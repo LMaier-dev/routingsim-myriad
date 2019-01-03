@@ -151,7 +151,7 @@ void NetworkManager::resetNode(nodeid_t n) {
 NetworkManager* getNetworkManager() {
 	if (mgr == NULL) {
 		cModuleType* type = cModuleType::get("routingsim.foundation.NetworkManager");
-		cModule* mod = simulation.getContextModule();
+		cModule* mod = getSimulation()->getContextModule();
 		while(mod->getParentModule()!=NULL) mod = mod->getParentModule();
 		mgr = dynamic_cast<NetworkManager*>(type->create( "NetworkManager",mod ));
 		if (mgr == NULL)

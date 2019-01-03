@@ -494,7 +494,7 @@ void VirtualRing::sampleStatistics( Statistics& stats ) {
 
 
 void VirtualRing::visualize( bool neighbors_valid ) {
-	if (!simulation.getEnvir()->isGUI()) return;
+	if (!getEnvir()->isGUI()) return;
 
 	// output table to visualization
 	ostringstream str;

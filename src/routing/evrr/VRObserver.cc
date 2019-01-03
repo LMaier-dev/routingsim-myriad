@@ -136,7 +136,7 @@ VRObserver& getVRObserver() {
 	if (observer == NULL) {
 		cModuleType* type = cModuleType::get(
 				"routingsim.routing.evrr.VRObserver");
-		cModule* mod = simulation.getContextModule();
+		cModule* mod = getSimulation()->getContextModule();
 		while (mod->getParentModule() != NULL)
 			mod = mod->getParentModule();
 		observer = dynamic_cast<VRObserver*>(type->create("vrobserver", mod));
@@ -146,7 +146,7 @@ VRObserver& getVRObserver() {
 
 // delivery ratio and stretch
 void VRObserver::messageRegister(cMessage* msg, bool anycast_msg) {
-	cModule* srcNode = simulation.getContextModule()->getParentModule();
+	cModule* srcNode = getSimulation()->getContextModule()->getParentModule();
 	msg->setContextPointer(srcNode);
 	if (anycast_msg) anycast->messageRegister(msg);
 	else general->messageRegister(msg);
@@ -170,7 +170,7 @@ void VRObserver::messageDelivered(cMessage* msg, vid_t dest, distance_t routingD
 	// get source / destination node
 	cModule* srcNode 	= static_cast<cModule*>(msg->getContextPointer());
 	nodeid_t srcNodeID 	= topology.moduleToNodeID(srcNode);
-	cModule* dstNode 	= simulation.getContextModule()->getParentModule();
+	cModule* dstNode 	= getSimulation()->getContextModule()->getParentModule();
 
 	// calculate stretch
 	distance_t realDistance = 0;

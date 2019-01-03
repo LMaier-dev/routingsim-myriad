@@ -264,7 +264,7 @@ void Statistics::addSample(StatisticSample* sample ) {
 
 void Statistics::registerMessage( cMessage* msg ) {
 	msgs.insert(msg);
-	cModule* srcNode = simulation.getContextModule()->getParentModule();
+	cModule* srcNode = getSimulation()->getContextModule()->getParentModule();
 	msg->setContextPointer(srcNode);
 }
 
@@ -280,7 +280,7 @@ void Statistics::deliveredMessage( cMessage* msg, int hop_count ) {
 	if (msgs.count(msg)==0) return;
 	hopCount->collect(hop_count);
 	cModule* srcNode = static_cast<cModule*>(msg->getContextPointer());
-	cModule* dstNode = simulation.getContextModule()->getParentModule();
+	cModule* dstNode = getSimulation()->getContextModule()->getParentModule();
 	if (getNetworkManager()!=NULL) {
 		int realDistance = (int)getNetworkManager()->getDistance(srcNode,dstNode);
 		realHopCount->collect(realDistance);
@@ -303,7 +303,7 @@ const char* STATS_TRAFFIC = "trafficStatistics";
 inline Statistics& createStats( const char* name = STATS_MAIN ) {
 	cModuleType* type =
 			cModuleType::get("routingsim.foundation.Statistics");
-	cModule* mod = simulation.getContextModule();
+	cModule* mod = getSimulation()->getContextModule();
 	while (mod->getParentModule() != NULL)
 		mod = mod->getParentModule();
 	Statistics& s = *dynamic_cast<Statistics*> (type->create(name, mod));

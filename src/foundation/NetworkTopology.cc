@@ -460,7 +460,7 @@ NetworkTopology::TopologyNode* NetworkTopology::getLinkset(nodeid_t node) {
 }
 
 void NetworkTopology::extractFromNetwork(cModule *networkManager) {
-	cModule* mod = simulation.getContextModule();
+	cModule* mod = getSimulation()->getContextModule();
 	while(mod->getParentModule()!=NULL) mod = mod->getParentModule();
 
 	// check that the top level module is actually a network
