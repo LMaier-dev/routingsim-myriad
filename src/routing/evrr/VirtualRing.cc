@@ -34,6 +34,8 @@
 #include "VirtualRingTable.h"
 #include "VirtualRingAnycast.h"
 
+#include "crng.h"
+
 #define CSTR(X,Y) \
 	std::ostringstream __##X; __##X << Y; \
 	const char* X = __##X.str().c_str()
@@ -60,10 +62,10 @@ private:
 	anycast_table* anycast_;
 
 public:
-	Table() {
+	Table(cRNG* rng) {
 		queue_ = new update_queue();
 		dsdv_ = new route_maintenance(*queue_);
-		ring_ = new ring_table(*dsdv_);
+		ring_ = new ring_table(*dsdv_, rng);
 		anycast_ = new anycast_table(*ring_);
 	}
 
@@ -139,7 +141,7 @@ vid_t VirtualRing::get_anycast_id( vid_t id ) {
 void VirtualRing::onInitialize() {
 
 	// initialize routing table
-	table = new Table();
+	table = new Table(getRNG(0));
 
 	// set evrr parameters
 	roundTime 					= par( "roundTime" );

@@ -6,6 +6,7 @@
 #include "VirtualRingEntry.h"
 #include "VirtualRingQueue.h"
 #include "VirtualRingRoutes.h"
+#include "crng.h"
 
 namespace routingsim {
 
@@ -22,7 +23,7 @@ class ring_table : public route_maintenance::listener {
 public://------------------------------------------------- Con-/Destruction ---
 
 	/// constructs the virtual ring routing-table
-	ring_table( route_maintenance& dsdv ) :
+	ring_table(route_maintenance& dsdv, cRNG* rng_) :
 		queue(dsdv.get_queue()), dsdv(dsdv) {
 		stable = 0;
 		stable_readvertize = 0;
@@ -31,6 +32,7 @@ public://------------------------------------------------- Con-/Destruction ---
 		discovery_alpha = 2;
 		delay_threshold = 5;
 		dsdv.register_listener(this);
+		rng = rng_;
 	}
 
 	/// destructs the virtual ring routing-table
@@ -198,6 +200,9 @@ private:
 	int stable;
 	int stable_readvertize;
 	int delay_threshold;
+
+	// this is needed for random values in maintenance/discover
+	cRNG* rng;
 
 protected://------------------------------------------------- DSDV Listener ---
 
@@ -437,7 +442,7 @@ private://------------------------------------------------------- Discovery ---
 			for (int s=0; s<discovery_alpha; s++) {
 				if (neighbors.size()==0) break;
 				unordered_set<nodeid_t>::iterator i=neighbors.begin();
-				if (neighbors.size()>2) std::advance(i,intuniform(0, neighbors.size()-1));
+				if (neighbors.size()>2) std::advance(i,intuniform(rng, 0, neighbors.size()-1));
 				if (i == neighbors.end()) continue;
 				queue.send( *i, e.route(vroute_update_t::DISCOVERY_PRED) );
 				queue.send( *i, e.route(vroute_update_t::DISCOVERY_SUCC) );
