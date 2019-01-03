@@ -190,7 +190,7 @@ void NetworkTopology::readTopology(string path) {
 	int lineNumber = 0;
 
 	if (!topologyFile) {
-		if (!ev.isDisabled())
+		if (getEnvir()->isLoggingEnabled())
 			EV << "Could not open" << path << endl;
 	}
 
