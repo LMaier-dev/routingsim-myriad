@@ -267,7 +267,7 @@ bool NetworkTopology::readShortestPaths(string shortestPathFile) {
 		EV << "Shortest path file version " << ver << endl;
 		EV << "Number of nodes: " << numNodes << endl;
 		if (numNodes!=numberNodes)
-			opp_error("number of nodes does not match: topology (%d), shortest path file (%d)", numberNodes, numNodes);
+			throw cRuntimeError("number of nodes does not match: topology (%d), shortest path file (%d)", numberNodes, numNodes);
 
 	} else {
 		EV << "Shortest path file version 0" << endl;
@@ -491,7 +491,7 @@ void NetworkTopology::extractFromNetwork(cModule *networkManager) {
 			}
 		}
 	} else {
-		opp_error("Error parsing network structure!");
+		throw cRuntimeError("Error parsing network structure!");
 	}
 }
 

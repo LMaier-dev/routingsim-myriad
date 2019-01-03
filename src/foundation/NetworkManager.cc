@@ -129,7 +129,7 @@ distance_t NetworkManager::getDistance(cModule *from, cModule* to) {
 
 int NetworkManager::getNetworkSize() {
 	if (topology == NULL) {
-		opp_error("topology has not been created yet!");
+		throw cRuntimeError("topology has not been created yet!");
 	}
 	topology->getNetworkSize();
 }
@@ -155,7 +155,7 @@ NetworkManager* getNetworkManager() {
 		while(mod->getParentModule()!=NULL) mod = mod->getParentModule();
 		mgr = dynamic_cast<NetworkManager*>(type->create( "NetworkManager",mod ));
 		if (mgr == NULL)
-			opp_error("Initialization of NetworkManager failed");
+			throw cRuntimeError("Initialization of NetworkManager failed");
 	}
 	return mgr;
 }

@@ -81,7 +81,7 @@ double LifetimeChurn::distributionFunction() {
 	    return truncnormal(p, p/3.0);
 	}
 
-	opp_error("LifetimeChurn::distribution function: "
+	throw cRuntimeError("LifetimeChurn::distribution function: "
 			  "Invalid value for parameter distribution!");
 
 	return 0.0;
