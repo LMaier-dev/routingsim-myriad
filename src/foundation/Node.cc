@@ -233,7 +233,7 @@ bool Node::disableLink(cModule *mod, const char *gatename) {
 
 bool Node::enableLink(cModule *mod, const char *gatename) {
 	if (!hasGate(gatename)) {
-		opp_warning("Node: %d: Gate %s does not exist", getNodeId(), gatename);
+		EV << "Node " << getNodeId() << ": Gate " << gatename << " does not exist" << endl;
 		return false;
 	}
 
@@ -248,7 +248,7 @@ bool Node::enableLink(cModule *mod, const char *gatename) {
 			return true;
 		}
 	}
-	opp_warning("Node %d: Could not find supposedly neighboring module with id: %d", getNodeId(), mod->getId());
+	EV << "Node " << getNodeId() << ": Could not find supposedly neighboring module with id: " << mod->getId() << endl;
 	return false;
 
 }
