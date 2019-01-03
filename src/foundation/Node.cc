@@ -272,7 +272,7 @@ void Node::disableGate(cGate *dg) {
 	sendNotify(disableLinkPacket, dg);
 
 	//add gate to filter list
-	//ev << "disabling cGate * " << dg << endl;
+	//EV << "disabling cGate * " << dg << endl;
 	disabledLinks.push_back(dg);
 	return;
 }
@@ -283,7 +283,7 @@ void Node::enableGate(cGate *dg) {
 	//remove gate from filter list
 	for(cit=disabledLinks.begin(); cit < disabledLinks.end(); cit++) {
 		if (*cit == dg) {
-			//ev << " enabling cGate * " << dg << endl;
+			//EV << " enabling cGate * " << dg << endl;
 			disabledLinks.erase(cit);
 		}
 	}
@@ -304,7 +304,7 @@ bool Node::gateIsDisabled(cGate *g) {
 	vector<cGate *>::iterator cit;
 	for(cit=disabledLinks.begin(); cit < disabledLinks.end(); cit++) {
 		if (*cit == g) {
-			//ev << "found gate in disabledLinks" << endl;
+			//EV << "found gate in disabledLinks" << endl;
 			return true;
 		}
 	}

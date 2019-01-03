@@ -20,11 +20,11 @@ namespace routingsim {
 Define_Module(TemplateProtocol);
 
 void TemplateProtocol::onInitialize() {
-	ev << "TemplateProtocol::onInitialize()" << endl;
+	EV << "TemplateProtocol::onInitialize()" << endl;
 }
 
 void TemplateProtocol::onConnect( nodeid_t nid ) {
-	ev << "Now I am connected to " << nid << endl;
+	EV << "Now I am connected to " << nid << endl;
 }
 
 void TemplateProtocol::onDisconnect( nodeid_t nid ) {
@@ -32,7 +32,7 @@ void TemplateProtocol::onDisconnect( nodeid_t nid ) {
 }
 
 void TemplateProtocol::onMessage( NodePkt* pkt ) {
-	ev << "received msg" << endl;
+	EV << "received msg" << endl;
 	switch (pkt->getType()) {
 	case PAYLOAD_HELLO:
 		onConnect(pkt->getHop().from);
@@ -44,12 +44,12 @@ void TemplateProtocol::onMessage( NodePkt* pkt ) {
 		return;
 	}
 
-	ev << "unhandled packet: " << pkt->getType() << endl;
+	EV << "unhandled packet: " << pkt->getType() << endl;
 	delete pkt;
 }
 
 void TemplateProtocol::reset() {
-	ev << "resetting state of TemplateProtocol" << endl;
+	EV << "resetting state of TemplateProtocol" << endl;
 }
 
 } //namespace

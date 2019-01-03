@@ -34,7 +34,7 @@ NetworkManager::NetworkManager() {
 }
 
 void NetworkManager::initialize() {
-	ev << "initializing network manager" << endl;
+	EV << "initializing network manager" << endl;
 	// set singleton variable
 	mgr = this;
 
@@ -82,16 +82,16 @@ void NetworkManager::initialize() {
 
 	// initialize dynamics module
 	if (dynamics != NULL) {
-		ev << "Using dynamic model: " << dynamics->getModuleType()->getName() << endl;
+		EV << "Using dynamic model: " << dynamics->getModuleType()->getName() << endl;
 		dynamics->manager = this;
 		dynamics->topology = topology;
 	} else
-		ev << "No dynamic model available." << endl;
+		EV << "No dynamic model available." << endl;
 }
 
 void NetworkManager::handleMessage(cMessage *msg) {
 	if (msg->arrivedOn("dynamics")) {
-		ev << "received dynamics message" << endl;
+		EV << "received dynamics message" << endl;
 
 		// if it's a selfmessage, then we have DynamicsInfo attached
 		DynamicsInfo *di =
@@ -111,11 +111,11 @@ void NetworkManager::handleMessage(cMessage *msg) {
 		case DynamicsInfo::linkRecovery:
 			break;
 		case DynamicsInfo::undefined:
-			ev << "undefined event, did you forget to set DynamicsInfo::type?"
+			EV << "undefined event, did you forget to set DynamicsInfo::type?"
 			<< endl;
 			break;
 		default:
-			ev << "unknown dynamic event" << endl;
+			EV << "unknown dynamic event" << endl;
 		}
 
 		delete di;

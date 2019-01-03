@@ -51,7 +51,7 @@ simtime_t CatastrophicFailure::scheduleDynamics() {
 
 	// determine nodes to fail
 	size_t numNodesFail = ((double) getTopology().getNumberNodes() * fraction);
-	ev << "Scheduling " << numNodesFail
+	EV << "Scheduling " << numNodesFail
 	   << " nodes for catastrophic failure"	<< endl;
 
 	unordered_set<nodeid_t> alreadyFailed;
@@ -142,7 +142,7 @@ for (int i=0; (i+1)*SFI < totalSimtime; i++) {
 	dynamicEventMessage->setContextPointer(diFail);
 
 	sendDelayed(dynamicEventMessage, diFail->occurrence - simTime(), "NetworkManager");
-	ev << "scheduling node failure at " << diFail->occurrence << endl;
+	EV << "scheduling node failure at " << diFail->occurrence << endl;
 	// prepare and schedule self message for recovery
 	DynamicsInfo *diRecovery = new DynamicsInfo();
 	diRecovery->update_type = DynamicsInfo::nodeRecovery;
@@ -154,7 +154,7 @@ for (int i=0; (i+1)*SFI < totalSimtime; i++) {
 	dynamicEventMessage->setContextPointer(diRecovery);
 
 	sendDelayed(dynamicEventMessage, diRecovery->occurrence - simTime(), "NetworkManager");
-	ev << "scheduling node recovery at " << diRecovery->occurrence << endl;
+	EV << "scheduling node recovery at " << diRecovery->occurrence << endl;
 }
 #endif
 
