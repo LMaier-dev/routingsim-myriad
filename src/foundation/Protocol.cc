@@ -1,0 +1,67 @@
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Lesser General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+// 
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Lesser General Public License for more details.
+// 
+// You should have received a copy of the GNU Lesser General Public License
+// along with this program.  If not, see http://www.gnu.org/licenses/.
+// 
+
+#include "Protocol.h"
+
+namespace routingsim {
+
+//Define_Module(Protocol);
+
+void Protocol::initialize() {
+	parent = check_and_cast<Node*>(getParentModule());
+	assert(parent!=NULL);
+	this->onInitialize();
+}
+
+void Protocol::handleMessage(cMessage *msg) {
+	NodePkt* np = check_and_cast<NodePkt*>(msg);
+	switch( np->getType() ) {
+	case PAYLOAD_HELLO:
+		this->onConnect(np->getHop().from);
+		delete np;
+		return;
+	case PAYLOAD_GOODBYE:
+		this->onDisconnect(np->getHop().from);
+		delete np;
+		return;
+	default:
+		break;
+	}
+	this->onMessage(np);
+}
+
+/// Bind module to node to receive messages of the given type
+void Protocol::bind(int type) {
+	node().bind(type, this);
+}
+
+/// Unbind module to node to receive messages of the given type no more
+void Protocol::unbind(int type) {
+	node().unbind(type, this);
+}
+
+/// sends a packet
+void Protocol::sendToNode( nodeid_t nid, NodePkt* pkt) {
+	pkt->getHop().to = nid;
+	cSimpleModule::send(pkt, "toNode$o");
+}
+
+/// sends a packet
+void Protocol::sendToNeighbors( NodePkt* pkt) {
+	pkt->getHop().to = neighbor_cast;
+	cSimpleModule::send(pkt, "toNode$o");
+}
+
+} // namespace
