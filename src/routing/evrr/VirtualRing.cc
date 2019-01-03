@@ -112,7 +112,7 @@ Define_Module(VirtualRing);
 static boost::unordered_set<vid_t> ids;
 static boost::unordered_map<vid_t, vid_t> anycast_map;
 
-static vid_t get_nice_id() {
+vid_t VirtualRing::get_nice_id() {
 	vid_t id;
 	int r = (ids.size()/100+1)*100+1;
 	do { id = intuniform(r-100,r); } while (ids.count(id)!=0);
@@ -120,7 +120,7 @@ static vid_t get_nice_id() {
 	return id;
 }
 
-static vid_t get_random_id() {
+vid_t VirtualRing::get_random_id() {
 	vid_t id;
 	do { id = (intuniform(0,65535) << 16) ^ (intuniform(0,65535)); }
 	while (ids.count(id)!=0);
@@ -128,7 +128,7 @@ static vid_t get_random_id() {
 	return id;
 }
 
-static vid_t get_anycast_id( vid_t id ) {
+vid_t VirtualRing::get_anycast_id( vid_t id ) {
 	if (anycast_map.count(id)!=0) return anycast_map[id];
 	vid_t nid = get_random_id();
 	anycast_map.insert(make_pair(id,nid));

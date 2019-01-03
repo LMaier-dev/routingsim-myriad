@@ -105,6 +105,9 @@ private:
 	void flushBacklog();
 	void route( NodePkt* );
 	void visualize( bool );
+	vid_t get_nice_id();
+	vid_t get_random_id();
+	vid_t get_anycast_id(vid_t id);
 };
 
 } // namespace
