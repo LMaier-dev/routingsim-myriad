@@ -67,7 +67,7 @@ simtime_t CatastrophicFailure::scheduleDynamics() {
 			cond = true;
 			cond &= (alreadyFailed.count(node) != 0);
 			cond &= (maxDegree == 0 || degree <= maxDegree);
-			cond &= (minDegree >= minDegree);
+			cond &= (degree >= minDegree);
 		} while (cond);
 		alreadyFailed.insert(node);
 
