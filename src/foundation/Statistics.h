@@ -20,6 +20,7 @@
 #include <vector>
 #include <boost/unordered_map.hpp>
 #include <boost/unordered_set.hpp>
+#include <chistogram.h>
 
 namespace routingsim {
 
@@ -52,10 +53,10 @@ private:
 	// message delivery ratio accounting
 	unordered_set<cMessage*> msgs;
 	cOutVector* deliveryRatio;
-	cLongHistogram* hopCount;
-	cLongHistogram* realHopCount;
-	cLongHistogram* addStretch;
-	cDoubleHistogram* mulStretch;
+	cHistogram* hopCount;
+	cHistogram* realHopCount;
+	cHistogram* addStretch;
+	cHistogram* mulStretch;
 	unsigned int messagesDropped;
 	unsigned int messagesDelivered;
 
@@ -89,6 +90,9 @@ Statistics& getStatistics( const char* name = NULL );
 
 /// Adds a statistic sample to the statistics module
 void addStatisticSample( StatisticSample* sample, const char* name = NULL );
+
+/// gets a preconfigured cHistogram in integer mode
+cHistogram* getIntHistogram(const char* name, int rangeLower = 0, int rangeUpper = 128, int numBins = 128);
 
 
 } //namespace

@@ -34,6 +34,24 @@ Define_Module(Statistics);
 static Statistics* stats = NULL;
 static boost::unordered_map<const char*, Statistics*> statsMap;
 
+// convinience method, used in Statistics::Value()
+cHistogram* getDensityHistogram(const char* name1, const char* name2, size_t size) {
+	cHistogram* hist = new cHistogram((string(name1) + string(name2)).c_str());
+	hist->setNumBinsHint(512);
+	hist->setNumPrecollectedValues(size*50);
+	hist->setRangeExtensionFactor(2.0);
+	return hist;
+}
+
+// convinience method, used in Statistics::initialize and MessageStatistics::MessageStatistics()
+cHistogram* getIntHistogram(const char* name, int rangeLower, int rangeUpper, int numBins) {
+	cHistogram* hist = new cHistogram(name);
+	hist->setRange(rangeLower, rangeUpper);
+	hist->setNumBinsHint(numBins);
+	hist->setMode(cHistogram::MODE_INTEGERS);
+	return hist;
+}
+
 // this class describes a sampling value
 class Statistics::Value {
 public:
@@ -53,9 +71,9 @@ public:
 	cOutVector* minVecDelta;
 	cOutVector* maxVec;
 	cOutVector* maxVecDelta;
-	cDoubleHistogram* histogram;
-	cDoubleHistogram* histogramAbs;
-	cDoubleHistogram* histogramDelta;
+	cHistogram* histogram;
+	cHistogram* histogramAbs;
+	cHistogram* histogramDelta;
 	int f;
 
 	double eqTrigger;
@@ -76,15 +94,9 @@ public:
 				(string(name) + string("MinDelta")).c_str());
 		maxVecDelta = new cOutVector(
 				(string(name) + string("MaxDelta")).c_str());
-		histogram = new cDoubleHistogram(
-				(string(name) + string("AvgDensity")).c_str(),512);
-		histogram->setRangeAuto(size*50,2);
-		histogramAbs = new cDoubleHistogram(
-				(string(name) + string("Density")).c_str(),512);
-		histogramAbs->setRangeAuto(size*50,2);
-		histogramDelta = new cDoubleHistogram(
-				(string(name) + string("AvgDeltaDensity")).c_str(),512);
-		histogramDelta->setRangeAuto(size*50,2);
+		histogram = getDensityHistogram(name, "AvgDensity", size);
+		histogramAbs = getDensityHistogram(name, "Density", size);
+		histogramDelta = getDensityHistogram(name, "AvgDeltaDensity", size);
 		eqTriggerName = (string(name) + string("Trigger"));
 		eqTrigger = INFINITY;
 		lastLog = simTime();
@@ -179,18 +191,12 @@ void Statistics::initialize(int stage) {
 		messagesDelivered = 0;
 		messagesDropped = 0;
 		deliveryRatio = new cOutVector("deliveryRatio");
-		hopCount = new cLongHistogram("hopCountRouting");
-		hopCount->setRange(0,128);
-		hopCount->setNumCells(128);
-		realHopCount = new cLongHistogram("hopCountReal");
-		realHopCount->setRange(0,128);
-		realHopCount->setNumCells(128);
-		addStretch = new cLongHistogram("stretchAdditive");
-		addStretch->setRange(0,128);
-		addStretch->setNumCells(128);
-		mulStretch = new cDoubleHistogram("stretchMultiplicative");
+		hopCount = getIntHistogram("hopCountRouting");
+		realHopCount = getIntHistogram("hopCountReal");
+		addStretch = getIntHistogram("stretchAdditive");
+		mulStretch = new cHistogram("stretchMultiplicative");
 		mulStretch->setRange(1.0,64.0);
-		mulStretch->setNumCells(1024);
+		mulStretch->setNumBinsHint(1024);
 		scheduleAt(simTime() + samplingInterval*2, samplingTimer);
 	}
 	if (stage==3)
@@ -322,6 +328,5 @@ Statistics& getStatistics( const char* name ) {
 void addStatisticSample(StatisticSample* sample, const char* name ) {
 	getStatistics(name).addSample(sample);
 }
-
 
 } //namespace

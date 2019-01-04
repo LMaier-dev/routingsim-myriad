@@ -20,10 +20,10 @@ class MessageStatistics {
 private:
 	unordered_set<long> msgs;
 	cOutVector* deliveryRatio;
-	cLongHistogram* distanceRouting;
-	cLongHistogram* distanceReality;
-	cLongHistogram* stretchAdditive;
-	cDoubleHistogram* stretchMultiplicative;
+	cHistogram* distanceRouting;
+	cHistogram* distanceReality;
+	cHistogram* stretchAdditive;
+	cHistogram* stretchMultiplicative;
 	unsigned int messagesDelivered;
 	unsigned int messagesDropped;
 
@@ -56,22 +56,14 @@ public:
 		// create statistics
 		deliveryRatio = new cOutVector(deliveryRatioName.c_str());
 
-		distanceRouting = new cLongHistogram(distanceRoutingName.c_str());
-		distanceRouting->setRange(0, 128);
-		distanceRouting->setNumCells(128);
+		distanceRouting = getIntHistogram(distanceRoutingName.c_str());
+		distanceReality = getIntHistogram(distanceRealityName.c_str());
+		stretchAdditive = getIntHistogram(stretchAdditiveName.c_str());
 
-		distanceReality = new cLongHistogram(distanceRealityName.c_str());
-		distanceReality->setRange(0, 128);
-		distanceReality->setNumCells(128);
-
-		stretchAdditive = new cLongHistogram(stretchAdditiveName.c_str());
-		stretchAdditive->setRange(0, 128);
-		stretchAdditive->setNumCells(128);
-
-		stretchMultiplicative = new cDoubleHistogram(
+		stretchMultiplicative = new cHistogram(
 				stretchMultiplicativeName.c_str());
 		stretchMultiplicative->setRange(1.0, 64.0);
-		stretchMultiplicative->setNumCells(1024);
+		stretchMultiplicative->setNumBinsHint(1024);
 
 		// messages delivered / dropped
 		messagesDelivered = 0;
