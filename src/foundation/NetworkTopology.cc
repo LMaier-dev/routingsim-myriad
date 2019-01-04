@@ -439,7 +439,7 @@ bool NetworkTopology::isConnected(nodeid_t node1, nodeid_t node2) {
 	lp2 = ls2->getLink(node1);
 
 	if (ls1 == NULL || lp1 == NULL || ls2 == NULL || lp2 == NULL)
-		return NULL;
+		return false;
 	else {
 		return (lp1->isConnected() && lp2->isConnected());
 	}
