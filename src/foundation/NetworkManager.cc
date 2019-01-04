@@ -131,7 +131,7 @@ int NetworkManager::getNetworkSize() {
 	if (topology == NULL) {
 		throw cRuntimeError("topology has not been created yet!");
 	}
-	topology->getNetworkSize();
+	return topology->getNetworkSize();
 }
 
 void NetworkManager::finish() {
