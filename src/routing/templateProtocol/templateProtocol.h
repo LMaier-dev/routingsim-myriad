@@ -19,7 +19,7 @@
 #include <omnetpp.h>
 
 #include "foundation.h"
-#include "VRObserver.h"
+#include "routing/evrr/VRObserver.h"
 #include "StatisticSample.h"
 
 namespace routingsim {

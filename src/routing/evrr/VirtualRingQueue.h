@@ -3,6 +3,7 @@
 
 #include<vector>
 #include<boost/unordered_map.hpp>
+#include "VRoutePkt_m.h"
 
 namespace routingsim {
 
