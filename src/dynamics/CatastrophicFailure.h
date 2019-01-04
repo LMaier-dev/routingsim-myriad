@@ -37,4 +37,4 @@ protected:
 
 } //namespace
 
-#endif
+#endif // __ROUTINGSIM_CATASTROPHICFAILURE_H_
