@@ -467,7 +467,7 @@ void NetworkTopology::extractFromNetwork(cModule *networkManager) {
 	if ( mod->getModuleType()->isNetwork() ) {
 		for (cModule::SubmoduleIterator i(mod); !i.end(); i++)
 		{
-			cModule *submodp = i();
+			cModule *submodp = *i;
 			// we are only interested in Nodes
 			if (opp_strcmp(submodp->getClassName(), "routingsim::Node")==0) {
 				int fromID = dynamic_cast<Node *>(submodp)->getNodeId();
@@ -565,7 +565,7 @@ void NetworkTopology::createNetwork(cModule *parent) {
 				adjacencyList[modMapIt->first]->properties) {
 			if (value.first.find('!')!=string::npos) continue;
 			for (cModule::SubmoduleIterator i(modMapIt->second); !i.end(); i++) {
-				cModule *smod = i();
+				cModule *smod = *i;
 				if (smod->findPar(value.first.c_str())!=-1) {
 					cPar& p = smod->par(value.first.c_str());
 					if (p.getType() == cPar::STRING)
