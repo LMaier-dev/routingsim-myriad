@@ -25,14 +25,14 @@ void Node::initialize() {
 	WATCH( id );
 	WATCH_VECTOR( neighbor_set );
 
-	if (par("id").longValue() == -1) {
+	if (par("id").intValue() == -1) {
 		this->id = gnodeid;
 		gnodeid++;
 	} else
-		this->id = par("id").longValue();
+		this->id = par("id").intValue();
 
-	minDelay = par("nodeMinDelay").longValue();
-	maxDelay = par("nodeMaxDelay").longValue();
+	minDelay = par("nodeMinDelay").intValue();
+	maxDelay = par("nodeMaxDelay").intValue();
 
 	initNeighbors();
 }

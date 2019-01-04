@@ -153,9 +153,9 @@ void VirtualRing::onInitialize() {
 
 	// set ring parameters
 	table->ring().set_use_linearization(par( "useLinearization" ).boolValue());
-	table->ring().set_discovery_alpha(par( "parallelDiscoveries").longValue());
-	table->ring().set_delay_threshold(par("delayThreshold").longValue());
-	table->anycast().set_delay_threshold(par("delayThreshold").longValue());
+	table->ring().set_discovery_alpha(par( "parallelDiscoveries").intValue());
+	table->ring().set_delay_threshold(par("delayThreshold").intValue());
+	table->anycast().set_delay_threshold(par("delayThreshold").intValue());
 
 	// set node id
 	table->dsdv().set_nodeid( node().getNodeId() );
