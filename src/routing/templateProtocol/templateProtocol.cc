@@ -33,17 +33,6 @@ void TemplateProtocol::onDisconnect( nodeid_t nid ) {
 
 void TemplateProtocol::onMessage( NodePkt* pkt ) {
 	EV << "received msg" << endl;
-	switch (pkt->getType()) {
-	case PAYLOAD_HELLO:
-		onConnect(pkt->getHop().from);
-		delete pkt;
-		return;
-	case PAYLOAD_GOODBYE:
-		onDisconnect(pkt->getHop().from);
-		delete pkt;
-		return;
-	}
-
 	EV << "unhandled packet: " << pkt->getType() << endl;
 	delete pkt;
 }
