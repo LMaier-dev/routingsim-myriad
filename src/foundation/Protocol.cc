@@ -39,7 +39,7 @@ void Protocol::handleMessage(cMessage *msg) {
 	default:
 		break;
 	}
-	this->onMessage(np);
+	this->onMessage(std::unique_ptr<NodePkt>(np));
 }
 
 /// Bind module to node to receive messages of the given type

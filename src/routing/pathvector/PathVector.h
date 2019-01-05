@@ -26,7 +26,7 @@ namespace routingsim {
 /**
  * TODO - Generated class
  */
-class PathVector: public Protocol {
+class PathVector: public LegacyProtocol {
 protected:
 	/// initialize
 	virtual void onInitialize();

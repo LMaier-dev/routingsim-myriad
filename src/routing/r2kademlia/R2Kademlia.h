@@ -32,14 +32,14 @@ namespace routingsim {
 class R2Kademlia : public Protocol
 {
   protected:
-  	/// called at initialization time of the Protocol
-  	void onInitialize();
+	/// called at initialization time of the Protocol
+	void onInitialize();
   	/// called when a new node is connected
   	void onConnect( nodeid_t nid );
   	/// called when a node is disconnected
   	void onDisconnect( nodeid_t nid );
   	/// on message
-  	void onMessage( NodePkt* pkt );
+	void onMessage( NodePkt_p pkt );
 	/// reset state of Protocol to initial state (Node Failure)
 	void reset();
 };

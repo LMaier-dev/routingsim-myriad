@@ -17,6 +17,7 @@
 #define __ROUTINGSIM_PROTOCOL_H_
 
 #include <omnetpp.h>
+#include <memory>
 
 namespace routingsim {
 class Protocol;
@@ -26,9 +27,11 @@ class Protocol;
 #include "Node.h"
 
 namespace routingsim {
+using NodePkt_p = std::unique_ptr<NodePkt>;
 
 /**
- * TODO - Generated class
+ * Class that models a protocol unit.
+ * @author ?
  */
 class Protocol: public cSimpleModule {
 	friend class NetworkManager;
@@ -48,8 +51,12 @@ protected:
 	void unbind(int type);
 
 	/// sends a packet
+	inline void sendToNode( nodeid_t nid, NodePkt_p pkt ){ sendToNode(nid, pkt.release());};
+	/// sends a packet
 	void sendToNode( nodeid_t nid, NodePkt* pkt );
 
+	/// sends a packet to all neighbors
+	inline void sendToNeighbors( NodePkt_p pkt ){ sendToNeighbors(pkt.release());};
 	/// sends a packet to all neighbors
 	void sendToNeighbors( NodePkt* pkt );
 
@@ -65,7 +72,7 @@ protected:
 	virtual void onDisconnect( nodeid_t nid ) = 0;
 
 	/// on message
-	virtual void onMessage( NodePkt* pkt ) = 0;
+	virtual void onMessage( NodePkt_p pkt ) = 0;
 
 	/// reset state of Protocol to initial state (Node Failure)
 	virtual void reset() = 0;
@@ -75,6 +82,17 @@ private:
 	Node* parent;
 	virtual void initialize();
 	virtual void handleMessage(cMessage *msg);
+};
+
+/**
+ * Protocol class for legacy code that needs unwraped pointers.
+ * @author Jakob Thomas
+ */
+class LegacyProtocol : public Protocol {
+	/// on message
+	virtual void onMessage( NodePkt_p pkt ) { onMessage(pkt.release());}
+	/// on message for code that needs unwraped pointers
+	virtual void onMessage( NodePkt* pkt ) = 0;
 };
 
 } //namespace

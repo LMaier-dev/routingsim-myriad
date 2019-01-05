@@ -31,10 +31,9 @@ void TemplateProtocol::onDisconnect( nodeid_t nid ) {
 	cout << "Now I am disconnected from " << nid << endl;
 }
 
-void TemplateProtocol::onMessage( NodePkt* pkt ) {
+void TemplateProtocol::onMessage( NodePkt_p pkt ) {
 	EV << "received msg" << endl;
 	EV << "unhandled packet: " << pkt->getType() << endl;
-	delete pkt;
 }
 
 void TemplateProtocol::reset() {

@@ -31,10 +31,9 @@ void R2Kademlia::onDisconnect( nodeid_t nid ) {
 	EV << "Now I am disconnected from " << nid << endl;
 }
 
-void R2Kademlia::onMessage( NodePkt* pkt ) {
+void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	EV << "received msg" << endl;
 	EV << "unhandled packet: " << pkt->getType() << endl;
-	delete pkt;
 }
 
 void R2Kademlia::reset() {

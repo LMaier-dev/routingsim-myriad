@@ -39,7 +39,7 @@ namespace routingsim {
  *
  * @author Sebastian Mies <mies@gtfr.de>
  */
-class VirtualRing: public Protocol, public StatisticSample {
+class VirtualRing: public LegacyProtocol, public StatisticSample {
 protected:
  	/// initialize
 	virtual void onInitialize();
