@@ -17,6 +17,8 @@
 //
 
 /**
+ * Represesentation of an overlay key.
+ * Taken from OverSim. Adapted by Jakob Thomas
  * @file OverlayKey.h
  * @author Sebastian Mies, Ingmar Baumgart
  */
@@ -368,6 +370,7 @@ public:
      * Fills the suffix starting at pos with random bits to lsb.
      *
      * @param pos
+	 * @param rng the rng to use for randomness
      * @return OverlayKey
      */
     OverlayKey randomSuffix(uint32_t pos, cRNG* rng) const;
@@ -376,6 +379,7 @@ public:
      * Fills the prefix starting at pos with random bits to msb.
      *
      * @param pos
+	 * @param rng the rng to use for randomness
      * @return OverlayKey
      */
     OverlayKey randomPrefix(uint32_t pos, cRNG* rng) const;

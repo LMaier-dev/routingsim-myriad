@@ -17,6 +17,7 @@
 //
 
 /**
+ * Taken from OverSim. Adapted by Jakob Thomas
  * @file OverlayKey.cc
  * @author Sebastian Mies, Ingmar Baumgart
  */
