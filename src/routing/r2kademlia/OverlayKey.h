@@ -50,473 +50,473 @@ inline void omnet_random(mp_limb_t *r1p, mp_size_t r1n, cRNG* rng);
 class OverlayKey
 {
 public:
-    //-------------------------------------------------------------------------
-    // constants
-    //-------------------------------------------------------------------------
+	//-------------------------------------------------------------------------
+	// constants
+	//-------------------------------------------------------------------------
 
-    static const OverlayKey UNSPECIFIED_KEY; /**< OverlayKey without defined key */
-    static const OverlayKey ZERO; /**< OverlayKey with key initialized as 0 */
-    static const OverlayKey ONE; /**< OverlayKey with key initialized as 1 */
+	static const OverlayKey UNSPECIFIED_KEY; /**< OverlayKey without defined key */
+	static const OverlayKey ZERO; /**< OverlayKey with key initialized as 0 */
+	static const OverlayKey ONE; /**< OverlayKey with key initialized as 1 */
 
-    //-------------------------------------------------------------------------
-    // construction and destruction
-    //-------------------------------------------------------------------------
+	//-------------------------------------------------------------------------
+	// construction and destruction
+	//-------------------------------------------------------------------------
 
-    /**
-     * Default constructor
-     *
-     * Contructs an unspecified overlay key
-     */
-    OverlayKey();
+	/**
+	 * Default constructor
+	 *
+	 * Contructs an unspecified overlay key
+	 */
+	OverlayKey();
 
-    /**
-     * Constructs an overlay key initialized with a common integer
-     *
-     * @param num The integer to initialize this key with
-     */
-    OverlayKey( uint32_t num );
+	/**
+	 * Constructs an overlay key initialized with a common integer
+	 *
+	 * @param num The integer to initialize this key with
+	 */
+	OverlayKey( uint32_t num );
 
-    /**
-     * Constructs a key out of a buffer
-     * @param buffer Source buffer
-     * @param size Buffer size (in bytes)
-     */
-    OverlayKey( const unsigned char* buffer, uint32_t size);
+	/**
+	 * Constructs a key out of a buffer
+	 * @param buffer Source buffer
+	 * @param size Buffer size (in bytes)
+	 */
+	OverlayKey( const unsigned char* buffer, uint32_t size);
 
-    /**
-     * Constructs a key out of a string number.
-     */
-    OverlayKey( const std::string& str, uint32_t base = 16 );
+	/**
+	 * Constructs a key out of a string number.
+	 */
+	OverlayKey( const std::string& str, uint32_t base = 16 );
 
-    /**
-     * Copy constructor.
-     *
-     * @param rhs The key to copy.
-     */
-    OverlayKey( const OverlayKey& rhs );
+	/**
+	 * Copy constructor.
+	 *
+	 * @param rhs The key to copy.
+	 */
+	OverlayKey( const OverlayKey& rhs );
 
-    OverlayKey* dup() const { return new OverlayKey(*this); };
+	OverlayKey* dup() const { return new OverlayKey(*this); };
 
-    /**
-     * Default destructor.
-     *
-     * Does nothing ATM.
-     */
-    ~OverlayKey();
+	/**
+	 * Default destructor.
+	 *
+	 * Does nothing ATM.
+	 */
+	~OverlayKey();
 
-    //-------------------------------------------------------------------------
-    // string representations & node key attributes
-    //-------------------------------------------------------------------------
+	//-------------------------------------------------------------------------
+	// string representations & node key attributes
+	//-------------------------------------------------------------------------
 
 
 
-    /**
-     * Returns a string representation of this key
-     *
-     * @return String representation of this key
-     */
-    std::string toString( uint32_t base = 16 ) const;
+	/**
+	 * Returns a string representation of this key
+	 *
+	 * @return String representation of this key
+	 */
+	std::string toString( uint32_t base = 16 ) const;
 
-    /**
-     * Common stdc++ console output method
-     */
-    friend std::ostream& operator<<(std::ostream& os, const OverlayKey& c);
+	/**
+	 * Common stdc++ console output method
+	 */
+	friend std::ostream& operator<<(std::ostream& os, const OverlayKey& c);
 
-    /**
-     * Returns true, if the key is unspecified
-     *
-     * @return Returns true, if key is unspecified
-     */
-    bool isUnspecified() const;
+	/**
+	 * Returns true, if the key is unspecified
+	 *
+	 * @return Returns true, if key is unspecified
+	 */
+	bool isUnspecified() const;
 
-    /**
-     * Returns true, if the key is a valid string representation
-     *
-     * @return Returns true, if the key is a valid string representation
-     */
+	/**
+	 * Returns true, if the key is a valid string representation
+	 *
+	 * @return Returns true, if the key is a valid string representation
+	 */
 
-    static bool isValid(std::string str);
+	static bool isValid(std::string str);
 
-    //-------------------------------------------------------------------------
-    // operators
-    //-------------------------------------------------------------------------
+	//-------------------------------------------------------------------------
+	// operators
+	//-------------------------------------------------------------------------
 
-    /**
-     * compares this to a given OverlayKey
-     *
-     * @param compKey the the OverlayKey to compare this to
-     * @return true if compKey->key is smaller than this->key, else false
-     */
-    bool operator< ( const OverlayKey& compKey ) const;
+	/**
+	 * compares this to a given OverlayKey
+	 *
+	 * @param compKey the the OverlayKey to compare this to
+	 * @return true if compKey->key is smaller than this->key, else false
+	 */
+	bool operator< ( const OverlayKey& compKey ) const;
 
-    /**
-     * compares this to a given OverlayKey
-     *
-     * @param compKey the the OverlayKey to compare this to
-     * @return true if compKey->key is greater than this->key, else false
-     */
-    bool operator> ( const OverlayKey& compKey ) const;
+	/**
+	 * compares this to a given OverlayKey
+	 *
+	 * @param compKey the the OverlayKey to compare this to
+	 * @return true if compKey->key is greater than this->key, else false
+	 */
+	bool operator> ( const OverlayKey& compKey ) const;
 
-    /**
-     * compares this to a given OverlayKey
-     *
-     * @param compKey the the OverlayKey to compare this to
-     * @return true if compKey->key is smaller than or equal to this->key, else false
-     */
-    bool operator<=( const OverlayKey& compKey ) const;
+	/**
+	 * compares this to a given OverlayKey
+	 *
+	 * @param compKey the the OverlayKey to compare this to
+	 * @return true if compKey->key is smaller than or equal to this->key, else false
+	 */
+	bool operator<=( const OverlayKey& compKey ) const;
 
-    /**
-     * compares this to a given OverlayKey
-     *
-     * @param compKey the the OverlayKey to compare this to
-     * @return true if compKey->key is greater than or equal to this->key, else false
-     */
-    bool operator>=( const OverlayKey& compKey ) const;
+	/**
+	 * compares this to a given OverlayKey
+	 *
+	 * @param compKey the the OverlayKey to compare this to
+	 * @return true if compKey->key is greater than or equal to this->key, else false
+	 */
+	bool operator>=( const OverlayKey& compKey ) const;
 
-    /**
-     * compares this to a given OverlayKey
-     *
-     * @param compKey the the OverlayKey to compare this to
-     * @return true if compKey->key is equal to this->key, else false
-     */
-    bool operator==( const OverlayKey& compKey ) const;
+	/**
+	 * compares this to a given OverlayKey
+	 *
+	 * @param compKey the the OverlayKey to compare this to
+	 * @return true if compKey->key is equal to this->key, else false
+	 */
+	bool operator==( const OverlayKey& compKey ) const;
 
-    /**
-     * compares this to a given OverlayKey
-     *
-     * @param compKey the the OverlayKey to compare this to
-     * @return true if compKey->key is not equal to this->key, else false
-     */
-    bool operator!=( const OverlayKey& compKey ) const;
+	/**
+	 * compares this to a given OverlayKey
+	 *
+	 * @param compKey the the OverlayKey to compare this to
+	 * @return true if compKey->key is not equal to this->key, else false
+	 */
+	bool operator!=( const OverlayKey& compKey ) const;
 
-    /**
-     * Unifies all compare operations in one method
-     *
-     * @param compKey key to compare with
-     * @return int -1 if smaller, 0 if equal, 1 if greater
-     */
-    int compareTo( const OverlayKey& compKey ) const;
+	/**
+	 * Unifies all compare operations in one method
+	 *
+	 * @param compKey key to compare with
+	 * @return int -1 if smaller, 0 if equal, 1 if greater
+	 */
+	int compareTo( const OverlayKey& compKey ) const;
 
-    /**
-     * assigns OverlayKey of rhs to this->key
-     *
-     * @param rhs the OverlayKey with the defined key
-     * @return this OverlayKey object
-     */
-    OverlayKey& operator= ( const OverlayKey& rhs );
+	/**
+	 * assigns OverlayKey of rhs to this->key
+	 *
+	 * @param rhs the OverlayKey with the defined key
+	 * @return this OverlayKey object
+	 */
+	OverlayKey& operator= ( const OverlayKey& rhs );
 
-    /**
-     * substracts 1 from this->key
-     *
-     * @return this OverlayKey object
-     */
-    OverlayKey& operator--();
+	/**
+	 * substracts 1 from this->key
+	 *
+	 * @return this OverlayKey object
+	 */
+	OverlayKey& operator--();
 
-    /**
-     * adds 1 to this->key
-     *
-     * @return this OverlayKey object
-     */
-    OverlayKey& operator++();
+	/**
+	 * adds 1 to this->key
+	 *
+	 * @return this OverlayKey object
+	 */
+	OverlayKey& operator++();
 
-    /**
-     * adds rhs->key to this->key
-     *
-     * @param rhs the OverlayKey with the defined key
-     * @return this OverlayKey object
-     */
-    OverlayKey& operator+=( const OverlayKey& rhs );
+	/**
+	 * adds rhs->key to this->key
+	 *
+	 * @param rhs the OverlayKey with the defined key
+	 * @return this OverlayKey object
+	 */
+	OverlayKey& operator+=( const OverlayKey& rhs );
 
-    /**
-     * substracts rhs->key from this->key
-     *
-     * @param rhs the OverlayKey with the defined key
-     * @return this OverlayKey object
-     */
-    OverlayKey& operator-=( const OverlayKey& rhs );
+	/**
+	 * substracts rhs->key from this->key
+	 *
+	 * @param rhs the OverlayKey with the defined key
+	 * @return this OverlayKey object
+	 */
+	OverlayKey& operator-=( const OverlayKey& rhs );
 
-    /**
-     * adds rhs->key to this->key
-     *
-     * @param rhs the OverlayKey with the defined key
-     * @return this OverlayKey object
-     */
-    OverlayKey  operator+ ( const OverlayKey& rhs ) const;
+	/**
+	 * adds rhs->key to this->key
+	 *
+	 * @param rhs the OverlayKey with the defined key
+	 * @return this OverlayKey object
+	 */
+	OverlayKey  operator+ ( const OverlayKey& rhs ) const;
 
-    /**
-     * substracts rhs->key from this->key
-     *
-     * @param rhs the OverlayKey with the defined key
-     * @return this OverlayKey object
-     */
-    OverlayKey  operator- ( const OverlayKey& rhs ) const;
+	/**
+	 * substracts rhs->key from this->key
+	 *
+	 * @param rhs the OverlayKey with the defined key
+	 * @return this OverlayKey object
+	 */
+	OverlayKey  operator- ( const OverlayKey& rhs ) const;
 
-    /**
-     * substracts 1 from this->key
-     *
-     * @return this OverlayKey object
-     */
-    OverlayKey  operator--( int );
+	/**
+	 * substracts 1 from this->key
+	 *
+	 * @return this OverlayKey object
+	 */
+	OverlayKey  operator--( int );
 
-    /**
-     * adds 1 to this->key
-     *
-     * @return this OverlayKey object
-     */
-    OverlayKey  operator++( int );
+	/**
+	 * adds 1 to this->key
+	 *
+	 * @return this OverlayKey object
+	 */
+	OverlayKey  operator++( int );
 
-    /**
-     * bitwise shift right
-     *
-     * @param num number of bits to shift
-     * @return this OverlayKey object
-     */
-    OverlayKey  operator>>( uint32_t num ) const;
+	/**
+	 * bitwise shift right
+	 *
+	 * @param num number of bits to shift
+	 * @return this OverlayKey object
+	 */
+	OverlayKey  operator>>( uint32_t num ) const;
 
-    /**
-     * bitwise shift left
-     *
-     * @param num number of bits to shift
-     * @return this OverlayKey object
-     */
-    OverlayKey  operator<<( uint32_t num ) const;
+	/**
+	 * bitwise shift left
+	 *
+	 * @param num number of bits to shift
+	 * @return this OverlayKey object
+	 */
+	OverlayKey  operator<<( uint32_t num ) const;
 
-    /**
-     * bitwise AND of rhs->key and this->key
-     *
-     * @param rhs the OverlayKey AND is calculated with
-     * @return this OverlayKey object
-     */
-    OverlayKey  operator& ( const OverlayKey& rhs ) const;
+	/**
+	 * bitwise AND of rhs->key and this->key
+	 *
+	 * @param rhs the OverlayKey AND is calculated with
+	 * @return this OverlayKey object
+	 */
+	OverlayKey  operator& ( const OverlayKey& rhs ) const;
 
-    /**
-     * bitwise OR of rhs->key and this->key
-     *
-     * @param rhs the OverlayKey OR is calculated with
-     * @return this OverlayKey object
-     */
-    OverlayKey  operator| ( const OverlayKey& rhs ) const;
+	/**
+	 * bitwise OR of rhs->key and this->key
+	 *
+	 * @param rhs the OverlayKey OR is calculated with
+	 * @return this OverlayKey object
+	 */
+	OverlayKey  operator| ( const OverlayKey& rhs ) const;
 
-    /**
-     * bitwise XOR of rhs->key and this->key
-     *
-     * @param rhs the OverlayKey XOR is calculated with
-     * @return this OverlayKey object
-     */
-    OverlayKey  operator^ ( const OverlayKey& rhs ) const;
+	/**
+	 * bitwise XOR of rhs->key and this->key
+	 *
+	 * @param rhs the OverlayKey XOR is calculated with
+	 * @return this OverlayKey object
+	 */
+	OverlayKey  operator^ ( const OverlayKey& rhs ) const;
 
-    /**
-     * bitwise NOT of this->key
-     *
-     * @return this OverlayKey object
-     */
-    OverlayKey  operator~ () const;
+	/**
+	 * bitwise NOT of this->key
+	 *
+	 * @return this OverlayKey object
+	 */
+	OverlayKey  operator~ () const;
 
-    /**
-     * returns the n-th bit of this->key
-     *
-     * @param n the position of the returned bit
-     * @return the bit on position n in this->key
-     */
-    OverlayKeyBit operator[]( uint32_t n );
+	/**
+	 * returns the n-th bit of this->key
+	 *
+	 * @param n the position of the returned bit
+	 * @return the bit on position n in this->key
+	 */
+	OverlayKeyBit operator[]( uint32_t n );
 
-    /**
-     * sets a bit of this->key
-     *
-     * @param pos the position of the bit to set
-     * @param value new value for bit at position pos
-     * @return *this
-     */
-    OverlayKey& setBit(uint32_t pos, bool value);
+	/**
+	 * sets a bit of this->key
+	 *
+	 * @param pos the position of the bit to set
+	 * @param value new value for bit at position pos
+	 * @return *this
+	 */
+	OverlayKey& setBit(uint32_t pos, bool value);
 
-    //-------------------------------------------------------------------------
-    // additional math
-    //-------------------------------------------------------------------------
+	//-------------------------------------------------------------------------
+	// additional math
+	//-------------------------------------------------------------------------
 
-    /**
-     * Returns a sub integer at position p with n-bits. p is counted starting
-     * from the least significant bit of the key as bit 0. Bit p of the key
-     * becomes bit 0 of the returned integer.
-     *
-     * @param p the position of the sub-integer
-     * @param n the number of bits to be returned (max.32)
-     * @return The sub-integer.
-     */
-    uint32_t getBitRange(uint32_t p, uint32_t n) const;
+	/**
+	 * Returns a sub integer at position p with n-bits. p is counted starting
+	 * from the least significant bit of the key as bit 0. Bit p of the key
+	 * becomes bit 0 of the returned integer.
+	 *
+	 * @param p the position of the sub-integer
+	 * @param n the number of bits to be returned (max.32)
+	 * @return The sub-integer.
+	 */
+	uint32_t getBitRange(uint32_t p, uint32_t n) const;
 
-    double toDouble() const;
+	double toDouble() const;
 
-    inline bool getBit(uint32_t p) const
-    {
-        return getBitRange(p, 1);
-    };
+	inline bool getBit(uint32_t p) const
+	{
+	    return getBitRange(p, 1);
+	};
 
-    /**
-     * Returns a hash value for the key
-     *
-     * @return size_t The hash value
-     */
-    uint32_t hash() const;
+	/**
+	 * Returns a hash value for the key
+	 *
+	 * @return size_t The hash value
+	 */
+	uint32_t hash() const;
 
-    /**
-     * Returns the position of the msb in this key, which represents
-     * just the logarithm to base 2.
-     *
-     * @return The logarithm to base 2 of this key.
-     */
-    int log_2() const;
+	/**
+	 * Returns the position of the msb in this key, which represents
+	 * just the logarithm to base 2.
+	 *
+	 * @return The logarithm to base 2 of this key.
+	 */
+	int log_2() const;
 
-    /**
-     * Fills the suffix starting at pos with random bits to lsb.
-     *
-     * @param pos
+	/**
+	 * Fills the suffix starting at pos with random bits to lsb.
+	 *
+	 * @param pos
 	 * @param rng the rng to use for randomness
-     * @return OverlayKey
-     */
-    OverlayKey randomSuffix(uint32_t pos, cRNG* rng) const;
+	 * @return OverlayKey
+	 */
+	OverlayKey randomSuffix(uint32_t pos, cRNG* rng) const;
 
-    /**
-     * Fills the prefix starting at pos with random bits to msb.
-     *
-     * @param pos
+	/**
+	 * Fills the prefix starting at pos with random bits to msb.
+	 *
+	 * @param pos
 	 * @param rng the rng to use for randomness
-     * @return OverlayKey
-     */
-    OverlayKey randomPrefix(uint32_t pos, cRNG* rng) const;
+	 * @return OverlayKey
+	 */
+	OverlayKey randomPrefix(uint32_t pos, cRNG* rng) const;
 
-    /**
-     * Calculates the number of equal bits (digits) from the left with another
-     * Key (shared prefix length)
-     *
-     * @param compKey the Key to compare with
-     * @param bitsPerDigit optional number of bits per digit, default is 1
-     * @return length of shared prefix
-     */
-    uint32_t sharedPrefixLength(const OverlayKey& compKey,
-                                uint32_t bitsPerDigit = 1) const;
+	/**
+	 * Calculates the number of equal bits (digits) from the left with another
+	 * Key (shared prefix length)
+	 *
+	 * @param compKey the Key to compare with
+	 * @param bitsPerDigit optional number of bits per digit, default is 1
+	 * @return length of shared prefix
+	 */
+	uint32_t sharedPrefixLength(const OverlayKey& compKey,
+	                            uint32_t bitsPerDigit = 1) const;
 
-    /**
-     * Returns true, if this key is element of the interval (keyA, keyB)
-     * on the ring.
-     *
-     * @param keyA The left border of the interval
-     * @param keyB The right border of the interval
-     * @return True, if the key is element of the interval (keyA, keyB)
-     */
-    bool isBetween(const OverlayKey& keyA, const OverlayKey& keyB) const;
+	/**
+	 * Returns true, if this key is element of the interval (keyA, keyB)
+	 * on the ring.
+	 *
+	 * @param keyA The left border of the interval
+	 * @param keyB The right border of the interval
+	 * @return True, if the key is element of the interval (keyA, keyB)
+	 */
+	bool isBetween(const OverlayKey& keyA, const OverlayKey& keyB) const;
 
-    /**
-     * Returns true, if this key is element of the interval (keyA, keyB]
-     * on the ring.
-     *
-     * @param keyA The left border of the interval
-     * @param keyB The right border of the interval
-     * @return True, if the key is element of the interval (keyA, keyB]
-     */
-    bool isBetweenR(const OverlayKey& keyA, const OverlayKey& keyB) const;
+	/**
+	 * Returns true, if this key is element of the interval (keyA, keyB]
+	 * on the ring.
+	 *
+	 * @param keyA The left border of the interval
+	 * @param keyB The right border of the interval
+	 * @return True, if the key is element of the interval (keyA, keyB]
+	 */
+	bool isBetweenR(const OverlayKey& keyA, const OverlayKey& keyB) const;
 
-    /**
-     * Returns true, if this key is element of the interval [keyA, keyB)
-     * on the ring.
-     *
-     * @param keyA The left border of the interval
-     * @param keyB The right border of the interval
-     * @return True, if the key is element of the interval [keyA, keyB)
-     */
-    bool isBetweenL(const OverlayKey& keyA, const OverlayKey& keyB) const;
+	/**
+	 * Returns true, if this key is element of the interval [keyA, keyB)
+	 * on the ring.
+	 *
+	 * @param keyA The left border of the interval
+	 * @param keyB The right border of the interval
+	 * @return True, if the key is element of the interval [keyA, keyB)
+	 */
+	bool isBetweenL(const OverlayKey& keyA, const OverlayKey& keyB) const;
 
-    /**
-     * Returns true, if this key is element of the interval [keyA, keyB]
-     * on the ring.
-     *
-     * @param keyA The left border of the interval
-     * @param keyB The right border of the interval
-     * @return True, if the key is element of the interval [keyA, keyB]
-     */
-    bool isBetweenLR(const OverlayKey& keyA, const OverlayKey& keyB) const;
+	/**
+	 * Returns true, if this key is element of the interval [keyA, keyB]
+	 * on the ring.
+	 *
+	 * @param keyA The left border of the interval
+	 * @param keyB The right border of the interval
+	 * @return True, if the key is element of the interval [keyA, keyB]
+	 */
+	bool isBetweenLR(const OverlayKey& keyA, const OverlayKey& keyB) const;
 
-    //-------------------------------------------------------------------------
-    // static methods
-    //-------------------------------------------------------------------------
+	//-------------------------------------------------------------------------
+	// static methods
+	//-------------------------------------------------------------------------
 
-    /**
-     * Set the length of an OverlayKey
-     *
-     * @param length keylength in bits
-     */
-    static void setKeyLength(uint32_t length);
+	/**
+	 * Set the length of an OverlayKey
+	 *
+	 * @param length keylength in bits
+	 */
+	static void setKeyLength(uint32_t length);
 
-    /**
-     * Returns the length in number of bits.
-     *
-     * @return The length in number of bits.
-     */
-    static uint32_t getLength();
+	/**
+	 * Returns the length in number of bits.
+	 *
+	 * @return The length in number of bits.
+	 */
+	static uint32_t getLength();
 
-    /**
-     * Returns a random key.
-     *
-     * @return A random key.
-     */
-    static OverlayKey random(cRNG* rng);
+	/**
+	 * Returns a random key.
+	 *
+	 * @return A random key.
+	 */
+	static OverlayKey random(cRNG* rng);
 
-    /**
-     * Returns the maximum key, i.e. a key filled with bit 1
-     *
-     * @return The maximum key, i.e. a key filled with bit 1
-     */
-    static OverlayKey getMax();
+	/**
+	 * Returns the maximum key, i.e. a key filled with bit 1
+	 *
+	 * @return The maximum key, i.e. a key filled with bit 1
+	 */
+	static OverlayKey getMax();
 
-    /**
-     * Returns a key with the SHA1 cryptographic hash of a
-     * BinaryValue.
-     *
-     * @param value A BinaryValue object.
-     * @return SHA1 of value
-     */
-    static OverlayKey sha1(const BinaryValue& value);
+	/**
+	 * Returns a key with the SHA1 cryptographic hash of a
+	 * BinaryValue.
+	 *
+	 * @param value A BinaryValue object.
+	 * @return SHA1 of value
+	 */
+	static OverlayKey sha1(const BinaryValue& value);
 
-    /**
-     * Returns a key 2^exponent.
-     *
-     * @param exponent The exponent.
-     * @return Key=2^exponent.
-     */
-    static OverlayKey pow2(uint32_t exponent);
+	/**
+	 * Returns a key 2^exponent.
+	 *
+	 * @param exponent The exponent.
+	 * @return Key=2^exponent.
+	 */
+	static OverlayKey pow2(uint32_t exponent);
 
-    /**
-     * A pseudo regression test method.
-     * Outputs report to standard output.
-     */
-    static void test();
+	/**
+	 * A pseudo regression test method.
+	 * Outputs report to standard output.
+	 */
+	static void test();
 
 private:
-    // private constants
+	// private constants
 
-    static const uint32_t MAX_KEYLENGTH = 160; /**< maximum length of the key */
-    static uint32_t keyLength; /**< actual length of the key */
-    static uint32_t aSize; /**< number of needed machine words to hold the key*/
-    static mp_limb_t GMP_MSB_MASK; /**< bits to fill up if key does not
-    exactly fit in one or more machine words */
+	static const uint32_t MAX_KEYLENGTH = 160; /**< maximum length of the key */
+	static uint32_t keyLength; /**< actual length of the key */
+	static uint32_t aSize; /**< number of needed machine words to hold the key*/
+	static mp_limb_t GMP_MSB_MASK; /**< bits to fill up if key does not
+	exactly fit in one or more machine words */
 
-    // private fields
-    bool isUnspec; /**< is this->key unspecified? */
+	// private fields
+	bool isUnspec; /**< is this->key unspecified? */
 
-    mp_limb_t key[MAX_KEYLENGTH / (8*sizeof(mp_limb_t)) +
-              (MAX_KEYLENGTH % (8*sizeof(mp_limb_t))!=0 ? 1 : 0)];
-    /**< the overlay key this object represents */
+	mp_limb_t key[MAX_KEYLENGTH / (8*sizeof(mp_limb_t)) +
+	          (MAX_KEYLENGTH % (8*sizeof(mp_limb_t))!=0 ? 1 : 0)];
+	/**< the overlay key this object represents */
 
 
-    // private "helper" methods
-    /**
-     * trims key after key operations
-     */
-    void trim();
+	// private "helper" methods
+	/**
+	 * trims key after key operations
+	 */
+	void trim();
 
-    /**
-     * set this->key to 0 and isUnspec to false
-     */
-    void clear();
+	/**
+	 * set this->key to 0 and isUnspec to false
+	 */
+	void clear();
 };
 
 /**
@@ -526,44 +526,44 @@ private:
  */
 class OverlayKeyBit
 {
- public:
+public:
 
-    OverlayKeyBit(bool value, uint32_t pos, OverlayKey* key)
-        : bit(value), pos(pos), key(key)
-    {};
+	OverlayKeyBit(bool value, uint32_t pos, OverlayKey* key)
+	    : bit(value), pos(pos), key(key)
+	{};
 
-    /** Converts to a boolean value */
-    inline operator bool()
-    {
-        return bit;
-    };
+	/** Converts to a boolean value */
+	inline operator bool()
+	{
+	    return bit;
+	};
 
-    inline OverlayKeyBit& operator=(const OverlayKeyBit& value)
-    {
-        key->setBit(pos, value.bit);
-        return *this;
-    };
+	inline OverlayKeyBit& operator=(const OverlayKeyBit& value)
+	{
+	    key->setBit(pos, value.bit);
+	    return *this;
+	};
 
-    /** Sets the corresponding bit to a boolean value
-    * @param value value to set to
-    */
-    inline OverlayKeyBit& operator=(bool value)
-    {
-        key->setBit(pos, value);
-        return *this;
-    };
+	/** Sets the corresponding bit to a boolean value
+	* @param value value to set to
+	*/
+	inline OverlayKeyBit& operator=(bool value)
+	{
+	    key->setBit(pos, value);
+	    return *this;
+	};
 
-    inline OverlayKeyBit& operator^=(bool value)
-    {
-        key->setBit(pos, (*key)[pos] ^ value);
-        return *this;
-    };
+	inline OverlayKeyBit& operator^=(bool value)
+	{
+	    key->setBit(pos, (*key)[pos] ^ value);
+	    return *this;
+	};
 
- private:
+private:
 
-    bool bit;
-    uint32_t pos;
-    OverlayKey* key;
+	bool bit;
+	uint32_t pos;
+	OverlayKey* key;
 };
 
 #endif
