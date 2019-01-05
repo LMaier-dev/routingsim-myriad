@@ -32,7 +32,6 @@
 
 class BinaryValue;
 class OverlayKeyBit;
-class cCommBuffer;
 
 /**
  * replacement function for mpn_random() using omnet's rng
@@ -514,22 +513,6 @@ private:
      * set this->key to 0 and isUnspec to false
      */
     void clear();
-
-public:
-
-    /**
-     * serializes the object into a buffer
-     *
-     * @param b the buffer
-     */
-    void parsimPack(cCommBuffer *b);
-
-    /**
-     * deserializes the object from a buffer
-     *
-     * @param b the buffer
-     */
-    void parsimUnpack(cCommBuffer *b);
 };
 
 /**
@@ -578,10 +561,5 @@ class OverlayKeyBit
     uint32_t pos;
     OverlayKey* key;
 };
-
-
-
-inline void doPacking(cCommBuffer *b, OverlayKey& obj) {obj.parsimPack(b);}
-inline void doUnpacking(cCommBuffer *b, OverlayKey& obj) {obj.parsimUnpack(b);}
 
 #endif

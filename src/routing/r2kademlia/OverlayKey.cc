@@ -26,10 +26,6 @@
 #include <omnetpp.h>
 
 #include "OverlayKey.h"
-#include "Comparator.h"
-
-#include <BinaryValue.h>
-#include "SHA1.h"
 
 using namespace std;
 
@@ -215,18 +211,6 @@ std::string OverlayKey::toString(uint32_t base) const
         } else {
             throw cRuntimeError("OverlayKey::OverlayKey(): Invalid base!");
         }
-
-// the following native libgmp code doesn't work with leading zeros
-#if 0
-        mp_size_t last = mpn_get_str((unsigned char*)temp, base,
-                                     (mp_limb_t*)this->key, aSize);
-        for (int i=0; i<last; i++) {
-            temp[i] = HEX[temp[i]];
-        }
-        temp[last] = 0;
-        return std::string((const char*)temp);
-#endif
-
     }
 }
 
@@ -568,61 +552,6 @@ int OverlayKey::log_2() const
     return i-1;
 }
 
-// returns a simple hash of the key
-uint32_t OverlayKey::hash() const
-{
-/* By Paul Hsieh (C) 2004, 2005.  Covered under the LGPL 2.1 license.
-   http://www.azillionmonkeys.com/qed/hash.html */
-
-    #define get16bits(d) (*((const uint16_t *) (d)))
-
-    const char * data = (const char *)key;
-    int len = OverlayKey::keyLength / 8;
-
-    uint32_t hash = len, tmp;
-    int rem;
-
-    if (len <= 0 || data == NULL) return 0;
-
-    rem = len & 3;
-    len >>= 2;
-
-    /* Main loop */
-    for (;len > 0; len--) {
-        hash  += get16bits (data);
-        tmp    = (get16bits (data+2) << 11) ^ hash;
-        hash   = (hash << 16) ^ tmp;
-        data  += 2*sizeof (uint16_t);
-        hash  += hash >> 11;
-    }
-
-    /* Handle end cases */
-    switch (rem) {
-    case 3: hash += get16bits (data);
-    hash ^= hash << 16;
-    hash ^= ((signed char)data[sizeof (uint16_t)]) << 18;
-    hash += hash >> 11;
-    break;
-    case 2: hash += get16bits (data);
-    hash ^= hash << 11;
-    hash += hash >> 17;
-    break;
-    case 1: hash += (signed char)*data;
-    hash ^= hash << 10;
-    hash += hash >> 1;
-    }
-
-    /* Force "avalanching" of final 127 bits */
-    hash ^= hash << 3;
-    hash += hash >> 5;
-    hash ^= hash << 4;
-    hash += hash >> 17;
-    hash ^= hash << 25;
-    hash += hash >> 6;
-
-    return hash;
-}
-
 // returns true, if this key is element of the interval (keyA, keyB)
 bool OverlayKey::isBetween(const OverlayKey& keyA,
                            const OverlayKey& keyB) const
@@ -721,25 +650,6 @@ OverlayKey OverlayKey::random(cRNG* rng)
     return newKey;
 }
 
-// generate sha1 hash
-OverlayKey OverlayKey::sha1(const BinaryValue& input)
-{
-    OverlayKey newKey = OverlayKey();
-    uint8_t temp[20];
-    CSHA1 sha1;
-
-    sha1.Reset();
-    sha1.Update((uint8_t*)(&(*input.begin())), input.size());
-    sha1.Final();
-    sha1.GetHash(temp);
-    mpn_set_str(newKey.key, (const uint8_t*)temp,
-                (int)std::min((uint32_t)(aSize * sizeof(mp_limb_t)), 20U), 256);
-    newKey.isUnspec = false;
-    newKey.trim();
-
-    return newKey;
-}
-
 // generate a key=2**exponent
 OverlayKey OverlayKey::pow2( uint32_t exponent )
 {
@@ -754,115 +664,6 @@ OverlayKey OverlayKey::pow2( uint32_t exponent )
         (mp_limb_t)1 << (exponent % GMP_LIMB_BITS);
 
     return newKey;
-}
-
-// pseudo-regression test
-void OverlayKey::test()
-{
-    // add test
-    cout << endl << "--- Add test ..." << endl;
-    OverlayKey key = 123456789;
-    cout << "    key=" << key << endl;
-    cout << "    key += 987654321 = " << (key+=987654321) << endl;
-    cout << "    prefix++  : " << (++key) << endl;
-    cout << "    postfix++ : " << (key++) << endl;
-    cout << "    key=" << key << endl;
-
-    OverlayKey k1 = 256, k2 = 10, k3 = 3;
-
-    // compare test
-    cout << endl << "--- Compare test ..." << endl;
-    cout << "    256 < 10 = "<< (k1 < k2) << " k1="<<k1<<endl;
-    cout << "    256 > 10 = "<< (k1 > k2) << " k2="<<k2<<endl;
-
-    cout << "    10 isBetween(3, 256)=" << k2.isBetween(k3, k1) << endl;
-    cout << "    3 isBetween(10, 256)=" << k3.isBetween(k2, k1) << endl;
-    cout << "    256 isBetween(10, 256)=" << k1.isBetween(k2, k1) << endl;
-    cout << "    256 isBetweenR(10, 256)=" << k1.isBetweenR(k2, k1) << endl;
-    cout << "    max isBetween(max-1,0)=" << OverlayKey::getMax().isBetween(
-                                                                         OverlayKey::getMax()-1, OverlayKey::ZERO) << endl;
-    cout << "    max-1 isBetween(max,1)=" << (OverlayKey::getMax()-1).isBetween(
-                                                                             OverlayKey::getMax(), OverlayKey::ONE) << endl;
-    cout << "    max-1 isBetweenL(max-1,1)=" << (OverlayKey::getMax()-1).
-        isBetweenL(OverlayKey::getMax()-1, OverlayKey::ONE) << endl;
-    cout << "    1 isBetweenL(max-1,1)=" << (OverlayKey::ONE).isBetweenL(
-                                                                         OverlayKey::getMax()-1, OverlayKey::ONE) << endl;
-    cout << "    1 isBetweenR(max-1,1)=" << OverlayKey::ONE.isBetweenR(
-                                                                       OverlayKey::getMax()-1, OverlayKey::ONE) << endl;
-    cout << "    1 isBetween(max-1,1)=" << OverlayKey::ONE.isBetween(
-                                                                     OverlayKey::getMax()-1, OverlayKey::ONE) << endl;
-    cout << "    1 isBetween(max-1,0)=" << OverlayKey::ONE.isBetween(
-                                                                     OverlayKey::getMax()-1, OverlayKey::ZERO) << endl;
-    cout << "    256 sharedPrefixLength(3)=" << k1.sharedPrefixLength(k3)
-         << endl;
-    cout << "    256 sharedPrefixLength(256)=" << k1.sharedPrefixLength(k1)
-         << endl;
-
-    // wrap around test
-    cout << endl << "--- Warp around test ..." << endl;
-
-    k1 = OverlayKey::getMax();
-    cout << "k1=max= " << k1.toString(16) << endl;
-    cout << "k1+1 = " << (k1 + 1).toString(16) << endl;
-    cout << "k1+2 = " << (k1 + 2).toString(16) << endl;
-
-    k1 = OverlayKey::ZERO;
-    cout << "k1=0= " << k1.toString(16) << endl;
-    cout << "k1-1 = " << (k1 - 1).toString(16) << endl;
-    cout << "k1-2 = " << (k1 - 2).toString(16) << endl;
-
-    cout << "max > ONE=" << (OverlayKey::getMax() > OverlayKey::ONE) << endl;
-    cout << "max < ONE=" << (OverlayKey::getMax() < OverlayKey::ONE) << endl;
-
-    // distance test
-    cout << endl << "--- Distance test ..." << endl;
-
-    cout << "KeyRingMetric::distance(1, max)="
-         <<  KeyRingMetric().distance(OverlayKey::ONE, OverlayKey::getMax()) << endl;
-    cout << "KeyCwRingMetric::distance(1, max)="
-         <<  KeyCwRingMetric().distance(OverlayKey::ONE, OverlayKey::getMax()) << endl;
-    cout << "KeyRingMetric::distance(max, 1)="
-         <<  KeyRingMetric().distance(OverlayKey::getMax(), OverlayKey::ONE) << endl;
-    cout << "KeyCwRingMetric::distance(max, 1)="
-         <<  KeyCwRingMetric().distance(OverlayKey::getMax(), OverlayKey::ONE) << endl;
-
-    // suffix and log2 test
-    cout << endl << "--- RandomSuffix and log2 test ..." << endl;
-    k1 = OverlayKey::ZERO;
-    for (uint32_t i=0; i<k1.getLength(); i++) {
-        k2=k1.randomSuffix(i);
-        cout << "    " << k2.toString(16) << " log2=" << k2.log_2() << endl;
-    }
-    cout << endl << "--- RandomPrefix and log2 test ..." << endl;
-    k1 = OverlayKey::getMax();
-    for (uint32_t i=0; i<k1.getLength(); i++) {
-        k2=k1.randomPrefix(i);
-        cout << "    " << k2.toString(16) << " log2=" << k2.log_2() << endl;
-    }
-
-    cout << endl << "--- pow2 test..." << endl;
-    for (uint32_t i=0; i<k1.getLength(); i++) {
-        k2=pow2(i);
-        cout << " 2^" << i << " = " << k2.toString(16) << "   log2="
-             << k2.log_2() << endl;
-    }
-
-    cout << endl << "--- Bits test ..." << endl << "    ";
-    const char* BITS[] = { "000","001","010","011","100","101","110","111" };
-    k1 = OverlayKey::random();
-    for (int i=k1.getLength()-1; i>=0; i--)
-        cout << k1[i];
-    cout << " = " << endl << "    ";
-    for (int i=k1.getLength()-3; i>=0; i-=3)
-        cout << BITS[k1.getBitRange(i,3)];
-    cout << endl;
-
-    cout << endl << "--- SHA1 test ... (verified with test vectors)" << endl;
-    cout << "    Empty string: " << OverlayKey::sha1("").toString(16)
-         << " = da39a3ee5e6b4b0d3255bfef95601890afd80709" << endl;
-    cout << "    'Hello World' string: "
-         << OverlayKey::sha1("Hello World").toString(16)
-         << " = 0a4d55a8d778e5022fab701977c5d840bbc486d0" << endl;
 }
 
 //--------------------------------------------------------------------
@@ -911,26 +712,3 @@ inline void omnet_random(mp_limb_t *r1p, mp_size_t r1n, cRNG* rng)
 #define GMP_TYPE unsigned long int
 #endif
 #endif
-
-void OverlayKey::parsimPack(cCommBuffer *b)
-{
-    //doPacking(b,(GMP_TYPE*)this->key, MAX_KEYLENGTH / (8*sizeof(mp_limb_t)) +
-              //(MAX_KEYLENGTH % (8*sizeof(mp_limb_t))!=0 ? 1 : 0));
-    // Pack an OverlayKey as uint32_t array and hope for the best
-    // FIXME: This is probably not exactly portable
-    doPacking(b,(uint32_t*)this->key, MAX_KEYLENGTH / (8*sizeof(uint32_t)) +
-              (MAX_KEYLENGTH % (8*sizeof(uint32_t))!=0 ? 1 : 0));
-    doPacking(b,this->isUnspec);
-}
-
-void OverlayKey::parsimUnpack(cCommBuffer *b)
-{
-    //doUnpacking(b,(GMP_TYPE*)this->key, MAX_KEYLENGTH / (8*sizeof(mp_limb_t)) +
-                //(MAX_KEYLENGTH % (8*sizeof(mp_limb_t))!=0 ? 1 : 0));
-    doUnpacking(b,(uint32_t*)this->key, MAX_KEYLENGTH / (8*sizeof(uint32_t)) +
-                (MAX_KEYLENGTH % (8*sizeof(uint32_t))!=0 ? 1 : 0));
-    doUnpacking(b,this->isUnspec);
-    trim();
-
-}
-
