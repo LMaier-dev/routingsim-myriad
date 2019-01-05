@@ -39,6 +39,7 @@ public:
 	kad_path path;
 	bool stale;
 	OverlayKey getOverlayKey() { return key; }
+	bool hasKey(const OverlayKey& other) { return other == key; }
 };
 using KadContact_p = std::shared_ptr<KadContact>;
 using KadContactList = std::vector<KadContact_p>;
@@ -48,6 +49,7 @@ class KadBucket
 public:
 	std::unique_ptr<KadContactList> contacts;
 	std::unique_ptr<KadContactList> refillContacts;
+	KadContact_p getContact(const OverlayKey& key);
 };
 using KadBucket_p = std::shared_ptr<KadBucket>;
 
@@ -60,16 +62,21 @@ public:
 	bool removeContact(const OverlayKey& key);
 	bool removeContact(KadContact_p contact);
 	KadContact_p getContact(const OverlayKey& key);
-	std::shared_ptr<KadBucket> getBucket(const OverlayKey& key);
 	std::unique_ptr<KadContactList> getClosestContacts(OverlayKey key, int n);
 	
 protected:
-	/** returns the index of the bucket corresponding to the given node id. */
+	/** returns the index of the bucket corresponding to the given overlay key. */
 	size_type getBucketIndex(const OverlayKey& key);
+
 	/** returns the index of the bucket corresponding to the given contact */
 	size_type getBucketIndex(KadContact_p contact) { return getBucketIndex(contact->getOverlayKey());}
+
+	/** returns the bucket corresponding to the given overlay key */
+	KadBucket* getBucket(const OverlayKey& key);
+
 	/** returns the index of the bucket that is the first on the level of the given bucket */
 	size_type getFirstOnBucketLevel(size_type index) { return index - (index % ((1 << b) - 1));}
+
 	// policy foo
 	/** called when a new contact is discovered */
 	void onDiscovery(KadContact_p);
@@ -81,9 +88,14 @@ protected:
 	void onBucketRefresh(KadBucket_p bucket);
 	/** called when a contact could be replaced by a new one */
 	void onReplacementPossibility(KadContact_p contact, KadBucket_p bucket);
-	
+
 private:
-	size_type b=1; /// acceleration factor, number of bits used for accelerated lookup
+	/** acceleration factor, number of bits used for accelerated lookup */
+	const size_type b=1;
+	/** the key of this overlay node */
+	const OverlayKey myKey=OverlayKey::ZERO;
+	size_type numBuckets;
+	std::vector<KadBucket> buckets;
 };
 
 } //namespace
