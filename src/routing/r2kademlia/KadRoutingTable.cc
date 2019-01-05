@@ -19,9 +19,9 @@
  */
 
 #include "KadRoutingTable.h"
-#include <memory>
 
 namespace routingsim {
+
 size_type KadRoutingTable::getBucketIndex(const OverlayKey& key)
 {
 	// taken from OverSim Kademlia.cc
@@ -106,15 +106,4 @@ KadContact_p KadBucket::getContact(const OverlayKey& key)
 	return KadContact_p();
 }
 
-bool removeContactFromList(KadContactList_p& list, const OverlayKey& key)
-{
-	auto it = findContactInList(list, key);
-	if (it != list->end()){
-		list->erase(it);
-		return true;
-	}
-	else
-		return false;
-}
-
-}
+} // namespace

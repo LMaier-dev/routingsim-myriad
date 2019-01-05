@@ -20,53 +20,13 @@
 #include <omnetpp.h>
 #include <memory>
 #include <vector>
-#include "OverlayKey.h"
+#include "KadContact.h"
 /**
  * @file KadRoutingTable.h
  * @author Jakob Thomas
  */
 
 namespace routingsim {
-
-// type definitions
-using kad_path = std::vector<OverlayKey>;
-using size_type = std::size_t;
-
-class KadContact
-{
-public:
-	KadContact(const OverlayKey key): key(key) {};
-	OverlayKey getKey() const { return key; }
-	/// compares the given key to the contacts key
-	bool hasKey(const OverlayKey& other) const { return other == key; }
-	void setStale(bool stale_) {stale = stale_};
-	bool isStale() const { return stale; }
-	/// sets the last seen time to now
-	void seen() { lastSeen = simTime(); }
-	simtime_t getLastSeen() const { return lastSeen; }
-private:
-	const OverlayKey key;	/// the OverlayKey of this contact
-	simtime_t lastSeen;		/// the last time this contact was seen
-	kad_path path;			/// the best known source routing path to reach this contact
-	bool stale;				/// true if the contact is not answering
-};
-// contact type definitions
-using KadContact_p = std::shared_ptr<KadContact>;
-using KadContactList = std::vector<KadContact_p>;
-using KadContactList_p = std::unique_ptr<KadContactList>;
-
-// contact list helper functions:
-/**
- * Returns an iterator at the contacts position.
- * Returns list->end() if the contact is not found.
- */
-auto findContactInList(KadContactList_p& list, const OverlayKey& key){
-	auto it = list->begin();
-	for (;!(*it)->hasKey(key) && it !=  list->end(); it++);
-	return it;
-}
-/** tries to remove the given contact from the list. returns true if found.*/
-bool removeContactFromList(KadContactList_p& list, const OverlayKey& key);
 
 class KadBucket
 {
