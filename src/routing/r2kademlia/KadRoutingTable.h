@@ -35,15 +35,38 @@ using size_type = std::size_t;
 class KadContact
 {
 public:
-	OverlayKey key;
-	kad_path path;
-	bool stale;
-	OverlayKey getKey() { return key; }
-	bool hasKey(const OverlayKey& other) { return other == key; }
+	KadContact(const OverlayKey key): key(key) {};
+	OverlayKey getKey() const { return key; }
+	/// compares the given key to the contacts key
+	bool hasKey(const OverlayKey& other) const { return other == key; }
+	void setStale(bool stale_) {stale = stale_};
+	bool isStale() const { return stale; }
+	/// sets the last seen time to now
+	void seen() { lastSeen = simTime(); }
+	simtime_t getLastSeen() const { return lastSeen; }
+private:
+	const OverlayKey key;	/// the OverlayKey of this contact
+	simtime_t lastSeen;		/// the last time this contact was seen
+	kad_path path;			/// the best known source routing path to reach this contact
+	bool stale;				/// true if the contact is not answering
 };
+// contact type definitions
 using KadContact_p = std::shared_ptr<KadContact>;
 using KadContactList = std::vector<KadContact_p>;
 using KadContactList_p = std::unique_ptr<KadContactList>;
+
+// contact list helper functions:
+/**
+ * Returns an iterator at the contacts position.
+ * Returns list->end() if the contact is not found.
+ */
+auto findContactInList(KadContactList_p& list, const OverlayKey& key){
+	auto it = list->begin();
+	for (;!(*it)->hasKey(key) && it !=  list->end(); it++);
+	return it;
+}
+/** tries to remove the given contact from the list. returns true if found.*/
+bool removeContactFromList(KadContactList_p& list, const OverlayKey& key);
 
 class KadBucket
 {
@@ -51,8 +74,8 @@ public:
 	KadContactList_p contacts;
 	KadContactList_p refillContacts;
 	KadContact_p getContact(const OverlayKey& key);
-	bool removeContact(const OverlayKey& key);
-	bool removeContactFromReplacements(const OverlayKey& key);
+	bool removeContact(const OverlayKey& key) { return removeContactFromList(contacts, key);}
+	bool removeContactFromReplacements(const OverlayKey& key) { return removeContactFromList(refillContacts, key);}
 	bool empty() { return contacts->empty();}
 };
 
@@ -115,16 +138,6 @@ private:
 		std::copy(source->begin(), source->end(), std::back_inserter(*target));
 	}
 };
-
-/**
- * Returns an iterator at the contacts position.
- * Returns list->end() if the contact is not found.
- */
-auto findContact(KadContactList_p& list, const OverlayKey& key){
-	auto it = list->begin();
-	for (;!(*it)->hasKey(key) && it !=  list->end(); it++);
-	return it;
-}
 
 } //namespace
 

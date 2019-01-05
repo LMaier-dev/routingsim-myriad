@@ -97,13 +97,24 @@ KadContact_p KadRoutingTable::getContact(const OverlayKey& key)
 KadContact_p KadBucket::getContact(const OverlayKey& key)
 {
 
-	auto it = findContact(contacts, key);
+	auto it = findContactInList(contacts, key);
 	if (it != contacts->end())
 		return *it;
-	it = findContact(refillContacts, key);
+	it = findContactInList(refillContacts, key);
 	if (it != refillContacts->end())
 		return *it;
 	return KadContact_p();
+}
+
+bool removeContactFromList(KadContactList_p& list, const OverlayKey& key)
+{
+	auto it = findContactInList(list, key);
+	if (it != list->end()){
+		list->erase(it);
+		return true;
+	}
+	else
+		return false;
 }
 
 }
