@@ -21,6 +21,15 @@
 #include "KadRoutingTable.h"
 
 namespace routingsim {
+KadRoutingTable::KadRoutingTable(const OverlayKey& myKey, size_type b, size_type bucketSize):
+	myKey(myKey), b(b), bucketSize(bucketSize)
+{
+	size_type numBuckets = myKey.getLength()/b * ((1 << b) - 1);
+	buckets.reserve(numBuckets);
+	for(size_type i=0; i<numBuckets; i++){
+		buckets.emplace_back();
+	}
+}
 
 size_type KadRoutingTable::getBucketIndex(const OverlayKey& key)
 {
@@ -68,6 +77,19 @@ KadContactList_p KadRoutingTable::getClosestContacts(const OverlayKey& key, size
 	return result;
 }
 
+bool KadRoutingTable::addContact(KadContact_p contact)
+{
+	KadBucket* bucket = getBucket(contact);
+	if (bucket->size() == bucketSize){
+		onBucketFull(bucket, contact);
+		return false;
+	}
+	else {
+		bucket->contacts->push_back(contact);
+		return true;
+	}
+}
+
 bool KadRoutingTable::removeContact(const OverlayKey& key)
 {
 	KadBucket* bucket = getBucket(key);
@@ -91,6 +113,13 @@ KadContact_p KadRoutingTable::getContact(const OverlayKey& key)
 {
 	KadBucket* bucket = getBucket(key);
 	return bucket->getContact(key);
+}
+
+void KadRoutingTable::onBucketFull(KadBucket* bucket, KadContact_p contact)
+{
+	if (bucket->refillContacts->size() < bucketSize){
+		bucket->refillContacts->push_back(contact);
+	}
 }
 
 //----------- KadBucket --------------

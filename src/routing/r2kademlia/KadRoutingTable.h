@@ -27,23 +27,29 @@
  */
 
 namespace routingsim {
+class KadRoutingTable;
 
 class KadBucket
 {
+	friend KadRoutingTable;
 public:
-	KadContactList_p contacts;
-	KadContactList_p refillContacts;
 	KadContact_p getContact(const OverlayKey& key);
 	bool removeContact(const OverlayKey& key) { return removeContactFromList(contacts, key);}
 	bool removeContactFromReplacements(const OverlayKey& key) { return removeContactFromList(refillContacts, key);}
-	bool empty() { return contacts->empty();}
+	bool empty() { return contacts->empty(); }
+	size_type size() { return contacts->size(); }
+protected:
+	KadContactList_p contacts;
+	KadContactList_p refillContacts;
 };
 
 /**
  */
 class KadRoutingTable
 {
+	friend KadBucket;
 public:
+	KadRoutingTable(const OverlayKey& myKey, size_type b=1, size_type bucketSize=20);
 	bool addContact(KadContact_p contact);
 	bool removeContact(const OverlayKey& key);
 	bool removeContact(KadContact_p contact) { return removeContact(contact->getKey()); }
@@ -55,10 +61,12 @@ protected:
 	size_type getBucketIndex(const OverlayKey& key);
 
 	/** returns the index of the bucket corresponding to the given contact */
-	size_type getBucketIndex(KadContact_p contact) { return getBucketIndex(contact->getKey());}
+	inline size_type getBucketIndex(KadContact_p contact) { return getBucketIndex(contact->getKey());}
 
 	/** returns the bucket corresponding to the given overlay key */
 	KadBucket* getBucket(const OverlayKey& key);
+	/** returns the bucket corresponding to the given contact */
+	inline KadBucket* getBucket(KadContact_p contact) { return getBucket(contact->getKey());}
 
 	/** returns the index of the bucket that is the first on the level of the given bucket */
 	size_type getFirstOnBucketLevel(size_type index) { return index - (index % ((1 << b) - 1));}
@@ -75,14 +83,15 @@ protected:
 	/**  called when a bucket needs to be refreshed */
 	void onBucketRefresh(KadBucket* bucket) {};
 	/** called when a contact could be replaced by a new one */
-	void onBucketFull(KadContact_p contact, KadBucket* bucket) {};
+	void onBucketFull(KadBucket* bucket, KadContact_p contact);
 
 private:
 	/** acceleration factor, number of bits used for accelerated lookup */
-	const size_type b=1;
+	const size_type b;
 	/** the key of this overlay node */
-	const OverlayKey myKey=OverlayKey::ZERO;
-	size_type numBuckets;
+	const OverlayKey myKey;
+	/** max size of the buckets, called "k" in research papers (k-Buckets) */
+	const size_type bucketSize;
 	std::vector<KadBucket> buckets;
 
 	//------ private inline helper functions -------
