@@ -19,6 +19,7 @@
  */
 
 #include "KadRoutingTable.h"
+#include <memory>
 
 namespace routingsim {
 size_type KadRoutingTable::getBucketIndex(const OverlayKey& key)
@@ -37,6 +38,49 @@ size_type KadRoutingTable::getBucketIndex(const OverlayKey& key)
 	return (i / b) * ((1 << b) - 1) + (delta.getBitRange(i, b) - 1);
 }
 
+KadContactList_p KadRoutingTable::getClosestContacts(const OverlayKey& key, size_type n)
+{
+	KadContactList_p result = std::make_unique<KadContactList>();
+	// find correct bucket and copy contents
+	size_type index = getBucketIndex(key);
+	auto bucket = getBucketIterator(index);
+	copyContacts(bucket->contacts, result);
+	if(result->size() < n){
+		// not enough contacts in first bucket
+		// now we scan the level of the accelerated lookup
+		// and then we go down the tree
+		size_type firstOnLevelIndex = getFirstOnBucketLevel(index);
+		auto otherBucket = getBucketIterator(firstOnLevelIndex);
+		while(result->size() < n && otherBucket != buckets.end()){
+			if(otherBucket == bucket)
+				continue;
+			copyContacts(otherBucket->contacts, result);
+			otherBucket++;
+		}
+		otherBucket = getBucketIterator(firstOnLevelIndex);
+		// if we still do not have enough contacts, we go up the tree
+		while(result->size() < n && otherBucket != buckets.begin()){
+			otherBucket--;
+			copyContacts(otherBucket->contacts, result);
+		}
+	}
+	//TODO if whe have found move than n contacts, we need to remove some...
+	return result;
+}
+
+bool KadRoutingTable::removeContact(const OverlayKey& key)
+{
+	KadBucket* bucket = getBucket(key);
+	bool result = bucket->removeContact(key);
+	if (bucket->empty())
+		onBucketEmpty(bucket);
+	if (result)
+		onBucketSpace(bucket);
+	else
+		bucket->removeContactFromReplacements(key);
+	return result;
+}
+
 KadBucket* KadRoutingTable::getBucket(const OverlayKey& key)
 {
 	size_type index = getBucketIndex(key);
@@ -52,14 +96,13 @@ KadContact_p KadRoutingTable::getContact(const OverlayKey& key)
 //----------- KadBucket --------------
 KadContact_p KadBucket::getContact(const OverlayKey& key)
 {
-	for (auto it = contacts->begin(); it != contacts->end(); it++){
-		if((*it)->hasKey(key))
-			return *it;
-	}
-	for (auto it = refillContacts->begin(); it != refillContacts->end(); it++){
-		if((*it)->hasKey(key))
-			return *it;
-	}
+
+	auto it = findContact(contacts, key);
+	if (it != contacts->end())
+		return *it;
+	it = findContact(refillContacts, key);
+	if (it != refillContacts->end())
+		return *it;
 	return KadContact_p();
 }
 

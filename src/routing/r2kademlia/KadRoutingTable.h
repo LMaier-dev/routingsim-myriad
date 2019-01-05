@@ -38,20 +38,23 @@ public:
 	OverlayKey key;
 	kad_path path;
 	bool stale;
-	OverlayKey getOverlayKey() { return key; }
+	OverlayKey getKey() { return key; }
 	bool hasKey(const OverlayKey& other) { return other == key; }
 };
 using KadContact_p = std::shared_ptr<KadContact>;
 using KadContactList = std::vector<KadContact_p>;
+using KadContactList_p = std::unique_ptr<KadContactList>;
 
 class KadBucket
 {
 public:
-	std::unique_ptr<KadContactList> contacts;
-	std::unique_ptr<KadContactList> refillContacts;
+	KadContactList_p contacts;
+	KadContactList_p refillContacts;
 	KadContact_p getContact(const OverlayKey& key);
+	bool removeContact(const OverlayKey& key);
+	bool removeContactFromReplacements(const OverlayKey& key);
+	bool empty() { return contacts->empty();}
 };
-using KadBucket_p = std::shared_ptr<KadBucket>;
 
 /**
  */
@@ -60,16 +63,16 @@ class KadRoutingTable
 public:
 	bool addContact(KadContact_p contact);
 	bool removeContact(const OverlayKey& key);
-	bool removeContact(KadContact_p contact);
+	bool removeContact(KadContact_p contact) { return removeContact(contact->getKey()); }
 	KadContact_p getContact(const OverlayKey& key);
-	std::unique_ptr<KadContactList> getClosestContacts(OverlayKey key, int n);
+	KadContactList_p getClosestContacts(const OverlayKey& key, size_type n);
 	
 protected:
 	/** returns the index of the bucket corresponding to the given overlay key. */
 	size_type getBucketIndex(const OverlayKey& key);
 
 	/** returns the index of the bucket corresponding to the given contact */
-	size_type getBucketIndex(KadContact_p contact) { return getBucketIndex(contact->getOverlayKey());}
+	size_type getBucketIndex(KadContact_p contact) { return getBucketIndex(contact->getKey());}
 
 	/** returns the bucket corresponding to the given overlay key */
 	KadBucket* getBucket(const OverlayKey& key);
@@ -77,17 +80,19 @@ protected:
 	/** returns the index of the bucket that is the first on the level of the given bucket */
 	size_type getFirstOnBucketLevel(size_type index) { return index - (index % ((1 << b) - 1));}
 
-	// policy foo
+	// ------ policy foo -----
 	/** called when a new contact is discovered */
-	void onDiscovery(KadContact_p);
+	void onDiscovery(KadContact_p) {};
 	/** called when we hear about a node id */
-	void onRumor(const OverlayKey& key);
-	/** called when there is space in a bucket */
-	void onBucketSpace(KadBucket_p bucket);
+	void onRumor(const OverlayKey& key) {};
+	/** called when there is space in a bucket and the bucket is not empty */
+	void onBucketSpace(KadBucket* bucket) {};
+	/** called when last contact is removed from a bucket*/
+	void onBucketEmpty(KadBucket* bucket) {};
 	/**  called when a bucket needs to be refreshed */
-	void onBucketRefresh(KadBucket_p bucket);
+	void onBucketRefresh(KadBucket* bucket) {};
 	/** called when a contact could be replaced by a new one */
-	void onReplacementPossibility(KadContact_p contact, KadBucket_p bucket);
+	void onBucketFull(KadContact_p contact, KadBucket* bucket) {};
 
 private:
 	/** acceleration factor, number of bits used for accelerated lookup */
@@ -96,7 +101,30 @@ private:
 	const OverlayKey myKey=OverlayKey::ZERO;
 	size_type numBuckets;
 	std::vector<KadBucket> buckets;
+
+	//------ private inline helper functions -------
+	/** returns a random access iterator situated on the bucket with the given index */
+	auto inline getBucketIterator(size_type index=0){
+		auto it=buckets.begin();
+		std::advance(it, index);
+		return it;
+	}
+
+	/** copies all contacts from one contact list to the end of the other contact list*/
+	void inline copyContacts(KadContactList_p& source, KadContactList_p& target){
+		std::copy(source->begin(), source->end(), std::back_inserter(*target));
+	}
 };
+
+/**
+ * Returns an iterator at the contacts position.
+ * Returns list->end() if the contact is not found.
+ */
+auto findContact(KadContactList_p& list, const OverlayKey& key){
+	auto it = list->begin();
+	for (;!(*it)->hasKey(key) && it !=  list->end(); it++);
+	return it;
+}
 
 } //namespace
 
