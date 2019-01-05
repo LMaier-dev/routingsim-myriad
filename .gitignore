@@ -40,3 +40,4 @@ doc/doxy
 images/original
 *.kdev4
 RoutingSim
+RoutingSim_dbg
