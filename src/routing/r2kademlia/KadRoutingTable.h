@@ -103,8 +103,8 @@ private:
 	}
 
 	/** copies all contacts from one contact list to the end of the other contact list*/
-	void inline copyContacts(KadContactList_p& source, KadContactList_p& target){
-		std::copy(source->begin(), source->end(), std::back_inserter(*target));
+	void inline copyContacts(KadContactList& source, KadContactList target){
+		std::copy(source.begin(), source.end(), std::back_inserter(target));
 	}
 };
 

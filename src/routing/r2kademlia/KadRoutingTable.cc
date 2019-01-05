@@ -53,7 +53,7 @@ KadContactList_p KadRoutingTable::getClosestContacts(const OverlayKey& key, size
 	// find correct bucket and copy contents
 	size_type index = getBucketIndex(key);
 	auto bucket = getBucketIterator(index);
-	copyContacts(bucket->contacts, result);
+	copyContacts(*(bucket->contacts), *result);
 	if(result->size() < n){
 		// not enough contacts in first bucket
 		// now we scan the level of the accelerated lookup
@@ -63,14 +63,14 @@ KadContactList_p KadRoutingTable::getClosestContacts(const OverlayKey& key, size
 		while(result->size() < n && otherBucket != buckets.end()){
 			if(otherBucket == bucket)
 				continue;
-			copyContacts(otherBucket->contacts, result);
+			copyContacts(*(otherBucket->contacts), *result);
 			otherBucket++;
 		}
 		otherBucket = getBucketIterator(firstOnLevelIndex);
 		// if we still do not have enough contacts, we go up the tree
 		while(result->size() < n && otherBucket != buckets.begin()){
 			otherBucket--;
-			copyContacts(otherBucket->contacts, result);
+			copyContacts(*(otherBucket->contacts), *result);
 		}
 	}
 	//TODO if whe have found move than n contacts, we need to remove some...
