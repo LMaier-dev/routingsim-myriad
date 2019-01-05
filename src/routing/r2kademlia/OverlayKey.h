@@ -28,8 +28,7 @@
 #include <stdint.h>
 
 #include <omnetpp.h>
-
-#include <DestObject.h>
+#include <crng.h>
 
 class BinaryValue;
 class OverlayKeyBit;
@@ -38,7 +37,7 @@ class cCommBuffer;
 /**
  * replacement function for mpn_random() using omnet's rng
  */
-inline void omnet_random(mp_limb_t *r1p, mp_size_t r1n);
+inline void omnet_random(mp_limb_t *r1p, mp_size_t r1n, cRNG* rng);
 
 /**
  * A common overlay key class.
@@ -47,7 +46,7 @@ inline void omnet_random(mp_limb_t *r1p, mp_size_t r1n);
  *
  * @author Sebastian Mies.
  */
-class OverlayKey : public OverArch::DestObject
+class OverlayKey
 {
 public:
     //-------------------------------------------------------------------------
@@ -95,7 +94,7 @@ public:
      */
     OverlayKey( const OverlayKey& rhs );
 
-    DestObject* dup() const { return new OverlayKey(*this); };
+    OverlayKey* dup() const { return new OverlayKey(*this); };
 
     /**
      * Default destructor.
@@ -372,7 +371,7 @@ public:
      * @param pos
      * @return OverlayKey
      */
-    OverlayKey randomSuffix(uint32_t pos) const;
+    OverlayKey randomSuffix(uint32_t pos, cRNG* rng) const;
 
     /**
      * Fills the prefix starting at pos with random bits to msb.
@@ -380,7 +379,7 @@ public:
      * @param pos
      * @return OverlayKey
      */
-    OverlayKey randomPrefix(uint32_t pos) const;
+    OverlayKey randomPrefix(uint32_t pos, cRNG* rng) const;
 
     /**
      * Calculates the number of equal bits (digits) from the left with another
@@ -456,7 +455,7 @@ public:
      *
      * @return A random key.
      */
-    static OverlayKey random();
+    static OverlayKey random(cRNG* rng);
 
     /**
      * Returns the maximum key, i.e. a key filled with bit 1

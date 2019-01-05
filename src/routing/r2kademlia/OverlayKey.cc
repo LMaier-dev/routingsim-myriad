@@ -139,9 +139,10 @@ OverlayKey::~OverlayKey() { }
 void OverlayKey::setKeyLength(uint32_t length)
 {
     if ((length < 1) || (length > OverlayKey::keyLength)) {
-        opp_error("OverlayKey::setKeyLength(): length must be <= %i "
-                  "and setKeyLength() must not be called twice "
-                  "with different length!", MAX_KEYLENGTH);
+        throw cRuntimeError(
+				"OverlayKey::setKeyLength(): length must be <= %i "
+				"and setKeyLength() must not be called twice "
+				"with different length!", MAX_KEYLENGTH);
     }
 
     keyLength = length;
@@ -480,40 +481,36 @@ double OverlayKey::toDouble() const
 }
 
 // fill suffix with random bits
-OverlayKey OverlayKey::randomSuffix( uint32_t pos ) const
+OverlayKey OverlayKey::randomSuffix(uint32_t pos, cRNG* rng) const
 {
     OverlayKey newKey = *this;
     int i = pos/GMP_LIMB_BITS, j = pos%GMP_LIMB_BITS;
     mp_limb_t m = ((mp_limb_t)1 << j)-1;
     mp_limb_t rnd;
 
-    //  mpn_random(&rnd,1);
-    omnet_random(&rnd,1);
+    omnet_random(&rnd, 1, rng);
     newKey.key[i] &= ~m;
     newKey.key[i] |= (rnd&m);
-    //  mpn_random(newKey.key,i);
-    omnet_random(newKey.key,i);
+    omnet_random(newKey.key,i, rng);
     newKey.trim();
 
     return newKey;
 }
 
 // fill prefix with random bits
-OverlayKey OverlayKey::randomPrefix( uint32_t pos ) const
+OverlayKey OverlayKey::randomPrefix(uint32_t pos, cRNG* rng) const
 {
     OverlayKey newKey = *this;
     int i = pos/GMP_LIMB_BITS, j = pos%GMP_LIMB_BITS;
     mp_limb_t m = ((mp_limb_t)1 << j)-1;
     mp_limb_t rnd;
 
-    //  mpn_random(&rnd,1);
-    omnet_random(&rnd,1);
+    omnet_random(&rnd,1, rng);
 
     newKey.key[i] &= m;
     newKey.key[i] |= (rnd&~m);
     for (int k=aSize-1; k!=i; k--) {
-        //        mpn_random( &newKey.key[k], 1 );
-        omnet_random( &newKey.key[k], 1 );
+        omnet_random(&newKey.key[k], 1, rng);
     }
     newKey.trim();
 
@@ -713,11 +710,11 @@ OverlayKey OverlayKey::getMax()
 }
 
 // generate random number
-OverlayKey OverlayKey::random()
+OverlayKey OverlayKey::random(cRNG* rng)
 {
     OverlayKey newKey = ZERO;
 
-    omnet_random(newKey.key,aSize);
+    omnet_random(newKey.key,aSize, rng);
 
     newKey.trim();
 
@@ -883,7 +880,7 @@ inline void OverlayKey::trim()
 int OverlayKey::compareTo( const OverlayKey& compKey ) const
 {
     if (compKey.isUnspec || isUnspec)
-        opp_error("OverlayKey::compareTo(): key is unspecified!");
+        throw cRuntimeError("OverlayKey::compareTo(): key is unspecified!");
     return mpn_cmp(key,compKey.key,aSize);
 }
 
@@ -895,13 +892,13 @@ inline void OverlayKey::clear()
 }
 
 // replacement function for mpn_random() using omnet's rng
-inline void omnet_random(mp_limb_t *r1p, mp_size_t r1n)
+inline void omnet_random(mp_limb_t *r1p, mp_size_t r1n, cRNG* rng)
 {
     // fill in 32 bit chunks
     uint32_t* chunkPtr = (uint32_t*)r1p;
 
     for (uint32_t i=0; i < ((r1n*sizeof(mp_limb_t) + 3) / 4); i++) {
-        chunkPtr[i] = intuniform(0, 0xFFFFFFFF);
+        chunkPtr[i] = intuniform(rng, 0, 0xFFFFFFFF);
     }
 }
 
