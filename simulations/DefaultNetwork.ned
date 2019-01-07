@@ -20,10 +20,10 @@ import routingsim.dynamics.*;
 
 network DefaultNetwork
 {
-    submodules:
-        manager: NetworkManager;
- //   	  dynamics: CatastrophicFailure;
-    //	dynamics: LifetimeChurn;
-//    connections:
-//        dynamics.toManager --> manager.dynamics;
+	submodules:
+		manager: NetworkManager;
+		dynamics: CatastrophicFailure;
+		//dynamics: LifetimeChurn;
+	connections:
+		dynamics.toManager --> manager.dynamics;
 }
