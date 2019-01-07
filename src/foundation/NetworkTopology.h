@@ -13,8 +13,8 @@
 // along with this program.  If not, see http://www.gnu.org/licenses/.
 // 
 
-#ifndef NETWORKTOPOLOGY_H_
-#define NETWORKTOPOLOGY_H_
+#ifndef __ROUTINGSIM_NETWORKTOPOLOGY_H_
+#define __ROUTINGSIM_NETWORKTOPOLOGY_H_
 
 #include <omnetpp.h>
 #include <string>
@@ -219,4 +219,4 @@ private:
 
 } // namespace RoutingSim
 
-#endif /* NETWORKTOPOLOGY_H_ */
+#endif /* __ROUTINGSIM_NETWORKTOPOLOGY_H_ */
