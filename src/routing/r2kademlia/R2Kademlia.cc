@@ -48,12 +48,14 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 
 void R2Kademlia::reset() {
 	EV << "resetting state of R2Kademlia" << endl;
+	neighborTable.clear();
+	//TODO routing table clear
 }
 
 
 void R2Kademlia::routePacket(KadPacket_p packet, NodePkt_p nodePkt) {
 	OverlayKey& target = packet->getTarget();
-	nodeid_t nid = getNeighbor(target);
+	nodeid_t nid = neighborTable.getNodeId(target);
 	if(nid == undefined_node) {
 		onMissingNeighbor(std::move(packet), std::move(nodePkt));
 		return;

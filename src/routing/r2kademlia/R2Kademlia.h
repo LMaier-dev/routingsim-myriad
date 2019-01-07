@@ -22,6 +22,7 @@
 #include "Protocol.h"
 #include "StatisticSample.h"
 #include "KadPackets_m.h"
+#include "NeighborTable.h"
 
 namespace routingsim {
 
@@ -84,9 +85,8 @@ class R2Kademlia : public Protocol
 	void onMissingNeighbor(KadPacket_p packet, NodePkt_p pkt){};
 	//@}
 private:
-	nodeid_t getNeighbor(const OverlayKey& key);
-private:
 	OverlayKey myOverlayKey;
+	NeighborTable neighborTable;
 };
 
 } //namespace
