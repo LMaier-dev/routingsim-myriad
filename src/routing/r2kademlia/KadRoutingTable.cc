@@ -22,7 +22,7 @@
 
 namespace routingsim {
 KadRoutingTable::KadRoutingTable(const OverlayKey& myKey, size_type b, size_type bucketSize):
-	myKey(myKey), b(b), bucketSize(bucketSize)
+	b(b), myKey(myKey), bucketSize(bucketSize)
 {
 	size_type numBuckets = myKey.getLength()/b * ((1 << b) - 1);
 	buckets.reserve(numBuckets);
