@@ -14,6 +14,7 @@
 // 
 
 #include "R2Kademlia.h"
+#include "BaseTypes.h"
 
 namespace routingsim {
 
@@ -33,11 +34,33 @@ void R2Kademlia::onDisconnect( nodeid_t nid ) {
 
 void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	EV << "received msg" << endl;
-	EV << "unhandled packet: " << pkt->getType() << endl;
+	//TODO assert type
+	KadPacket_p packet = \
+		std::unique_ptr<KadPacket>(check_and_cast<KadPacket*>(pkt->decapsulate()));
+	// check if recipient
+	if(packet->getTarget() == myOverlayKey)
+		handlePacket(std::move(packet));
+	else if (true /* source route end*/)
+		handleStrandedPacket(std::move(packet));
+	else // route packet according to source route
+		routePacket(std::move(packet), std::move(pkt));
 }
 
 void R2Kademlia::reset() {
 	EV << "resetting state of R2Kademlia" << endl;
+}
+
+
+void R2Kademlia::routePacket(KadPacket_p packet, NodePkt_p nodePkt) {
+	OverlayKey& target = packet->getTarget();
+	nodeid_t nid = getNeighbor(target);
+	if(nid == undefined_node) {
+		onMissingNeighbor(std::move(packet), std::move(nodePkt));
+		return;
+	}
+	//TODO set type
+	nodePkt->encapsulate(packet.release());
+	sendToNode(nid, std::move(nodePkt));
 }
 
 } //namespace

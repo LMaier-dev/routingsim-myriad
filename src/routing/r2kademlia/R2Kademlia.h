@@ -19,29 +19,74 @@
 #include <omnetpp.h>
 
 #include "foundation.h"
+#include "Protocol.h"
 #include "StatisticSample.h"
+#include "KadPackets_m.h"
 
 namespace routingsim {
 
+// packet types
+using KadPacket_p = std::unique_ptr<KadPacket>;
+using KadAnswer_p = std::unique_ptr<KadAnswer>;
+using KadHello_p = std::unique_ptr<KadHello>;
+using KadPing_p = std::unique_ptr<KadPing>;
+using KadPong_p = std::unique_ptr<KadPong>;
+
 /**
  * Implementation of R2Kademlia.
- * Routing with R/Kademlia.
+ * Routing with R/Kademlia...
  * TODO: sources
  * @author Jakob Thomas
  */
 class R2Kademlia : public Protocol
 {
   protected:
+	/** @name Protocol interface */
+	//@{
 	/// called at initialization time of the Protocol
 	void onInitialize();
-  	/// called when a new node is connected
-  	void onConnect( nodeid_t nid );
-  	/// called when a node is disconnected
-  	void onDisconnect( nodeid_t nid );
-  	/// on message
-	void onMessage( NodePkt_p pkt );
+	/// called when a new node is connected
+	void onConnect(nodeid_t nid);
+	/// called when a node is disconnected
+	void onDisconnect(nodeid_t nid);
+	/// on message
+	void onMessage(NodePkt_p pkt);
 	/// reset state of Protocol to initial state (Node Failure)
 	void reset();
+	//@}
+
+	/** @name packet handling */
+	//@{
+	///
+	virtual void handlePacket(KadHello_p packet);
+	virtual void handlePacket(KadPing_p packet);
+	virtual void handlePacket(KadAnswer_p packet);
+	/// fallback
+	virtual void handlePacket(KadPacket_p packet);
+	/// for packets with no remaining source route and target != myOverlayKey
+	virtual void handleStrandedPacket(KadPacket_p packet){};
+	//@}
+
+	/** @name sending packets out*/
+	//@{
+	/**
+	 * routes a packet to a neighbor based on the source route in the packet.
+	 * uses the given NodePkt for encapsulation.
+	 */
+	void routePacket(KadPacket_p packet, NodePkt_p nodePkt);
+	/// routes a packet to a neighbor based on the source route in the packet
+	inline void routePacket(KadPacket_p packet)
+		{ routePacket(std::move(packet), std::make_unique<NodePkt>()); }
+	//@}
+
+	/** @name policy foo */
+	//@{
+	void onMissingNeighbor(KadPacket_p packet, NodePkt_p pkt){};
+	//@}
+private:
+	nodeid_t getNeighbor(const OverlayKey& key);
+private:
+	OverlayKey myOverlayKey;
 };
 
 } //namespace
