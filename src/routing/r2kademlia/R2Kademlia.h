@@ -58,12 +58,12 @@ class R2Kademlia : public Protocol
 
 	/** @name packet handling */
 	//@{
-	///
+	/// adds the neighbor to the neighbor table
 	virtual void handlePacket(KadHello_p packet);
-	virtual void handlePacket(KadPing_p packet);
-	virtual void handlePacket(KadAnswer_p packet);
+	virtual void handlePacket(KadPing_p packet){};
+	virtual void handlePacket(KadAnswer_p packet){};
 	/// fallback
-	virtual void handlePacket(KadPacket_p packet);
+	virtual void handlePacket(KadPacket_p packet){};
 	/// for packets with no remaining source route and target != myOverlayKey
 	virtual void handleStrandedPacket(KadPacket_p packet){};
 	//@}

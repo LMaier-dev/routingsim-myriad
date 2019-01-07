@@ -28,6 +28,7 @@ enum KadPacketType {
 }
 
 class noncobject OverlayKey;
+class noncobject nodeid_t;
 
 packet KadPacket {
 	OverlayKey target;
@@ -41,6 +42,7 @@ packet KadAnswer extends KadPacket {
 
 packet KadHello extends KadPacket {
 	type = HELLO;
+	nodeid_t sourceId;
 }
 
 packet KadPing extends KadPacket {

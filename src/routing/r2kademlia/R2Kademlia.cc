@@ -25,11 +25,20 @@ void R2Kademlia::onInitialize() {
 }
 
 void R2Kademlia::onConnect( nodeid_t nid ) {
-	EV << "Now I am connected to " << nid << endl;
+	KadHello_p hello = std::make_unique<KadHello>();
+	hello->setTarget(0);
+	hello->setSource(myOverlayKey);
+	hello->setSourceId(node().getNodeId());
+	hello->setNonce(0);
+	NodePkt_p nodePkt = std::make_unique<NodePkt>();
+	//TODO set type
+	nodePkt->encapsulate(nodePkt.release());
+	sendToNode(nid, std::move(nodePkt));
 }
 
 void R2Kademlia::onDisconnect( nodeid_t nid ) {
-	EV << "Now I am disconnected from " << nid << endl;
+	neighborTable.removeNeighbor(nid);
+	//TODO remove neighbor from routing table
 }
 
 void R2Kademlia::onMessage( NodePkt_p pkt ) {
@@ -38,7 +47,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	KadPacket_p packet = \
 		std::unique_ptr<KadPacket>(check_and_cast<KadPacket*>(pkt->decapsulate()));
 	// check if recipient
-	if(packet->getTarget() == myOverlayKey)
+	if(packet->getTarget() == myOverlayKey || packet->getType() == HELLO)
 		handlePacket(std::move(packet));
 	else if (true /* source route end*/)
 		handleStrandedPacket(std::move(packet));
@@ -52,8 +61,14 @@ void R2Kademlia::reset() {
 	//TODO routing table clear
 }
 
+void R2Kademlia::handlePacket(KadHello_p packet) {
+	neighborTable.addNeighbor(packet->getSourceId(), packet->getSourceId());
+	//TODO add neighbor to routing table
+}
 
 void R2Kademlia::routePacket(KadPacket_p packet, NodePkt_p nodePkt) {
+	//TODO forward using source routing
+	//TODO assert packet->getType() != HELLO;
 	OverlayKey& target = packet->getTarget();
 	nodeid_t nid = neighborTable.getNodeId(target);
 	if(nid == undefined_node) {
