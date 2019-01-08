@@ -68,14 +68,14 @@ void R2Kademlia::handlePacket(KadPacket_p packet) {
 
 void R2Kademlia::routePacket(KadPacket_p packet, NodePkt_p nodePkt) {
 	//TODO forward using source routing
-	ASSERT(packet->getType() != HELLO);
+	// we do not route hello packets!
+	ASSERT(packet->getType() != KAD_HELLO);
 	OverlayKey& target = packet->getTarget();
 	nodeid_t nid = neighborTable.getNodeId(target);
 	if(nid == undefined_node) {
 		onMissingNeighbor(std::move(packet), std::move(nodePkt));
 		return;
 	}
-	//TODO set type
 	nodePkt->setType(PAYLOAD_TYPE);
 	nodePkt->encapsulate(packet.release());
 	sendToNode(nid, std::move(nodePkt));

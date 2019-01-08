@@ -21,10 +21,10 @@ cplusplus {{
 namespace routingsim;
 
 enum KadPacketType {
-    INVALID = 0;
-	HELLO = 1;
-    PING = 2;
-    PONG = 3;
+	KAD_INVALID = 0;
+	KAD_HELLO = 1;
+	KAD_PING = 2;
+	KAD_PONG = 3;
 }
 
 class noncobject OverlayKey;
@@ -41,15 +41,14 @@ packet KadAnswer extends KadPacket {
 }
 
 packet KadHello extends KadPacket {
-	type = HELLO;
+	type = KAD_HELLO;
 	nodeid_t sourceId;
 }
 
 packet KadPing extends KadPacket {
-	type = PING;
+	type = KAD_PING;
 }
 
 packet KadPong extends KadAnswer {
-	type = PONG;
+	type = KAD_PONG;
 }
-
