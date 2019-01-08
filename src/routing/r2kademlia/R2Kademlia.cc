@@ -96,16 +96,16 @@ void R2Kademlia::routePacket(KadPacket_p packet, NodePkt_p nodePkt) {
 
 
 class R2Kademlia::PingRPCState : public RPCComponent::RPCState {
-	void handleAnswer(KadAnswer_p answer) override {
-		EV << "got ping answer from " << answer->getSource();
+	void handleAnswer(cPacket_p answer) override {
+		KadPong_p pong = packet_cast<KadPong>(answer);
+		EV << "got ping answer from " << pong->getSource();
 		EV << " with nonce " << nonce << endl;
 	}
 };
 
 void R2Kademlia::ping(const OverlayKey& key) {
 	auto ping = std::make_unique<KadPing>();
-	RPCComponent<KadAnswer>::RPCState_p pingState = std::make_unique<PingRPCState>();
-	nonce_t nonce = registerState(std::move(pingState));
+	nonce_t nonce = registerState(std::make_unique<PingRPCState>());
 	ping->setNonce(nonce);
 }
 
@@ -148,9 +148,9 @@ template<typename T> bool R2Kademlia::handleIfFitting(KadPacket_p& packet) {
 	return true;
 }
 
-template<typename T> std::unique_ptr<T> packet_cast(KadPacket_p& packet) {
+template<typename T> std::unique_ptr<T> packet_cast(cPacket_p& packet) {
 	ASSERT(packet); // no nullptr here!
-	KadPacket *raw_ptr = packet.get();
+	cPacket *raw_ptr = packet.get();
 	std::unique_ptr<T> tPacket(dynamic_cast<T*>(raw_ptr));
 	// if tPacket is not nullptr the cast succeded
 	// -> we need to invalidate the original pointer

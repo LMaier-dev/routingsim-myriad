@@ -40,7 +40,7 @@ using KadPong_p = std::unique_ptr<KadPong>;
  * TODO: sources
  * @author Jakob Thomas
  */
-class R2Kademlia : public RPCComponent<KadAnswer>
+class R2Kademlia : public RPCComponent
 {
   protected:
 	/** @name Protocol interface */
@@ -104,8 +104,6 @@ private:
 	 */
 	template<typename T>
 	bool handleIfFitting(KadPacket_p& packet);
-	template<typename T>
-	std::unique_ptr<T> packet_cast(KadPacket_p& packet);
 private:
 	OverlayKey myOverlayKey;
 	NeighborTable neighborTable;
@@ -114,6 +112,8 @@ private:
 	class PingRPCState;
 };
 
+template<typename T>
+std::unique_ptr<T> packet_cast(cPacket_p& packet);
 } //namespace
 
 #endif // __ROUTINGSIM_R2Kademlia_H_

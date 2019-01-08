@@ -25,15 +25,14 @@
 
 namespace routingsim {
 typedef unsigned int nonce_t;
+using cPacket_p = std::unique_ptr<cPacket>;
 
 /**
  * A basic implementation of a component that sets up rpc calls.
  * TODO retransmittions and timeouts
  */
-template<typename Answer>
 class RPCComponent : public Protocol {
 protected:
-	using Answer_p = std::unique_ptr<Answer>;
 	/// represents the state of an rpc call, gets called
 	class RPCState {
 	public:
@@ -42,21 +41,21 @@ protected:
 		inline const cComponent* getThisPtr() const { return parent->getThisPtr(); };
 		virtual void retransmit() {};
 		virtual void handleTimeout() {};
-		virtual void handleAnswer(Answer_p answer) = 0;
+		virtual void handleAnswer(cPacket_p answer) = 0;
 	};
 	using RPCState_p = std::unique_ptr<RPCState>;
 protected:
 	/// dispatches the answer to the correct RPCState
-	void handleAnswer(nonce_t nonce, Answer answer);
+	void handleAnswer(nonce_t nonce, cPacket_p answer);
 	/// registers the given state and returns the assigned nonce
 	nonce_t registerState(RPCState_p rpcState);
 	/// gets called when handleAnswer encounters an onknown nonce
-	virtual void onUnknownNonce(nonce_t nonce, Answer_p answer) = 0;
+	virtual void onUnknownNonce(nonce_t nonce, cPacket_p answer) = 0;
 private:
 	/// maps nonces to rpc states, used to dispatch answers
 	std::map<nonce_t, RPCState_p> states;
 	/// counter to ensure nonce uniqueness
-	std::atomic_int nonceCounter;
+	std::atomic_uint nonceCounter;
 };
 
 } // namespace

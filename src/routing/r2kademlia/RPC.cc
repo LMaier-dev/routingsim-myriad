@@ -18,27 +18,27 @@
 
 namespace routingsim {
 
-template<typename Answer> nonce_t RPCComponent<Answer>::registerState(RPCState_p rpcState)
+nonce_t RPCComponent::registerState(RPCState_p rpcState)
 {
 	nonce_t nonce = nonceCounter++;
 	ASSERT(nonceCounter < std::numeric_limits<nonce_t>::max());
 	ASSERT(states.find(nonce) == states.end());
 	rpcState->nonce = nonce;
 	rpcState->parent = this;
-	states[nonce] = rpcState;
+	states[nonce] = std::move(rpcState);
 	return nonce;
 }
 
-template<typename Answer> void RPCComponent<Answer>::handleAnswer(nonce_t nonce, Answer answer)
+void RPCComponent::handleAnswer(nonce_t nonce, cPacket_p answer)
 {
 	auto it = states.find(nonce);
 	if(it == states.end()) {
-		onUnknownNonce(nonce);
+		onUnknownNonce(nonce, std::move(answer));
 		return;
 	}
-	RPCState_p state = it->second;
+	RPCState_p state = std::move(it->second);
 	states.erase(it);
-	state->onAnswer(answer);
+	state->handleAnswer(std::move(answer));
 }
 
 }
