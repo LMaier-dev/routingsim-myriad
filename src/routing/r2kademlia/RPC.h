@@ -21,24 +21,27 @@
 #include <memory>
 #include <map>
 #include <atomic>
-
+#include "Protocol.h"
 
 namespace routingsim {
-typedef int nonce_t;
+typedef unsigned int nonce_t;
 
 /**
  * A basic implementation of a component that sets up rpc calls.
  * TODO retransmittions and timeouts
  */
 template<typename Answer>
-class RPCComponent {
+class RPCComponent : public Protocol {
 protected:
 	using Answer_p = std::unique_ptr<Answer>;
 	/// represents the state of an rpc call, gets called
 	class RPCState {
+	public:
 		nonce_t nonce;
-		virtual void retransmit() = 0;
-		virtual void handleTimeout() = 0;
+		RPCComponent* parent;
+		inline const cComponent* getThisPtr() const { return parent->getThisPtr(); };
+		virtual void retransmit() {};
+		virtual void handleTimeout() {};
 		virtual void handleAnswer(Answer_p answer) = 0;
 	};
 	using RPCState_p = std::unique_ptr<RPCState>;

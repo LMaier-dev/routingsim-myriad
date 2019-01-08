@@ -67,6 +67,13 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 	//TODO add neighbor to routing table
 }
 
+void R2Kademlia::handlePacket(KadPing_p packet) {
+	EV << "recieved ping packet from " << packet->getSource() << endl;
+	KadPong_p pong = std::make_unique<KadPong>();
+	fillAnswer(*packet, *pong);
+	routePacket(std::move(pong));
+}
+
 void R2Kademlia::handlePacket(KadPacket_p packet) {
 	EV_ERROR << "dropping unhandled packet..." << endl;
 }
@@ -85,8 +92,24 @@ void R2Kademlia::routePacket(KadPacket_p packet, NodePkt_p nodePkt) {
 	nodePkt->encapsulate(packet.release());
 	sendToNode(nid, std::move(nodePkt));
 }
+// -------------------- rpc methods and classes ---------------------------
 
 
+class R2Kademlia::PingRPCState : public RPCComponent::RPCState {
+	void handleAnswer(KadAnswer_p answer) override {
+		EV << "got ping answer from " << answer->getSource();
+		EV << " with nonce " << nonce << endl;
+	}
+};
+
+void R2Kademlia::ping(const OverlayKey& key) {
+	auto ping = std::make_unique<KadPing>();
+	RPCComponent<KadAnswer>::RPCState_p pingState = std::make_unique<PingRPCState>();
+	nonce_t nonce = registerState(std::move(pingState));
+	ping->setNonce(nonce);
+}
+
+// -------------------- private helper methods --------------------
 NodePkt_p R2Kademlia::makeHelloPacket()
 {
 	KadHello_p hello = std::make_unique<KadHello>();
@@ -105,6 +128,13 @@ bool R2Kademlia::hasRemainingSourceRoute(const KadPacket& packet) {
 	return false;
 }
 
+void R2Kademlia::fillAnswer(const KadPacket& original, KadPacket& answer) {
+	answer.setSource(myOverlayKey);
+	answer.setTarget(original.getSource());
+	answer.setNonce(original.getNonce());
+	//TODO implement reverse source route
+}
+
 template<typename T> bool R2Kademlia::handleIfFitting(KadPacket_p& packet) {
 	ASSERT(packet); // no nullptr here!
 	KadPacket *raw_ptr = packet.get();
@@ -118,4 +148,14 @@ template<typename T> bool R2Kademlia::handleIfFitting(KadPacket_p& packet) {
 	return true;
 }
 
+template<typename T> std::unique_ptr<T> packet_cast(KadPacket_p& packet) {
+	ASSERT(packet); // no nullptr here!
+	KadPacket *raw_ptr = packet.get();
+	std::unique_ptr<T> tPacket(dynamic_cast<T*>(raw_ptr));
+	// if tPacket is not nullptr the cast succeded
+	// -> we need to invalidate the original pointer
+	if(tPacket)
+		packet.release();
+	return tPacket;
+}
 } //namespace

@@ -40,7 +40,7 @@ using KadPong_p = std::unique_ptr<KadPong>;
  * TODO: sources
  * @author Jakob Thomas
  */
-class R2Kademlia : public Protocol, public RPCComponent<KadAnswer>
+class R2Kademlia : public RPCComponent<KadAnswer>
 {
   protected:
 	/** @name Protocol interface */
@@ -61,7 +61,8 @@ class R2Kademlia : public Protocol, public RPCComponent<KadAnswer>
 	//@{
 	/// adds the neighbor to the neighbor table
 	virtual void handlePacket(KadHello_p packet);
-	virtual void handlePacket(KadPing_p packet){};
+	/// responds to ping request
+	virtual void handlePacket(KadPing_p packet);
 	virtual void handlePacket(KadAnswer_p packet){};
 	/// fallback
 	virtual void handlePacket(KadPacket_p packet);
@@ -79,6 +80,8 @@ class R2Kademlia : public Protocol, public RPCComponent<KadAnswer>
 	/// routes a packet to a neighbor based on the source route in the packet
 	inline void routePacket(KadPacket_p packet)
 		{ routePacket(std::move(packet), std::make_unique<NodePkt>()); }
+	/// sends a ping request to the given key
+	void ping(const OverlayKey& key);
 	//@}
 
 	/** @name policy foo */
@@ -91,6 +94,8 @@ private:
 	NodePkt_p makeHelloPacket();
 	/// checks if the packet has some hops remaining in the source route field
 	bool hasRemainingSourceRoute(const KadPacket& packet);
+	/// fills in source, target, sourceroute and nonce fields
+	void fillAnswer(const KadPacket& original, KadPacket& answer);
 	/**
 	 * Tries to cast packet to type T.
 	 * If this succeeds, the method handlePacket(T) is called, the given pointer
@@ -99,10 +104,14 @@ private:
 	 */
 	template<typename T>
 	bool handleIfFitting(KadPacket_p& packet);
+	template<typename T>
+	std::unique_ptr<T> packet_cast(KadPacket_p& packet);
 private:
 	OverlayKey myOverlayKey;
 	NeighborTable neighborTable;
 	static const int PAYLOAD_TYPE=5;
+private:
+	class PingRPCState;
 };
 
 } //namespace

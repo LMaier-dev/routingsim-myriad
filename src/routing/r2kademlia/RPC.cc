@@ -24,6 +24,7 @@ template<typename Answer> nonce_t RPCComponent<Answer>::registerState(RPCState_p
 	ASSERT(nonceCounter < std::numeric_limits<nonce_t>::max());
 	ASSERT(states.find(nonce) == states.end());
 	rpcState->nonce = nonce;
+	rpcState->parent = this;
 	states[nonce] = rpcState;
 	return nonce;
 }
