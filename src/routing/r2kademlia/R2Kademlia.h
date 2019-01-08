@@ -87,6 +87,16 @@ class R2Kademlia : public Protocol
 private:
 	/// crafts a hello packet and encapsulates it in a NodePkt
 	NodePkt_p makeHelloPacket();
+	/// checks if the packet has some hops remaining in the source route field
+	bool hasRemainingSourceRoute(const KadPacket& packet);
+	/**
+	 * Tries to cast packet to type T.
+	 * If this succeeds, the method handlePacket(T) is called, the given pointer
+	 * is invalidated and we return true.
+	 * If the cast fails, nothing happends and we return false.
+	 */
+	template<typename T>
+	bool handleIfFitting(KadPacket_p& packet);
 private:
 	OverlayKey myOverlayKey;
 	NeighborTable neighborTable;

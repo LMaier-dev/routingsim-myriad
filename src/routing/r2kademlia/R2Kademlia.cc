@@ -42,12 +42,17 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	KadPacket_p packet = \
 		std::unique_ptr<KadPacket>(check_and_cast<KadPacket*>(pkt->decapsulate()));
 	// check if recipient
-	if(packet->getTarget() == myOverlayKey || packet->getType() == HELLO)
-		handlePacket(std::move(packet));
-	else if (true /* source route end*/)
-		handleStrandedPacket(std::move(packet));
-	else // route packet according to source route
-		routePacket(std::move(packet), std::move(pkt));
+	if (handleIfFitting<KadHello>(packet)) return;
+	if (hasRemainingSourceRoute(*packet)){
+		routePacket(std::move(packet));
+		return;
+	}
+	if (packet->getTarget() == myOverlayKey){
+		// handle packets directly adressed to me
+		if (handleIfFitting<KadAnswer>(packet)) return;
+		if (handleIfFitting<KadPing>(packet)) return;
+	}
+	handleStrandedPacket(std::move(packet));
 }
 
 void R2Kademlia::reset() {
@@ -93,6 +98,24 @@ NodePkt_p R2Kademlia::makeHelloPacket()
 	nodePkt->setType(PAYLOAD_TYPE);
 	nodePkt->encapsulate(hello.release());
 	return nodePkt;
+}
+
+bool R2Kademlia::hasRemainingSourceRoute(const KadPacket& packet) {
+	//TODO implement
+	return false;
+}
+
+template<typename T> bool R2Kademlia::handleIfFitting(KadPacket_p& packet) {
+	ASSERT(packet); // no nullptr here!
+	KadPacket *raw_ptr = packet.get();
+	std::unique_ptr<T> tPacket(dynamic_cast<T*>(raw_ptr));
+	// if cast failed we get nullptr -> skip the rest, return false
+	if(not tPacket) return false;
+	// invalidate the original unique_ptr
+	packet.release();
+	// delegate responsibility to handlePacket method
+	handlePacket(std::move(tPacket));
+	return true;
 }
 
 } //namespace
