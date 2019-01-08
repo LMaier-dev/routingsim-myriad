@@ -63,7 +63,7 @@ class R2Kademlia : public Protocol
 	virtual void handlePacket(KadPing_p packet){};
 	virtual void handlePacket(KadAnswer_p packet){};
 	/// fallback
-	virtual void handlePacket(KadPacket_p packet){};
+	virtual void handlePacket(KadPacket_p packet);
 	/// for packets with no remaining source route and target != myOverlayKey
 	virtual void handleStrandedPacket(KadPacket_p packet){};
 	//@}
@@ -85,8 +85,12 @@ class R2Kademlia : public Protocol
 	void onMissingNeighbor(KadPacket_p packet, NodePkt_p pkt){};
 	//@}
 private:
+	/// crafts a hello packet and encapsulates it in a NodePkt
+	NodePkt_p makeHelloPacket();
+private:
 	OverlayKey myOverlayKey;
 	NeighborTable neighborTable;
+	static const int PAYLOAD_TYPE=5;
 };
 
 } //namespace

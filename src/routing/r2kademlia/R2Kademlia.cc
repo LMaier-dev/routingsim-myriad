@@ -22,18 +22,13 @@ Define_Module(R2Kademlia);
 
 void R2Kademlia::onInitialize() {
 	EV << "R2Kademlia::onInitialize()" << endl;
+	myOverlayKey = OverlayKey::random(getRNG(0));
+	bind(PAYLOAD_TYPE);
+	sendToNeighbors(makeHelloPacket());
 }
 
 void R2Kademlia::onConnect( nodeid_t nid ) {
-	KadHello_p hello = std::make_unique<KadHello>();
-	hello->setTarget(0);
-	hello->setSource(myOverlayKey);
-	hello->setSourceId(node().getNodeId());
-	hello->setNonce(0);
-	NodePkt_p nodePkt = std::make_unique<NodePkt>();
-	//TODO set type
-	nodePkt->encapsulate(nodePkt.release());
-	sendToNode(nid, std::move(nodePkt));
+	sendToNode(nid, makeHelloPacket());
 }
 
 void R2Kademlia::onDisconnect( nodeid_t nid ) {
@@ -43,7 +38,7 @@ void R2Kademlia::onDisconnect( nodeid_t nid ) {
 
 void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	EV << "received msg" << endl;
-	//TODO assert type
+	ASSERT(pkt->getType() == PAYLOAD_TYPE);
 	KadPacket_p packet = \
 		std::unique_ptr<KadPacket>(check_and_cast<KadPacket*>(pkt->decapsulate()));
 	// check if recipient
@@ -62,13 +57,18 @@ void R2Kademlia::reset() {
 }
 
 void R2Kademlia::handlePacket(KadHello_p packet) {
-	neighborTable.addNeighbor(packet->getSourceId(), packet->getSourceId());
+	EV << "recieved hello packet from " << packet->getSourceId() << endl;
+	neighborTable.addNeighbor(packet->getSourceId(), packet->getSource());
 	//TODO add neighbor to routing table
+}
+
+void R2Kademlia::handlePacket(KadPacket_p packet) {
+	EV_ERROR << "dropping unhandled packet..." << endl;
 }
 
 void R2Kademlia::routePacket(KadPacket_p packet, NodePkt_p nodePkt) {
 	//TODO forward using source routing
-	//TODO assert packet->getType() != HELLO;
+	ASSERT(packet->getType() != HELLO);
 	OverlayKey& target = packet->getTarget();
 	nodeid_t nid = neighborTable.getNodeId(target);
 	if(nid == undefined_node) {
@@ -76,8 +76,23 @@ void R2Kademlia::routePacket(KadPacket_p packet, NodePkt_p nodePkt) {
 		return;
 	}
 	//TODO set type
+	nodePkt->setType(PAYLOAD_TYPE);
 	nodePkt->encapsulate(packet.release());
 	sendToNode(nid, std::move(nodePkt));
+}
+
+
+NodePkt_p R2Kademlia::makeHelloPacket()
+{
+	KadHello_p hello = std::make_unique<KadHello>();
+	hello->setTarget(0);
+	hello->setSource(myOverlayKey);
+	hello->setSourceId(node().getNodeId());
+	hello->setNonce(0);
+	NodePkt_p nodePkt = std::make_unique<NodePkt>();
+	nodePkt->setType(PAYLOAD_TYPE);
+	nodePkt->encapsulate(hello.release());
+	return nodePkt;
 }
 
 } //namespace
