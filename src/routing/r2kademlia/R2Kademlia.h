@@ -23,6 +23,7 @@
 #include "StatisticSample.h"
 #include "KadPackets_m.h"
 #include "NeighborTable.h"
+#include "RPC.h"
 
 namespace routingsim {
 
@@ -39,7 +40,7 @@ using KadPong_p = std::unique_ptr<KadPong>;
  * TODO: sources
  * @author Jakob Thomas
  */
-class R2Kademlia : public Protocol
+class R2Kademlia : public Protocol, public RPCComponent<KadAnswer>
 {
   protected:
 	/** @name Protocol interface */
@@ -83,6 +84,7 @@ class R2Kademlia : public Protocol
 	/** @name policy foo */
 	//@{
 	void onMissingNeighbor(KadPacket_p packet, NodePkt_p pkt){};
+	void onUnknownNonce(nonce_t nonce, KadAnswer_p answer) override {};
 	//@}
 private:
 	/// crafts a hello packet and encapsulates it in a NodePkt
