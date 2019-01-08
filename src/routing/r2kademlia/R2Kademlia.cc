@@ -64,6 +64,7 @@ void R2Kademlia::reset() {
 void R2Kademlia::handlePacket(KadHello_p packet) {
 	EV << "recieved hello packet from " << packet->getSourceId() << endl;
 	neighborTable.addNeighbor(packet->getSourceId(), packet->getSource());
+	ping(packet->getSource());
 	//TODO add neighbor to routing table
 }
 
@@ -72,6 +73,10 @@ void R2Kademlia::handlePacket(KadPing_p packet) {
 	KadPong_p pong = std::make_unique<KadPong>();
 	fillAnswer(*packet, *pong);
 	routePacket(std::move(pong));
+}
+
+void R2Kademlia::handlePacket(KadAnswer_p packet) {
+	handleAnswer(packet->getNonce(), std::move(packet));
 }
 
 void R2Kademlia::handlePacket(KadPacket_p packet) {
@@ -108,6 +113,15 @@ void R2Kademlia::ping(const OverlayKey& key) {
 	nonce_t nonce = registerState(std::make_unique<PingRPCState>());
 	ping->setNonce(nonce);
 }
+
+// ------------------------- policy foo --------------------------------------
+
+void R2Kademlia::onMissingNeighbor(KadPacket_p packet, NodePkt_p pkt) {
+	EV_WARN << "missing neighbor" << packet->getTarget() << endl;
+};
+void R2Kademlia::onUnknownNonce(nonce_t nonce, cPacket_p answer) override {
+	EV_WARN << "recieved answer packet with unknown nonce" << endl;
+};
 
 // -------------------- private helper methods --------------------
 NodePkt_p R2Kademlia::makeHelloPacket()

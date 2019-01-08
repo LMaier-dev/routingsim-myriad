@@ -63,7 +63,7 @@ class R2Kademlia : public RPCComponent
 	virtual void handlePacket(KadHello_p packet);
 	/// responds to ping request
 	virtual void handlePacket(KadPing_p packet);
-	virtual void handlePacket(KadAnswer_p packet){};
+	virtual void handlePacket(KadAnswer_p packet);
 	/// fallback
 	virtual void handlePacket(KadPacket_p packet);
 	/// for packets with no remaining source route and target != myOverlayKey
@@ -86,8 +86,8 @@ class R2Kademlia : public RPCComponent
 
 	/** @name policy foo */
 	//@{
-	void onMissingNeighbor(KadPacket_p packet, NodePkt_p pkt){};
-	void onUnknownNonce(nonce_t nonce, KadAnswer_p answer) override {};
+	void onMissingNeighbor(KadPacket_p packet, NodePkt_p pkt);
+	void onUnknownNonce(nonce_t nonce, cPacket_p answer) override;
 	//@}
 private:
 	/// crafts a hello packet and encapsulates it in a NodePkt
