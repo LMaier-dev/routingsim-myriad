@@ -40,7 +40,7 @@ using KadPong_p = std::unique_ptr<KadPong>;
  * TODO: sources
  * @author Jakob Thomas
  */
-class R2Kademlia : public RPCComponent
+class R2Kademlia : public RPCProtocol
 {
   protected:
 	/** @name Protocol interface */

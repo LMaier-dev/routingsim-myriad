@@ -76,7 +76,8 @@ void R2Kademlia::handlePacket(KadPing_p packet) {
 }
 
 void R2Kademlia::handlePacket(KadAnswer_p packet) {
-	handleAnswer(packet->getNonce(), std::move(packet));
+	nonce_t nonce = packet->getNonce();
+	handleAnswer(nonce, std::move(packet));
 }
 
 void R2Kademlia::handlePacket(KadPacket_p packet) {
@@ -100,7 +101,7 @@ void R2Kademlia::routePacket(KadPacket_p packet, NodePkt_p nodePkt) {
 // -------------------- rpc methods and classes ---------------------------
 
 
-class R2Kademlia::PingRPCState : public RPCComponent::RPCState {
+class R2Kademlia::PingRPCState : public RPCProtocol::RPCState {
 	void handleAnswer(cPacket_p answer) override {
 		KadPong_p pong = packet_cast<KadPong>(answer);
 		EV << "got ping answer from " << pong->getSource();
@@ -110,8 +111,11 @@ class R2Kademlia::PingRPCState : public RPCComponent::RPCState {
 
 void R2Kademlia::ping(const OverlayKey& key) {
 	auto ping = std::make_unique<KadPing>();
-	nonce_t nonce = registerState(std::make_unique<PingRPCState>());
-	ping->setNonce(nonce);
+	ping->setNonce(registerState(std::make_unique<PingRPCState>()));
+	ping->setTarget(key);
+	ping->setSource(myOverlayKey);
+	routePacket(std::move(ping));
+	EV << "ping sent";
 }
 
 // ------------------------- policy foo --------------------------------------
@@ -119,7 +123,7 @@ void R2Kademlia::ping(const OverlayKey& key) {
 void R2Kademlia::onMissingNeighbor(KadPacket_p packet, NodePkt_p pkt) {
 	EV_WARN << "missing neighbor" << packet->getTarget() << endl;
 };
-void R2Kademlia::onUnknownNonce(nonce_t nonce, cPacket_p answer) override {
+void R2Kademlia::onUnknownNonce(nonce_t nonce, cPacket_p answer) {
 	EV_WARN << "recieved answer packet with unknown nonce" << endl;
 };
 

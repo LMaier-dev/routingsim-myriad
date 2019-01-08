@@ -18,7 +18,7 @@
 
 namespace routingsim {
 
-nonce_t RPCComponent::registerState(RPCState_p rpcState)
+nonce_t RPCProtocol::registerState(RPCState_p rpcState)
 {
 	nonce_t nonce = nonceCounter++;
 	ASSERT(nonceCounter < std::numeric_limits<nonce_t>::max());
@@ -29,7 +29,7 @@ nonce_t RPCComponent::registerState(RPCState_p rpcState)
 	return nonce;
 }
 
-void RPCComponent::handleAnswer(nonce_t nonce, cPacket_p answer)
+void RPCProtocol::handleAnswer(nonce_t nonce, cPacket_p answer)
 {
 	auto it = states.find(nonce);
 	if(it == states.end()) {

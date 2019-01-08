@@ -31,13 +31,13 @@ using cPacket_p = std::unique_ptr<cPacket>;
  * A basic implementation of a component that sets up rpc calls.
  * TODO retransmittions and timeouts
  */
-class RPCComponent : public Protocol {
+class RPCProtocol : public Protocol {
 protected:
 	/// represents the state of an rpc call, gets called
 	class RPCState {
 	public:
 		nonce_t nonce;
-		RPCComponent* parent;
+		RPCProtocol* parent;
 		inline const cComponent* getThisPtr() const { return parent->getThisPtr(); };
 		virtual void retransmit() {};
 		virtual void handleTimeout() {};
