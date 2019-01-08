@@ -197,6 +197,7 @@ void NetworkTopology::readTopology(string path) {
 	while (std::getline(topologyFile, line)) {
 		int tokenNumber = 0;
 		lineNumber++;
+		// escape char: "\", seperator "\t" and " ", quote chars " and '
 		escaped_list_separator<char> sep("\\","\t ","\"'");
 		typedef boost::tokenizer<escaped_list_separator<char> > tokenizer_t;
 		tokenizer_t tok(line,sep);
@@ -224,8 +225,10 @@ void NetworkTopology::readTopology(string path) {
 				toNode = boost::lexical_cast<long long>(*it);
 				if (fromNode != toNode) {
 					addLink(fromNode, toNode);
+					addLink(toNode, fromNode);
+					EV_DETAIL << "Added link from " << fromNode << " to " << toNode << "and back" << endl;
 				} else {
-					EV << "Attention: omitting reflexive link ("<< fromNode<<","<<toNode<<" as implicitly contained!" << endl;
+					EV_WARN << "Attention: omitting reflexive link ("<< fromNode<<","<<toNode<<" as implicitly contained!" << endl;
 				}
 			}
 
@@ -240,7 +243,7 @@ void NetworkTopology::readTopology(string path) {
 				string key = s.substr(0,i);
 				string value = s.substr(i+1);
 				adjacencyList[toNode]->properties[key]=value;
-				//EV << "Node " << toNode << ": key='" << key << "' value='" << value << "'" << endl;
+				EV_DETAIL << "Node " << toNode << ": key='" << key << "' value='" << value << "'" << endl;
 			}
 
 		}

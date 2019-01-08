@@ -60,6 +60,10 @@ public:
 
 	/**
 	 * Read network topology from filename into data structure
+	 * format
+	 * 1st line: number of nodes(tab)number of links
+	 * following lines: src node(tab)dest node
+	 * TODO: Input validation and sanity checks
 	 */
 	void readTopology(string topologyFile);
 
