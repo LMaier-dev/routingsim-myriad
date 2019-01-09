@@ -60,7 +60,7 @@ simtime_t LinkFailure::scheduleDynamics() {
 
 		// no more edges available
 		if (ntop.getActiveNumberLinks() == 0) {
-			opp_warning("Premature termination of Dynamics Module LinkFailure (not enough active edges!)");
+			EV_WARN <<"Premature termination of Dynamics Module LinkFailure (not enough active edges!)" << endl;
 			break;
 		}
 
@@ -90,7 +90,7 @@ simtime_t LinkFailure::scheduleDynamics() {
 
 			destination = neighbors[intuniform(0, neighbors.size() - 1)];
 		} else {
-			opp_error("Invalid Link Failure model!");
+			throw cRuntimeError("Invalid Link Failure model!");
 		}
 		scheduleLinkFailure(source, destination, period, duration);
 		scheduledFailures++;

@@ -77,7 +77,7 @@ simtime_t MixedFailure::scheduleDynamics() {
 
 		// no more nodes available
 		if (activeNodes.size() < nodesToFailPerPeriod) {
-			opp_warning("Premature termination of Dynamics Module (not enough active nodes!); failing remaining nodes and disabling dynamics");
+			EV_WARN << "Premature termination of Dynamics Module (not enough active nodes!); failing remaining nodes and disabling dynamics" << endl;
 			failNodes = activeNodes;
 			nodeFailure=false;
 		} else {
@@ -111,7 +111,7 @@ simtime_t MixedFailure::scheduleDynamics() {
 
 		// no more edges available
 		if (activeNumLinks < linksToFailPerPeriod) {
-			opp_warning("Premature termination of Dynamics Module (not enough active edges!); failing remaining edges and disabling dynamics");
+			EV_WARN << "Premature termination of Dynamics Module (not enough active edges!); failing remaining edges and disabling dynamics" << endl;
 			linksToFailPerPeriod = activeNumLinks;
 			linkFailure=false;
 		}

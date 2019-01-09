@@ -64,7 +64,7 @@ void NetworkTopology::readTopology(string path, string topologytype, bool useOnl
 	if (!topologyFile) {
 		string msg("Could not open topology file ");
 		msg+=path;
-		opp_error(msg.c_str());
+		throw cRuntimeError(msg.c_str());
 	}
 
 	if (!topologytype.compare("SELF_DEFINED")) {
@@ -74,7 +74,7 @@ void NetworkTopology::readTopology(string path, string topologytype, bool useOnl
 	else if (!topologytype.compare("DIMES")) {
 		readDimesTopology(topologyFile, nodeset, edgesRead, nodeproperties, makeLinksBidirectional);
 	} else {
-		opp_error("Unknown topology type!");
+		throw cRuntimeError("Unknown topology type!");
 	}
 
 	long long maxVectorEntries = edgesRead.max_size();
@@ -99,7 +99,7 @@ void NetworkTopology::readTopology(string path, string topologytype, bool useOnl
 
 			// no more node ids left
 			if (foundID==false) {
-				opp_error("BGL cannot handle that many node ids with the current data structures");
+				throw cRuntimeError("BGL cannot handle that many node ids with the current data structures");
 			}
 
 			// replace any occurrence of maxElement by newID
@@ -111,7 +111,7 @@ void NetworkTopology::readTopology(string path, string topologytype, bool useOnl
 					edgeIt->second = newID;
 			}
 			if (nodeproperties.find(maxElement) != nodeproperties.end()){
-				opp_error("Fixme: Reassign node properties!");
+				throw cRuntimeError("Fixme: Reassign node properties!");
 			}
 			// add new id and remove offending element for next iteration
 			nodeset.insert(newID);
@@ -156,7 +156,7 @@ void NetworkTopology::readTopology(string path, string topologytype, bool useOnl
 						edgeIt->second = newID;
 				}
 				if (nodeproperties.find(maxElement) != nodeproperties.end()){
-					opp_error("Fixme: Reassign node properties!");
+					throw cRuntimeError("Fixme: Reassign node properties!");
 				}
 				// add new id and remove offending element for next iteration
 				nodeset.insert(newID);
@@ -182,7 +182,7 @@ void NetworkTopology::readTopology(string path, string topologytype, bool useOnl
 			}
 		}
 	} catch (length_error &lerr) {
-		opp_error("When inserting nodes into our graph structure, a length_error occured - probably due to a too large node id.\n"\
+		throw cRuntimeError("When inserting nodes into our graph structure, a length_error occured - probably due to a too large node id.\n"\
 				"To allow remapping, enable the network manager parameter \"allowNodeIdRemapping\"");
 	}
 
@@ -505,7 +505,7 @@ vector<pair<nodeid_t, nodeid_t> > NetworkTopology::getRandomNodePairs( size_t k 
 	if (k > n*(n-1)) {
 		cout << "Maximum   pairs: " << n*(n-1) << endl;
 		cout << "Requested pairs: " << k << endl;
-		opp_error("Not enough node pairs in topology to fulfill request");
+		throw cRuntimeError("Not enough node pairs in topology to fulfill request");
 	}
 
 	for (unsigned int i=0; i<k; ) {
@@ -654,7 +654,7 @@ vector<nodeid_t>  NetworkTopology::getHighestDegreeNodes( unsigned int count ) c
 /// add a connected pair of nodes with default link properties
 // TODO: extend to add new nodes / links on the fly?
 void NetworkTopology::addLink(nodeid_t from, nodeid_t to) {
-	opp_warning("UNTESTED");
+	EV_WARN << "UNTESTED" << endl;
 	add_edge(from, to, *BGLtopology);
 	enableLink(from, to);
 	topologyAltered = true; // requires shortest path recalculation
@@ -685,7 +685,7 @@ unsigned int NetworkTopology::getNumPartitions() {
 		return ( connected_components(fg, &component[0]) );
 	}
 
-	opp_error("Something went wrong, should never reach here");
+	throw cRuntimeError("Something went wrong, should never reach here");
 	return false;
 }
 
@@ -842,7 +842,7 @@ void NetworkTopology::disableLink(nodeid_t f, nodeid_t t) {
 
 	tie( e, edgeValid) = edge(f, t, *BGLtopology);
 	if (!edgeValid) {
-		opp_error("trying to disable non-existing link!");
+		throw cRuntimeError("trying to disable non-existing link!");
 	}
 	// if link is already disabled, return instantly
 	if ( (*BGLtopology)[e].active == false ) {
@@ -873,7 +873,7 @@ void NetworkTopology::enableLink(nodeid_t f, nodeid_t t) {
 
 	tie( e, edgeValid) = edge(f, t, *BGLtopology);
 	if (!edgeValid) {
-		opp_error("trying to enable non-existing link!");
+		throw cRuntimeError("trying to enable non-existing link!");
 	}
 
 	// if one of the adjacent nodes is down, don't enable the link
@@ -1061,7 +1061,7 @@ float NetworkTopology::getDistance(nodeid_t from, nodeid_t to) {
 		return spath[from][to];
 	}
 
-	opp_error("Unknown shortest path calculation mode: must never reach here");
+	throw cRuntimeError("Unknown shortest path calculation mode: must never reach here");
 	return 0.0;
 }
 

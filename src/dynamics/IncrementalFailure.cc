@@ -60,7 +60,7 @@ simtime_t IncrementalFailure::scheduleDynamics() {
 
 		if (activeNodes.size() < nodesToFailPerPeriod) {
 		    // no more nodes available
-			opp_warning("Premature termination of Dynamics Module LinkFailure (not enough active nodes!); failing remaining nodes and disabling dynamics");
+			EV_WARN << "Premature termination of Dynamics Module LinkFailure (not enough active nodes!); failing remaining nodes and disabling dynamics" << endl;
 			failNodes = activeNodes;
 			NodeFailure=false;
 		} else {
@@ -91,7 +91,7 @@ simtime_t IncrementalFailure::scheduleDynamics() {
 
 		// no more edges available
 		if (activeNumLinks < linksToFailPerPeriod) {
-			opp_warning("Premature termination of Dynamics Module LinkFailure (not enough active edges!); failing remaining edges and disabling dynamics");
+			EV_WARN << "Premature termination of Dynamics Module LinkFailure (not enough active edges!); failing remaining edges and disabling dynamics" << endl;
 			linksToFailPerPeriod = activeNumLinks;
 			LinkFailure=false;
 		}
