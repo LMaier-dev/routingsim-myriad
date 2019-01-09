@@ -14,14 +14,25 @@
 // 
 
 #include "Node.h"
+#include "NetworkManager.h"
 
 namespace routingsim {
 
 Define_Module(Node);
 
-static nodeid_t gnodeid=1;
+/// if the network is created from a ned file, the variable gnodeid is incremented
+/// by each new Node instance. To allow for reproducible IDs for NED files when the
+/// network is rebuilt, we reset gnodeid to 1 in the destructor of Node.
+/// (ATM dynamics in the network do not remove but only disable nodes. Therefore, this
+/// is no problem)
+static nodeid_t gnodeid=0;
 
 void Node::initialize() {
+	// we need to be sure that the network manager is also initialized for topologies
+	// read from RoutingSim-unaware ned files
+	// make sure that the network manager instance is generated at first node initialization
+	getNetworkManager();
+
 	WATCH( id );
 	WATCH_VECTOR( neighbor_set );
 
@@ -36,6 +47,8 @@ void Node::initialize() {
 
 	initNeighbors();
 }
+
+Node::~Node() { gnodeid = 1; }
 
 void Node::doBuildInside() {
 	// create node modules
@@ -69,7 +82,11 @@ void Node::unbind( int type, Protocol* mod ) {
 }
 
 void Node::handleMessage(cMessage *msg) {
+#ifdef NDEBUG
+	NodePkt* np = reinterpret_cast<NodePkt*>(msg);
+#else
 	NodePkt* np = check_and_cast<NodePkt*>(msg);
+#endif
 
 	// packet from Protocol? yes-> delegate!
 	if (np->arrivedOn("toProtocols$i")) {
@@ -106,7 +123,7 @@ void Node::handleMessage(cMessage *msg) {
 		cGate* g = bindings[np->getType()]->gate("toNode$i")->getPathStartGate();
 		send(np,g);
 	} else {
-		EV << "Binding to " << np->getType() << " unknown ";
+		EV << "Binding to packet type " << np->getType() << " unknown -- did you register your module to this packet type by calling bind()?";
 		delete np;
 	}
 }
@@ -172,6 +189,8 @@ void Node::sendNotify(NodePkt *packet, cGate *dg) {
 void Node::initNeighbors() {
 	NodePkt* np = new NodePkt();
 	np->setType(PAYLOAD_HELLO);
+	if (cSimulation::getActiveEnvir()->isGUI())
+		np->setName("Link Up");
 	np->setHop( hop_t(id, neighbor_cast) );
 	int outGateBaseId = gateBaseId("toNeighbors$o");
 	int n = gate(outGateBaseId)->getVectorSize();
@@ -220,11 +239,14 @@ bool Node::disableLink(cModule *mod, const char *gatename) {
 	for(int i=0; i<gateSize(gatename); i++) {
 		if (mod == gate(gatename, i)->getNextGate()->getOwnerModule()) {
 			disableGate(gate(gatename, i));
-			cDisplayString ds = gate(gatename,i)->getDisplayString();
-			ds.insertTag("ls");
-			ds.setTagArg("ls",0, "red" );
-			ds.setTagArg("ls",2,"d");
-			gate(gatename,i)->setDisplayString(ds);
+			if (cSimulation::getActiveEnvir()->isGUI()) {
+				cDisplayString ds = gate(gatename,i)->getDisplayString();
+				ds.insertTag("ls");
+				ds.setTagArg("ls",0, "red" );
+				ds.setTagArg("ls", 1, 3);
+				ds.setTagArg("ls",2,"s");
+				gate(gatename,i)->setDisplayString(ds);
+			}
 			return true;
 		}
 	}
@@ -240,11 +262,14 @@ bool Node::enableLink(cModule *mod, const char *gatename) {
 	for(int i=0; i<gateSize(gatename); i++) {
 		if (mod == gate(gatename, i)->getNextGate()->getOwnerModule()) {
 			enableGate(gate(gatename, i));
-			cDisplayString ds = gate(gatename,i)->getDisplayString();
-			ds.insertTag("ls");
-			ds.setTagArg("ls",0, "black" );
-			ds.setTagArg("ls",2,"solid");
-			gate(gatename,i)->setDisplayString(ds);
+			if (cSimulation::getActiveEnvir()->isGUI()) {
+				cDisplayString ds = gate(gatename,i)->getDisplayString();
+				ds.insertTag("ls");
+				ds.setTagArg("ls",0, "black" );
+				ds.setTagArg("ls",1, 1);
+				ds.setTagArg("ls",2,"solid");
+				gate(gatename,i)->setDisplayString(ds);
+			}
 			return true;
 		}
 	}
@@ -265,6 +290,7 @@ void Node::disableGate(cGate *dg) {
 	//create disconnect packet before filter is set
 	NodePkt *disableLinkPacket = new NodePkt();
 	disableLinkPacket->setType(PAYLOAD_GOODBYE);
+	disableLinkPacket->setName("Link Down");
 	hop_t disconnectNode;
 	disconnectNode.from=id;
 	disconnectNode.to=undefined_node;
@@ -291,6 +317,7 @@ void Node::enableGate(cGate *dg) {
 	// notify node that it is connected now
 	NodePkt *enableLinkPacket = new NodePkt();
 	enableLinkPacket->setType(PAYLOAD_HELLO);
+	enableLinkPacket->setName("Link Up");
 	hop_t connectNode;
 	connectNode.from=id;
 	connectNode.to=undefined_node;

@@ -26,21 +26,21 @@ simple CatastrophicFailure extends NetworkDynamics {
 parameters:
     @class(CatastrophicFailure);
     
-    /// min. degree of nodes that fail, default are bigger routers (>=3)
+    /// minimum degree of nodes that should failed; default is 3
     int minDegree = default(3);
     			 
-    /// max. degree of nodes that fail, 0=infinite
+    /// maximum degree of nodes that should be failed; default is infinite (by setting maxDegree to 0)
     int maxDegree = default(0);
     			
-    /// fraction of nodes that fail
+    /// fraction of nodes that should be failed
    	double fraction = default(0.05);
    	
-   	/// warmup phase
+   	/// warmup phase during which no failures will occur
    	double warmup @unit(s) = default(100s);
    		
-   	/// periodic occurence of failure
+   	/// after the warmup phase, failures will occur each period seconds
     double period @unit(s) = default(200s);
     	
-    /// duration of failure on period start
+    /// duration of failures
     double duration @unit(s) = default(100s);		
 }

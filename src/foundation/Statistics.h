@@ -22,6 +22,8 @@
 #include <boost/unordered_set.hpp>
 #include <chistogram.h>
 
+#include "BaseTypes.h"
+
 namespace routingsim {
 
 using namespace boost;
@@ -42,23 +44,31 @@ protected:
     virtual int numInitStages() const;
 
 private:
-	const char* name;
+	//const char* name;
 	class Value;
 	typedef boost::unordered_map<const char*, Value*> Values;
 	Values values;
 	simtime_t samplingInterval;
 	cMessage* samplingTimer;
 	std::vector<StatisticSample*> samples;
+	bool recordShortestPathDeliveryRatio;
 
 	// message delivery ratio accounting
 	unordered_set<cMessage*> msgs;
 	cOutVector* deliveryRatio;
+	cOutVector* messagesDroppedVector;
+	cOutVector* messagesDeliveredVector;
 	cHistogram* hopCount;
 	cHistogram* realHopCount;
 	cHistogram* addStretch;
 	cHistogram* mulStretch;
 	unsigned int messagesDropped;
 	unsigned int messagesDelivered;
+	cOutVector* shortestPathDeliveryRatio;
+	cOutVector* shortestPathMessagesDroppedVector;
+	cOutVector* shortestPathMessagesDeliveredVector;
+	unsigned int shortestPathMessagesDropped;
+	unsigned int shortestPathMessagesDelivered;
 
 	void sample();
 
@@ -75,8 +85,9 @@ public:
 	// register a message
 	void registerMessage( cMessage* msg );
 
-	// notify that the message has been dropped
-	void dropMessage( cMessage* msg );
+	// notify that the message has been dropped;
+	// as dstNode pass the final destination of the packet
+	void dropMessage( cMessage* msg, nodeid_t dstNode  );
 
 	// notify that the message has been delivered
 	void deliveredMessage( cMessage* msg, int hopCount );

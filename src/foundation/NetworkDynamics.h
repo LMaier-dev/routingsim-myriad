@@ -17,6 +17,7 @@
 #define __ROUTINGSIM_NETWORKDYNAMICS_H_
 
 #include <omnetpp.h>
+#include <iostream>
 
 // forward declarations
 namespace routingsim {
@@ -30,6 +31,11 @@ namespace routingsim {
 
 /**
  * This class generates dynamics in the network topology.
+ * Node Failures handle automatically if we are dealing with
+ * directed or undirected graphs and deactivates all attached links.
+ *
+ * Edge Failures need to explicitly state whether a link to be removed
+ * is directed or not in the dynamicsInfo passed to the networkManager
  *
  * @author Christoph Werle <werle@kit.edu>
  */
@@ -55,15 +61,23 @@ protected:
 	 */
 	virtual simtime_t scheduleDynamics() = 0;
 
-	/**
-	 * Schedules a node failure at the given time and duration.
-	 * This is a convenience method.
-	 */
+	/// Schedules a node failure at time occurence with given duration
+	/// Message is sent to networkManager, which processes the event
+	/// in the handleMessage()-method.
+	/// Effect:
+	/// In the topology management, the node as well as all attached links
+	/// (in both directions) are disabled
+	/// The node will not be able to send/receive messages any more and is
+	/// sent a reset, which enables the node to (voluntarily) forget some state
 	void scheduleNodeFailure(nodeid_t node, simtime_t occurence, simtime_t duration );
 
+	/// schedules a (unidirectional) link failure of the link connecting (from/to).
+	/// if the "full" link is supposed to fail, call the function a second time with (to/from)
+	void scheduleLinkFailure(nodeid_t from, nodeid_t to, simtime_t occurence, simtime_t duration );
 public:
 	inline NetworkTopology& getTopology() { return *topology; }
 	inline NetworkManager& getManager() { return *manager; }
+	virtual ~NetworkDynamics();
 };
 
 /**
@@ -71,6 +85,7 @@ public:
  */
 class DynamicsInfo {
 public:
+
 	// dynamic types
 	enum type_t {
 		nodeFailure, linkFailure, nodeRecovery, linkRecovery, undefined = 0xff
@@ -80,12 +95,16 @@ public:
 	// affected nodes
 	nodeid_t source, destination;
 
+	// Does a link failure between nodes a and b disable both directed links
+	// from a->b and the reverse direction b->a
+	bool bidirectionalLinkFailure;
+
 	// occurence and duration
 	simtime_t occurrence, duration;
 
 	DynamicsInfo() :
 		type(undefined), source(undefined_node), destination(undefined_node),
-				occurrence(0), duration(0) {
+		bidirectionalLinkFailure(true), occurrence(0), duration(0) {
 	}
 };
 

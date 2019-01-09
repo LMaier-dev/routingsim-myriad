@@ -13,16 +13,24 @@
 // along with this program.  If not, see http://www.gnu.org/licenses/.
 // 
 
-package routingsim.routing.pathvector;
+#ifndef LINKFAILURE_H_
+#define LINKFAILURE_H_
+#include "NetworkDynamics.h"
+#include <list>
+#include <utility>
 
-import routingsim.foundation.Protocol;
+namespace routingsim {
 
-//
-// TODO auto-generated module
-//
-simple PathVector extends Protocol
-{
-    @class(PathVector);
-    @display("i=abstract/router");
-}
-    
+class LinkFailure: public NetworkDynamics {
+private:
+
+public:
+	LinkFailure();
+	virtual ~LinkFailure();
+	virtual void initialize();
+	virtual simtime_t scheduleDynamics();
+
+};
+
+} /* namespace routingsim */
+#endif /* LINKFAILURE_H_ */

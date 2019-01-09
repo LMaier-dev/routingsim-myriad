@@ -60,6 +60,7 @@ protected:
 	virtual void initialize();
 	virtual void handleMessage(cMessage *msg);
 	virtual void doBuildInside();
+	virtual ~Node();
 	/// Disable link to neighbor mod in gate vector gatename
 	bool disableLink(cModule *mod, const char *gatename);
 	/// Enable link to neighbor mod in gate vector gatename

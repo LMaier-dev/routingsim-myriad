@@ -15,6 +15,9 @@
 
 #include "NetworkDynamics.h"
 #include "NetworkTopology.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
 
 namespace routingsim {
 
@@ -29,7 +32,7 @@ void NetworkDynamics::initialize(int stage) {
 	if (stage == 1) {
 		initialize();
 		simtime_t nextSchedule = this->scheduleDynamics();
-		scheduleAt(nextSchedule,timer);
+		scheduleAt(nextSchedule, timer);
 	}
 }
 
@@ -37,8 +40,10 @@ void NetworkDynamics::initialize() {
 
 }
 
-
 void NetworkDynamics::finish() {
+}
+
+NetworkDynamics::~NetworkDynamics() {
 	cancelAndDelete(timer);
 }
 
@@ -56,18 +61,83 @@ void NetworkDynamics::scheduleNodeFailure(nodeid_t node, simtime_t occurrence,
 	di->source = node;
 	di->occurrence = occurrence;
 	di->duration = duration;
-	dim = new cMessage("nodeFailure");
+	if (cSimulation::getActiveEnvir()->isGUI()) {
+		stringstream fls;
+		fls << "Fail Node " << di->source;
+		string failLabel(fls.str());
+		dim = new cMessage(failLabel.c_str());
+	} else {
+		dim = new cMessage();
+	}
 	dim->setContextPointer(di);
 	sendDelayed(dim, di->occurrence, "toManager");
 
 	di = new DynamicsInfo();
 	di->type = DynamicsInfo::nodeRecovery;
 	di->source = node;
-	di->occurrence = occurrence + duration;
+	di->occurrence = (duration==MAXTIME ? MAXTIME : occurrence + duration);
 	di->duration = duration;
-	dim = new cMessage("nodeRecovery");
+	if (cSimulation::getActiveEnvir()->isGUI()) {
+		stringstream rls;
+		rls << "Recovery Node " << di->source;
+		string recoverLabel(rls.str());
+		dim = new cMessage(recoverLabel.c_str());
+	} else {
+		dim = new cMessage();
+	}
+	dim->setContextPointer(di);
+
+	// if nodes fail forever, do not schedule the recovery msg but free msgs
+	if (duration != MAXTIME) {
+		sendDelayed(dim, di->occurrence, "toManager");
+	} else {
+		delete di; delete dim;
+	}
+}
+
+void NetworkDynamics::scheduleLinkFailure(nodeid_t from, nodeid_t to, simtime_t occurrence, simtime_t duration) {
+	DynamicsInfo* di;
+	cMessage* dim;
+
+	di = new DynamicsInfo();
+	di->type = DynamicsInfo::linkFailure;
+	di->source = from;
+	di->destination = to;
+	di->occurrence = occurrence;
+	di->duration = duration;
+	if (cSimulation::getActiveEnvir()->isGUI()) {
+		stringstream fls;
+		fls << "Fail Link [" << from << "," << to << "]";
+		string failLabel(fls.str());
+		dim = new cMessage(failLabel.c_str());
+	} else {
+		dim = new cMessage();
+	}
 	dim->setContextPointer(di);
 	sendDelayed(dim, di->occurrence, "toManager");
+
+	di = new DynamicsInfo();
+	di->type = DynamicsInfo::linkRecovery;
+	di->source = from;
+	di->destination = to;
+	di->occurrence = (duration==MAXTIME ? MAXTIME : occurrence + duration);
+	di->duration = duration;
+	if (cSimulation::getActiveEnvir()->isGUI()) {
+		stringstream rls;
+		rls << "Recovery Link [" << from << "," << to << "]";
+		string recoverLabel(rls.str());
+		dim = new cMessage(recoverLabel.c_str());
+	} else {
+		dim = new cMessage();
+	}
+	dim->setContextPointer(di);
+
+	// if nodes fail forever, do not schedule the recovery msg but free msgs
+	if (duration != MAXTIME) {
+		sendDelayed(dim, di->occurrence, "toManager");
+	} else {
+		delete di; delete dim;
+	}
 }
 
 /*
@@ -79,4 +149,17 @@ void NetworkDynamics::handleMessage(cMessage *msg) {
 	scheduleAt(nextSchedule,timer);
 }
 
+/*
+ *
+ *
+ * vector_set<nodeid_t>neighbours = di->source->getNeighbours();
+ int random = rand() % neighbours;
+ di->destination = neighbours[random];
+ deletedNoteLinks.insert(di->destination);
+
+
+ di->destination = deletedNoteLinks[0];
+ deletedNoteLinks.erase(deletedNoteLinks[0]);
+
+ */
 } //namespace

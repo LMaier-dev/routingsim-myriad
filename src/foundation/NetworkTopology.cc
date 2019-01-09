@@ -30,169 +30,285 @@ using namespace boost;
 using namespace std;
 
 // ============================================================================
-// Topology Helpers
-// ============================================================================
-
-/**
- * TopologyLink class describes a link in the graph and the actual status in the
- * topology
- */
-class TopologyLink {
-private:
-	string name; // link name
-	float weight; // link weight
-	bool connected; // true, if a gate exists
-	bool active; // true, if forwarding is active in Node (de-)multiplexer
-public:
-	inline TopologyLink() :
-	name(""), weight(1.0), connected(false), active(false) {
-	}
-	inline ~TopologyLink() {
-
-	}
-	inline bool isConnected() const {
-		return connected;
-	}
-	inline void setConnected(bool state) {
-		connected = state;
-	}
-	inline bool isActive() const {
-		return active;
-	}
-	inline void setActive(bool state) {
-		active = state;
-	}
-	inline float getWeight() const {
-		return weight;
-	}
-};
-
-/**
- * Set of links.
- */
-class NetworkTopology::TopologyNode {
-public:
-	typedef unordered_map<nodeid_t, TopologyLink*> linkset_t;
-	linkset_t linkset;
-	typedef unordered_map<string,string> properties_t;
-	properties_t properties;
-
-public:
-	inline TopologyNode() :
-	linkset() {
-	}
-
-	inline ~TopologyNode() {
-		// free all link properties
-		for (linkset_t::iterator i = linkset.begin(); i != linkset.end(); i++)
-			delete (i->second);
-
-		// cleanup link-set
-		linkset.clear();
-	}
-
-	/// Returns the number of links
-	inline size_t count() const {
-		return linkset.size();
-	}
-
-	/// add a new link to the set
-	inline TopologyLink* addLink(nodeid_t id) {
-		linkset_t::iterator i = linkset.find(id);
-		if (i == linkset.end())
-			i = linkset.insert(make_pair(id, new TopologyLink())).first;
-		return i->second;
-	}
-
-	/// returns a link from the set
-	inline TopologyLink* getLink(nodeid_t node) {
-		if (linkset.find(node) != linkset.end())
-			return linkset.find(node)->second;
-		else
-			return NULL;
-	}
-};
-
-/**
- * DijkstraStatus provides the helper data structure to calculate
- * shortest paths in NetworkTopology::getDistance
- */
-class DijkstraStatus {
-private:
-	bool visited; //has the node been visited?
-	float weight; //cost as sum of weights
-	NetworkTopology::TopologyNode *ls;
-
-public:
-	inline DijkstraStatus() :
-	visited(false), weight(FLT_MAX) {
-	}
-	inline DijkstraStatus(NetworkTopology::TopologyNode *ls) :
-				visited(false), weight(FLT_MAX), ls(ls) {
-	}
-	inline ~DijkstraStatus() {
-	}
-	inline void markVisited() {
-		visited = true;
-	}
-	inline bool hasBeenVisited() const {
-		return visited;
-	}
-	inline void setWeight(cost_t weight) {
-		this->weight = weight;
-	}
-	inline cost_t getWeight() const {
-		return weight;
-	}
-	inline NetworkTopology::TopologyNode* getLinkSet() {
-		return ls;
-	}
-};
-
-// ============================================================================
 // Network Topology Class
 // ============================================================================
 
-/// constructor
 NetworkTopology::NetworkTopology() :
-			spath_available(false), numberNodes(0), numberLinks(0) {
-}
+																			BGLtopology(0), topologyAltered(false), spath(0), spathMatrixSize(0), spathAvailable(false) { }
 
 /// destructor
 NetworkTopology::~NetworkTopology() {
-	unordered_map<nodeid_t, TopologyNode *>::iterator it;
-	unordered_map<nodeid_t, cModule*>::iterator modMapIt;
+	delete BGLtopology;
 
-	// stop modules and remove them
-	// NOTE: happens without explicit call too ...
-	for (modMapIt = moduleMap.begin(); modMapIt != moduleMap.end(); modMapIt++) {
-		modMapIt->second->callFinish();
-		modMapIt->second->deleteModule();
+	if (spathAvailable) {
+		if (spath != NULL) {
+			for  (int i=0; i<spathMatrixSize; i++) {
+				delete[] spath[i];
+			}
+			delete[] spath;
+		}
 	}
-
-	// remove graph / topology data structure
-	for (it = adjacencyList.begin(); it != adjacencyList.end(); it++) {
-		delete (it->second);
-	}
-	adjacencyList.clear();
 }
 
-// read a file from topology generator
-// format:
-// 1st line: number of nodes\tnumber of links
-// following lines: src node\tdest node
-// TODO: Input validation and sanity checks
-void NetworkTopology::readTopology(string path) {
+void NetworkTopology::readTopology(string path, string topologytype, bool useOnlyLargestConnectedComponent, bool makeLinksBidirectional, bool allowNodeIdRemapping, bool compressNodeIDs) {
+	// store edges of topology
+	vector< pair<long long, long long> > edgesRead;
+	// store node properties
+	unordered_map < nodeid_t, properties_t > nodeproperties;
+	// sanity check for number of nodes
+	set<nodeid_t> nodeset;
+
+	EV << "Reading Topology from " << path << "(file format: " << topologytype << ")" << endl;
+
 	ifstream topologyFile(path.c_str());
+	if (!topologyFile) {
+		string msg("Could not open topology file ");
+		msg+=path;
+		opp_error(msg.c_str());
+	}
+
+	if (!topologytype.compare("SELF_DEFINED")) {
+		EV << "using bidirectional parameter read from topology file " << path << "!" << endl;
+		readSelfDefinedTopology(topologyFile, nodeset, edgesRead, nodeproperties);
+	}
+	else if (!topologytype.compare("DIMES")) {
+		readDimesTopology(topologyFile, nodeset, edgesRead, nodeproperties, makeLinksBidirectional);
+	} else {
+		opp_error("Unknown topology type!");
+	}
+
+	long long maxVectorEntries = edgesRead.max_size();
+	long long maxElement=*max_element(nodeset.begin(), nodeset.end());
+	// if there are ids that would lead to an exception when inserting into the
+	// BGLtopology (nodes are stored in a vector), remap them.
+	// edgesRead is taken as a general vector -  better way to access limit?
+	if (allowNodeIdRemapping &&
+			maxElement > maxVectorEntries) {
+		do {
+			long long newID;
+			bool foundID=false;
+
+			// find lowest available node id
+			for (long long i=0; i<maxVectorEntries; i++) {
+				if (nodeset.find(i)==nodeset.end()) {
+					newID = i;
+					foundID = true;
+					break;
+				}
+			}
+
+			// no more node ids left
+			if (foundID==false) {
+				opp_error("BGL cannot handle that many node ids with the current data structures");
+			}
+
+			// replace any occurrence of maxElement by newID
+			vector< pair<long long, long long> >::iterator edgeIt;
+			for(edgeIt = edgesRead.begin(); edgeIt!= edgesRead.end(); edgeIt++) {
+				if (edgeIt->first == maxElement)
+					edgeIt->first = newID;
+				if (edgeIt->second == maxElement)
+					edgeIt->second = newID;
+			}
+			if (nodeproperties.find(maxElement) != nodeproperties.end()){
+				opp_error("Fixme: Reassign node properties!");
+			}
+			// add new id and remove offending element for next iteration
+			nodeset.insert(newID);
+			nodeset.erase( nodeset.find(maxElement) );
+
+			EV << "Node ID " << maxElement << " has been reassigned to ID " << newID << endl;
+
+		} while ((maxElement=*max_element(nodeset.begin(), nodeset.end())) > maxVectorEntries);
+	}
+
+	// compress the graph's id space; this may currently be required as we use the node ids
+	// as direct indices into our graph structures and therefore high node ids lead to large
+	// data structures and exorbitant memory consumption during shortest path calculation
+	if (compressNodeIDs) {
+		long long maxVectorEntries = edgesRead.max_size();
+		bool continueLoop=true;
+
+		do {
+			long long newID;
+			bool foundID=false;
+			long long maxElement=*max_element(nodeset.begin(), nodeset.end());
+
+			// find lowest available node id
+			for (long long i=0; i<maxVectorEntries; i++) {
+				if (nodeset.find(i)==nodeset.end()) {
+					newID = i;
+					foundID=true;
+					break;
+				}
+			}
+
+			// the id space is continuous and we are done
+			if (foundID==false || newID==maxElement+1) {
+				continueLoop=false;
+			} else {
+				// replace any occurrence of maxElement by newID
+				vector< pair<long long, long long> >::iterator edgeIt;
+				for(edgeIt = edgesRead.begin(); edgeIt!= edgesRead.end(); edgeIt++) {
+					if (edgeIt->first == maxElement)
+						edgeIt->first = newID;
+					if (edgeIt->second == maxElement)
+						edgeIt->second = newID;
+				}
+				if (nodeproperties.find(maxElement) != nodeproperties.end()){
+					opp_error("Fixme: Reassign node properties!");
+				}
+				// add new id and remove offending element for next iteration
+				nodeset.insert(newID);
+				nodeset.erase( nodeset.find(maxElement) );
+				EV << "Node ID " << maxElement << " has been reassigned to ID " << newID << endl;
+			}
+
+		} while (continueLoop);
+	}
+
+	// build bgl graph
+	BGLtopology = new topologyGraph(nodeset.size());
+	typedef vector< pair<long long, long long> >::iterator vpairit;
+
+	try {
+		// add edges with default properties
+		for ( vpairit v = edgesRead.begin(); v != edgesRead.end(); v++ ) {
+			BGLEdgeDesc e; bool b;
+			tie(e,b) = add_edge(v->first, v->second, *BGLtopology);
+			if (b) {
+				(*BGLtopology)[e].active = true;
+				(*BGLtopology)[e].weight = 1.0;
+			}
+		}
+	} catch (length_error &lerr) {
+		opp_error("When inserting nodes into our graph structure, a length_error occured - probably due to a too large node id.\n"\
+				"To allow remapping, enable the network manager parameter \"allowNodeIdRemapping\"");
+	}
+
+	// set node properties
+	for (BGLVertexIt it=vertices(*BGLtopology).first; it!=vertices(*BGLtopology).second; it++) {
+		(*BGLtopology)[*it].maxRTentries = std::numeric_limits<int>::max();
+
+		// if the node actually exists
+		if (nodeset.count( *it )) {
+			(*BGLtopology)[*it].disabled = false;
+			(*BGLtopology)[*it].active = true;
+			//cout << "active node " << *it << endl;
+		}
+		// if the node does not exist, set disabled (no Node module is created for disabled nodes)
+		else {
+			(*BGLtopology)[*it].disabled = true;
+			(*BGLtopology)[*it].active = false;
+		}
+
+		if ( nodeproperties.find(*it) != nodeproperties.end() ) {
+			(*BGLtopology)[*it].properties = nodeproperties[*it];
+		}
+	}
+
+	// compute largest connected component if useOnlyLargestConnectedComponent (NetworkManager.ned) is true
+	if ( useOnlyLargestConnectedComponent ) {
+		FilteredGraph fg(*BGLtopology, activeEdges<topologyGraph>(*BGLtopology), activeNodes<topologyGraph>(*BGLtopology));
+		std::vector<int> component(num_vertices(fg));
+		std::vector<int>::iterator vit;
+		int numComponents;
+		int numDisabledNodes=0; // count nodes that are disabled for not being part of LCC
+		int numDisabledEdges=0;
+
+		if ( is_directed(fg) ) {
+			numComponents = strong_components(fg, &component[0]);
+		} else {
+			numComponents = connected_components(fg, &component[0]);
+		}
+
+		if (numComponents > 1) {
+			cout << "Determining Largest Connected Component of overall " << numComponents << " components" << endl;
+			vector<long long> partitionSizes(numComponents, 0);
+
+			// determine partition sizes
+			for (vit=component.begin(); vit!=component.end(); vit++) {
+				partitionSizes[*vit]++;
+			}
+
+			// determine size of max partition and its index
+			long long maxPartitionSize = *(max_element(partitionSizes.begin(), partitionSizes.end()));
+			int maxPartitionId;
+
+			for (int i=0; i<numComponents; i++) {
+				if ( partitionSizes[i] == maxPartitionSize ) {
+					maxPartitionId = i;
+				}
+			}
+
+			// disable nodes and edges of other partitions
+			for (ActiveBGLVertexIt it=vertices(fg).first; it!=vertices(fg).second; it++) {
+				if (component[*it] != maxPartitionId) {
+					EV << "Deactivating node ["<< *it << endl;
+					// iterate over attached edges (in+out) and deactivate them
+					ActiveBGLEdgeIt ei, ee;
+					for (tie(ei,ee)=edges(fg); ei!=ee; ei++) {
+						if ( source(*ei, fg)== *it || target(*ei, fg)==*it ) {
+							EV << "... deactivating edge ["<< source(*ei,fg) << "," << target(*ei,fg) << "]" << endl;
+							fg[*ei].active = false;
+							numDisabledEdges++;
+						}
+					}
+
+					// deactivate after edge removal as otherwise fg does not contain the edges any more
+					(fg)[*it].disabled = true;
+					(fg)[*it].active = false;
+					numDisabledNodes++;
+				}
+			}
+		}
+		cout << "Disabled " << numDisabledNodes << " nodes to only work on largest connected/strong component!" << endl;
+		cout << "Disabled " << numDisabledEdges << " edges to only work on largest connected/strong component!" << endl;
+	}
+
+
+	cout << "Unique Nodes read from file: " << nodeset.size() << endl;
+	cout << "Edges (not necessarily unique) read from file including possibly added bidirectional edges: " << edgesRead.size() << endl;
+	cout << "Active Nodes: " << getActiveNumberNodes() << endl;
+	cout << "Active Edges: " << getActiveNumberLinks() << endl;
+
+	if (! isConnected()) {
+		cout << "Working on partitioned graph!" << endl;
+	}
+}
+
+
+// Read in a topology from a text file.
+// Currently there are two formats supported:
+// (1) The first file format (header version 0) consists of a single header line
+//     stating the number of nodes and the number of links (int \t int)
+//     Consecutive lines describe edges in the same format (int \t int)
+//     where the first column is the source and the second column is the
+//     destination of the edge
+// (2) The second file format (header version 1) is a bit advanced and allows a more explicit
+//     description of the topology. An exemplary header looks as follows:
+//     ******************************************************************
+//     ###     Nodes:  8210    Edges:  19732   Bidirectional:  True
+//	   # GNM (10240, 10240), Largest connected component with 8210 nodes and 9866 edges, SEED=123
+// 	   # Nodes: 8210
+//     # Edges: 9866
+//     # (Global) Clustering Coefficient: 4.87210718636e-05
+//     # Local Density (value, node, radius): [315, 5924, 12]
+//     # Diameter: 29
+//     # Degree Min / Mean / Median / Max: 1 / 2.40341047503 / 2.0 / 10
+//     2       6428
+//     3       2146
+//     ******************************************************************
+//     The first line, starting with ### states the basic topology parameters
+//     Lines starting with a single # may contain additional information and comments
+//     The remainder of the file contains the edges as in header version 0:
+//     (int \t int) describing the "from" and "to" of an edge
+void NetworkTopology::readSelfDefinedTopology(ifstream &topologyFile, set<nodeid_t> &nodeset, vector< pair<long long, long long> > &edges, unordered_map < nodeid_t, properties_t > &nodeproperties) {
 	string line;
-	int numNodes = 0, numLinks = 0;
+	unsigned int numNodes = 0, numLinks = 0; // as given by header
 	nodeid_t fromNode, toNode;
 	int lineNumber = 0;
-
-	if (!topologyFile) {
-		if (getEnvir()->isLoggingEnabled())
-			EV << "Could not open" << path << endl;
-	}
+	bool undirectedGraph;
 
 	while (std::getline(topologyFile, line)) {
 		int tokenNumber = 0;
@@ -201,29 +317,90 @@ void NetworkTopology::readTopology(string path) {
 		typedef boost::tokenizer<escaped_list_separator<char> > tokenizer_t;
 		tokenizer_t tok(line,sep);
 		bool nodep=false;
+
+		int headerVersion=1;
+
 		for (tokenizer_t::iterator it = tok.begin(); it != tok.end(); it++) {
 			tokenNumber++;
 
-			// read header line
-			if (lineNumber == 1 && tokenNumber == 1) {
+			// determine header type
+			if (lineNumber==1 && tokenNumber==1) {
+				if (boost::lexical_cast<string>(*it).compare("###") == 0) {
+					headerVersion=1;
+					EV << "Detected Topology File Header Version " << headerVersion << endl;
+					// go to next token
+					continue;
+				} else {
+					headerVersion=0;
+					// do continue processing below as the current token is the number of nodes
+					EV << "Detected Topology File Header Version " << headerVersion << endl;
+				}
+			}
+
+			// new header
+			if (headerVersion == 1 && lineNumber == 1 && ((tokenNumber == 2) || (tokenNumber==4))) {
+				continue;
+			}
+			if (headerVersion == 1 && lineNumber == 1 && tokenNumber == 3) {
 				numNodes = boost::lexical_cast<int>(*it);
 				continue;
 			}
-			if (lineNumber == 1 && tokenNumber == 2) {
+			if (headerVersion == 1 && lineNumber == 1 && tokenNumber == 5) {
 				numLinks = boost::lexical_cast<int>(*it);
-				break;
+				continue;
+			}
+			if (headerVersion == 1 && lineNumber == 1 && tokenNumber == 7) {
+				if ( string(*it) == string("True") ||
+						string(*it) == string("true") ||
+						string(*it) == string("1") ) {
+					undirectedGraph = true;
+					EV << "Network topology is an undirected graph!" << endl;
+				} else {
+					undirectedGraph = false;
+					EV << "Network topology is a directed graph!" << endl;
+				}
+				continue;
+			}
+
+
+			// old header
+			if (headerVersion == 0 && lineNumber == 1 && tokenNumber == 1) {
+				numNodes = boost::lexical_cast<int>(*it);
+				continue;
+			}
+			if (headerVersion == 0 && lineNumber == 1 && tokenNumber == 2) {
+				numLinks = boost::lexical_cast<int>(*it);
+				undirectedGraph = true;
+				EV << "Old header version, assuming network topology is an undirected graph!" << endl;
+				continue;
+			}
+
+			// skip comment lines in new header format
+			if (headerVersion == 1 && lineNumber > 1 && tokenNumber == 1) {
+				if (boost::lexical_cast<string>(*it).compare(0,1,"#") == 0) {
+					break;
+				}
 			}
 
 			// handle regular line
 			if (tokenNumber == 1) {
 				if (*it=="node") nodep = true;
-				else fromNode = boost::lexical_cast<long long>(*it);
+				else {
+					fromNode = boost::lexical_cast<long long>(*it);
+					nodeset.insert(fromNode);
+				}
 			}
 
 			if (tokenNumber == 2 && !nodep) {
 				toNode = boost::lexical_cast<long long>(*it);
 				if (fromNode != toNode) {
-					addLink(fromNode, toNode);
+					edges.push_back( pair<long long, long long>(toNode, fromNode) );
+					if ( undirectedGraph == true ) {
+						// if the read topology is bidirectional/undirected, insert the reverse edge
+						// this is safe in case of multi-edges (which we do not want) as we use setS for the edgeList
+						edges.push_back( pair<long long, long long>(fromNode, toNode) );
+					}
+					nodeset.insert(toNode);
 				} else {
 					EV << "Attention: omitting reflexive link ("<< fromNode<<","<<toNode<<" as implicitly contained!" << endl;
 				}
@@ -239,228 +416,283 @@ void NetworkTopology::readTopology(string path) {
 				if (i == string::npos) continue;
 				string key = s.substr(0,i);
 				string value = s.substr(i+1);
-				adjacencyList[toNode]->properties[key]=value;
-				//EV << "Node " << toNode << ": key='" << key << "' value='" << value << "'" << endl;
+				// store for later insertion into bgl topology
+				if ( nodeproperties.find(toNode) != nodeproperties.end() ) {
+					nodeproperties[toNode].insert( pair<string, string>(key, value));
+				} else {
+					properties_t pt;
+					pt[key] = value;
+					nodeproperties.insert( pair<nodeid_t, properties_t>(toNode, pt));
+				}
 			}
-
 		}
 	}
-	numberNodes = numNodes;
-	numberLinks = numLinks;
+
+#ifdef DEBUG
+	// output node properties
+	for (unordered_map < nodeid_t, properties_t >::iterator i = nodeproperties.begin(); i!=nodeproperties.end(); i++) {
+		EV << "Node: " <<i->first <<endl;
+		for (properties_t::iterator pt=i->second.begin(); pt!=i->second.end(); pt++) {
+			EV << "\tproperty [" << pt->first << "] value [" << pt->second << "]" << endl;
+		}
+	}
+#endif
+
+
+}
+
+void NetworkTopology::readDimesTopology(ifstream &topologyFile, set<nodeid_t> &nodeset, vector< pair<long long, long long> > &edges, unordered_map < nodeid_t, properties_t > &nodeproperties, bool makeBidirectional) {
+	string line;
+	escaped_list_separator<char> sep("\\", "," ,"\"'");
+	typedef boost::tokenizer<escaped_list_separator<char> > tokenizer_t;
+
+	while (std::getline(topologyFile, line)) {
+		unsigned int tokenNumber = 0;
+		long long from = 0;
+		long long to = 0;
+
+		tokenizer_t tok(line,sep);
+		for (tokenizer_t::iterator it = tok.begin(); it != tok.end(); it++) {
+			if (tokenNumber == 0) {
+				from = boost::lexical_cast<long long>(*it);
+				nodeset.insert(from);
+			}
+			if (tokenNumber == 1) {
+				to = boost::lexical_cast<long long>(*it);
+				edges.push_back( make_pair(from, to) );
+				if (makeBidirectional)
+					edges.push_back( make_pair(to, from) );
+
+				nodeset.insert(to);
+			}
+			if (tokenNumber >=2)
+				continue;
+
+			tokenNumber++;
+		}
+	}
 }
 
 bool NetworkTopology::readShortestPaths(string shortestPathFile) {
-	ifstream f(shortestPathFile.c_str(), ifstream::in | ifstream::binary);
-	if (!f) {
-		EV << "Could not open shortest-paths " << shortestPathFile << endl;
-		return false;
-	}
-	numberNodes = adjacencyList.size();
+	EV << "readShortestPaths currently not implemented (shortest paths are calculated)" << endl;
 
-	// check version
-	uint32_t ver;
-	f.read((char*) &ver, 4);
-	if ((ver & 0x00FFFFFF) == 0x00FFFFFF) {
-		ver >>= 24;
-		uint32_t numNodes;
-		f.read((char*) &numNodes, 4);
-		EV << "Shortest path file version " << ver << endl;
-		EV << "Number of nodes: " << numNodes << endl;
-		if (numNodes!=numberNodes)
-			throw cRuntimeError("number of nodes does not match: topology (%d), shortest path file (%d)", numberNodes, numNodes);
+	// TODO:
+	/* read shortest paths into bgl distance matrix
+	 * set 	bool topologyAltered to false (if we read in a spath matrix, we assume it matches the current network
+	 * set spathAvailable to true to indicate that further lookups are supposed to happen directly to the stored spaths
+	 */
 
-	} else {
-		EV << "Shortest path file version 0" << endl;
-		f.seekg(0, ios::beg);
-	}
-
-	// load shortest-paths
-	spath_costs = new uint8_t[numberNodes * numberNodes];
-	spath_available = true;
-
-	// read row by row
-	uint8_t* ptr = spath_costs;
-	for (size_t i = 0; i < numberNodes; i++) {
-		// read id
-		uint32_t id;
-		f.read((char*) &id, 4);
-
-		// set mapping
-		spath_map.insert(make_pair(id, i));
-
-		// read row
-		f.read((char*) ptr, numberNodes);
-		ptr += numberNodes;
-	}
-
-	// check on file end
-	f.sync();
-	ifstream::pos_type curr = f.tellg();
-	f.seekg(0, ios::end);
-	ifstream::pos_type end = f.tellg();
-	if (curr != end) {
-		EV << "Shortest path file size mismatch. ";
-		EV << curr << " vs. " << end << endl;
-		f.close();
-		return false;
-	}
-
-	f.close();
 	return true;
 }
 
-/// returns a random node
 nodeid_t NetworkTopology::getRandomNode(size_t rndvalue) const {
-	adjacencylist_t::const_iterator i = adjacencyList.begin();
-	std::advance(i, (rndvalue % adjacencyList.size()));
-	return i->first;
+	ActiveBGLVertexIt vi, vi_end;
+	FilteredGraph fg(*BGLtopology, activeEdges<topologyGraph>(*BGLtopology), activeNodes<topologyGraph>(*BGLtopology));
+	tie(vi, vi_end) = vertices(fg);
+	unsigned int n = getActiveNumberNodes();
+	advance(vi, rndvalue % n);
+	return *vi;
 }
 
-/// Returns the node degree, i.e., number of links to neighbors
-size_t NetworkTopology::getNodeDegree(nodeid_t node) const {
-	adjacencylist_t::const_iterator i = adjacencyList.find(node);
-	if (i == adjacencyList.end())
-		return 0;
-	return i->second->linkset.size();
-}
+vector<pair<nodeid_t, nodeid_t> > NetworkTopology::getRandomNodePairs( size_t k ) const {
+	vector<pair<nodeid_t, nodeid_t> > res;
+	vector<pair<nodeid_t, nodeid_t> >::const_iterator resIt;
 
-vector<nodeid_t>* NetworkTopology::getNodeIDs() const {
-	vector<nodeid_t>* ids = new vector<nodeid_t>();
-	foreach(const adjacencylist_t::value_type& value, adjacencyList)
-	ids->push_back(value.first);
-	return ids;
-}
+	FilteredGraph fg(*BGLtopology, activeEdges<topologyGraph>(*BGLtopology), activeNodes<topologyGraph>(*BGLtopology));
+	unsigned int n = getActiveNumberNodes();
+	ActiveBGLVertexIt vi, ve;
 
-unordered_set<nodeid_t>* NetworkTopology::getGiantComponent(
-		unordered_set<nodeid_t>& disabled) const {
+	if (k > n*(n-1)) {
+		cout << "Maximum   pairs: " << n*(n-1) << endl;
+		cout << "Requested pairs: " << k << endl;
+		opp_error("Not enough node pairs in topology to fulfill request");
+	}
 
-	// components store
-	typedef unordered_map<int, vector<nodeid_t>*> components_t;
-	components_t components;
-	unordered_set<nodeid_t>* d = &disabled;
+	for (unsigned int i=0; i<k; ) {
+		nodeid_t src=undefined_node, dst=undefined_node;
+		bool insertPair = true;
 
-	// prepare unvisited nodes
-	unordered_set<nodeid_t> unvisited;
-	foreach(const adjacencylist_t::value_type& value, adjacencyList)
-	if (d == NULL || d->count(value.first) == 0)
-		unvisited.insert(value.first);
+		tie(vi, ve) = vertices(fg);
+		advance(vi, intuniform(0, std::numeric_limits<int>::max()) % n);
+		src = *vi;
+		tie(vi, ve) = vertices(fg);
+		advance(vi, intuniform(0, std::numeric_limits<int>::max()) % n);
+		dst = *vi;
 
-	// find components
-	int compno = 0;
-	while (unvisited.size() != 0) {
-		compno++;
-		nodeid_t start = *unvisited.begin();
-		vector<nodeid_t>& p = *new vector<nodeid_t> ();
+		// ignore self-messages
+		if (src == dst) continue;
 
-		// breath-first search
-		p.push_back(start);
-		unvisited.erase(start);
-
-		for (size_t i = 0; i < p.size(); i++) {
-			// add neighbors of node
-			const TopologyNode::linkset_t& ls =
-					adjacencyList.find(p[i])->second->linkset;
-			foreach(const TopologyNode::linkset_t::value_type& value, ls )
-			if (unvisited.count(value.first) == 1 && (d == NULL
-					|| d->count(value.first) == 0)) {
-				p.push_back(value.first);
-				unvisited.erase(value.first);
+		// check uniqueness
+		for ( resIt = res.begin(); resIt != res.end(); resIt++ ) {
+			if (resIt->first == src && resIt->second == dst) {
+				insertPair = false;
+				break;
 			}
 		}
 
-		// store component
-		components.insert(make_pair(compno, &p));
+		// insert unique pairs into result vector
+		if ( insertPair ) {
+			res.push_back( make_pair(src, dst) );
+			++i;
+		}
+
 	}
 
-	// find giant component
-	vector<nodeid_t>* max_component = NULL;
-	foreach( components_t::value_type& comp, components )
-	if (max_component == NULL || comp.second->size()> max_component->size())
-		max_component = comp.second;
-
-	// erase other components
-	foreach( components_t::value_type& comp, components )
-	if (comp.second != max_component)
-		delete comp.second;
-
-	// convert to set
-	unordered_set<nodeid_t>* set = new unordered_set<nodeid_t> (
-			max_component->begin(), max_component->end());
-
-	// free remaining
-	delete max_component;
-	components.clear();
-
-	return set;
+	return res;
 }
+
+
+pair<nodeid_t, nodeid_t> NetworkTopology::getRandomEdge(size_t activeLinkNumber) const {
+	ActiveBGLEdgeIt ei, ee;
+	FilteredGraph fg(*BGLtopology, activeEdges<topologyGraph>(*BGLtopology), activeNodes<topologyGraph>(*BGLtopology));
+	tie(ei, ee) = edges(fg);
+	//unsigned int n = getActiveNumberLinks();
+	advance(ei, activeLinkNumber);
+	return pair<nodeid_t, nodeid_t>(source(*ei, fg), target(*ei, fg));
+}
+
+size_t NetworkTopology::getNodeDegree(nodeid_t node) const {
+	ActiveBGLVertexIt vi, vi_end;
+	FilteredGraph fg(*BGLtopology, activeEdges<topologyGraph>(*BGLtopology), activeNodes<topologyGraph>(*BGLtopology));
+
+	for ( tie(vi, vi_end) = vertices(fg); vi!=vi_end; vi++ ) {
+		if (*vi == node && fg[*vi].active==true)
+			return out_degree(*vi, fg);
+	}
+	// if the node does not exist, return degree 0
+	return 0;
+}
+
+size_t NetworkTopology::getNodeDegrees( map<nodeid_t, unsigned long> &retDegreeMap) const {
+	ActiveBGLVertexIt vi, ve;
+	FilteredGraph fg(*BGLtopology, activeEdges<topologyGraph>(*BGLtopology), activeNodes<topologyGraph>(*BGLtopology));
+	//	FilteredGraph::out_edge_iterator f, l;
+
+	for ( tie(vi,ve)=vertices(fg); vi!=ve; vi++ ) {
+		if ( fg[*vi].active ) {
+			//			for (boost::tie(f, l) = out_edges(*vi, fg); f != l; ++f) {
+			//				EV << *f << " - "<< *l << endl;
+			//			}
+			retDegreeMap[*vi] = out_degree(*vi, fg);
+			//EV << "Degree of node " << *vi << ": " << retDegreeMap[*vi] << endl;
+		}
+	}
+	return retDegreeMap.size();
+}
+
+void NetworkTopology::getNodeIDs(vector<nodeid_t> &v) const {
+	ActiveBGLVertexIt vi, ve;
+	FilteredGraph fg(*BGLtopology, activeEdges<topologyGraph>(*BGLtopology), activeNodes<topologyGraph>(*BGLtopology));
+
+	for ( tie(vi, ve)=vertices(fg); vi!=ve; vi++) {
+		v.push_back(*vi);
+	}
+	return;
+}
+
+void NetworkTopology::getNeighborNodeIDs(nodeid_t fromID, vector<nodeid_t> &neighborIDs) const {
+	ActiveBGLAdjacencyIt ai, ae;
+	FilteredGraph fg(*BGLtopology, activeEdges<topologyGraph>(*BGLtopology), activeNodes<topologyGraph>(*BGLtopology));
+
+	tie(ai, ae) = adjacent_vertices( fromID, fg);
+	for ( ; ai!=ae; ai++ ) {
+		neighborIDs.push_back(*ai);
+	}
+}
+
+vector<nodeid_t>  NetworkTopology::getHighestDegreeNodes( unsigned int count ) const {
+	map<nodeid_t, unsigned long> nodeDegrees;
+	map<nodeid_t, unsigned long> selectedNodes;
+	map<nodeid_t, unsigned long>::const_iterator ndit;
+	map<nodeid_t, unsigned long>::const_iterator snit;
+	vector<nodeid_t> returnIDs;
+
+	getNodeDegrees( nodeDegrees );
+
+	unsigned long minDeg=std::numeric_limits<unsigned long>::max();
+	nodeid_t minNodeID;
+
+	for ( ndit=nodeDegrees.begin(); ndit!=nodeDegrees.end(); ndit++) {
+
+		// insert first count elements directly
+		if (selectedNodes.size() < count) {
+			//selectedNodes.insert( make_pair<nodeid_t, unsigned long>(ndit->first, ndit->second) );
+			selectedNodes.insert( *ndit );
+			if ( ndit->second < minDeg ) {
+				minDeg = ndit->second;
+				minNodeID = ndit->first;
+			}
+			continue;
+		}
+
+		// skip if node's degree is lower than or equal to current minimum degree
+		if (ndit->second <= minDeg) continue;
+
+		// exchange lowest degree node
+		selectedNodes.erase(minNodeID);
+		selectedNodes.insert(*ndit);
+
+		// update minDeg and minNodeID
+		minDeg=std::numeric_limits<unsigned long>::max();
+		for ( snit=selectedNodes.begin(); snit!=selectedNodes.end(); snit++ ) {
+			if ( snit->second < minDeg ) {
+				minNodeID = snit->first;
+				minDeg = snit->second;
+			}
+		}
+	}
+
+	// prepare return vector
+	for ( snit=selectedNodes.begin(); snit!=selectedNodes.end(); snit++ ) {
+		returnIDs.push_back(snit->first);
+	}
+
+	return returnIDs;
+}
+
 
 /// add a connected pair of nodes with default link properties
+// TODO: extend to add new nodes / links on the fly?
 void NetworkTopology::addLink(nodeid_t from, nodeid_t to) {
-	unordered_map<nodeid_t, TopologyNode *>::iterator it;
-
-	// if not present yet, insert from into adjacencyList
-	if ((it = adjacencyList.find(from)) == adjacencyList.end()) {
-		TopologyNode *add = new TopologyNode();
-		add->addLink(to);
-		adjacencyList[from] = add;
-	} else {
-		// if not yet present add new link with default link properties
-		it->second->addLink(to);
-	}
+	opp_warning("UNTESTED");
+	add_edge(from, to, *BGLtopology);
+	enableLink(from, to);
+	topologyAltered = true; // requires shortest path recalculation
 }
 
-/// mark node1 and node2 bi-directionally connected
-void NetworkTopology::setConnected(nodeid_t node1, nodeid_t node2, bool status) {
-	TopologyNode *ls1, *ls2;
-	TopologyLink *lp1, *lp2;
-
-	ls1 = getLinkset(node1);
-	if (ls1) {
-		lp1 = ls1->getLink(node2);
-		lp1->setConnected(status);
-	}
-
-	ls2 = getLinkset(node2);
-	if (ls2) {
-		lp2 = ls2->getLink(node1);
-		lp2->setConnected(status);
-	}
-}
-
-// does a bidirectional gate exist between the two nodes?
 bool NetworkTopology::isConnected(nodeid_t node1, nodeid_t node2) {
-	TopologyNode *ls1 = NULL, *ls2 = NULL;
-	TopologyLink *lp1 = NULL, *lp2 = NULL;
-
-	ls1 = getLinkset(node1);
-	lp1 = ls1->getLink(node2);
-
-	ls2 = getLinkset(node2);
-	lp2 = ls2->getLink(node1);
-
-	if (ls1 == NULL || lp1 == NULL || ls2 == NULL || lp2 == NULL)
+	BGLEdgeDesc e;
+	bool edgeExists;
+	tie(e, edgeExists) = edge(node1, node2, *BGLtopology);
+	if (edgeExists && (*BGLtopology)[e].active) {
+		return true;
+	} else {
 		return false;
-	else {
-		return (lp1->isConnected() && lp2->isConnected());
 	}
 }
 
-/// Returns true, if the network is connected
-/// TODO: implement...
 bool NetworkTopology::isConnected() {
+	return ( getNumPartitions() ==  1 );
+}
+
+unsigned int NetworkTopology::getNumPartitions() {
+	FilteredGraph fg(*BGLtopology, activeEdges<topologyGraph>(*BGLtopology), activeNodes<topologyGraph>(*BGLtopology));
+	std::vector<int> component(num_vertices(fg));
+
+	if ( is_directed(fg) ) {
+		return ( strong_components(fg, &component[0]) );
+	} else if (is_undirected(fg) ) {
+		return ( connected_components(fg, &component[0]) );
+	}
+
+	opp_error("Something went wrong, should never reach here");
 	return false;
 }
 
-NetworkTopology::TopologyNode* NetworkTopology::getLinkset(nodeid_t node) {
-	unordered_map<nodeid_t, TopologyNode*>::iterator it;
-	if ((it = adjacencyList.find(node)) != adjacencyList.end())
-		return it->second;
-	else
-		return NULL;
-}
 
 void NetworkTopology::extractFromNetwork(cModule *networkManager) {
-	cModule* mod = getSimulation()->getContextModule();
+	vector< pair<long long, long long> > edges;
+	cModule* mod = simulation.getContextModule();
 	while(mod->getParentModule()!=NULL) mod = mod->getParentModule();
 
 	// check that the top level module is actually a network
@@ -473,21 +705,31 @@ void NetworkTopology::extractFromNetwork(cModule *networkManager) {
 				int fromID = dynamic_cast<Node *>(submodp)->getNodeId();
 				moduleMap[fromID] = submodp;
 				cGate *toNeighbors = submodp->gate("toNeighbors$o",0);
-				EV << "Node " << fromID << endl;
+				EV << "Node " << fromID << " (mod-id: " << submodp->getId() << ")" << endl;
 				for (int i=0; i<toNeighbors->size(); i++) {
 					cGate *outGate = submodp->gate("toNeighbors$o",i);
 					Node *to = dynamic_cast<Node *>(outGate->getNextGate()->getOwnerModule());
 					EV << "\tconnected to node " << to->getNodeId() << endl;
-					addLink(fromID, to->getNodeId());
+					edges.push_back( pair<long long, long long>(fromID, to->getNodeId()));
 				}
+			}
+			BGLtopology = new topologyGraph();
+			typedef vector< pair<long long, long long> >::iterator vpairit;
 
+			// add edges with default properties
+			for ( vpairit v = edges.begin(); v != edges.end(); v++ ) {
+				BGLEdgeDesc e; bool b;
+				tie(e,b) = add_edge(v->first, v->second, *BGLtopology);
+				if (b) {
+					(*BGLtopology)[e].active = true;
+					(*BGLtopology)[e].weight = 1.0;
+				}
+			}
 
-				// TODO: insert into networktopology data structures
-				// iterate over toNeighbors gate vector
-				// TODO: check that everything is there for querying
-				// TODO: Count number of links
-
-				numberNodes++;
+			// set node properties
+			for (BGLVertexIt it=vertices(*BGLtopology).first; it!=vertices(*BGLtopology).second; it++) {
+				(*BGLtopology)[*it].active = true;
+				(*BGLtopology)[*it].maxRTentries = std::numeric_limits<int>::max();
 			}
 		}
 	} else {
@@ -495,74 +737,79 @@ void NetworkTopology::extractFromNetwork(cModule *networkManager) {
 	}
 }
 
-// build the network topology with given modules
 void NetworkTopology::createNetwork(cModule *parent) {
-	unordered_map<nodeid_t, TopologyNode *>::iterator adjListIt; //adjacencyList;
-	unordered_map<nodeid_t, cModule*>::iterator modMapIt; // moduleMap;
 
-	// create nodes
+	// create nodes from bgl representation
+	BGLVertexIt vi, ve;
 	cModuleType *moduleType = cModuleType::get("routingsim.foundation.Node");
-	for (adjListIt = adjacencyList.begin(); adjListIt != adjacencyList.end(); adjListIt++) {
+
+	for ( tie(vi,ve) = vertices(*BGLtopology); vi!=ve; vi++) {
+
+		// jump over disabled nodes
+		if ( (*BGLtopology)[*vi].disabled ) {
+			//EV << "IGNORING NODE " << *vi << endl;
+			continue;
+		}
 		char name[256];
-		snprintf(name, 255, "Node%llu", adjListIt->first);
+		snprintf(name, 255, "Node%llu", (long long)*vi);
 		cModule *mod = moduleType->create(name, parent);
-		mod->par("id") = (long int)adjListIt->first;
-		moduleMap[adjListIt->first] = mod;
+		mod->par("id") = *vi;
+		moduleMap[*vi] = mod;
 	}
 	EV << "Created node modules." << endl;
 
 	// setup and connect gates
-	for (adjListIt = adjacencyList.begin(); adjListIt != adjacencyList.end(); adjListIt++) {
-		unordered_map<nodeid_t, TopologyLink *> linkset;
-		unordered_map<nodeid_t, TopologyLink *>::iterator link;
-		nodeid_t fromId, toId;
+	for ( tie(vi, ve) = vertices(*BGLtopology); vi!=ve; vi++ ) {
+		nodeid_t fromId = *vi;
 		cModule *fromModule, *toModule;
-		cGate *fromIn, *fromOut, *toIn, *toOut;
+		//cGate *fromIn, *toOut;
+		cGate *fromOut, *toIn;
 
-		fromId = adjListIt->first;
+		// jump over disabled nodes
+		if ( (*BGLtopology)[*vi].disabled ) {
+			//EV << "IGNORING NODE in gate setup" << *vi << endl;
+			continue;
+		}
 
-		fromModule = moduleMap.find(fromId)->second;
-		linkset = adjListIt->second->linkset;
-
+		fromModule = moduleMap[fromId];
 		// for each connected node
-		for (link = linkset.begin(); link != linkset.end(); link++) {
-			toId = link->first;
-			toModule = moduleMap.find(toId)->second;
-			if (!isConnected(fromId, toId)) {
-				//connect both directions of Gate "toNeighbors"
-				fromModule->getOrCreateFirstUnconnectedGatePair("toNeighbors",
-						false, true, fromIn, fromOut);
-				toModule->getOrCreateFirstUnconnectedGatePair("toNeighbors",
-						false, true, toIn, toOut);
+		graph_traits<topologyGraph>::adjacency_iterator ai, ae;
+		for ( tie(ai, ae) = adjacent_vertices(fromId, *BGLtopology); ai!=ae; ai++ ) {
+			nodeid_t toId = *ai;
 
-				fromOut->connectTo(toIn);
-				toOut->connectTo(fromIn);
-
-				setConnected(fromId, toId, true);
+			// jump over disabled neighbor nodes
+			if ( (*BGLtopology)[*ai].disabled ) {
+				//EV << "IGNORING NODE in gate setup (adjacent nodes)" << *ai << endl;
+				continue;
 			}
+			toModule = moduleMap[toId];
+
+			fromOut = fromModule->getOrCreateFirstUnconnectedGate("toNeighbors", 'o', false, true);
+			toIn = toModule->getOrCreateFirstUnconnectedGate("toNeighbors", 'i', false, true);
+
+			fromOut->connectTo(toIn);
 		}
 	}
 	EV << "Created links." << endl;
 
-	// start simulation (randomize?)
+	// start simulation
+	unordered_map<nodeid_t, cModule *>::iterator modMapIt;
 	for (modMapIt = moduleMap.begin(); modMapIt != moduleMap.end(); modMapIt++) {
 
 		// finalize parameters
 		modMapIt->second->finalizeParameters();
 
+		properties_t nodeProp = (*BGLtopology)[modMapIt->first].properties;
 		// set display strings
-		foreach(TopologyNode::properties_t::value_type& value,
-				adjacencyList[modMapIt->first]->properties) {
+		foreach(properties_t::value_type& value, nodeProp) {
 			if (value.first=="!ds")
 				modMapIt->second->getDisplayString().updateWith(value.second.c_str());
 		}
 
-		// build insides
 		modMapIt->second->buildInside();
 
 		// set parameters of inside modules
-		foreach(TopologyNode::properties_t::value_type& value,
-				adjacencyList[modMapIt->first]->properties) {
+		foreach(properties_t::value_type& value, nodeProp) {
 			if (value.first.find('!')!=string::npos) continue;
 			for (cModule::SubmoduleIterator i(modMapIt->second); !i.end(); i++) {
 				cModule *smod = *i;
@@ -573,7 +820,7 @@ void NetworkTopology::createNetwork(cModule *parent) {
 					else
 						p.parse(value.second.c_str());
 				} else {
-					EV <<"Module " << smod->getId() << " does not have a parameter " << value.second << endl;
+					EV <<"Module " << smod->getId() << " of type " << smod->getClassName() << " does not have a parameter " << value.second << endl;
 				}
 			}
 		}
@@ -586,54 +833,64 @@ void NetworkTopology::createNetwork(cModule *parent) {
 	EV << "Modules started." << endl;
 }
 
-/// map a Node to our topology-describing nodeid_t
-nodeid_t NetworkTopology::moduleToNodeID(cModule *cmod) {
-	unordered_map<nodeid_t, cModule*>::iterator modMapIt; // moduleMap;
-	for (modMapIt = moduleMap.begin(); modMapIt != moduleMap.end(); modMapIt++) {
-		if (modMapIt->second == cmod) {
-			return modMapIt->first;
-		}
-	}
-	// not found
-	return -1;
-}
-
-/// map a topology-describing nodeid_t to a Node (cModule *)
-cModule *NetworkTopology::NodeIDToModule(nodeid_t node) {
-	unordered_map<nodeid_t, cModule*>::iterator modMapIt; // moduleMap;
-	for (modMapIt = moduleMap.begin(); modMapIt != moduleMap.end(); modMapIt++) {
-		if (modMapIt->first == node) {
-			return modMapIt->second;
-		}
-	}
-	// not found
-	return NULL;
-}
-
-/// disable links in Nodes and topology description
 void NetworkTopology::disableLink(nodeid_t f, nodeid_t t) {
 	cModule *from, *to;
-	from = NodeIDToModule(f);
-	to = NodeIDToModule(t);
+
+	// topology description
+	BGLEdgeDesc e;
+	bool edgeValid;
+
+	tie( e, edgeValid) = edge(f, t, *BGLtopology);
+	if (!edgeValid) {
+		opp_error("trying to disable non-existing link!");
+	}
+	// if link is already disabled, return instantly
+	if ( (*BGLtopology)[e].active == false ) {
+		return;
+	}
+
+	(*BGLtopology)[e].active = false;
+	topologyAltered = true; // requires shortest path recalculation
+
+	// omnet network
+	from = moduleMap[f];
+	to = moduleMap[t];
 
 	if (from == NULL || to == NULL) {
 		EV << "Could not determine cModule (Node) for " << f << " or " << t
 				<< endl;
 		return;
 	}
-
-	if (check_and_cast<Node *> (from)->disableLink(to, "toNeighbors$o"))
-		adjacencyList[f]->getLink(t)->setActive(false);
-	if (check_and_cast<Node *> (to)->disableLink(from, "toNeighbors$o"))
-		adjacencyList[t]->getLink(f)->setActive(false);
-
+	check_and_cast<Node *> (from)->disableLink(to, "toNeighbors$o");
 }
 
-/// enable links in Nodes and topology description
 void NetworkTopology::enableLink(nodeid_t f, nodeid_t t) {
 	cModule *from, *to;
-	from = NodeIDToModule(f);
-	to = NodeIDToModule(t);
+
+	// topology description
+	BGLEdgeDesc e;
+	bool edgeValid;
+
+	tie( e, edgeValid) = edge(f, t, *BGLtopology);
+	if (!edgeValid) {
+		opp_error("trying to enable non-existing link!");
+	}
+
+	// if one of the adjacent nodes is down, don't enable the link
+	if ( !(*BGLtopology)[source(e, *BGLtopology)].active || !(*BGLtopology)[target(e, *BGLtopology)].active ) {
+		return;
+	}
+
+	// if link is already enabled, return instantly
+	if ( (*BGLtopology)[e].active == true ) {
+		return;
+	}
+
+	(*BGLtopology)[e].active = true;
+	topologyAltered = true; // requires shortest path recalculation
+
+	from = moduleMap[f];
+	to = moduleMap[t];
 
 	if (from == NULL || to == NULL) {
 		EV << "Could not determine cModule (Node) for " << f << " or " << t
@@ -641,117 +898,316 @@ void NetworkTopology::enableLink(nodeid_t f, nodeid_t t) {
 		return;
 	}
 
-	if (check_and_cast<Node *> (from)->enableLink(to, "toNeighbors$o"))
-		adjacencyList[f]->getLink(t)->setActive(true);
-	if (check_and_cast<Node *> (to)->enableLink(from, "toNeighbors$o"))
-		adjacencyList[t]->getLink(f)->setActive(true);
+	check_and_cast<Node *> (from)->enableLink(to, "toNeighbors$o");
 }
 
 void NetworkTopology::disableNode(nodeid_t n) {
-	unordered_map<nodeid_t, TopologyLink*>::iterator it;
-	TopologyNode *ls = getLinkset(n);
+	BGLOutEdgeIt oe_cur, oe_end;
+	BGLInEdgeIt ie_cur, ie_end;
 
-	// Iterate over all links of the node and disable them
-	for (it = ls->linkset.begin(); it != ls->linkset.end(); it++)
-		disableLink(n, it->first);
+	// if node already down, return instantly
+	if ( !(*BGLtopology)[n].active ) {
+		return;
+	}
+
+	// iterate over out edges
+	tie( oe_cur, oe_end) = out_edges(n, *BGLtopology);
+	for (; oe_cur!=oe_end; ++oe_cur) {
+		if ( (*BGLtopology)[*oe_cur].active ) {
+			disableLink(n, target(*oe_cur, *BGLtopology));
+		}
+	}
+
+	// iterate over in edges
+	tie( ie_cur, ie_end) = in_edges(n, *BGLtopology);
+	for (; ie_cur!=ie_end; ++ie_cur) {
+		if ( (*BGLtopology)[*ie_cur].active ) {
+			disableLink(source(*ie_cur, *BGLtopology), n);
+		}
+	}
+
+	(*BGLtopology)[n].active = false;
+
+	// set display string status icon i2
+	if (cSimulation::getActiveEnvir()->isGUI()) {
+		cDisplayString &ds = (check_and_cast<Node *> (moduleMap[n]))->getDisplayString();
+		ds.setTagArg("i2", 0, "status/stop");
+	}
 }
 
 void NetworkTopology::enableNode(nodeid_t n) {
-	unordered_map<nodeid_t, TopologyLink*>::iterator it;
-	TopologyNode *ls = getLinkset(n);
+	BGLOutEdgeIt oe_cur, oe_end;
+	BGLInEdgeIt ie_cur, ie_end;
 
-	// Iterate over all links of the node and disable them
-	for (it = ls->linkset.begin(); it != ls->linkset.end(); it++)
-		enableLink(n, it->first);
-}
-
-int NetworkTopology::getNetworkSize() {
-
-	return numberNodes;
-}
-
-/// returns the distance between two cModules (class Node)
-/// can be queried by via NetworkManager::getDistance()
-cost_t NetworkTopology::getDistance(cModule *from, cModule *to) {
-	return getDistance(moduleToNodeID(from), moduleToNodeID(to));
-}
-
-/// return the shortest path distance between two nodes
-/// if a shortest path file is available, read it from there
-/// and otherwise calculate it on the fly
-cost_t NetworkTopology::getDistance(nodeid_t from, nodeid_t to) {
-	unordered_map<nodeid_t, TopologyNode *>::iterator it;
-	unordered_map<nodeid_t, DijkstraStatus *> status;
-	unordered_map<nodeid_t, DijkstraStatus *>::iterator sit; //status iterator
-	unordered_map<nodeid_t, TopologyLink *>::iterator lsit; //link set iterator
-
-	// if we have a precalculated map, return result right now
-	if (spath_available) {
-		size_t f = spath_map[from];
-		size_t t = spath_map[to];
-		return spath_costs[f + t * numberNodes];
+	// if node already up, return instantly
+	if ( (*BGLtopology)[n].active ) {
+		return;
 	}
 
-	// initialize status map
-	for (it = adjacencyList.begin(); it != adjacencyList.end(); it++) {
-		status[it->first] = new DijkstraStatus(it->second);
-	}
+	(*BGLtopology)[n].active = true;
 
-	// set start node
-	status[from]->setWeight(0.0);
-	nodeid_t current = from;
-	TopologyNode *currentLS = status[current]->getLinkSet();
-
-	while (true) {
-		float minDistance = FLT_MAX;
-		//cost_t minDistance=~0;
-
-		// traverse linkset and update costs (if better)
-		for (lsit = currentLS->linkset.begin(); lsit
-		!= currentLS->linkset.end(); lsit++) {
-			cost_t cost = status[current]->getWeight()+ lsit->second->getWeight();
-			if (status[lsit->first]->getWeight() > cost) {
-				//EV << " updating cost from " << status[lsit->first]->getWeight() << " to "<< cost << endl;
-				status[lsit->first]->setWeight(cost);
-			}
-		}
-		// mark that all neighbors of current have been visited
-		status[current]->markVisited();
-		//EV << "marked visited: " << current << endl;
-
-		// find minimum distance node from the set of not yet visited nodes
-		for (sit = status.begin(); sit != status.end(); sit++) {
-			DijkstraStatus *cds = sit->second;
-			if (!cds->hasBeenVisited() && cds->getWeight() < minDistance) {
-				minDistance = sit->second->getWeight();
-				current = sit->first;
-				currentLS = status[current]->getLinkSet();
-				//EV << "setting minDistance to " << minDistance << "for node " << current << endl;
-			}
-		}
-
-		// if all nodes have been visited, return cost
-		bool allVisited = true;
-		for (sit = status.begin(); sit != status.end(); sit++) {
-			if (sit->second->hasBeenVisited() != true) {
-				allVisited = false;
-				break;
-			}
-		}
-		if (allVisited) {
-			cost_t result = status[to]->getWeight();
-			for (sit = status.begin(); sit != status.end(); sit++) {
-				delete sit->second;
-			}
-			return result;
+	// iterate over out edges
+	tie( oe_cur, oe_end) = out_edges(n, *BGLtopology);
+	for (; oe_cur!=oe_end; ++oe_cur) {
+		if ( (*BGLtopology)[ target(*oe_cur, *BGLtopology) ].active ) {
+			enableLink(n, target(*oe_cur, *BGLtopology));
 		}
 	}
 
-	EV << "should never reach here" << endl;
-	for (sit = status.begin(); sit != status.end(); sit++) {
-		delete sit->second;
+	// iterate over in edges
+	tie( ie_cur, ie_end) = in_edges(n, *BGLtopology);
+	for (; ie_cur!=ie_end; ++ie_cur) {
+		if ( (*BGLtopology)[ source(*ie_cur, *BGLtopology) ].active ) {
+			enableLink(source(*ie_cur, *BGLtopology), n);
+		}
 	}
-	return INVALID_DISTANCE;
+
+	// set display string status icon i2
+	if (cSimulation::getActiveEnvir()->isGUI()) {
+		cDisplayString &ds = (check_and_cast<Node *> (moduleMap[n]))->getDisplayString();
+		ds.setTagArg("i2", 0, "");
+	}
 }
+
+unsigned int NetworkTopology::getNetworkSize() {
+	return getActiveNumberNodes();
+}
+
+unsigned int NetworkTopology::getActiveNumberNodes() const {
+	int cnt = 0;
+	BGLVertexIt vi, ve;
+
+	for ( tie(vi, ve)=vertices(*BGLtopology); vi!=ve; vi++) {
+		if ( (*BGLtopology)[*vi].active ) {
+			++cnt;
+		}
+	}
+	return cnt;
+}
+
+unsigned int NetworkTopology::getActiveNumberLinks() const {
+	int cnt = 0;
+	BGLEdgeIt ei, ee;
+
+	for ( tie(ei, ee)=edges(*BGLtopology); ei!=ee; ei++) {
+		if ( (*BGLtopology)[*ei].active ) {
+			++cnt;
+		}
+	}
+	return cnt;
+}
+
+float NetworkTopology::getDistance(nodeid_t from, nodeid_t to) {
+	time_t start, end;
+
+	if ( spathAvailable && !topologyAltered ) {
+		// return result from calculated spaths
+		return spath[from][to];
+	} else if (shortestPathCalculationMode == "onDemand") {
+		// subtract 1 as path contains sender
+		return getActiveTopologyPath(from, to).size()-1;
+	} else if (shortestPathCalculationMode == "fullDistanceMatrix"){
+		// (re-)calculate shortest paths on ACTIVE graph and store
+		// note that num_vertices() and num_edges() on a filtered graph do return the unfiltered sizes!
+
+		int totalNodes = num_vertices(*BGLtopology);
+
+		// make sure we have enough storage
+		if ( spathMatrixSize < totalNodes ) {
+			if (spath != NULL) {
+				for  (int i=0; i<spathMatrixSize; i++) {
+					delete[] spath[i];
+				}
+				delete[] spath;
+				throw;
+			}
+
+			spath = new float*[totalNodes];
+
+			// set to NULL for cleanup in case of exception
+			for (int i=0; i<totalNodes; i++) {
+				spath[i] = NULL;
+			}
+
+			// try/catch to cleanup in case of exception
+			try {
+				for (int i=0; i<totalNodes; i++) {
+					spath[i] = new float[totalNodes];
+				}
+				spathMatrixSize = totalNodes;
+			} catch(...) {
+				for  (int i=0; i<totalNodes; i++) {
+					delete[] spath[i];
+				}
+				delete[] spath;
+				throw;
+			}
+		}
+
+		FilteredGraph fg(*BGLtopology, activeEdges<topologyGraph>(*BGLtopology), activeNodes<topologyGraph>(*BGLtopology));
+		EV << "Recalculating Shortest Paths at Simtime " << simTime() << endl;
+		time(&start);
+		// use floyd warshall for dense graphs only
+		if ( (totalNodes*num_edges(*BGLtopology)*log(totalNodes)) < pow(totalNodes, 3) ) {
+			johnson_all_pairs_shortest_paths(fg, spath, weight_map(get(&BGLEdge::weight, fg)));
+		} else {
+			floyd_warshall_all_pairs_shortest_paths(fg, spath, weight_map(get(&BGLEdge::weight, fg)));
+		}
+		time(&end);
+		EV << "... took " << difftime(end, start) << " seconds." << endl;
+		spathAvailable = true;
+		topologyAltered = false;
+
+		return spath[from][to];
+	}
+
+	opp_error("Unknown shortest path calculation mode: must never reach here");
+	return 0.0;
+}
+
+class dijkstra_finish : std::exception {};
+
+class dvis : public default_dijkstra_visitor {
+public:
+	dvis(nodeid_t d) : destination(d) {}
+	template <typename Vertex, typename Graph>
+	void finish_vertex(Vertex u, Graph &g) {
+		if (u == destination) throw dijkstra_finish();
+	}
+private:
+	nodeid_t destination;
+};
+
+
+vector<nodeid_t> NetworkTopology::getActiveTopologyPath(nodeid_t from, nodeid_t to) const {
+	FilteredGraph fg(*BGLtopology, activeEdges<topologyGraph>(*BGLtopology), activeNodes<topologyGraph>(*BGLtopology));
+	unsigned int n = num_vertices(fg);
+
+	//XXX: performance?!
+	vector<nodeid_t> p(n);
+	vector<nodeid_t> path;
+
+	if (from == to) { path.push_back(to); return path; } // leads to correct length calculation: path.size()-1
+
+	dvis dv(to);
+	try {
+		dijkstra_shortest_paths(fg, vertex(from, *BGLtopology), weight_map(get(&BGLEdge::weight, fg)).predecessor_map(&p[0]).visitor(dv));
+	} catch (const dijkstra_finish&) {EV << "Aborted sp calculation from " << from << " to " << to << " as sp was found on active topology" << endl; };
+
+	// if p[to] == to, then to is not reachable from from
+	if (p[to] == to) { return path; }
+
+	path.push_back(to);
+	nodeid_t pred = to;
+	bool done = false;
+
+	while ( !done ) {
+		pred = p[pred];
+
+		// add next predecessor
+		path.push_back(pred);
+
+		// done construcing path?
+		if (pred == from)
+			done = true;
+	}
+	reverse(path.begin(), path.end());
+
+	return path;
+}
+
+vector<nodeid_t> NetworkTopology::getFullTopologyPath(nodeid_t from, nodeid_t to) const {
+	// we could use bfs for unweighted graphs
+	unsigned int n = num_vertices(*BGLtopology);
+	vector<nodeid_t> p(n);
+	vector<nodeid_t> path;
+
+	if (from == to) { return path; }
+
+	dvis dv(to);
+	try {
+		dijkstra_shortest_paths(*BGLtopology, vertex(from, *BGLtopology), weight_map(get(&BGLEdge::weight, *BGLtopology)).predecessor_map(&p[0]).visitor(dv));
+	} catch (const dijkstra_finish&) {EV << "Aborted sp calculation from " << from << " to " << to << " as sp was found on *full* topology" << endl; };
+
+	path.push_back(to);
+	nodeid_t pred = to;
+	bool done = false;
+
+	while ( !done ) {
+		pred = p[pred];
+
+		// add next predecessor
+		path.push_back(pred);
+
+		// done construcing path?
+		if (pred == from)
+			done = true;
+	}
+	reverse(path.begin(), path.end());
+
+	return path;
+}
+
+bool NetworkTopology::FullTopologyPathFailed(nodeid_t from, nodeid_t to) const {
+	vector<nodeid_t> path = getFullTopologyPath(from, to);
+
+	EV << "Checking whether path from " << from << " to " << "to " << to << " has failed" << endl;
+
+	graph_traits<topologyGraph>::vertex_iterator vi, ve;
+
+	// check for node failures
+	tie(vi, ve) = vertices(*BGLtopology);
+	for (; vi!= ve; vi++) {
+		/// skip disabled nodes (disabled == non-existent)
+		if ( (*BGLtopology)[*vi].disabled == true ) {
+			continue;
+		}
+
+		/// if a failed node is on the path, return true
+		if ( (*BGLtopology)[*vi].active == false ) {
+			if ( find(path.begin(), path.end(), *vi) != path.end() ) {
+				return true;
+			}
+		}
+	}
+
+
+	// check for link failures
+	vector<nodeid_t>::const_iterator pit = path.begin();
+	nodeid_t prev=-1;
+	for (; pit!=path.end(); pit++) {
+		if (*pit==from) {
+			prev=from;
+			continue;
+		}
+		//only if the edge exists
+		if ( edge(prev, *pit, *BGLtopology).second ) {
+			EV << "\t(" << prev << "\t" << *pit << ") active : " <<  (*BGLtopology)[ edge(prev, *pit, *BGLtopology).first ].active  << endl;
+			if ( (*BGLtopology)[ edge(prev, *pit, *BGLtopology).first ].active == false ) {
+				// failed edge on path
+				return true;
+			} else {
+				// prepare for next iteration
+				prev = *pit;
+			}
+		}
+	}
+
+	return false;
+}
+
+void NetworkTopology::setShortestPathCalculationMode(string mode) {
+	shortestPathCalculationMode = mode;
+}
+
+void NetworkTopology::resetNode(nodeid_t n) {
+	cModule *node = moduleMap[n];
+	int size = node->gate("toProtocols$o", 0)->size();
+	for (int i = 0; i < size; i++) {
+		cGate *tnm = node->gate("toProtocols$o", i);
+		check_and_cast<Protocol *> (tnm->getNextGate()->getOwner())->reset();
+	}
+}
+
 
 } //namespace routingsim

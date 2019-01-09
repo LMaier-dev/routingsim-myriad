@@ -27,135 +27,66 @@ void CatastrophicFailure::initialize() {
 	first = true;
 }
 
-
 /**
- * Disable the given percentage of nodes, disregarding the connectivity of the
+ * Disable the given percentage of avtive nodes, disregarding the connectivity of the
  * graph and re-enable them again after catastrophicDuration.
- *
- * Currently also no check for multiple selection of a node is performed,
- * i.e., the same node could be selected over and over again leading to a
- * smaller amount of nodes that fail.
- *
- * TODO: Add check for duplicates
  */
 simtime_t CatastrophicFailure::scheduleDynamics() {
 	// get parameters
 	double fraction = par("fraction").doubleValue();
-	//assert(fraction>0);
 	double duration = par("duration").doubleValue();
-	assert(duration>0);
 	double period = par("period").doubleValue();
 	double warmup = par("warmup").doubleValue();
 	size_t minDegree = par("minDegree");
 	size_t maxDegree = par("maxDegree");
 
-	// determine nodes to fail
-	size_t numNodesFail = ((double) getTopology().getNumberNodes() * fraction);
-	EV << "Scheduling " << numNodesFail
-	   << " nodes for catastrophic failure"	<< endl;
+	assert(fraction>=0);
+	assert(duration>0);
 
-	unordered_set<nodeid_t> alreadyFailed;
-	for (size_t i = 0; i < numNodesFail; i++) {
+	// maxDegree 0 --> consider all nodes by setting maxDegree to max!
+	if (maxDegree == 0) {
+		maxDegree = std::numeric_limits<int>::max();
+	}
 
-		// find a node for failure
-		nodeid_t node;
-		bool cond;
-		size_t degree;
-		do {
-			node = getTopology().getRandomNode(intuniform(0, 65536));
-			degree = getTopology().getNodeDegree(node);
-			cond = true;
-			cond &= (alreadyFailed.count(node) != 0);
-			cond &= (maxDegree == 0 || degree <= maxDegree);
-			cond &= (degree >= minDegree);
-		} while (cond);
-		alreadyFailed.insert(node);
+	// acquire list of nodes and select potential targets
+	size_t numNodesFail = ((double) getTopology().getActiveNumberNodes() * fraction);
+	EV << "Scheduling " << numNodesFail << " nodes for catastrophic failure" << endl;
+
+	map<nodeid_t, unsigned long> nodeDegreeMap;
+	size_t nodeDegreeMapSize;
+	map<nodeid_t, unsigned long>::iterator ndit;
+
+	getTopology().getNodeDegrees(nodeDegreeMap);
+	for (ndit=nodeDegreeMap.begin(); ndit!=nodeDegreeMap.end();) {
+		if (ndit->second <= minDegree || ndit->second >= maxDegree) {
+			nodeDegreeMap.erase(ndit++);
+		} else {
+			++ndit;
+		}
+	}
+	nodeDegreeMapSize = nodeDegreeMap.size();
+
+	// determine actual nodes to fail
+	if (nodeDegreeMapSize < numNodesFail) {
+		EV << "Failing only " << nodeDegreeMapSize << " nodes as these are the only "
+		"ones within the degree range ["<<minDegree<<","<<maxDegree<<"]!" << endl;
+	} else {
+		EV << "Scheduling " << numNodesFail << " nodes for catastrophic failure" << endl;
+	}
+
+	for (size_t i = 0; i < min(numNodesFail, nodeDegreeMapSize); i++) {
+		size_t rnd = intuniform(0,std::numeric_limits<int>::max()) % nodeDegreeMap.size();
+		advance(ndit=nodeDegreeMap.begin(), rnd);
+		nodeid_t rndnode = ndit->first;
+		nodeDegreeMap.erase(ndit);
 
 		// schedule node failure
-		scheduleNodeFailure(node,first ? warmup : period,duration);
+		scheduleNodeFailure(rndnode,first ? warmup : period,duration);
 	}
 
 	/// the catastrophic failure is repeated each occurrence seconds
 	first=false;
 	return simTime()+period;
 }
-
-// ==========================================================================
-// OLD STUFF / NOTES
-// ==========================================================================
-#if 0
-// what do I need?
-/*
- * Number of Nodes
- * Simulation Time
- * Failure Types:
- * 	Single Node Failure: bool
- * 	Single Link Failure: bool
- * 		- Flapping Links
- * 	Cascading Node Failure: bool
- * 	Cascading Link Failure: bool
- * 	Cascading Failure Size:
- * 	Cascading Failure Propagation:
- * 	Occurrence time: Periodic, probabilistic
- * 	Failure Duration: Static, probabilistic
- * 	Recovery from Dynamic Failure: synchronized or not?
- *
- * 	Selection Criteria??? Random, Rank, Betweenness, ... update for new topology?
- *
- */
-
-// generate disable/enable data
-// location (Node or Node+Link)
-// occurrence (simtime)+ duration
-// schedule disable message and enable message
-
-// how to deal intersection of events???
-
-/* simplest case node failure assuming node ids from 0...numberNodes-1
- * 	- known simulation time
- * 	- single failure interval (SFI) ( 10s )
- * 	for (int i=0; (i+1)*SFI < totalSimtime; i++) {
- * 	- randomize node to fail within that interval
- * 		intrand(numberNodes)
- * 	- randomize failure occurrence within that interval
- * 		occurence = simTime() + i*SFI + dblrand()*SFI
- * 	- randomize duration within interval-occurrence
- * 		duration = simTime() + (i+1)*SFI - occurrence
- * 	- scheduleAt(occurence,
- */
-
-for (int i=0; (i+1)*SFI < totalSimtime; i++) {
-	simtime_t occurrence, duration;
-
-	int failedNode = intrand(nodes);
-	occurrence = simTime() + i*SFI + dblrand()*SFI;
-	duration = dblrand() * ( simTime() + (i+1)*SFI - occurrence );
-
-	// prepare and schedule self message for failure
-	DynamicsInfo *diFail = new DynamicsInfo();
-	diFail->update_type = DynamicsInfo::nodeFailure;
-	diFail->source = failedNode;
-	diFail->occurrence = occurrence;
-	diFail->duration = duration;
-
-	dynamicEventMessage = new cMessage();
-	dynamicEventMessage->setContextPointer(diFail);
-
-	sendDelayed(dynamicEventMessage, diFail->occurrence - simTime(), "NetworkManager");
-	EV << "scheduling node failure at " << diFail->occurrence << endl;
-	// prepare and schedule self message for recovery
-	DynamicsInfo *diRecovery = new DynamicsInfo();
-	diRecovery->update_type = DynamicsInfo::nodeRecovery;
-	diRecovery->source = failedNode;
-	diRecovery->occurrence = occurrence+duration;
-	diRecovery->duration = duration;
-
-	dynamicEventMessage = new cMessage();
-	dynamicEventMessage->setContextPointer(diRecovery);
-
-	sendDelayed(dynamicEventMessage, diRecovery->occurrence - simTime(), "NetworkManager");
-	EV << "scheduling node recovery at " << diRecovery->occurrence << endl;
-}
-#endif
 
 } //namespace

@@ -1,4 +1,4 @@
-//
+git s//
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
@@ -114,13 +114,6 @@ Define_Module(VirtualRing);
 static boost::unordered_set<vid_t> ids;
 static boost::unordered_map<vid_t, vid_t> anycast_map;
 
-vid_t VirtualRing::get_nice_id() {
-	vid_t id;
-	int r = (ids.size()/100+1)*100+1;
-	do { id = intuniform(r-100,r); } while (ids.count(id)!=0);
-	ids.insert(id);
-	return id;
-}
 
 vid_t VirtualRing::get_random_id() {
 	vid_t id;
@@ -395,7 +388,7 @@ void VirtualRing::onTimer() {
 
 	// consistency check
 	consistencyCheckCount++;
-	if (consistencyCheckCount > consistencyCheck && consistencyCheck!=0) {
+	if (consistencyCheckCount > (int)consistencyCheck && consistencyCheck!=0) {
 		consistencyCheckCount = 0;
 		table->dsdv().trigger_consistency_check();
 	}
