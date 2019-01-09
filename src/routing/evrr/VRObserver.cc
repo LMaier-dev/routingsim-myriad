@@ -45,7 +45,7 @@ void VRObserver::handleMessage(cMessage *msg) {
 	scheduleAt(simTime() + 1.0, timer);
 }
 
-void VRObserver::getNeighbors(unordered_set<vid_t>& set, vid_t id, size_t k) {
+void VRObserver::getNeighbors(boost::unordered_set<vid_t>& set, vid_t id, size_t k) {
 	if (entries.size() == 0)
 		return;
 	for (size_t i = 0; i < entries.size(); i++) {

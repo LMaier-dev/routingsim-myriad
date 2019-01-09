@@ -18,7 +18,7 @@ using namespace std;
  */
 class MessageStatistics {
 private:
-	unordered_set<long> msgs;
+	boost::unordered_set<long> msgs;
 	cOutVector* deliveryRatio;
 	cHistogram* distanceRouting;
 	cHistogram* distanceReality;

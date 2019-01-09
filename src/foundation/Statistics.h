@@ -54,7 +54,7 @@ private:
 	bool recordShortestPathDeliveryRatio;
 
 	// message delivery ratio accounting
-	unordered_set<cMessage*> msgs;
+	boost::unordered_set<cMessage*> msgs;
 	cOutVector* deliveryRatio;
 	cOutVector* messagesDroppedVector;
 	cOutVector* messagesDeliveredVector;

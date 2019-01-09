@@ -54,7 +54,7 @@ void NetworkTopology::readTopology(string path, string topologytype, bool useOnl
 	// store edges of topology
 	vector< pair<long long, long long> > edgesRead;
 	// store node properties
-	unordered_map < nodeid_t, properties_t > nodeproperties;
+	boost::unordered_map < nodeid_t, properties_t > nodeproperties;
 	// sanity check for number of nodes
 	set<nodeid_t> nodeset;
 
@@ -303,7 +303,7 @@ void NetworkTopology::readTopology(string path, string topologytype, bool useOnl
 //     Lines starting with a single # may contain additional information and comments
 //     The remainder of the file contains the edges as in header version 0:
 //     (int \t int) describing the "from" and "to" of an edge
-void NetworkTopology::readSelfDefinedTopology(ifstream &topologyFile, set<nodeid_t> &nodeset, vector< pair<long long, long long> > &edges, unordered_map < nodeid_t, properties_t > &nodeproperties) {
+void NetworkTopology::readSelfDefinedTopology(ifstream &topologyFile, set<nodeid_t> &nodeset, vector< pair<long long, long long> > &edges, boost::unordered_map < nodeid_t, properties_t > &nodeproperties) {
 	string line;
 	unsigned int numNodes = 0, numLinks = 0; // as given by header
 	nodeid_t fromNode, toNode;
@@ -430,7 +430,7 @@ void NetworkTopology::readSelfDefinedTopology(ifstream &topologyFile, set<nodeid
 
 #ifdef DEBUG
 	// output node properties
-	for (unordered_map < nodeid_t, properties_t >::iterator i = nodeproperties.begin(); i!=nodeproperties.end(); i++) {
+	for (boost::unordered_map < nodeid_t, properties_t >::iterator i = nodeproperties.begin(); i!=nodeproperties.end(); i++) {
 		EV << "Node: " <<i->first <<endl;
 		for (properties_t::iterator pt=i->second.begin(); pt!=i->second.end(); pt++) {
 			EV << "\tproperty [" << pt->first << "] value [" << pt->second << "]" << endl;
@@ -441,7 +441,7 @@ void NetworkTopology::readSelfDefinedTopology(ifstream &topologyFile, set<nodeid
 
 }
 
-void NetworkTopology::readDimesTopology(ifstream &topologyFile, set<nodeid_t> &nodeset, vector< pair<long long, long long> > &edges, unordered_map < nodeid_t, properties_t > &nodeproperties, bool makeBidirectional) {
+void NetworkTopology::readDimesTopology(ifstream &topologyFile, set<nodeid_t> &nodeset, vector< pair<long long, long long> > &edges, boost::unordered_map < nodeid_t, properties_t > &nodeproperties, bool makeBidirectional) {
 	string line;
 	escaped_list_separator<char> sep("\\", "," ,"\"'");
 	typedef boost::tokenizer<escaped_list_separator<char> > tokenizer_t;
@@ -793,7 +793,7 @@ void NetworkTopology::createNetwork(cModule *parent) {
 	EV << "Created links." << endl;
 
 	// start simulation
-	unordered_map<nodeid_t, cModule *>::iterator modMapIt;
+	boost::unordered_map<nodeid_t, cModule *>::iterator modMapIt;
 	for (modMapIt = moduleMap.begin(); modMapIt != moduleMap.end(); modMapIt++) {
 
 		// finalize parameters

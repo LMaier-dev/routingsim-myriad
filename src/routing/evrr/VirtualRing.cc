@@ -436,8 +436,8 @@ void VirtualRing::reset() {
 
 void VirtualRing::sampleStatistics( Statistics& stats ) {
 	// check correct neighborhood
-	unordered_set<vid_t> *neighbors = table->ring().get_vneighbors();
-	unordered_set<vid_t> set;
+	boost::unordered_set<vid_t> *neighbors = table->ring().get_vneighbors();
+	boost::unordered_set<vid_t> set;
 	for (size_t i = 0; i < table->ring().size(); i++) {
 		if (!table->ring()[i].own()) continue;
 		observer->getNeighbors(set, table->ring()[i].id, 1);

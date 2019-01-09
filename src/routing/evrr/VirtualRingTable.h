@@ -102,12 +102,12 @@ public://----------------------------------------------------- Table Access ---
 	}
 
 	/// returns the virtual neighbors including my own identifiers
-	unordered_set<vid_t>* get_vneighbors() const {
+	boost::unordered_set<vid_t>* get_vneighbors() const {
 		if (table.size() == 0)
 			return NULL;
 
 		// find my own entries and add their virtual neighbors
-		unordered_set<vid_t>* ids = new unordered_set<vid_t>();
+		boost::unordered_set<vid_t>* ids = new boost::unordered_set<vid_t>();
 		for (size_t i = 0; i < table.size(); i++) {
 			if (!table[i]->own()) continue;
 			ids->insert(table[i]->id);
@@ -194,7 +194,7 @@ private:
 	int discovery_alpha;
 
 	// listeners
-	unordered_set<listener*> listeners;
+	boost::unordered_set<listener*> listeners;
 
 	// stability detection
 	int stable;
@@ -437,11 +437,11 @@ private://------------------------------------------------------- Discovery ---
 			if (!e.own()) continue;
 
 			// issue parallel discovery messages
-			unordered_set<nodeid_t> neighbors;
+			boost::unordered_set<nodeid_t> neighbors;
 			neighbors = dsdv.get_neighbors();
 			for (int s=0; s<discovery_alpha; s++) {
 				if (neighbors.size()==0) break;
-				unordered_set<nodeid_t>::iterator i=neighbors.begin();
+				boost::unordered_set<nodeid_t>::iterator i=neighbors.begin();
 				if (neighbors.size()>2) std::advance(i,intuniform(rng, 0, neighbors.size()-1));
 				if (i == neighbors.end()) continue;
 				queue.send( *i, e.route(vroute_update_t::DISCOVERY_PRED) );

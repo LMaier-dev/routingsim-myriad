@@ -13,7 +13,7 @@ using namespace boost;
 class update_queue {
 private:
 	/// backlog type & declaration
-	typedef unordered_map<nodeid_t, vector<vroute_update_t> > backlog_t;
+	typedef boost::unordered_map<nodeid_t, vector<vroute_update_t> > backlog_t;
 	backlog_t backlog;
 
 public:

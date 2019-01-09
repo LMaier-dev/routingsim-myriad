@@ -61,7 +61,7 @@ using namespace boost;
 
 class NetworkTopology {
 private:
-	typedef unordered_map<string,string> properties_t;
+	typedef boost::unordered_map<string,string> properties_t;
 
 	NetworkTopology &operator=(NetworkTopology const &n);
 	NetworkTopology(NetworkTopology const &n);
@@ -121,7 +121,7 @@ private:
 	topologyGraph *BGLtopology;
 
 	/// link between the graph and the omnet network
-	unordered_map<nodeid_t, cModule *> moduleMap;
+	boost::unordered_map<nodeid_t, cModule *> moduleMap;
 
 	/// Bool to keep track of whether the topology was changed since last
 	/// shortest path calculation; needs to be set to true by topology-
@@ -154,14 +154,14 @@ public:
 	/**
 	 * Read our own
 	 */
-	void readSelfDefinedTopology(ifstream &topologyFile, set<nodeid_t> &nodeset, vector< pair<long long, long long> > &edges, unordered_map < nodeid_t, properties_t > &nodeproperties);
+	void readSelfDefinedTopology(ifstream &topologyFile, set<nodeid_t> &nodeset, vector< pair<long long, long long> > &edges, boost::unordered_map < nodeid_t, properties_t > &nodeproperties);
 
 	/**
 	 * Read a dimes as edges topology; by default, bidirectional edges are
 	 * assumed. If this is not the intended behaviour, set makeBidirectional
 	 * to false.
 	 */
-	void readDimesTopology(ifstream &topologyFile, set<nodeid_t> &nodeset, vector< pair<long long, long long> > &edges, unordered_map < nodeid_t, properties_t > &nodeproperties, bool makeBidirectional=true);
+	void readDimesTopology(ifstream &topologyFile, set<nodeid_t> &nodeset, vector< pair<long long, long long> > &edges, boost::unordered_map < nodeid_t, properties_t > &nodeproperties, bool makeBidirectional=true);
 
 	/**
 	 * Read shortest paths from file with shortest-path pre-calculations.

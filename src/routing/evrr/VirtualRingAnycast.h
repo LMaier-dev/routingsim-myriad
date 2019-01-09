@@ -17,9 +17,9 @@ private:
 	ring_table& ring;
 	route_maintenance& dsdv;
 	update_queue& queue;
-	unordered_set<entry_t*> table;
-	unordered_set<entry_t*> maintained;
-	unordered_set<entry_t*> announced;
+	boost::unordered_set<entry_t*> table;
+	boost::unordered_set<entry_t*> maintained;
+	boost::unordered_set<entry_t*> announced;
 	int stable;
 	int stable_readvertize;
 	int delay_threshold;
@@ -42,7 +42,7 @@ public:
 		this->delay_threshold = threshold;
 	}
 
-	unordered_set<entry_t*>& get_entries() {
+	boost::unordered_set<entry_t*>& get_entries() {
 		return table;
 	}
 
