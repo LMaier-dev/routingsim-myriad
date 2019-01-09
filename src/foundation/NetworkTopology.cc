@@ -494,7 +494,7 @@ nodeid_t NetworkTopology::getRandomNode(size_t rndvalue) const {
 	return *vi;
 }
 
-vector<pair<nodeid_t, nodeid_t> > NetworkTopology::getRandomNodePairs( size_t k ) const {
+vector<pair<nodeid_t, nodeid_t> > NetworkTopology::getRandomNodePairs( cRNG *rng, size_t k ) const {
 	vector<pair<nodeid_t, nodeid_t> > res;
 	vector<pair<nodeid_t, nodeid_t> >::const_iterator resIt;
 
@@ -513,10 +513,10 @@ vector<pair<nodeid_t, nodeid_t> > NetworkTopology::getRandomNodePairs( size_t k 
 		bool insertPair = true;
 
 		tie(vi, ve) = vertices(fg);
-		advance(vi, intuniform(0, std::numeric_limits<int>::max()) % n);
+		advance(vi, intuniform(rng, 0, std::numeric_limits<int>::max()) % n);
 		src = *vi;
 		tie(vi, ve) = vertices(fg);
-		advance(vi, intuniform(0, std::numeric_limits<int>::max()) % n);
+		advance(vi, intuniform(rng, 0, std::numeric_limits<int>::max()) % n);
 		dst = *vi;
 
 		// ignore self-messages

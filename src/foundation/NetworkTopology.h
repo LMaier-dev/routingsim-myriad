@@ -195,7 +195,7 @@ public:
 
 	/// Return k random distinct pairs of active nodes in a vector (-> Sampling)
 	/// Random Edge Sampling ("Sampling from Large Graphs", Jure Leskovec and Christos Faloutsos, 2006)
-	vector<pair<nodeid_t, nodeid_t> > getRandomNodePairs( size_t k ) const;
+	vector<pair<nodeid_t, nodeid_t> > getRandomNodePairs( cRNG *rng, size_t k ) const;
 
 	/// Return a random edge selected from the set of active edges (activeLinkNumber-th edge)
 	pair<nodeid_t, nodeid_t> getRandomEdge(size_t activeLinkNumber) const;
