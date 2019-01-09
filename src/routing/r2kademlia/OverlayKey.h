@@ -47,7 +47,7 @@ inline void omnet_random(mp_limb_t *r1p, mp_size_t r1n, cRNG* rng);
  *
  * @author Sebastian Mies.
  */
-class OverlayKey
+class OverlayKey : public cObject
 {
 public:
 	//-------------------------------------------------------------------------
