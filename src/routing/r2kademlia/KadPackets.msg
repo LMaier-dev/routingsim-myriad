@@ -15,27 +15,15 @@
 cplusplus {{
 #include "BaseTypes.h"
 #include "OverlayKey.h"
+#include "RPC.h"
+#include "KadPacket.h"
 #include <memory>
+class KadPacket;
 }}
 
 namespace routingsim;
-
-enum KadPacketType {
-	KAD_INVALID = 0;
-	KAD_HELLO = 1;
-	KAD_PING = 2;
-	KAD_PONG = 3;
-}
-
-class noncobject OverlayKey;
+class KadPacket extends cPacket;
 class noncobject nodeid_t;
-
-packet KadPacket {
-	OverlayKey target;
-	OverlayKey source;
-	unsigned int nonce;
-	uint8_t type enum(KadPacketType);
-}
 
 packet KadAnswer extends KadPacket {
 }

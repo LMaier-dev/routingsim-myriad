@@ -88,7 +88,7 @@ void R2Kademlia::routePacket(KadPacket_p packet, NodePkt_p nodePkt) {
 	//TODO forward using source routing
 	// we do not route hello packets!
 	ASSERT(packet->getType() != KAD_HELLO);
-	OverlayKey& target = packet->getTarget();
+	const OverlayKey& target = packet->getTarget();
 	nodeid_t nid = neighborTable.getNodeId(target);
 	if(nid == undefined_node) {
 		onMissingNeighbor(std::move(packet), std::move(nodePkt));
@@ -112,7 +112,7 @@ class R2Kademlia::PingRPCState : public RPCProtocol::RPCState {
 void R2Kademlia::ping(const OverlayKey& key) {
 	auto ping = std::make_unique<KadPing>();
 	ping->setNonce(registerState(std::make_unique<PingRPCState>()));
-	ping->setTarget(key);
+	ping->appendHop(key);
 	ping->setSource(myOverlayKey);
 	routePacket(std::move(ping));
 	EV << "ping sent";
@@ -131,7 +131,8 @@ void R2Kademlia::onUnknownNonce(nonce_t nonce, cPacket_p answer) {
 NodePkt_p R2Kademlia::makeHelloPacket()
 {
 	KadHello_p hello = std::make_unique<KadHello>();
-	hello->setTarget(0);
+	OverlayKey k(0);
+	hello->appendHop(k);
 	hello->setSource(myOverlayKey);
 	hello->setSourceId(node().getNodeId());
 	hello->setNonce(0);
@@ -148,7 +149,7 @@ bool R2Kademlia::hasRemainingSourceRoute(const KadPacket& packet) {
 
 void R2Kademlia::fillAnswer(const KadPacket& original, KadPacket& answer) {
 	answer.setSource(myOverlayKey);
-	answer.setTarget(original.getSource());
+	answer.appendHop(original.getSource());
 	answer.setNonce(original.getNonce());
 	//TODO implement reverse source route
 }
