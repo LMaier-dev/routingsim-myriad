@@ -692,7 +692,7 @@ unsigned int NetworkTopology::getNumPartitions() {
 
 void NetworkTopology::extractFromNetwork(cModule *networkManager) {
 	vector< pair<long long, long long> > edges;
-	cModule* mod = simulation.getContextModule();
+	cModule* mod = getSimulation()->getContextModule();
 	while(mod->getParentModule()!=NULL) mod = mod->getParentModule();
 
 	// check that the top level module is actually a network

@@ -171,7 +171,7 @@ void VRObserver::messageDelivered(cMessage* msg, vid_t dest, distance_t routingD
 	// get source / destination node
 	cModule* srcNode 	= static_cast<cModule*>(msg->getContextPointer());
 	nodeid_t srcNodeID 	= check_and_cast<Node *>(srcNode)->getNodeId();
-	cModule* dstNode 	= simulation.getContextModule()->getParentModule();
+	cModule* dstNode 	= getSimulation()->getContextModule()->getParentModule();
 	nodeid_t dstNodeID = check_and_cast<Node *>(dstNode)->getNodeId();
 	// calculate stretch
 	distance_t realDistance = 0;

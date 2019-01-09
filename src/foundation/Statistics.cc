@@ -329,7 +329,7 @@ void Statistics::deliveredMessage( cMessage* msg, int hop_count ) {
 	if (msgs.count(msg)==0) return;
 	hopCount->collect(hop_count);
 	nodeid_t srcNode = dynamic_cast<Node *>(static_cast<cModule*>(msg->getContextPointer()))->getNodeId();
-	nodeid_t dstNode = dynamic_cast<Node *>(simulation.getContextModule()->getParentModule())->getNodeId();
+	nodeid_t dstNode = dynamic_cast<Node *>(getSimulation()->getContextModule()->getParentModule())->getNodeId();
 	if (getNetworkManager()!=NULL) {
 		int realDistance = (int)getNetworkManager()->getDistance(srcNode, dstNode);
 		if (realDistance >= 0) {
