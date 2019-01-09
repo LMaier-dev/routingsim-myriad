@@ -149,7 +149,7 @@ simtime_t MixedFailure::scheduleDynamics() {
 	}
 
 	/// the catastrophic failure is repeated each occurrence seconds
-	return min( nodeFailure?nodeFailureDue:MAXTIME, linkFailure?linkFailureDue:MAXTIME);
+	return min( nodeFailure?nodeFailureDue:SIMTIME_MAX, linkFailure?linkFailureDue:SIMTIME_MAX);
 }
 
 } //namespace

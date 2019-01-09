@@ -78,7 +78,7 @@ simtime_t IncrementalFailure::scheduleDynamics() {
 		// deactivate nodes
 		for (size_t i=0; i<failNodes.size(); i++) {
 			EV << "Failing node " << failNodes[i] << endl;
-			scheduleNodeFailure(failNodes[i], first ? warmup : period, MAXTIME);
+			scheduleNodeFailure(failNodes[i], first ? warmup : period, SIMTIME_MAX);
 		}
 	}
 
@@ -110,7 +110,7 @@ simtime_t IncrementalFailure::scheduleDynamics() {
 		// deactivate edges
 		for (size_t i=0; i<failEdges.size(); i++) {
 			EV << "Failing edge (" << failEdges[i].first << ", " << failEdges[i].second << ")" << endl;
-			scheduleLinkFailure(failEdges[i].first, failEdges[i].second, first ? warmup : period, MAXTIME);
+			scheduleLinkFailure(failEdges[i].first, failEdges[i].second, first ? warmup : period, SIMTIME_MAX);
 		}
 	}
 
