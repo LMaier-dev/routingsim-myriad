@@ -38,12 +38,12 @@ void LinkFailure::initialize() {
 
 simtime_t LinkFailure::scheduleDynamics() {
 
-	unsigned int numLinksFail = par("numLinksFail").longValue();
+	unsigned int numLinksFail = par("numLinksFail").intValue();
 	double duration = par("duration").doubleValue();
 	double period = par("period").doubleValue();
 	string linkSelection = par("linkSelection").stdstringValue();
-	unsigned int minDegree = par("minDegree").longValue();
-	unsigned int maxDegree = par("maxDegree").longValue();
+	unsigned int minDegree = par("minDegree").intValue();
+	unsigned int maxDegree = par("maxDegree").intValue();
 	map<nodeid_t, unsigned long> nodeDegrees;
 	unsigned int scheduledFailures = 0;
 
