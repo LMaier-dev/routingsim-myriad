@@ -307,7 +307,7 @@ public://--------------------------------------------------------- Triggers ---
 	}
 
 	/// trigger cleanup of the routing table
-	void maintenance( uint ttl ) {
+	void maintenance( unsigned int ttl ) {
 
 		// erase unused entries
 		vector<entry_t*> to_remove;

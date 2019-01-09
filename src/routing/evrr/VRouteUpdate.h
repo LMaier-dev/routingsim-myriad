@@ -2,6 +2,7 @@
 #define VROUTEUPDATE_HPP_
 
 #include "foundation.h"
+#include "VirtualRing.h"
 
 namespace routingsim {
 

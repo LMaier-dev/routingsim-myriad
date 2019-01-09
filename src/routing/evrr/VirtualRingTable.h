@@ -62,12 +62,12 @@ public://------------------------------------------------- Con-/Destruction ---
 	}
 
 	/// sets the number of parallel discoveries
-	void set_discovery_alpha( uint alpha ) {
+	void set_discovery_alpha( unsigned int alpha ) {
 		this->discovery_alpha = alpha;
 	}
 
 	/// sets the number of parallel discoveries
-	void set_delay_threshold( uint threshold ) {
+	void set_delay_threshold( unsigned int threshold ) {
 		this->delay_threshold = threshold;
 	}
 
@@ -102,12 +102,12 @@ public://----------------------------------------------------- Table Access ---
 	}
 
 	/// returns the virtual neighbors including my own identifiers
-	unordered_set<vid_t>* get_vneighbors() const {
+	boost::unordered_set<vid_t>* get_vneighbors() const {
 		if (table.size() == 0)
 			return NULL;
 
 		// find my own entries and add their virtual neighbors
-		unordered_set<vid_t>* ids = new unordered_set<vid_t>();
+		boost::unordered_set<vid_t>* ids = new boost::unordered_set<vid_t>();
 		for (size_t i = 0; i < table.size(); i++) {
 			if (!table[i]->own()) continue;
 			ids->insert(table[i]->id);
@@ -194,7 +194,7 @@ private:
 	int discovery_alpha;
 
 	// listeners
-	unordered_set<listener*> listeners;
+	boost::unordered_set<listener*> listeners;
 
 	// stability detection
 	int stable;
@@ -306,7 +306,7 @@ private:
 
 	// returns the route neighbor
 	inline entry_t* get( int index, int offset = 0) {
-		if ((index+offset)<0 || (index+offset)>=size()) return NULL;
+		if ((index+offset)<0 || (index+offset)>=(int)size()) return NULL;
 		else return table[(size_t)(index+offset)];
 	}
 
@@ -316,7 +316,7 @@ private:
 		if (table[idx]->own()) return dir_own;
 		int left=-1, right=-1;
 		for (int j=1; j<(int)table.size(); j++) {
-			if (left==-1 && (idx+j) < size() && table[idx+j]->own() ) left = idx+j;
+			if (left==-1 && (idx+j) < (int)size() && table[idx+j]->own() ) left = idx+j;
 			if (right==-1 &&(idx-j)>=0 && table[idx-j]->own()) right = idx-j;
 		}
 		if (left!=-1 && right!=-1)
@@ -331,7 +331,7 @@ private:
 		if (idx == -1) return -1;
 
 		if (idx>0 && table[idx-1]->own()) return idx-1;
-		if (idx<(table.size()-1) && table[idx+1]->own()) return idx+1;
+		if (idx<((int)table.size()-1) && table[idx+1]->own()) return idx+1;
 		return -1;
 	}
 
@@ -414,7 +414,7 @@ private://--------------------------------------------------- Linearization ---
 		}
 
 		// right
-		if ( dir == dir_right && (index+1) < size() ) {
+		if ( dir == dir_right && (index+1) < (int)size() ) {
 			table[index+1]->delegated_new = true;
 			table[index+1]->changed = true;
 		}
@@ -437,11 +437,11 @@ private://------------------------------------------------------- Discovery ---
 			if (!e.own()) continue;
 
 			// issue parallel discovery messages
-			unordered_set<nodeid_t> neighbors;
+			boost::unordered_set<nodeid_t> neighbors;
 			neighbors = dsdv.get_neighbors();
 			for (int s=0; s<discovery_alpha; s++) {
 				if (neighbors.size()==0) break;
-				unordered_set<nodeid_t>::iterator i=neighbors.begin();
+				boost::unordered_set<nodeid_t>::iterator i=neighbors.begin();
 				if (neighbors.size()>2) std::advance(i,intuniform(rng, 0, neighbors.size()-1));
 				if (i == neighbors.end()) continue;
 				queue.send( *i, e.route(vroute_update_t::DISCOVERY_PRED) );
@@ -509,7 +509,7 @@ private://------------------------------------------------------- Discovery ---
 
 		// inform neighbors
 		if (index>0) dsdv.notify(get(index,-1)->id);
-		if (index<(size()-1)) dsdv.notify(get(index,1)->id);
+		if (index<((int)size()-1)) dsdv.notify(get(index,1)->id);
 	}
 };
 

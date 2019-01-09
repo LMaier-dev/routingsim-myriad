@@ -31,12 +31,40 @@ simple NetworkManager {
 	    /// filename of the network topology 
         string topologyFile = default("");
         
+        /// determine the file format of topologyFile
+        string topologyFileType @enum(SELF_DEFINED, DIMES) = default("SELF_DEFINED");
+        
+        /// extract the largest stronlgy connected component from the graph read?
+        bool useOnlyLargestConnectedComponent = default(true);
+        
+        /// make any given link bidirectional?
+        bool makeLinksBidirectional = default(true);
+        
+        /// allow id-remapping (if ids are too high, map them to lower, unused ids)
+        /// if ids are larger than std::vector.max_size(), an exception is thrown
+        /// may be required for DIMES ASEdges
+        bool allowNodeIdRemapping = default(false);
+        
+        /// enable compression of the node id space; currently the node ids are used
+        /// directly as indices to our bgl graph data structures; therefore high node
+        /// ids result in increased memory consumption.
+        /// if compression is enabled, the max node ids are sequentially merged into
+        /// the lowest available ids
+        bool compressNodeIDs = default(false);
+        
         /// filename of the shortest-path pre-calculations
         string spathFile = default("");
         
+        /// determine the way shortest paths are determine; we want an alternative to
+        /// calculating the full distance matrix for large graphs, when only sampling
+        /// is used.
+        string shortestPathCalculationMode @enum(fullDistanceMatrix, onDemand) = default("fullDistanceMatrix");
+        
         /// when dynamics gate is not connected, create a dynamics model by name
-        string dynamicsModel @enum(None, CatastrophicFailure, LifetimeChurn) = 
+        string dynamicsModel @enum(None, CatastrophicFailure, LifetimeChurn, LinkFailure, IncrementalFailure) = 
         	default("CatastrophicFailure");
+        	
+        string topologyStatistics @enum(None, Light, Heavy) = default("Light");
     gates:
         /// input gate for topoplogy dynamics
         input dynamics @loose;

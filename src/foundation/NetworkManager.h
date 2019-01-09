@@ -27,17 +27,18 @@ NetworkManager* getNetworkManager();
 
 #include "NetworkTopology.h"
 #include "NetworkDynamics.h"
+#include "StatisticSample.h"
 
 namespace routingsim {
 
-class NetworkManager: public cSimpleModule {
+class NetworkManager: public cSimpleModule, public StatisticSample {
 public:
 	/// Returns the distance between two modules in the network topoology
-	distance_t getDistance(cModule *from, cModule* to);
+	distance_t getDistance(nodeid_t from, nodeid_t to);
 
 	/// Returns current size of the network
 	/// TODO: atm returns the number of nodes disregarding their status!
-	int getNetworkSize();
+	unsigned int getNetworkSize();
 
 	/// Returns the network topology
 	inline NetworkTopology& getTopology() { return *topology; }
@@ -57,11 +58,18 @@ protected:
 	virtual void initialize();
 	virtual void finish();
 	virtual void handleMessage(cMessage *msg);
+	void sampleStatistics( Statistics& stats );
 
 private:
 	NetworkTopology* topology;
 	NetworkDynamics* dynamics;
 	void resetNode(nodeid_t node);
+
+	// Topology Statistics
+	bool evaluateStatistics;
+	cOutVector *activeNodesCount;
+	cOutVector *activeEdgesCount;
+	cOutVector *partitionCount;
 };
 
 /// Returns the network Manager singleton

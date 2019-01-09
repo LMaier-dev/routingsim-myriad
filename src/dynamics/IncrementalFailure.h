@@ -13,44 +13,36 @@
 // along with this program.  If not, see http://www.gnu.org/licenses/.
 // 
 
-#ifndef __ROUTINGSIM_PATHVECTOR_H_
-#define __ROUTINGSIM_PATHVECTOR_H_
+#ifndef __ROUTINGSIM_CATASTROPHICFAILURE_H_
+#define __ROUTINGSIM_CATASTROPHICFAILURE_H_
 
 #include <omnetpp.h>
-#include <vector>
-
-#include "foundation.h"
+#include "foundation/NetworkDynamics.h"
+#include "NetworkManager.h"
 
 namespace routingsim {
 
 /**
- * TODO - Generated class
+ * This class implements an incremental failure model to, e.g.,
+ * track the performance of a routing protocol in a consistently
+ * degrading environment
+ *
+ *  @author Christoph Werle <werle@kit.edu>
  */
-class PathVector: public LegacyProtocol {
-protected:
-	/// initialize
-	virtual void onInitialize();
-
-	/// called when a new node is connected
-	virtual void onConnect( nodeid_t nid );
-
-	/// called when a node is disconnected
-	virtual void onDisconnect( nodeid_t nid );
-
-	/// on message
-	virtual void onMessage( NodePkt* pkt );
-	/// reset state of Protocol to initial state (Node Failure)
-	void reset();
-
+class IncrementalFailure: public NetworkDynamics {
 private:
-	seqnum_t syn;
-	class route_t {
-	public:
-		path_t route;
-		nodeid_t owner;
-		vector_set<nodeid_t> used_by;
-	};
-	std::vector<route_t> routes;
+	bool first;
+	unsigned int iteration;
+	// parameters from ned file
+	bool NodeFailure;
+	bool LinkFailure;
+	double NodeFraction;
+	double LinkFraction;
+	double warmup;
+	double period;
+protected:
+	virtual void initialize();
+	virtual simtime_t scheduleDynamics();
 };
 
 } //namespace

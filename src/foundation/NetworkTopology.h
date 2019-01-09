@@ -19,9 +19,22 @@
 #include <omnetpp.h>
 #include <string>
 #include <vector>
+#include <ctime>
+#include <sstream>
+#include <boost/algorithm/string.hpp>
+#include <stdexcept>
 
 #include <boost/unordered_map.hpp>
 #include <boost/unordered_set.hpp>
+
+#include <boost/graph/adjacency_list.hpp>
+#include <boost/graph/graph_traits.hpp>
+#include <boost/graph/filtered_graph.hpp>
+#include <boost/graph/graph_utility.hpp>
+#include <boost/graph/connected_components.hpp>
+#include <boost/graph/strong_components.hpp>
+#include <boost/graph/floyd_warshall_shortest.hpp>
+#include <boost/graph/johnson_all_pairs_shortest.hpp>
 
 /// forward declaration
 namespace routingsim {
@@ -35,37 +48,120 @@ namespace routingsim {
 using namespace std;
 using namespace boost;
 
-typedef float cost_t;
-#define INVALID_DISTANCE 	0xff;
-
 /**
  * NetworkTopology provides a data structure to represent network topologies
  * and corresponding methods for their manipulation as well as the runtime
  * state.
  *
+ * The boost graph library is used to represent the graph and to perform calculations
+ * on it
+ *
  * @author Christoph Werle <werle@kit.edu>
- * @author Sebastian Mies <mies@kit.edu>
  */
+
 class NetworkTopology {
+private:
+	typedef boost::unordered_map<string,string> properties_t;
+
+	NetworkTopology &operator=(NetworkTopology const &n);
+	NetworkTopology(NetworkTopology const &n);
+
+	// Vertex Properties
+	struct BGLNode {
+		bool active; // mark status of used nodes
+		bool disabled; // mark unused (non-existing) nodes
+		int maxRTentries;
+		properties_t properties; // store properties from config file
+	};
+	// Edge Properties
+	struct BGLEdge {
+		bool active;
+		float weight;
+	};
+	// BGL Definitions
+	// to enforce the absence of multi-edges, vertexlist might be set to setS,
+	// currently this needs to be ensured in the topology file for efficiency
+	typedef adjacency_list<setS, vecS, bidirectionalS, BGLNode, BGLEdge> topologyGraph;
+	typedef graph_traits<topologyGraph>::vertex_descriptor BGLVertexDesc;
+	typedef graph_traits<topologyGraph>::vertex_iterator BGLVertexIt;
+	typedef graph_traits<topologyGraph>::edge_descriptor BGLEdgeDesc;
+	typedef graph_traits<topologyGraph>::edge_iterator BGLEdgeIt;
+	typedef graph_traits<topologyGraph>::out_edge_iterator BGLOutEdgeIt;
+	typedef graph_traits<topologyGraph>::in_edge_iterator BGLInEdgeIt;
+
+
+	// filters
+	template <typename GraphType>
+	class activeNodes {
+	public:
+		activeNodes() : graph(0) {};
+		activeNodes( GraphType &g) : graph(&g) {};
+		template <typename VertexType>
+		bool operator() (const VertexType &v) const { return (*graph)[v].active; }
+	private:
+		GraphType *graph;
+	};
+
+	template <typename GraphType>
+	class activeEdges {
+	public:
+		activeEdges() : graph(0) {};
+		activeEdges( GraphType &g) :graph(&g) {};
+		template <typename EdgeType>
+		bool operator() (const EdgeType &e) const { return (*graph)[e].active; }
+	private:
+		GraphType *graph;
+	};
+
+	typedef filtered_graph<topologyGraph, activeEdges<topologyGraph>, activeNodes<topologyGraph> > FilteredGraph;
+	typedef graph_traits<FilteredGraph>::vertex_iterator ActiveBGLVertexIt;
+	typedef graph_traits<FilteredGraph>::edge_iterator ActiveBGLEdgeIt;
+	typedef graph_traits<FilteredGraph>::adjacency_iterator ActiveBGLAdjacencyIt;
+	/// our topology as bgl graph
+	topologyGraph *BGLtopology;
+
+	/// link between the graph and the omnet network
+	boost::unordered_map<nodeid_t, cModule *> moduleMap;
+
+	/// Bool to keep track of whether the topology was changed since last
+	/// shortest path calculation; needs to be set to true by topology-
+	/// modifying functions
+	bool topologyAltered;
+
+	float **spath;
+	int spathMatrixSize;
+	bool spathAvailable;
+	string shortestPathCalculationMode;
+
 public:
 	/**
 	 * Constructs an empty network topology.
 	 */
-	NetworkTopology();
+	explicit NetworkTopology();
 
 	/**
-	 * Destroyes the network topology
+	 * Destroys the network topology
 	 */
 	~NetworkTopology();
 
 	/**
 	 * Read network topology from filename into data structure
-	 * format
-	 * 1st line: number of nodes(tab)number of links
-	 * following lines: src node(tab)dest node
-	 * TODO: Input validation and sanity checks
+	 * This function dispatches the actual reading to specialized functions
+	 * depending on topologytype (for possible values see NetworkManager.ned)
 	 */
-	void readTopology(string topologyFile);
+	void readTopology(string topologyFile, string topologytype = "SELF_DEFINED", bool useOnlyLargestConnectedComponent=true, bool makeLinksBidirectional=true, bool allowNodeIdRemapping=false, bool compressIDs=false);
+
+	/**
+	 * Read our own
+	 */
+	void readSelfDefinedTopology(ifstream &topologyFile, set<nodeid_t> &nodeset, vector< pair<long long, long long> > &edges, boost::unordered_map < nodeid_t, properties_t > &nodeproperties);
+
+	/**
+	 * Read a dimes as edges topology; by default, bidirectional edges are
+	 * assumed. If this is not the intended behaviour, set makeBidirectional
+	 * to false.
+	 */
+	void readDimesTopology(ifstream &topologyFile, set<nodeid_t> &nodeset, vector< pair<long long, long long> > &edges, boost::unordered_map < nodeid_t, properties_t > &nodeproperties, bool makeBidirectional=true);
 
 	/**
 	 * Read shortest paths from file with shortest-path pre-calculations.
@@ -90,135 +186,102 @@ public:
 	void extractFromNetwork(cModule *networkManager);
 
 	/**
-	 * Returns a random node identifier.
+	 * Returns a random node from the set of active nodes
 	 *
 	 * @param rndvalue a random value.
 	 * @return a random node identifier.
 	 */
 	nodeid_t getRandomNode( size_t rndvalue ) const;
 
-	/**
-	 * Returns the maximal set of connected nodes.
-	 */
-	unordered_set<nodeid_t>* getGiantComponent(unordered_set<nodeid_t>& disabled ) const;
+	/// Return k random distinct pairs of active nodes in a vector (-> Sampling)
+	/// Random Edge Sampling ("Sampling from Large Graphs", Jure Leskovec and Christos Faloutsos, 2006)
+	vector<pair<nodeid_t, nodeid_t> > getRandomNodePairs( cRNG *rng, size_t k ) const;
 
-	/**
-	 * Returns a node's degree, i.e., number of links.
-	 */
+	/// Return a random edge selected from the set of active edges (activeLinkNumber-th edge)
+	pair<nodeid_t, nodeid_t> getRandomEdge(size_t activeLinkNumber) const;
+
+
+	/// Returns the node degree, i.e., number of links to ACTIVE neighbors
+	/// If the node itself is not active, zero is returned
 	size_t getNodeDegree( nodeid_t node ) const;
 
-	/**
-	 * Returns all node ID's
-	 */
-	vector<nodeid_t>* getNodeIDs() const;
+	/// return in the parameter retDegreeMap the list of active nodes and
+	/// their degree, resp. out-degree in case of a directed graph
+	/// Return value: Size of retDegreeMap
+	size_t getNodeDegrees( map<nodeid_t, unsigned long> &retDegreeMap) const;
+
+	/// returns the FILTERED set of ACTIVE nodeids contained in the topology
+	/// in the parameter v
+	void getNodeIDs(vector<nodeid_t> &v) const;
+
+	/// return the active neighbors of a node in the vector neighborIDs
+	void getNeighborNodeIDs(nodeid_t fromID, vector<nodeid_t> &neighborIDs) const;
+
+	// return the node ids of the count highest degree nodes
+    vector<nodeid_t> getHighestDegreeNodes( unsigned int count ) const;
 
 	/**
-	 * Adds a bidirectional link between nodes node1 and node2
+	 * Adds an active bidirectional link between nodes node1 and node2
+	 * TODO: Properties?
 	 */
 	void addLink(nodeid_t node1, nodeid_t node2);
 
-	/**
-	 * Disables the bidirectional link between node1 and node2
-	 * in the Node multiplexer
-	 */
+	/// Disables the *unidirectional* link between node1 and node2
 	void disableLink(nodeid_t node1, nodeid_t node2);
 
-	/**
-	 * Enables the bidirectional link between node1 and node2
-	 * in the Node multiplexer
-	 */
+	/// Enables the *unidirectional* link between node1 and node2
 	void enableLink(nodeid_t node1, nodeid_t node2);
 
-	/**
-	 * Disable all links of the node to its neighbors
-	 */
+	/// Disable all links of the node to and from its neighbors
 	void disableNode(nodeid_t node);
 
-	/**
-	 * Re-enable all links of the node to its neighbors
-	 */
+	/// Re-enable all links of the node to its ACTIVE neighbors
+	/// links that were disabled individually before between node and
+	/// active neighbors are also! re-enabled
 	void enableNode(nodeid_t node);
 
-	/**
-	 * Enable or disable a link between two nodes
-	 */
-	void setConnected(nodeid_t node1, nodeid_t node2, bool connected);
-
-	/**
-	 * Returns true, if nodes are connected by a link
-	 */
+	// are the two nodes directly connected with an active link
 	bool isConnected(nodeid_t node1, nodeid_t node2);
 
-	/**
-	 * Returns true, if the network is connected
-	 */
+	/// Returns true, if the network is connected
 	bool isConnected();
 
-	/**
-	 * returns the number of nodes in the network
-	 * TODO: consider node status
-	 */
-	int getNetworkSize();
+	/// Returns the current number of partitions in the network
+	unsigned int getNumPartitions();
 
-	/**
-	 * Returns the distance as sum of the link weights on the path
-	 */
-	cost_t getDistance(nodeid_t from, nodeid_t to);
+	/// returns the number of ACTIVE nodes in the network
+	unsigned int getNetworkSize();
 
-	/**
-	 * Returns the distance as sum of the link weights on the path
-	 */
-	cost_t getDistance(cModule *from, cModule *to);
+	/// Returns the TOTAL number of nodes irregarding their state (active/inactive)
+	inline unsigned int getNumberNodes() const { return num_vertices(*BGLtopology); }
 
-	/**
-	 * Helper-function mapping a cModule to the corresponding nodeid_t
-	 */
-	nodeid_t moduleToNodeID(cModule *cmod);
+	/// Returns the TOTAL number of links irregarding their state (active/inactive)
+	inline unsigned int getNumberLinks() const { return num_edges(*BGLtopology); }
 
-	/**
-	 * Helper-function mapping a nodeid_t to the corresponding cModule
-	 */
-	cModule *NodeIDToModule(nodeid_t node);
+	unsigned int getActiveNumberNodes() const;
 
-	/**
-	 * Returns the total number of nodes
-	 */
-	uint getNumberNodes() const {
-		return numberNodes;
-	}
+	unsigned int getActiveNumberLinks() const;
 
-	/**
-	 * Returns the total number of links
-	 */
-	uint getNumberLinks() const {
-		return numberLinks;
-	}
+	/// return the shortest path distance between two nodes
+	/// if not calculated already (or the graph has changed),
+	/// calculate it on the fly and return result
+	float getDistance(nodeid_t from, nodeid_t to);
 
-public:
-	class TopologyNode;
-	TopologyNode *getLinkset(nodeid_t);
+	/// get the shortest path between from and to in the full, unfiltered topology
+	vector<nodeid_t> getFullTopologyPath(nodeid_t from, nodeid_t to) const;
 
-private:
-	/// List of adjacent nodes + link properties
-	typedef unordered_map<nodeid_t, TopologyNode*> adjacencylist_t;
-	adjacencylist_t adjacencyList;
+	/// get the shortest path between from and to in the ACTIVE topology respecting failed nodes and edges
+	vector<nodeid_t> getActiveTopologyPath(nodeid_t from, nodeid_t to) const;
 
-	/// mapping from a node in the graph topology to the corresponding
-	/// Node module
-	typedef unordered_map<nodeid_t, cModule*> modulemap_t;
-	modulemap_t moduleMap;
+	/// return true if either a link or a node of the shortest path within the
+	/// unaltered original topology failed; false otherwise
+	/// XXX: currently only considers node failures
+	bool FullTopologyPathFailed(nodeid_t from, nodeid_t to) const;
 
-	/// are we aware of the shortest paths, i.e., is the mapping sp valid?
-	bool spath_available;
-	uint8_t* spath_costs;
-	unordered_map<nodeid_t, size_t> spath_map;
+	/// reset all protocols on the Node identified by nodeid n
+	void resetNode(nodeid_t n);
 
-	/// file from which the topology was read
-	string inputFile;
-
-	uint numberNodes;
-	uint numberLinks;
-
+	void setShortestPathCalculationMode(string mode);
 };
 
 } // namespace RoutingSim

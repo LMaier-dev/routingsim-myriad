@@ -17,18 +17,18 @@ package routingsim.foundation;
 
 simple Node {
 parameters:
-	@display("i=block/join");
-	    
+    @display("i=block/join");
+
     /// node id, -1 = choose own id
-    int id = default(-1); 	
-    
+    int id = default(-1);
+
     /// protocols to the node uses
-    string protocols;	
-    
+    string protocols;
+
     // minimum and maximum delay in milliseconds
-    int nodeMinDelay @unit(ms) = default(52ms);		
-    int nodeMaxDelay @unit(ms) = default(60ms);		
-        
+    int nodeMinDelay @unit(ms) = default(52ms);
+    int nodeMaxDelay @unit(ms) = default(60ms);
+
 gates:
     inout toProtocols[];
     inout toNeighbors[];

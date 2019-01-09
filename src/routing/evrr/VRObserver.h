@@ -49,7 +49,7 @@ private:
 	MessageStatistics* general;
 
 	// anycast support
-	typedef unordered_multimap<vid_t,nodeid_t> anycastmap_t;
+	typedef boost::unordered_multimap<vid_t,nodeid_t> anycastmap_t;
 	vector<vid_t> anycast_entries;
 	anycastmap_t anycast_map;
 	MessageStatistics* anycast;
@@ -59,7 +59,7 @@ private:
 
 public:
 	// return virtual ring neighbors
-	void getNeighbors(unordered_set<vid_t>& set, vid_t id, size_t k);
+	void getNeighbors(boost::unordered_set<vid_t>& set, vid_t id, size_t k);
 
 	// register / unregister normal ring identifiers
 	void up(vid_t id, nodeid_t owner = undefined_node );

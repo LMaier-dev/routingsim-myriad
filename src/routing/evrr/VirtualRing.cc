@@ -114,13 +114,6 @@ Define_Module(VirtualRing);
 static boost::unordered_set<vid_t> ids;
 static boost::unordered_map<vid_t, vid_t> anycast_map;
 
-vid_t VirtualRing::get_nice_id() {
-	vid_t id;
-	int r = (ids.size()/100+1)*100+1;
-	do { id = intuniform(r-100,r); } while (ids.count(id)!=0);
-	ids.insert(id);
-	return id;
-}
 
 vid_t VirtualRing::get_random_id() {
 	vid_t id;
@@ -395,7 +388,7 @@ void VirtualRing::onTimer() {
 
 	// consistency check
 	consistencyCheckCount++;
-	if (consistencyCheckCount > consistencyCheck && consistencyCheck!=0) {
+	if (consistencyCheckCount > (int)consistencyCheck && consistencyCheck!=0) {
 		consistencyCheckCount = 0;
 		table->dsdv().trigger_consistency_check();
 	}
@@ -443,8 +436,8 @@ void VirtualRing::reset() {
 
 void VirtualRing::sampleStatistics( Statistics& stats ) {
 	// check correct neighborhood
-	unordered_set<vid_t> *neighbors = table->ring().get_vneighbors();
-	unordered_set<vid_t> set;
+	boost::unordered_set<vid_t> *neighbors = table->ring().get_vneighbors();
+	boost::unordered_set<vid_t> set;
 	for (size_t i = 0; i < table->ring().size(); i++) {
 		if (!table->ring()[i].own()) continue;
 		observer->getNeighbors(set, table->ring()[i].id, 1);
