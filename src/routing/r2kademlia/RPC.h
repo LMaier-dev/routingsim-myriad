@@ -38,6 +38,7 @@ protected:
 	public:
 		nonce_t nonce;
 		RPCProtocol* parent;
+		/// this is a hack to get the EV << logging working...
 		inline const cComponent* getThisPtr() const { return parent->getThisPtr(); };
 		virtual void retransmit() {};
 		virtual void handleTimeout() {};
