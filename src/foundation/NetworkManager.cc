@@ -25,23 +25,39 @@ Define_Module(NetworkManager);
 NetworkManager* mgr = NULL;
 
 NetworkManager::~NetworkManager() {
+	delete topology;
 	mgr = NULL;
 	topology = NULL;
+
+	// clean up statistics
+	delete activeEdgesCount;
+	delete activeNodesCount;
+	delete partitionCount;
+	activeEdgesCount = activeNodesCount = partitionCount = NULL;
 }
 
 NetworkManager::NetworkManager() {
-
+	// TODO: assert that there has not been another NetworkManager instantiated already
+	evaluateStatistics = true;
+	activeEdgesCount = activeNodesCount = partitionCount = NULL;
 }
 
 void NetworkManager::initialize() {
-	ev << "initializing network manager" << endl;
+	EV << "initializing network manager" << endl;
 	// set singleton variable
 	mgr = this;
 
 	// create network topology
 	topology = new NetworkTopology();
 	if (par("topologyFile").stdstringValue().size()!=0)
-		topology->readTopology(par("topologyFile").stdstringValue());
+		topology->readTopology(
+				par("topologyFile").stdstringValue(),
+				par("topologyFileType").stdstringValue(),
+				par("useOnlyLargestConnectedComponent").boolValue(),
+				par("makeLinksBidirectional").boolValue(),
+				par("allowNodeIdRemapping").boolValue(),
+				par("compressNodeIDs").boolValue()
+				);
 	if (par("spathFile").stdstringValue().size()!=0)
 		topology->readShortestPaths(par("spathFile").stdstringValue());
 	if (par("topologyFile").stdstringValue().size()!=0) {
@@ -50,6 +66,9 @@ void NetworkManager::initialize() {
 		// the network was built from a ned file
 		topology->extractFromNetwork(this);
 	}
+
+	topology->setShortestPathCalculationMode(par("shortestPathCalculationMode").stdstringValue());
+	cout << "shortestPathCalculationMode: " << par("shortestPathCalculationMode").stdstringValue() << endl;
 
 	// dynamics module connected? yes-> get dynamics module!
 	cGate* dynamicsGate = gate("dynamics");
@@ -87,17 +106,25 @@ void NetworkManager::initialize() {
 		dynamics->topology = topology;
 	} else
 		ev << "No dynamic model available." << endl;
+
+
+	// statistics
+	activeNodesCount = new cOutVector("activeNodesCount");
+	activeEdgesCount = new cOutVector("activeEdgesCount");
+	partitionCount = new cOutVector("partitionCount");
+	addStatisticSample(this);
 }
 
 void NetworkManager::handleMessage(cMessage *msg) {
 	if (msg->arrivedOn("dynamics")) {
-		ev << "received dynamics message" << endl;
+		EV << "received dynamics message" << endl;
 
 		// if it's a selfmessage, then we have DynamicsInfo attached
 		DynamicsInfo *di =
 				static_cast<DynamicsInfo *> (msg->getContextPointer());
 		assert(di!=NULL);
 
+		evaluateStatistics = true;
 		switch (di->type) {
 		case DynamicsInfo::nodeFailure:
 			topology->disableNode(di->source);
@@ -107,15 +134,25 @@ void NetworkManager::handleMessage(cMessage *msg) {
 			topology->enableNode(di->source);
 			break;
 		case DynamicsInfo::linkFailure:
+			// depending on bidirectional flag deactivate one or both directions
+			topology->disableLink(di->source,di->destination);
+			if (di->bidirectionalLinkFailure) {
+				topology->disableLink(di->destination,di->source);
+			}
 			break;
 		case DynamicsInfo::linkRecovery:
+			// depending on bidirectional flag deactivate one or both directions
+			topology->enableLink(di->source,di->destination);
+			if (di->bidirectionalLinkFailure) {
+				topology->enableLink(di->destination,di->source);
+			}
 			break;
 		case DynamicsInfo::undefined:
-			ev << "undefined event, did you forget to set DynamicsInfo::type?"
-			<< endl;
+			opp_error ("undefined event, did you forget to set DynamicsInfo::type?");
 			break;
 		default:
-			ev << "unknown dynamic event" << endl;
+			opp_error ("undefined event, did you forget to set DynamicsInfo::type?");
+			break;
 		}
 
 		delete di;
@@ -123,29 +160,52 @@ void NetworkManager::handleMessage(cMessage *msg) {
 	}
 }
 
-distance_t NetworkManager::getDistance(cModule *from, cModule* to) {
+float NetworkManager::getDistance(nodeid_t from, nodeid_t to) {
 	return topology->getDistance(from, to);
 }
 
-int NetworkManager::getNetworkSize() {
+unsigned int NetworkManager::getNetworkSize() {
 	if (topology == NULL) {
 		opp_error("topology has not been created yet!");
 	}
-	topology->getNetworkSize();
+	return topology->getNetworkSize();
 }
 
 void NetworkManager::finish() {
-	delete topology;
 }
 
 void NetworkManager::resetNode(nodeid_t n) {
-	cModule *node = topology->NodeIDToModule(n);
-	int size = node->gate("toProtocols$o", 0)->size();
+	getTopology().resetNode(n);
+}
 
-	for (int i = 0; i < size; i++) {
-		cGate *tnm = node->gate("toProtocols$o", i);
-		check_and_cast<Protocol *> (tnm->getNextGate()->getOwner())->reset();
+void NetworkManager::sampleStatistics( Statistics& stats ) {
+	string topologyStatistics = par("topologyStatistics").stdstringValue();
+	static unsigned int ann, anl, pc;
+
+	if (topologyStatistics == string("None")) return;
+
+	if (evaluateStatistics) {
+		if (topologyStatistics == string("Light") || topologyStatistics== string("Heavy")) {
+			ann = getNetworkManager()->getTopology().getActiveNumberNodes();
+			anl = getNetworkManager()->getTopology().getActiveNumberLinks();
+		}
+		if (topologyStatistics== string("Heavy")) {
+			pc = getNetworkManager()->getTopology().getNumPartitions();
+		}
+		evaluateStatistics = false;
 	}
+
+
+	if (topologyStatistics == string("Light") || topologyStatistics== string("Heavy")) {
+		activeNodesCount->record(ann);
+		activeEdgesCount->record(anl);
+	}
+
+	// expensive statistics
+	if (topologyStatistics== string("Heavy")) {
+		partitionCount->record(pc);
+	}
+
 }
 
 NetworkManager* getNetworkManager() {

@@ -112,13 +112,13 @@ Define_Module(VirtualRing);
 static boost::unordered_set<vid_t> ids;
 static boost::unordered_map<vid_t, vid_t> anycast_map;
 
-static vid_t get_nice_id() {
-	vid_t id;
-	int r = (ids.size()/100+1)*100+1;
-	do { id = intuniform(r-100,r); } while (ids.count(id)!=0);
-	ids.insert(id);
-	return id;
-}
+//static vid_t get_nice_id() {
+//	vid_t id;
+//	int r = (ids.size()/100+1)*100+1;
+//	do { id = intuniform(r-100,r); } while (ids.count(id)!=0);
+//	ids.insert(id);
+//	return id;
+//}
 
 static vid_t get_random_id() {
 	vid_t id;
@@ -393,7 +393,7 @@ void VirtualRing::onTimer() {
 
 	// consistency check
 	consistencyCheckCount++;
-	if (consistencyCheckCount > consistencyCheck && consistencyCheck!=0) {
+	if (consistencyCheckCount > (int)consistencyCheck && consistencyCheck!=0) {
 		consistencyCheckCount = 0;
 		table->dsdv().trigger_consistency_check();
 	}

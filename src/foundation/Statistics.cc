@@ -165,6 +165,11 @@ int Statistics::numInitStages() const {
 Statistics::Statistics() {
 	samplingTimer = NULL;
 	deliveryRatio = NULL;
+	messagesDeliveredVector = NULL;
+	messagesDroppedVector = NULL;
+	shortestPathDeliveryRatio = NULL;
+	shortestPathMessagesDeliveredVector = NULL;
+	shortestPathMessagesDroppedVector = NULL;
 	hopCount = NULL;
 	realHopCount = NULL;
 	addStretch = NULL;
@@ -175,10 +180,20 @@ void Statistics::initialize(int stage) {
 	if (stage==0) {
 		// start sampling
 		samplingInterval = par("samplingInterval");
+		recordShortestPathDeliveryRatio = par("recordShortestPathDeliveryRatio");
 		samplingTimer = new cMessage("samplingTimer");
 		messagesDelivered = 0;
 		messagesDropped = 0;
+		shortestPathMessagesDelivered = 0;
+		shortestPathMessagesDropped = 0;
 		deliveryRatio = new cOutVector("deliveryRatio");
+		messagesDeliveredVector = new cOutVector("messagesDelivered");
+		messagesDroppedVector = new cOutVector("messagesDropped");
+		if (recordShortestPathDeliveryRatio) {
+			shortestPathDeliveryRatio = new cOutVector("shortestPathDeliveryRatio");
+			shortestPathMessagesDeliveredVector = new cOutVector("shortestPathMessagesDelivered");
+			shortestPathMessagesDroppedVector = new cOutVector("shortestPathMessagesDropped");
+		}
 		hopCount = new cLongHistogram("hopCountRouting");
 		hopCount->setRange(0,128);
 		hopCount->setNumCells(128);
@@ -191,7 +206,7 @@ void Statistics::initialize(int stage) {
 		mulStretch = new cDoubleHistogram("stretchMultiplicative");
 		mulStretch->setRange(1.0,64.0);
 		mulStretch->setNumCells(1024);
-		scheduleAt(simTime() + samplingInterval*2, samplingTimer);
+		scheduleAt(simTime() + samplingInterval, samplingTimer);
 	}
 	if (stage==3)
 		sample();
@@ -215,6 +230,11 @@ void Statistics::finish() {
 Statistics::~Statistics() {
 	boost::unordered_map<const char*, Statistics*>::iterator it;
 	delete deliveryRatio;
+	delete messagesDeliveredVector;
+	delete messagesDroppedVector;
+	delete shortestPathDeliveryRatio;
+	delete shortestPathMessagesDeliveredVector;
+	delete shortestPathMessagesDroppedVector;
 	delete hopCount;
 	delete realHopCount;
 	delete addStretch;
@@ -234,10 +254,20 @@ const char* messagesDeliveredStr = "messagesDelivered";
 const char* messagesDroppedStr = "messagesDropped";
 
 void Statistics::sample() {
-	if ((messagesDelivered+messagesDropped)!=0)
+	if ((messagesDelivered+messagesDropped)!=0) {
 		deliveryRatio->record((double)messagesDelivered/((double)messagesDelivered+(double)messagesDropped));
+		messagesDeliveredVector->record(messagesDelivered);
+		messagesDroppedVector->record(messagesDropped);
+		if (recordShortestPathDeliveryRatio) {
+			shortestPathDeliveryRatio->record((double)shortestPathMessagesDelivered/((double)shortestPathMessagesDelivered+(double)shortestPathMessagesDropped));
+			shortestPathMessagesDeliveredVector->record(shortestPathMessagesDelivered);
+			shortestPathMessagesDroppedVector->record(shortestPathMessagesDropped);
+		}
+	}
 	messagesDelivered = 0;
 	messagesDropped = 0;
+	shortestPathMessagesDelivered = 0;
+	shortestPathMessagesDropped = 0;
 
 	foreach( StatisticSample* sample, samples )	sample->sampleStatistics(*this);
 	foreach( Values::value_type& value, values ) value.second->record(this);
@@ -268,8 +298,21 @@ void Statistics::registerMessage( cMessage* msg ) {
 	msg->setContextPointer(srcNode);
 }
 
-void Statistics::dropMessage( cMessage* msg ) {
+void Statistics::dropMessage( cMessage* msg, nodeid_t dstNode ) {
 	if (msgs.count(msg)==0) return;
+
+	nodeid_t srcNode = dynamic_cast<Node *>(static_cast<cModule*>(msg->getContextPointer()))->getNodeId();
+
+	if (recordShortestPathDeliveryRatio) {
+		if (getNetworkManager()!=NULL) {
+			if (getNetworkManager()->getTopology().FullTopologyPathFailed(srcNode, dstNode)) {
+				shortestPathMessagesDropped++;
+			} else {
+				shortestPathMessagesDelivered++;
+			}
+		}
+	}
+
 	messagesDropped++;
 	msgs.erase(msg);
 }
@@ -279,17 +322,29 @@ const char* stretchStr="stretch";
 void Statistics::deliveredMessage( cMessage* msg, int hop_count ) {
 	if (msgs.count(msg)==0) return;
 	hopCount->collect(hop_count);
-	cModule* srcNode = static_cast<cModule*>(msg->getContextPointer());
-	cModule* dstNode = simulation.getContextModule()->getParentModule();
+	nodeid_t srcNode = dynamic_cast<Node *>(static_cast<cModule*>(msg->getContextPointer()))->getNodeId();
+	nodeid_t dstNode = dynamic_cast<Node *>(simulation.getContextModule()->getParentModule())->getNodeId();
+
 	if (getNetworkManager()!=NULL) {
-		int realDistance = (int)getNetworkManager()->getDistance(srcNode,dstNode);
-		realHopCount->collect(realDistance);
-		addStretch->collect(hop_count-realDistance);
-		if (realDistance>0.5) {
-			double stretch = (double)hop_count / (double)realDistance;
-			mulStretch->collect(stretch);
+		int realDistance = (int)getNetworkManager()->getDistance(srcNode, dstNode);
+		if (realDistance >= 0) {
+			realHopCount->collect(realDistance);
+			addStretch->collect(hop_count-realDistance);
+			if (realDistance>0.5) {
+				double stretch = (double)hop_count / (double)realDistance;
+				mulStretch->collect(stretch);
+			}
+		}
+
+		if (recordShortestPathDeliveryRatio) {
+			if (getNetworkManager()->getTopology().FullTopologyPathFailed(srcNode, dstNode)) {
+				shortestPathMessagesDropped++;
+			} else {
+				shortestPathMessagesDelivered++;
+			}
 		}
 	}
+
 	messagesDelivered++;
 	msgs.erase(msg);
 }

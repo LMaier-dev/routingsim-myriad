@@ -26,7 +26,11 @@ void Protocol::initialize() {
 }
 
 void Protocol::handleMessage(cMessage *msg) {
+#ifdef NDEBUG
+	NodePkt* np = reinterpret_cast<NodePkt*>(msg);
+#else
 	NodePkt* np = check_and_cast<NodePkt*>(msg);
+#endif
 	switch( np->getType() ) {
 	case PAYLOAD_HELLO:
 		this->onConnect(np->getHop().from);

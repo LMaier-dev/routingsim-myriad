@@ -38,7 +38,7 @@ public:
 	}
 
 	/// sets the number of parallel discoveries
-	void set_delay_threshold( uint threshold ) {
+	void set_delay_threshold( unsigned int threshold ) {
 		this->delay_threshold = threshold;
 	}
 

@@ -34,8 +34,10 @@ void LifetimeChurn::initialize() {
     int maxDegree	= par("maxDegree");
 
     // extract relevant nodes
-	vector<nodeid_t>* ids= getTopology().getNodeIDs();
-	foreach(nodeid_t id, *ids) {
+	vector<nodeid_t> ids;
+	getTopology().getNodeIDs( ids );
+
+	foreach(nodeid_t id, ids) {
 		int deg = getTopology().getNodeDegree(id);
 		if (deg>=minDegree && (deg<=maxDegree || maxDegree==0)) {
 			node_state_t nstate;

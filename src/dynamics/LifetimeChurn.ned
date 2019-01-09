@@ -38,7 +38,7 @@ parameters:
     	default("Weibull");
  
     /// mean node lifetime in seconds, default 
-//   	double meanLifetime @unit(s) = default(10000s); 
+	///double meanLifetime @unit(s) = default(10000s); 
    	double meanLifetime @unit(s) = default(10000s); 
    	
    	/// parameter for the distribution function

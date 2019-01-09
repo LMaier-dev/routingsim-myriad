@@ -16,29 +16,16 @@ namespace routingsim {
 
 using namespace std;
 
-/// sequence numbers
-typedef unsigned int seqnum_t;
-
 /// identifier type
 typedef unsigned long long id_t;
-const id_t undefined_id = 0;
 
 /// node identifier definitions
 typedef id_t nodeid_t;
 const nodeid_t undefined_node = ~0;
 const nodeid_t neighbor_cast = ~0;
 
-/// virtual identifier definitions
-typedef uint32_t vid_t;
-const vid_t undefined_vid = 0;
-
-/// edge identifier definitions
-typedef id_t edgeid_t;
-const edgeid_t undefined_edge = 0;
-const edgeid_t default_edge = 1;
-
 /// distance definition
-typedef int distance_t;
+typedef float distance_t;
 const distance_t default_distance = 1;
 const distance_t infinite_distance = ~0;
 
@@ -61,7 +48,7 @@ public:
 	typename super::iterator insert(const T& value) {
 		for (typename super::iterator i = super::begin(); i != super::end(); i++)
 			if (*i == value) return i;
-		push_back(value);
+		super::push_back(value);
 		return super::end() - 1;
 	}
 
@@ -112,14 +99,14 @@ std::ostream& operator<<(std::ostream& os, const vector_set<T>& vs) {
 class hop_t {
 public:
 	hop_t() :
-		from(undefined_node), to(undefined_node), edge(undefined_edge),
+		from(undefined_node), to(undefined_node),
 				distance(default_distance) {
 	}
 	hop_t(const hop_t& hop) :
-		from(hop.from), to(hop.to), edge(hop.edge), distance(hop.distance) {
+		from(hop.from), to(hop.to), distance(hop.distance) {
 	}
 	hop_t(nodeid_t from, nodeid_t to, distance_t distance = default_distance) :
-		from(from), to(to), edge(default_edge), distance(distance) {
+		from(from), to(to), distance(distance) {
 	}
 
 	/// reverse hop
@@ -133,7 +120,7 @@ public:
 
 	/// compare hop, distance is not compared!!
 	bool operator==(const hop_t& hop) const {
-		return hop.from == from && hop.to == to && hop.edge == edge;
+		return hop.from == from && hop.to == to;
 	}
 
 	/// compare hop
@@ -142,85 +129,15 @@ public:
 	}
 
 	nodeid_t from, to;
-	edgeid_t edge;
 	distance_t distance;
 };
 
 std::ostream& operator<<(std::ostream& os, const hop_t& h);
 
-/// path definition
-class path_t: public std::vector<hop_t> {
-public:
-	seqnum_t seq; //< The sequence number of the path
-
-public:
-	/// default constructor
-	path_t() :
-		std::vector<hop_t>(), seq(0) {
-	}
-
-	/// copy constructor
-	path_t(const path_t& path) :
-		std::vector<hop_t>(path), seq(path.seq) {
-	}
-
-	/// returns true, if this path contains the node
-	bool contains(nodeid_t& node) const {
-		for (const_iterator i = begin(); i != end(); i++)
-			if (i->to == node || i->from == node)
-				return true;
-		return false;
-	}
-
-	/// returns true, if the hop is included in the path
-	bool contains(hop_t& hop) const {
-		for (const_iterator i = begin(); i != end(); i++)
-			if (*i == hop)
-				return true;
-		return false;
-	}
-
-	/// returns the distance to the node in the path
-	distance_t distance(nodeid_t& node) const {
-		distance_t dist = 0;
-		for (const_iterator i = begin(); i != end(); i++) {
-			dist += i->distance;
-			if (i->to == node)
-				return dist;
-		}
-		return infinite_distance;
-	}
-
-	/// the sum of all weights
-	distance_t distance() const {
-		distance_t dist = 0;
-		for (const_iterator i = begin(); i != end(); i++)
-			dist += i->distance;
-		return dist;
-	}
-
-	/// compare a path
-	bool operator==(const path_t& path) const {
-		if (path.size() != size())
-			return false;
-		for (const_iterator i1 = begin(), i2 = path.begin(); i1 != end(); i1++, i2++)
-			if (*i1 != *i2)
-				return false;
-		return true;
-	}
-
-	bool operator!=(const path_t& path) const {
-		return !(operator==(path));
-	}
-};
-
-std::ostream& operator<<(std::ostream& os, const path_t& h);
-
 /// a neighbor record of a node
 class neighbor_t {
 public:
 	nodeid_t id;
-	edgeid_t eid;
 	simtime_t activity;
 	cGate * out;
 };

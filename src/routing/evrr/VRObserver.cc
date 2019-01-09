@@ -35,6 +35,7 @@ void VRObserver::initialize() {
 void VRObserver::finish() {
 	general->finish();
 	anycast->finish();
+	entries.clear();
 }
 
 void VRObserver::handleMessage(cMessage *msg) {
@@ -169,14 +170,14 @@ void VRObserver::messageDelivered(cMessage* msg, vid_t dest, distance_t routingD
 
 	// get source / destination node
 	cModule* srcNode 	= static_cast<cModule*>(msg->getContextPointer());
-	nodeid_t srcNodeID 	= topology.moduleToNodeID(srcNode);
+	nodeid_t srcNodeID 	= check_and_cast<Node *>(srcNode)->getNodeId();
 	cModule* dstNode 	= simulation.getContextModule()->getParentModule();
-
+	nodeid_t dstNodeID = check_and_cast<Node *>(dstNode)->getNodeId();
 	// calculate stretch
 	distance_t realDistance = 0;
 	if (getNetworkManager() != NULL) {
 		// get real distance
-		realDistance = (distance_t) topology.getDistance(srcNode, dstNode);
+		realDistance = (distance_t) topology.getDistance(srcNodeID, dstNodeID);
 
 		// check any-cast distance
 		if (anycast_map.count(dest) != 0) {

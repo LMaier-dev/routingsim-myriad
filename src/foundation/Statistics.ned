@@ -21,4 +21,5 @@ simple Statistics
     parameters:
         double samplingInterval = 1.0;
         @display("i=msg/package;is=l");
+        bool recordShortestPathDeliveryRatio = default(true);
 }

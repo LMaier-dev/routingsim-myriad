@@ -20,10 +20,14 @@
 #include <vector>
 
 #include "foundation.h"
+/// virtual identifier definitions
+typedef uint32_t vid_t;
+const vid_t undefined_vid = 0;
 #include "VRObserver.h"
 #include "StatisticSample.h"
 
 namespace routingsim {
+
 
 /**
  * The implementation of a Virtual Ring Routing (VRR)-inspired protocol.
@@ -72,11 +76,11 @@ private:
 
 	// parameters
 	simtime_t roundTime;
-	uint vneighborTimeout;
+	unsigned int vneighborTimeout;
 	bool immediateResponse;
 	bool useRouteDescentCriterion;
-	uint consistencyCheck;
-	uint timeout;
+	unsigned int consistencyCheck;
+	unsigned int timeout;
 
 	simtime_t sendMessageDelay;
 

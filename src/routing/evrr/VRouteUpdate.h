@@ -2,6 +2,7 @@
 #define VROUTEUPDATE_HPP_
 
 #include "foundation.h"
+#include "VirtualRing.h"
 
 namespace routingsim {
 
@@ -84,8 +85,8 @@ public:
 
 	/// initializes a route update with default values
 	vroute_update_t() : update_type(INVALID_UPDATE), route_type(INVALID_ROUTE),
-		id(undefined_vid), owner(undefined_node),
-		seq(0), dist(0), dest(undefined_vid), pred(undefined_vid), succ(undefined_vid) {
+		id(undefined_vid), seq(0), dist(0), owner(undefined_node),
+		dest(undefined_vid), pred(undefined_vid), succ(undefined_vid) {
 	}
 
 	/// returns an adapted route update
