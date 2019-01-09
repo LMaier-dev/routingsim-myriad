@@ -32,7 +32,7 @@ void TemplateProtocol::onDisconnect( nodeid_t nid ) {
 }
 
 void TemplateProtocol::onMessage( NodePkt* pkt ) {
-	ev << "received msg" << endl;
+	EV << "received msg" << endl;
 	switch (pkt->getType()) {
 	default:
 		EV << "unhandled packet: " << pkt->getType() << endl;

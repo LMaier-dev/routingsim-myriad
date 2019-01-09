@@ -28,7 +28,7 @@ void MixedFailure::initialize() {
 	iteration = 0;
 	nodeFailureDue = -1;
 	linkFailureDue = -1;
-	string prefix = "results/"+string(ev.getConfigEx()->getActiveConfigName())+"-"+boost::lexical_cast<string>(ev.getConfigEx()->getActiveRunNumber());
+	string prefix = "results/"+string(getEnvir()->getConfigEx()->getActiveConfigName())+"-"+boost::lexical_cast<string>(getEnvir()->getConfigEx()->getActiveRunNumber());
 	linkFailOut.open( (prefix+"-failedLinks").c_str() );
 }
 
