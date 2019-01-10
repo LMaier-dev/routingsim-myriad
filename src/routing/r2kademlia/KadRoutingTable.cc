@@ -79,6 +79,8 @@ KadContactList_p KadRoutingTable::getClosestContacts(const OverlayKey& key, size
 
 bool KadRoutingTable::addContact(KadContact_p contact)
 {
+	// contact must not be present
+	ASSERT(not getContact(contact->getKey()));
 	KadBucket* bucket = getBucket(contact);
 	if (bucket->size() == bucketSize){
 		onBucketFull(bucket, contact);

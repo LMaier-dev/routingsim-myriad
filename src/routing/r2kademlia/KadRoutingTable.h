@@ -33,11 +33,16 @@ class KadBucket
 {
 	friend KadRoutingTable;
 public:
+	/** returns the contact if found, nullptr otherwise */
 	KadContact_p getContact(const OverlayKey& key);
-	bool removeContact(const OverlayKey& key) { return removeContactFromList(contacts, key);}
-	bool removeContactFromReplacements(const OverlayKey& key) { return removeContactFromList(refillContacts, key);}
-	bool empty() { return contacts->empty(); }
-	size_type size() { return contacts->size(); }
+	/** tries to remove the contact, returns true if found */
+	inline bool removeContact(const OverlayKey& key) { return removeContactFromList(contacts, key);}
+	/** tries to remove the contact from replacement list, returns true if found */
+	inline bool removeContactFromReplacements(const OverlayKey& key) { return removeContactFromList(refillContacts, key);}
+	/** returns true if the contact list is empty */
+	inline bool empty() { return contacts->empty(); }
+	/** returns the size of the contact list */
+	inline size_type size() { return contacts->size(); }
 protected:
 	KadContactList_p contacts;
 	KadContactList_p refillContacts;
@@ -50,16 +55,40 @@ class KadRoutingTable
 	friend KadBucket;
 public:
 	KadRoutingTable(const OverlayKey& myKey, size_type b=1, size_type bucketSize=20);
+	/**
+	 * Tries to add the contact to the routing table.
+	 * A contact with this key must not be present.
+	 * If the corresponding bucket is full, the contact is handled by the
+	 * onBucketFull policy.
+	 * @returns true if the contact was added
+	 */
 	bool addContact(KadContact_p contact);
+	/**
+	 * Removes the contact with the givne key from the routing table.
+	 * @returns true if the contact was removed, false if it was not present
+	 */
 	bool removeContact(const OverlayKey& key);
-	bool removeContact(KadContact_p contact) { return removeContact(contact->getKey()); }
+	/** Removes the contact from the routing table */
+	inline bool removeContact(KadContact_p contact) {
+		ASSERT(getContact(contact->getKey()) == contact);
+		return removeContact(contact->getKey());
+	}
+	/**
+	 * Returns the contact with the specified key.
+	 * Returns a nullptr if the contact was not found.
+	 */
 	KadContact_p getContact(const OverlayKey& key);
+	/**
+	 * Returns a list of n contacts that are closest to the given key if possible.
+	 * If there are not enough contacts found, the list is shorter.
+	 */
 	KadContactList_p getClosestContacts(const OverlayKey& key, size_type n);
 	
 protected:
+	/** @name bucket access */
+	//@{
 	/** returns the index of the bucket corresponding to the given overlay key. */
 	size_type getBucketIndex(const OverlayKey& key);
-
 	/** returns the index of the bucket corresponding to the given contact */
 	inline size_type getBucketIndex(KadContact_p contact) { return getBucketIndex(contact->getKey());}
 
@@ -70,8 +99,10 @@ protected:
 
 	/** returns the index of the bucket that is the first on the level of the given bucket */
 	size_type getFirstOnBucketLevel(size_type index) { return index - (index % ((1 << b) - 1));}
+	//@}
 
-	// ------ policy foo -----
+	/** @name policy foo */
+	//@{
 	/** called when a new contact is discovered */
 	void onDiscovery(KadContact_p) {};
 	/** called when we hear about a node id */
@@ -84,7 +115,7 @@ protected:
 	void onBucketRefresh(KadBucket* bucket) {};
 	/** called when a contact could be replaced by a new one */
 	void onBucketFull(KadBucket* bucket, KadContact_p contact);
-
+	//@}
 private:
 	/** acceleration factor, number of bits used for accelerated lookup */
 	const size_type b;
