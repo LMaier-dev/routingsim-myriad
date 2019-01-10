@@ -37,18 +37,21 @@ void R2Kademlia::onDisconnect( nodeid_t nid ) {
 }
 
 void R2Kademlia::onMessage( NodePkt_p pkt ) {
-	EV << "received msg" << endl;
 	ASSERT(pkt->getType() == PAYLOAD_TYPE);
 	KadPacket_p packet = \
 		std::unique_ptr<KadPacket>(check_and_cast<KadPacket*>(pkt->decapsulate()));
+	EV_TRACE << "received KadPacket of type " << (int)packet->getType() << endl;
+	EV_TRACE << "my key " << myOverlayKey << endl;
+	EV_TRACE << "source " << packet->getSource() << endl;
+	EV_TRACE << "target " << packet->getTarget() << endl;
 	// hello packets do not include my key
 	if (handleIfFitting<KadHello>(packet)) return;
 	// other packets should do so
+	packet->advanceProgress(); // increase hop count
 	ASSERT(packet->getCurrentHop() == myOverlayKey);
 	if (packet->hasRemainingHops()){
 		// we are not the recipient
-		packet->advanceProgress(); // increase hop count
-		routePacket(std::move(packet));
+		routePacket(std::move(packet), std::move(pkt));
 		return;
 	}
 	else {
@@ -91,6 +94,7 @@ void R2Kademlia::handlePacket(KadPacket_p packet) {
 void R2Kademlia::routePacket(KadPacket_p packet, NodePkt_p nodePkt) {
 	// we do not route hello packets!
 	ASSERT(packet->getType() != KAD_HELLO);
+	ASSERT(packet->hasRemainingHops());
 	//TODO we could check if the target is a neighbor...
 	const OverlayKey& nextHop = packet->getNextHop();
 	nodeid_t nid = neighborTable.getNodeId(nextHop);
@@ -117,10 +121,10 @@ class R2Kademlia::PingRPCState : public RPCProtocol::RPCState {
 void R2Kademlia::ping(const OverlayKey& key) {
 	auto ping = std::make_unique<KadPing>();
 	ping->setNonce(registerState(std::make_unique<PingRPCState>()));
-	ping->appendHop(key);
 	ping->setSource(myOverlayKey);
+	ping->appendHop(key);
 	routePacket(std::move(ping));
-	EV << "ping sent";
+	EV_TRACE << "ping sent to" << key << endl;
 }
 
 // ------------------------- policy foo --------------------------------------

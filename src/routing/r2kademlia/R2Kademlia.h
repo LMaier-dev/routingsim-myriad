@@ -92,7 +92,7 @@ class R2Kademlia : public RPCProtocol
 private:
 	/// crafts a hello packet and encapsulates it in a NodePkt
 	NodePkt_p makeHelloPacket();
-	/// fills in source, target, sourceroute and nonce fields
+	/// fills in source, target, sourceroute and nonce
 	void fillAnswer(KadPacket& original, KadPacket& answer);
 	/**
 	 * Tries to cast packet to type T.

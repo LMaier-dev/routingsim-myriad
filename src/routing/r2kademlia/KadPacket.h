@@ -64,7 +64,7 @@ public:
 	/// returns the index of the next hop
 	inline uint getNextHopIndex() const { return progress + 1;}
 	/// incremets the progress counter, advances it to the next hop
-	inline void advanceProgress() { ASSERT(progress < route_arraysize-1); progress++; }
+	inline void advanceProgress() { ASSERT(progress < route_arraysize); progress++; }
 	/// returns the specified part of the source route
 	inline const OverlayKey& getHop(uint index) const { return getRoute(index); }
 	/// returns the key of the next hop
