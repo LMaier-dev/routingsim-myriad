@@ -108,7 +108,7 @@ void R2Kademlia::routePacket(KadPacket_p packet, NodePkt_p nodePkt) {
 
 class R2Kademlia::PingRPCState : public RPCProtocol::RPCState {
 	void handleAnswer(cPacket_p answer) override {
-		KadPong_p pong = packet_cast<KadPong>(answer);
+		KadPong_p pong = safe_packet_cast<KadPong>(answer);
 		EV << "got ping answer from " << pong->getSource();
 		EV << " with nonce " << nonce << endl;
 	}
@@ -166,14 +166,9 @@ template<typename T> bool R2Kademlia::handleIfFitting(KadPacket_p& packet) {
 	return true;
 }
 
-template<typename T> std::unique_ptr<T> packet_cast(cPacket_p& packet) {
+template<typename T> std::unique_ptr<T> safe_packet_cast(cPacket_p& packet) {
 	ASSERT(packet); // no nullptr here!
-	cPacket *raw_ptr = packet.get();
-	std::unique_ptr<T> tPacket(dynamic_cast<T*>(raw_ptr));
-	// if tPacket is not nullptr the cast succeded
-	// -> we need to invalidate the original pointer
-	if(tPacket)
-		packet.release();
-	return tPacket;
+	// this will throw cRuntimeError if the cast fails
+	return std::unique_ptr<T>(check_and_cast<T*>(packet.release()));
 }
 } //namespace

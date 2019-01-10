@@ -111,7 +111,7 @@ private:
 };
 
 template<typename T>
-std::unique_ptr<T> packet_cast(cPacket_p& packet);
+std::unique_ptr<T> safe_packet_cast(cPacket_p& packet);
 } //namespace
 
 #endif // __ROUTINGSIM_R2Kademlia_H_
