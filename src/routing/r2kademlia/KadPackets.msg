@@ -25,6 +25,11 @@ namespace routingsim;
 class KadPacket extends cPacket;
 class noncobject nodeid_t;
 
+enum KadErrorType {
+	KAD_PACKET_INVALID = 0;
+	KAD_NEXT_HOP_UNAVAILABLE = 1;
+}
+
 packet KadAnswer extends KadPacket {
 }
 
@@ -35,6 +40,10 @@ packet KadHello extends KadPacket {
 
 packet KadPing extends KadPacket {
 	type = KAD_PING;
+}
+
+packet KadError extends KadAnswer {
+	uint8_t errorType enum(KadErrorType);
 }
 
 packet KadPong extends KadAnswer {

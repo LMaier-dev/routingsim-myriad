@@ -31,6 +31,7 @@ namespace routingsim {
 using KadPacket_p = std::unique_ptr<KadPacket>;
 using KadAnswer_p = std::unique_ptr<KadAnswer>;
 using KadHello_p = std::unique_ptr<KadHello>;
+using KadError_p = std::unique_ptr<KadError>;
 using KadPing_p = std::unique_ptr<KadPing>;
 using KadPong_p = std::unique_ptr<KadPong>;
 
@@ -93,7 +94,13 @@ private:
 	/// crafts a hello packet and encapsulates it in a NodePkt
 	NodePkt_p makeHelloPacket();
 	/// fills in source, target, sourceroute and nonce
-	void fillAnswer(KadPacket& original, KadPacket& answer);
+	void fillAnswer(KadPacket& original, KadAnswer& answer);
+	/**
+	 * sends an error packet to the sender of the given packet
+	 * the original packet is encapsulated on the error packet
+	 * @errorType the error type for the error packet
+	 */
+	void returnToSender(uint8_t errorType, KadPacket_p packet, NodePkt_p nodePkt);
 	/**
 	 * Tries to cast packet to type T.
 	 * If this succeeds, the method handlePacket(T) is called, the given pointer

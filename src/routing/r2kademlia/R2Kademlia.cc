@@ -130,7 +130,7 @@ void R2Kademlia::ping(const OverlayKey& key) {
 // ------------------------- policy foo --------------------------------------
 
 void R2Kademlia::onMissingNeighbor(KadPacket_p packet, NodePkt_p pkt) {
-	EV_WARN << "missing neighbor" << packet->getTarget() << endl;
+	returnToSender(KAD_NEXT_HOP_UNAVAILABLE, std::move(packet), std::move(pkt));
 };
 void R2Kademlia::onUnknownNonce(nonce_t nonce, cPacket_p answer) {
 	EV_WARN << "recieved answer packet with unknown nonce" << endl;
@@ -151,10 +151,18 @@ NodePkt_p R2Kademlia::makeHelloPacket()
 	return nodePkt;
 }
 
-void R2Kademlia::fillAnswer(KadPacket& original, KadPacket& answer) {
+void R2Kademlia::fillAnswer(KadPacket& original, KadAnswer& answer) {
 	answer.setReturnPathFrom(original);
 	ASSERT(answer.getSource() == myOverlayKey);
 	answer.setNonce(original.getNonce());
+}
+
+void R2Kademlia::returnToSender(uint8_t errorType, KadPacket_p packet, NodePkt_p nodePkt) {
+	KadError_p answer = std::make_unique<KadError>();
+	fillAnswer(*packet, *answer);
+	answer->setErrorType(errorType);
+	answer->encapsulate(packet.release());
+	routePacket(std::move(answer), std::move(nodePkt));
 }
 
 template<typename T> bool R2Kademlia::handleIfFitting(KadPacket_p& packet) {
