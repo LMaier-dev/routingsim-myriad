@@ -22,17 +22,17 @@
 
 namespace routingsim {
 
-std::vector<KadContact_p>::iterator findContactInList(KadContactList_p& list, const OverlayKey& key){
-	auto it = list->begin();
-	for (;!(*it)->hasKey(key) && it !=  list->end(); it++);
+std::vector<KadContact_p>::iterator findContactInList(KadContactList& list, const OverlayKey& key){
+	auto it = list.begin();
+	for (;!(*it)->hasKey(key) && it !=  list.end(); it++);
 	return it;
 }
 
-bool removeContactFromList(KadContactList_p& list, const OverlayKey& key)
+bool removeContactFromList(KadContactList& list, const OverlayKey& key)
 {
 	auto it = findContactInList(list, key);
-	if (it != list->end()){
-		list->erase(it);
+	if (it != list.end()){
+		list.erase(it);
 		return true;
 	}
 	else

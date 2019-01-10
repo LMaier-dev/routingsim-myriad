@@ -40,12 +40,12 @@ public:
 	/** tries to remove the contact from replacement list, returns true if found */
 	inline bool removeContactFromReplacements(const OverlayKey& key) { return removeContactFromList(refillContacts, key);}
 	/** returns true if the contact list is empty */
-	inline bool empty() { return contacts->empty(); }
+	inline bool empty() { return contacts.empty(); }
 	/** returns the size of the contact list */
-	inline size_type size() { return contacts->size(); }
+	inline size_type size() { return contacts.size(); }
 protected:
-	KadContactList_p contacts;
-	KadContactList_p refillContacts;
+	KadContactList contacts;
+	KadContactList refillContacts;
 };
 
 /**
@@ -82,7 +82,7 @@ public:
 	 * Returns a list of n contacts that are closest to the given key if possible.
 	 * If there are not enough contacts found, the list is shorter.
 	 */
-	KadContactList_p getClosestContacts(const OverlayKey& key, size_type n);
+	KadContactList getClosestContacts(const OverlayKey& key, size_type n);
 	
 protected:
 	/** @name bucket access */

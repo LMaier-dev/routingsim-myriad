@@ -57,16 +57,15 @@ private:
 // contact type definitions
 using KadContact_p = std::shared_ptr<KadContact>;
 using KadContactList = std::vector<KadContact_p>;
-using KadContactList_p = std::unique_ptr<KadContactList>;
 
 // contact list helper functions:
 /**
  * Returns an iterator at the contacts position.
  * Returns list->end() if the contact is not found.
  */
-std::vector<KadContact_p>::iterator findContactInList(KadContactList_p& list, const OverlayKey& key);
+std::vector<KadContact_p>::iterator findContactInList(KadContactList& list, const OverlayKey& key);
 /** tries to remove the given contact from the list. returns true if found.*/
-bool removeContactFromList(KadContactList_p& list, const OverlayKey& key);
+bool removeContactFromList(KadContactList& list, const OverlayKey& key);
 
 }; // namespace
 #endif // __ROUTINGSIM_KadContact_H_

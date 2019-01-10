@@ -47,30 +47,30 @@ size_type KadRoutingTable::getBucketIndex(const OverlayKey& key)
 	return (i / b) * ((1 << b) - 1) + (delta.getBitRange(i, b) - 1);
 }
 
-KadContactList_p KadRoutingTable::getClosestContacts(const OverlayKey& key, size_type n)
+KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_type n)
 {
-	KadContactList_p result = std::make_unique<KadContactList>();
+	KadContactList result{};
 	// find correct bucket and copy contents
 	size_type index = getBucketIndex(key);
 	auto bucket = getBucketIterator(index);
-	copyContacts(*(bucket->contacts), *result);
-	if(result->size() < n){
+	copyContacts(bucket->contacts, result);
+	if(result.size() < n){
 		// not enough contacts in first bucket
 		// now we scan the level of the accelerated lookup
 		// and then we go down the tree
 		size_type firstOnLevelIndex = getFirstOnBucketLevel(index);
 		auto otherBucket = getBucketIterator(firstOnLevelIndex);
-		while(result->size() < n && otherBucket != buckets.end()){
+		while(result.size() < n && otherBucket != buckets.end()){
 			if(otherBucket == bucket)
 				continue;
-			copyContacts(*(otherBucket->contacts), *result);
+			copyContacts(otherBucket->contacts, result);
 			otherBucket++;
 		}
 		otherBucket = getBucketIterator(firstOnLevelIndex);
 		// if we still do not have enough contacts, we go up the tree
-		while(result->size() < n && otherBucket != buckets.begin()){
+		while(result.size() < n && otherBucket != buckets.begin()){
 			otherBucket--;
-			copyContacts(*(otherBucket->contacts), *result);
+			copyContacts(otherBucket->contacts, result);
 		}
 	}
 	//TODO if whe have found move than n contacts, we need to remove some...
@@ -87,7 +87,7 @@ bool KadRoutingTable::addContact(KadContact_p contact)
 		return false;
 	}
 	else {
-		bucket->contacts->push_back(contact);
+		bucket->contacts.push_back(contact);
 		return true;
 	}
 }
@@ -119,8 +119,8 @@ KadContact_p KadRoutingTable::getContact(const OverlayKey& key)
 
 void KadRoutingTable::onBucketFull(KadBucket* bucket, KadContact_p contact)
 {
-	if (bucket->refillContacts->size() < bucketSize){
-		bucket->refillContacts->push_back(contact);
+	if (bucket->refillContacts.size() < bucketSize){
+		bucket->refillContacts.push_back(contact);
 	}
 }
 
@@ -129,10 +129,10 @@ KadContact_p KadBucket::getContact(const OverlayKey& key)
 {
 
 	auto it = findContactInList(contacts, key);
-	if (it != contacts->end())
+	if (it != contacts.end())
 		return *it;
 	it = findContactInList(refillContacts, key);
-	if (it != refillContacts->end())
+	if (it != refillContacts.end())
 		return *it;
 	return KadContact_p();
 }
