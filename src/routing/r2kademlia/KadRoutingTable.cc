@@ -19,6 +19,7 @@
  */
 
 #include "KadRoutingTable.h"
+#include <algorithm>
 
 namespace routingsim {
 KadRoutingTable::KadRoutingTable(const OverlayKey& myKey, size_type b, size_type bucketSize):
@@ -60,7 +61,7 @@ KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_t
 		// and then we go down the tree
 		size_type firstOnLevelIndex = getFirstOnBucketLevel(index);
 		auto otherBucket = getBucketIterator(firstOnLevelIndex);
-		while(result.size() < n && otherBucket != buckets.end()){
+		while(result.size() < n && otherBucket != buckets.end()) {
 			if(otherBucket == bucket)
 				continue;
 			copyContacts(otherBucket->contacts, result);
@@ -68,12 +69,27 @@ KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_t
 		}
 		otherBucket = getBucketIterator(firstOnLevelIndex);
 		// if we still do not have enough contacts, we go up the tree
-		while(result.size() < n && otherBucket != buckets.begin()){
+		while(result.size() < n && otherBucket != buckets.begin()) {
 			otherBucket--;
 			copyContacts(otherBucket->contacts, result);
 		}
 	}
-	//TODO if whe have found move than n contacts, we need to remove some...
+	// now we sort the keys
+	struct KadContactCompare{
+		const OverlayKey& key;
+		KadContactCompare(const OverlayKey& key) : key(key) {}
+		bool operator()(KadContact_p& a, KadContact_p& b) const {
+			return (a->getKey() ^ key) < (b->getKey() ^ key);
+		}
+    };
+	std::sort(result.begin(), result.end(), KadContactCompare(key));
+	// if whe have found move than n contacts, we need to remove some
+	if (result.size() > n) {
+		auto it = result.begin();
+		std::advance(it, n);
+		result.erase(it, result.end());
+	}
+	result.shrink_to_fit();
 	return result;
 }
 

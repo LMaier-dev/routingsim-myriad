@@ -127,14 +127,14 @@ private:
 
 	//------ private inline helper functions -------
 	/** returns a random access iterator situated on the bucket with the given index */
-	auto inline getBucketIterator(size_type index=0){
+	auto inline getBucketIterator(size_type index=0) {
 		auto it=buckets.begin();
 		std::advance(it, index);
 		return it;
 	}
 
 	/** copies all contacts from one contact list to the end of the other contact list*/
-	void inline copyContacts(KadContactList& source, KadContactList target){
+	void inline copyContacts(KadContactList& source, KadContactList target) {
 		std::copy(source.begin(), source.end(), std::back_inserter(target));
 	}
 };
