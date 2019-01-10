@@ -39,15 +39,16 @@ public:
 	KadContact(const OverlayKey& key): key(key), path(){};
 	KadContact(const OverlayKey& key, kad_path path): key(key), path(path) {};
 	/// returns the key of this contact
-	OverlayKey getKey() const { return key; }
+	inline const OverlayKey& getKey() const { return key; }
 	/// compares the given overlay key to the contacts overlay key
-	bool hasKey(const OverlayKey& other) const { return other == key; }
-	void setStale(bool stale_=true) { stale = stale_; }
+	inline bool hasKey(const OverlayKey& other) const { return other == key; }
+	/// marks the contact as stale (or not)
+	inline void setStale(bool stale=true) { this->stale=stale; }
 	/// returns if this contact was marked as stale
-	bool isStale() const { return stale; }
+	inline bool isStale() const { return stale; }
 	/// sets the last seen time to now
-	void seen() { lastSeen = simTime(); }
-	simtime_t getLastSeen() const { return lastSeen; }
+	inline void seen() { lastSeen = simTime(); }
+	inline simtime_t getLastSeen() const { return lastSeen; }
 private:
 	const OverlayKey key;	/// the OverlayKey of this contact
 	simtime_t lastSeen;		/// the last time this contact was seen
