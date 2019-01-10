@@ -92,10 +92,8 @@ class R2Kademlia : public RPCProtocol
 private:
 	/// crafts a hello packet and encapsulates it in a NodePkt
 	NodePkt_p makeHelloPacket();
-	/// checks if the packet has some hops remaining in the source route field
-	bool hasRemainingSourceRoute(const KadPacket& packet);
 	/// fills in source, target, sourceroute and nonce fields
-	void fillAnswer(const KadPacket& original, KadPacket& answer);
+	void fillAnswer(KadPacket& original, KadPacket& answer);
 	/**
 	 * Tries to cast packet to type T.
 	 * If this succeeds, the method handlePacket(T) is called, the given pointer

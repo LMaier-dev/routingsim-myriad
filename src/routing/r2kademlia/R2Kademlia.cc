@@ -41,14 +41,18 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	ASSERT(pkt->getType() == PAYLOAD_TYPE);
 	KadPacket_p packet = \
 		std::unique_ptr<KadPacket>(check_and_cast<KadPacket*>(pkt->decapsulate()));
-	// check if recipient
+	// hello packets do not include my key
 	if (handleIfFitting<KadHello>(packet)) return;
-	if (hasRemainingSourceRoute(*packet)){
+	// other packets should do so
+	ASSERT(packet->getCurrentHop() == myOverlayKey);
+	if (packet->hasRemainingHops()){
+		// we are not the recipient
+		packet->advanceProgress(); // increase hop count
 		routePacket(std::move(packet));
 		return;
 	}
-	if (packet->getTarget() == myOverlayKey){
-		// handle packets directly adressed to me
+	else {
+		// no hops left, packet is adressed to me
 		if (handleIfFitting<KadAnswer>(packet)) return;
 		if (handleIfFitting<KadPing>(packet)) return;
 	}
@@ -85,18 +89,19 @@ void R2Kademlia::handlePacket(KadPacket_p packet) {
 }
 
 void R2Kademlia::routePacket(KadPacket_p packet, NodePkt_p nodePkt) {
-	//TODO forward using source routing
 	// we do not route hello packets!
 	ASSERT(packet->getType() != KAD_HELLO);
-	const OverlayKey& target = packet->getTarget();
-	nodeid_t nid = neighborTable.getNodeId(target);
-	if(nid == undefined_node) {
-		onMissingNeighbor(std::move(packet), std::move(nodePkt));
-		return;
+	//TODO we could check if the target is a neighbor...
+	const OverlayKey& nextHop = packet->getNextHop();
+	nodeid_t nid = neighborTable.getNodeId(nextHop);
+	if (nid != undefined_node) {
+		nodePkt->setType(PAYLOAD_TYPE);
+		nodePkt->encapsulate(packet.release());
+		sendToNode(nid, std::move(nodePkt));
 	}
-	nodePkt->setType(PAYLOAD_TYPE);
-	nodePkt->encapsulate(packet.release());
-	sendToNode(nid, std::move(nodePkt));
+	else {
+		onMissingNeighbor(std::move(packet), std::move(nodePkt));
+	}
 }
 // -------------------- rpc methods and classes ---------------------------
 
@@ -142,16 +147,10 @@ NodePkt_p R2Kademlia::makeHelloPacket()
 	return nodePkt;
 }
 
-bool R2Kademlia::hasRemainingSourceRoute(const KadPacket& packet) {
-	//TODO implement
-	return false;
-}
-
-void R2Kademlia::fillAnswer(const KadPacket& original, KadPacket& answer) {
-	answer.setSource(myOverlayKey);
-	answer.appendHop(original.getSource());
+void R2Kademlia::fillAnswer(KadPacket& original, KadPacket& answer) {
+	answer.setReturnPathFrom(original);
+	ASSERT(answer.getSource() == myOverlayKey);
 	answer.setNonce(original.getNonce());
-	//TODO implement reverse source route
 }
 
 template<typename T> bool R2Kademlia::handleIfFitting(KadPacket_p& packet) {
