@@ -1,4 +1,3 @@
-
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
@@ -20,12 +19,14 @@
 #include <omnetpp.h>
 #include <memory>
 #include <map>
-#include <atomic>
+#include <functional>
 #include "Protocol.h"
 
 namespace routingsim {
 typedef unsigned int nonce_t;
-using cPacket_p = std::unique_ptr<cPacket>;
+class KadPacket;
+using packet_t = KadPacket;
+using packet_p = std::unique_ptr<KadPacket>;
 
 /**
  * A basic implementation of a component that sets up rpc calls.
@@ -33,30 +34,51 @@ using cPacket_p = std::unique_ptr<cPacket>;
  */
 class RPCProtocol : public Protocol {
 protected:
+	enum RPC_STATUS { RPC_WAITING, RPC_TIMEOUT, RPC_ERROR, RPC_SUCCESS};
 	/// represents the state of an rpc call, gets called
-	class RPCState {
+	struct RPCState;
+	using rpc_callback_t = std::function<void(packet_p, RPCState&)>;
+	struct RPCState {
 	public:
 		nonce_t nonce;
-		RPCProtocol* parent;
-		/// this is a hack to get the EV << logging working...
-		inline const cComponent* getThisPtr() const { return parent->getThisPtr(); };
-		virtual void retransmit() {};
-		virtual void handleTimeout() {};
-		virtual void handleAnswer(cPacket_p answer) = 0;
+		packet_p original_packet;
+		uint8_t retransmittions = 0;
+		RPC_STATUS status = RPC_WAITING;
+		rpc_callback_t success_callback;
+		rpc_callback_t error_callback;
+		rpc_callback_t timeout_callback;
 	};
-	using RPCState_p = std::unique_ptr<RPCState>;
 protected:
+	/** @name fucntions called by the subclass */
+	//@{
 	/// dispatches the answer to the correct RPCState
-	void handleAnswer(nonce_t nonce, cPacket_p answer);
-	/// registers the given state and returns the assigned nonce
-	nonce_t registerState(RPCState_p rpcState);
-	/// gets called when handleAnswer encounters an onknown nonce
-	virtual void onUnknownNonce(nonce_t nonce, cPacket_p answer) = 0;
+	void handleAnswer(packet_p answer);
+	
+	/**
+	 * registers the given packet, assigns a nonce and sends it out.
+	 *
+	 * @success_callback is called with the answer when it arrives
+	 * @error_callback is called with the error packet when it arrives
+	 * @timeout_callback is called when a timeout is reached
+	 */
+	
+	void sendRpcCall(packet_p rpcCall, rpc_callback_t success_callback,
+		 rpc_callback_t error_callback,  rpc_callback_t timeout_callback);
+	/**
+	 * registers the given packet, assigns a nonce and sends it out
+	 * callback is called on answer, error or timeout
+	 */
+	void sendRpcCall(packet_p rpcCall, rpc_callback_t callback);
+	//@}
+
+	/** @name functions implemented by the subclass */
+	//@{
+	/// used for sending packets
+	virtual void sendPacket(packet_p packet) = 0;
+	//@}
 private:
 	/// maps nonces to rpc states, used to dispatch answers
-	std::map<nonce_t, RPCState_p> states;
-	/// counter to ensure nonce uniqueness
-	std::atomic_uint nonceCounter;
+	std::map<nonce_t, RPCState> states;
 };
 
 } // namespace

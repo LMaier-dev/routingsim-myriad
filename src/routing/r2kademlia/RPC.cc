@@ -15,30 +15,47 @@
 // 
 
 #include "RPC.h"
+#include "KadPacket.h"
 
 namespace routingsim {
-
-nonce_t RPCProtocol::registerState(RPCState_p rpcState)
+void RPCProtocol::sendRpcCall(packet_p rpcCall, rpc_callback_t callback)
 {
-	nonce_t nonce = nonceCounter++;
-	ASSERT(nonceCounter < std::numeric_limits<nonce_t>::max());
-	ASSERT(states.find(nonce) == states.end());
-	rpcState->nonce = nonce;
-	rpcState->parent = this;
-	states[nonce] = std::move(rpcState);
-	return nonce;
+	sendRpcCall(std::move(rpcCall), callback, callback, callback);
 }
 
-void RPCProtocol::handleAnswer(nonce_t nonce, cPacket_p answer)
+void RPCProtocol::sendRpcCall(packet_p rpcCall, rpc_callback_t success_callback,
+	rpc_callback_t error_callback,  rpc_callback_t timeout_callback)
 {
+	nonce_t nonce = rpcCall->getTreeId();
+	ASSERT(states.find(nonce) == states.end());
+	rpcCall->setNonce(nonce);
+	// create state
+	RPCState rpcState;
+	rpcState.nonce = nonce;
+	rpcState.success_callback = success_callback;
+	rpcState.error_callback = error_callback;
+	rpcState.timeout_callback = timeout_callback;
+	rpcState.original_packet = std::unique_ptr<packet_t>(rpcCall->dup());
+	// register
+	states[nonce] = std::move(rpcState);
+	// send out
+	sendPacket(std::move(rpcCall));
+}
+
+void RPCProtocol::handleAnswer(packet_p answer)
+{
+	nonce_t nonce = answer->getNonce();
 	auto it = states.find(nonce);
 	if(it == states.end()) {
-		onUnknownNonce(nonce, std::move(answer));
+		EV_WARN << "recieved answer packet with unknown nonce" << endl;
 		return;
 	}
-	RPCState_p state = std::move(it->second);
+	RPCState& rpcState = it->second;
+	// TODO check for error
+	rpcState.status = RPC_SUCCESS;
+	rpcState.success_callback(std::move(answer), rpcState);
+	// erase at last, because we give around references to it!
 	states.erase(it);
-	state->handleAnswer(std::move(answer));
 }
 
-}
+} // namespace

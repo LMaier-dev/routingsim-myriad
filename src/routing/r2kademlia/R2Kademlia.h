@@ -80,7 +80,7 @@ class R2Kademlia : public RPCProtocol
 	 */
 	void routePacket(KadPacket_p packet, NodePkt_p nodePkt);
 	/// routes a packet to a neighbor based on the source route in the packet
-	inline void routePacket(KadPacket_p packet)
+	void sendPacket(KadPacket_p packet) override
 		{ routePacket(std::move(packet), std::make_unique<NodePkt>()); }
 	/// sends a ping request to the given key
 	void ping(const OverlayKey& key);
@@ -89,7 +89,6 @@ class R2Kademlia : public RPCProtocol
 	/** @name policy foo */
 	//@{
 	void onMissingNeighbor(KadPacket_p packet, NodePkt_p pkt);
-	void onUnknownNonce(nonce_t nonce, cPacket_p answer) override;
 	//@}
 private:
 	/// crafts a hello packet and encapsulates it in a NodePkt
@@ -120,7 +119,7 @@ private:
 };
 
 template<typename T>
-std::unique_ptr<T> safe_packet_cast(cPacket_p& packet);
+std::unique_ptr<T> safe_packet_cast(KadPacket_p& packet);
 } //namespace
 
 #endif // __ROUTINGSIM_R2Kademlia_H_

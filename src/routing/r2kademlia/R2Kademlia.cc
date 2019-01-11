@@ -82,12 +82,12 @@ void R2Kademlia::handlePacket(KadPing_p packet) {
 	EV << "recieved ping packet from " << packet->getSource() << endl;
 	KadPong_p pong = std::make_unique<KadPong>();
 	fillAnswer(*packet, *pong);
-	routePacket(std::move(pong));
+	sendPacket(std::move(pong));
 }
 
 void R2Kademlia::handlePacket(KadAnswer_p packet) {
 	nonce_t nonce = packet->getNonce();
-	handleAnswer(nonce, std::move(packet));
+	handleAnswer(std::move(packet));
 }
 
 void R2Kademlia::handlePacket(KadPacket_p packet) {
@@ -127,7 +127,7 @@ void R2Kademlia::ping(const OverlayKey& key) {
 	ping->setNonce(registerState(std::make_unique<PingRPCState>()));
 	ping->setSource(myOverlayKey);
 	ping->appendHop(key);
-	routePacket(std::move(ping));
+	sendPacket(std::move(ping));
 	EV_TRACE << "ping sent to" << key << endl;
 }
 
@@ -135,9 +135,6 @@ void R2Kademlia::ping(const OverlayKey& key) {
 
 void R2Kademlia::onMissingNeighbor(KadPacket_p packet, NodePkt_p pkt) {
 	returnToSender(KAD_NEXT_HOP_UNAVAILABLE, std::move(packet), std::move(pkt));
-};
-void R2Kademlia::onUnknownNonce(nonce_t nonce, cPacket_p answer) {
-	EV_WARN << "recieved answer packet with unknown nonce" << endl;
 };
 
 // -------------------- private helper methods --------------------
@@ -182,7 +179,7 @@ template<typename T> bool R2Kademlia::handleIfFitting(KadPacket_p& packet) {
 	return true;
 }
 
-template<typename T> std::unique_ptr<T> safe_packet_cast(cPacket_p& packet) {
+template<typename T> std::unique_ptr<T> safe_packet_cast(KadPacket_p& packet) {
 	ASSERT(packet); // no nullptr here!
 	// this will throw cRuntimeError if the cast fails
 	return std::unique_ptr<T>(check_and_cast<T*>(packet.release()));
