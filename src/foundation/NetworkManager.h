@@ -1,3 +1,4 @@
+
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
@@ -36,8 +37,7 @@ public:
 	/// Returns the distance between two modules in the network topoology
 	distance_t getDistance(nodeid_t from, nodeid_t to);
 
-	/// Returns current size of the network
-	/// TODO: atm returns the number of nodes disregarding their status!
+	/// Returns current size of the network, i.e. the number of ACTIVE nodes
 	unsigned int getNetworkSize();
 
 	/// Returns the network topology

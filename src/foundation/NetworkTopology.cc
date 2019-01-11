@@ -444,6 +444,7 @@ void NetworkTopology::readSelfDefinedTopology(ifstream &topologyFile, set<nodeid
 
 void NetworkTopology::readDimesTopology(ifstream &topologyFile, set<nodeid_t> &nodeset, vector< pair<long long, long long> > &edges, boost::unordered_map < nodeid_t, properties_t > &nodeproperties, bool makeBidirectional) {
 	string line;
+	// standart csv file...
 	escaped_list_separator<char> sep("\\", "," ,"\"'");
 	typedef boost::tokenizer<escaped_list_separator<char> > tokenizer_t;
 
