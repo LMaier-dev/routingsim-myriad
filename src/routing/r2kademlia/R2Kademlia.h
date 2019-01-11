@@ -23,6 +23,7 @@
 #include "StatisticSample.h"
 #include "KadPackets_m.h"
 #include "NeighborTable.h"
+#include "KadRoutingTable.h"
 #include "RPC.h"
 
 namespace routingsim {
@@ -112,6 +113,7 @@ private:
 private:
 	OverlayKey myOverlayKey;
 	NeighborTable neighborTable;
+	std::unique_ptr<KadRoutingTable> routingTable;
 	static const int PAYLOAD_TYPE=5;
 private:
 	class PingRPCState;

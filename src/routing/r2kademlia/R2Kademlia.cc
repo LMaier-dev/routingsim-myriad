@@ -24,6 +24,8 @@ void R2Kademlia::onInitialize() {
 	EV << "R2Kademlia::onInitialize()" << endl;
 	myOverlayKey = OverlayKey::random(getRNG(0));
 	bind(PAYLOAD_TYPE);
+	//TODO parameters for bucketSize and b (accelerated lookup parameter)
+	routingTable = std::make_unique<KadRoutingTable>(myOverlayKey);
 	sendToNeighbors(makeHelloPacket());
 }
 
@@ -65,7 +67,8 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 void R2Kademlia::reset() {
 	EV << "resetting state of R2Kademlia" << endl;
 	neighborTable.clear();
-	//TODO routing table clear
+	routingTable = std::make_unique<KadRoutingTable>(myOverlayKey);
+	//TODO optimization: implement clear function in routing table
 }
 
 void R2Kademlia::handlePacket(KadHello_p packet) {
@@ -115,6 +118,7 @@ class R2Kademlia::PingRPCState : public RPCProtocol::RPCState {
 		KadPong_p pong = safe_packet_cast<KadPong>(answer);
 		EV << "got ping answer from " << pong->getSource();
 		EV << " with nonce " << nonce << endl;
+		//TODO add contact to routing table and mark seen
 	}
 };
 
