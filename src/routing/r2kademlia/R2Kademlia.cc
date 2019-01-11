@@ -77,7 +77,7 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 	EV << "recieved hello packet from " << packet->getSourceId() << endl;
 	neighborTable.addNeighbor(packet->getSourceId(), packet->getSource());
 	ping(packet->getSource());
-	//TODO add neighbor to routing table
+	// node gets added to routing table when it responds
 }
 
 void R2Kademlia::handlePacket(KadPing_p packet) {
@@ -99,7 +99,7 @@ void R2Kademlia::routePacket(KadPacket_p packet, NodePkt_p nodePkt) {
 	// we do not route hello packets!
 	ASSERT(packet->getType() != KAD_HELLO);
 	ASSERT(packet->hasRemainingHops());
-	//TODO we could check if the target is a neighbor...
+	//TODO optimization: we could check if the target is a neighbor...
 	const OverlayKey& nextHop = packet->getNextHop();
 	nodeid_t nid = neighborTable.getNodeId(nextHop);
 	if (nid != undefined_node) {
@@ -125,10 +125,28 @@ void R2Kademlia::ping(const OverlayKey& key) {
 
 void R2Kademlia::handlePingAnswer(KadPacket_p answer, RPCState& rpcState) {
 	if (rpcState.status != RPC_SUCCESS) return;
+	ASSERT(answer->getSource() == rpcState.original_packet->getTarget());
 	KadPong_p pong = safe_packet_cast<KadPong>(answer);
 	EV_TRACE << "got ping answer from " << pong->getSource();
 	EV_TRACE << " with nonce " << pong->getNonce() << endl;
 	//TODO add contact to routing table and mark seen
+	const OverlayKey& key = answer->getSource();
+	KadContact_p contact = routingTable->getContact(key);
+	//TODO check if return path was the same
+	kad_path path = rpcState.original_packet->getIntermediatePath();
+	if (contact){
+		// update contact
+		contact->seen();
+		if (contact->isStale() or (contact->getPathLength() > path.size()))
+			contact->setPath(path);
+		contact->setStale(false);
+	}
+	else {
+		// create new contact
+		contact = std::make_shared<KadContact>(key, path);
+		contact->seen();
+		routingTable->addContact(contact);
+	}
 }
 
 // ------------------------- policy foo --------------------------------------

@@ -49,6 +49,12 @@ public:
 	/// sets the last seen time to now
 	inline void seen() { lastSeen = simTime(); }
 	inline simtime_t getLastSeen() const { return lastSeen; }
+	/// returns the length of the path
+	/// i.e. the intermediate hops between me and this contact
+	inline size_t getPathLength() const { return path.size(); }
+	/// sets the path to reach this contact
+	inline void setPath(kad_path path) { this->path = path; }
+
 private:
 	const OverlayKey key;	/// the OverlayKey of this contact
 	simtime_t lastSeen;		/// the last time this contact was seen
