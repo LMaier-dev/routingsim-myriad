@@ -249,7 +249,7 @@ public:
 	/// Returns the current number of partitions in the network
 	unsigned int getNumPartitions();
 
-	/// returns the number of ACTIVE nodes in the network
+	/// Returns the number of ACTIVE nodes in the network
 	unsigned int getNetworkSize();
 
 	/// Returns the TOTAL number of nodes irregarding their state (active/inactive)
@@ -258,8 +258,10 @@ public:
 	/// Returns the TOTAL number of links irregarding their state (active/inactive)
 	inline unsigned int getNumberLinks() const { return num_edges(*BGLtopology); }
 
+	/// Returns the number of ACTIVE nodes in the network
 	unsigned int getActiveNumberNodes() const;
 
+	/// Returns the number of ACTIVE links in the network
 	unsigned int getActiveNumberLinks() const;
 
 	/// return the shortest path distance between two nodes
