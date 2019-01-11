@@ -17,6 +17,8 @@
 #include "BaseTypes.h"
 
 namespace routingsim {
+// for std::bind with callback functions
+using namespace std::placeholders;
 
 Define_Module(R2Kademlia);
 
@@ -86,7 +88,6 @@ void R2Kademlia::handlePacket(KadPing_p packet) {
 }
 
 void R2Kademlia::handlePacket(KadAnswer_p packet) {
-	nonce_t nonce = packet->getNonce();
 	handleAnswer(std::move(packet));
 }
 
@@ -113,22 +114,21 @@ void R2Kademlia::routePacket(KadPacket_p packet, NodePkt_p nodePkt) {
 // -------------------- rpc methods and classes ---------------------------
 
 
-class R2Kademlia::PingRPCState : public RPCProtocol::RPCState {
-	void handleAnswer(cPacket_p answer) override {
-		KadPong_p pong = safe_packet_cast<KadPong>(answer);
-		EV << "got ping answer from " << pong->getSource();
-		EV << " with nonce " << nonce << endl;
-		//TODO add contact to routing table and mark seen
-	}
-};
 
 void R2Kademlia::ping(const OverlayKey& key) {
 	auto ping = std::make_unique<KadPing>();
-	ping->setNonce(registerState(std::make_unique<PingRPCState>()));
 	ping->setSource(myOverlayKey);
 	ping->appendHop(key);
-	sendPacket(std::move(ping));
+	sendRpcCall(std::move(ping), std::bind(&R2Kademlia::handlePingAnswer, this, _1, _2));
 	EV_TRACE << "ping sent to" << key << endl;
+}
+
+void R2Kademlia::handlePingAnswer(KadPacket_p answer, RPCState& rpcState) {
+	if (rpcState.status != RPC_SUCCESS) return;
+	KadPong_p pong = safe_packet_cast<KadPong>(answer);
+	EV_TRACE << "got ping answer from " << pong->getSource();
+	EV_TRACE << " with nonce " << pong->getNonce() << endl;
+	//TODO add contact to routing table and mark seen
 }
 
 // ------------------------- policy foo --------------------------------------

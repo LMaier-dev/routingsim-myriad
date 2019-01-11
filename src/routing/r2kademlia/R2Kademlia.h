@@ -91,6 +91,8 @@ class R2Kademlia : public RPCProtocol
 	void onMissingNeighbor(KadPacket_p packet, NodePkt_p pkt);
 	//@}
 private:
+	/** @name private helpers */
+	//@{
 	/// crafts a hello packet and encapsulates it in a NodePkt
 	NodePkt_p makeHelloPacket();
 	/// fills in source, target, sourceroute and nonce
@@ -109,6 +111,12 @@ private:
 	 */
 	template<typename T>
 	bool handleIfFitting(KadPacket_p& packet);
+	//@}
+
+	/** @name callbacks for rpc calls */
+	//@{
+	void handlePingAnswer(KadPacket_p answer, RPCState& rpcState);
+	//@}
 private:
 	OverlayKey myOverlayKey;
 	NeighborTable neighborTable;
