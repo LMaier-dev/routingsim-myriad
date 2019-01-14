@@ -82,8 +82,8 @@ class R2Kademlia : public RPCProtocol
 	/// routes a packet to a neighbor based on the source route in the packet
 	void sendPacket(KadPacket_p packet) override
 		{ routePacket(std::move(packet), std::make_unique<NodePkt>()); }
-	/// sends a ping request to the given key
-	void ping(const OverlayKey& key);
+	/// sends a ping request to the given contact
+	void sendPing(KadContact_p contact);
 	//@}
 
 	/** @name policy foo */
@@ -91,12 +91,20 @@ class R2Kademlia : public RPCProtocol
 	void onMissingNeighbor(KadPacket_p packet, NodePkt_p pkt);
 	//@}
 private:
-	/** @name private helpers */
+	/** @name message generation */
 	//@{
 	/// crafts a hello packet and encapsulates it in a NodePkt
 	NodePkt_p makeHelloPacket();
-	/// fills in source, target, sourceroute and nonce
-	void fillAnswer(KadPacket& original, KadAnswer& answer);
+	/// crafts a packet of type T, sets the route to the given contact.
+	template<typename T>
+	std::unique_ptr<T> makePacket(KadContact_p contact);
+	/// crafts a packet of type T, sets the route and nonce according to original
+	template<typename T>
+	std::unique_ptr<T> makeAnswer(KadPacket& original);
+	//@}
+	
+	/** @name private helpers */
+	//@{
 	/**
 	 * sends an error packet to the sender of the given packet
 	 * the original packet is encapsulated on the error packet
