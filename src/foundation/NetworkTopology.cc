@@ -1206,7 +1206,7 @@ void NetworkTopology::resetNode(nodeid_t n) {
 	int size = node->gate("toProtocols$o", 0)->size();
 	for (int i = 0; i < size; i++) {
 		cGate *tnm = node->gate("toProtocols$o", i);
-		check_and_cast<Protocol *> (tnm->getNextGate()->getOwner())->reset();
+		check_and_cast<Protocol *> (tnm->getPathEndGate()->getOwner())->reset();
 	}
 }
 

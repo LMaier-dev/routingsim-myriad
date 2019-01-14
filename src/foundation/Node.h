@@ -46,10 +46,10 @@ public:
 	}
 
 	/// Binds a module to the given packet type
-	void bind( int type, Protocol* mod );
+	void bind( int type, cModule* mod );
 
 	/// Unbind the module
-	void unbind( int type, Protocol* mod );
+	void unbind( int type, cModule* mod );
 
 	/// call reset on all Protocols
 	void reset();
@@ -73,7 +73,8 @@ protected:
 	nodeid_t id;
 
 	/// the bindings of the node modules
-	boost::unordered_map<int, Protocol*> bindings;
+	/// maps type int to gate index
+	boost::unordered_map<int, int> bindings;
 
 	/// Neighbors of the node
 	vector_set<nodeid_t> neighbor_set;

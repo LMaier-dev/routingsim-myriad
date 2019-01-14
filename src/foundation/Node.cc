@@ -54,30 +54,32 @@ void Node::doBuildInside() {
 	// create node modules
 	const char* nodeModules = par("protocols");
 	cModuleType* type = cModuleType::get(nodeModules);
-	Protocol* module =
-			dynamic_cast<Protocol*>(type->create( "module0", this ));
-	module->finalizeParameters();
+	cModule* protocol = type->create( "protocol0", this );
+	protocol->finalizeParameters();
 
 	// connect gates
 	cGate* in = NULL, *out = NULL;
 	getOrCreateFirstUnconnectedGatePair("toProtocols", false, true, in, out );
-	module->gate("toNode$o")->connectTo(in);
-	out->connectTo( module->gate("toNode$i") );
+	protocol->gate("toNode$o")->connectTo(in);
+	out->connectTo( protocol->gate("toNode$i") );
 
 	// create internals, and schedule it
-	module->buildInside();
-	module->scheduleStart(simTime());
+	protocol->buildInside();
+	protocol->scheduleStart(simTime());
 }
 
 /// Binds a module to the given packet type
-void Node::bind( int type, Protocol* mod ) {
-	assert( bindings.count(type) == 0);
-	bindings.insert( make_pair(type,mod) );
+void Node::bind( int type, cModule* mod ) {
+	ASSERT( bindings.count(type) == 0);
+	cGate* gate = mod->gate("toNode$i")->getPathStartGate();
+	ASSERT( gate->getOwnerModule() == this );
+	ASSERT( strcmp( gate->getName(), "toProtocols$o" ) == 0);
+	bindings.insert( make_pair(type, gate->getIndex()) );
 }
 
 /// Unbind the module
-void Node::unbind( int type, Protocol* mod ) {
-	assert( bindings[type]==mod );
+void Node::unbind( int type, cModule* mod ) {
+	assert( bindings[type]==mod->gate("toNode$i")->getPathStartGate()->getIndex() );
 	bindings.erase(type);
 }
 
@@ -120,10 +122,10 @@ void Node::handleMessage(cMessage *msg) {
 
 	// send to binding
 	if (bindings.count(np->getType())!=0) {
-		cGate* g = bindings[np->getType()]->gate("toNode$i")->getPathStartGate();
-		send(np,g);
+		int gateIndex = bindings[np->getType()];
+		send(np, "toProtocols$o", gateIndex);
 	} else {
-		EV << "Binding to packet type " << np->getType() << " unknown -- did you register your module to this packet type by calling bind()?";
+		EV_WARN << "Binding to packet type " << np->getType() << " unknown -- did you register your module to this packet type by calling bind()?";
 		delete np;
 	}
 }
