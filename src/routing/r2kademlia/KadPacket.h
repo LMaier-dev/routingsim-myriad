@@ -43,7 +43,7 @@ public:
 	/// If the source route is empty, this initializes it.
 	void setSource(const OverlayKey & source);
 	/// appends the specified path to the source route
-	void appendRoute(kad_path& path);
+	void appendRoute(const kad_path& path);
 	/// appends the specified key to the source route
 	void appendHop(const OverlayKey& key);
 	/// appends the key of the specified contact to the source route

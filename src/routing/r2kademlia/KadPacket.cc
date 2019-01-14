@@ -25,7 +25,7 @@ void KadPacket::setSource(const OverlayKey & source) {
 		setRoute(0, source);
 };
 
-void KadPacket::appendRoute(kad_path& path) {
+void KadPacket::appendRoute(const kad_path& path) {
 	auto old_size = getRouteArraySize();
 	setRouteArraySize(old_size + path.size());
 	for(size_t i=0; i<path.size(); i++)

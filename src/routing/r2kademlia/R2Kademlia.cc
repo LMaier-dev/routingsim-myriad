@@ -60,8 +60,10 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	}
 	else {
 		// no hops left, packet is adressed to me
+		//TODO learn route from packet
 		if (handleIfFitting<KadAnswer>(packet)) return;
 		if (handleIfFitting<KadPing>(packet)) return;
+		if (handleIfFitting<KadGetNeighborsCall>(packet)) return;
 	}
 	handleStrandedPacket(std::move(packet));
 }
@@ -141,6 +143,47 @@ void R2Kademlia::handlePingAnswer(KadPacket_p answer, RPCState& rpcState) {
 		contact = std::make_shared<KadContact>(key, path);
 		contact->seen();
 		routingTable->addContact(contact);
+	}
+}
+
+// GET NEIGHBOR
+void R2Kademlia::sendGetNeighbors(KadContact_p contact)
+{
+	sendRpcCall(
+		makePacket<KadGetNeighborsCall>(contact),
+		std::bind(&R2Kademlia::handleGetNeighborsAnswer, this, _1, _2)
+	);
+}
+
+void R2Kademlia::handlePacket(std::unique_ptr<KadGetNeighborsCall> packet) {
+	auto answer = makeAnswer<KadGetNeighborsAnswer>(*packet);
+	std::vector<OverlayKey> neighbors = neighborTable.getNeighbors();
+	answer->setNeighborsArraySize(neighbors.size());
+	for (uint i = 0; i < neighbors.size(); i++)
+		answer->setNeighbors(i, neighbors[i]);
+	sendPacket(std::move(answer));
+}
+
+void R2Kademlia::handleGetNeighborsAnswer(KadPacket_p answer, RPCState& rpcState)
+{
+	if (rpcState.status != RPC_SUCCESS) return;
+	auto answ = safe_packet_cast<KadGetNeighborsAnswer>(answer);
+	EV_TRACE << "recieved get neighbors answer" << endl;
+	for (uint i=0; i < answ->getNeighborsArraySize(); i++) {
+		const OverlayKey& key = answ->getNeighbors(i);
+		KadContact_p contact = routingTable->getContact(key);
+		if (contact.get() == nullptr) {
+			// contact is not known
+			kad_path path = routingTable->getContact(answ->getSource())->getPath();
+			path.push_back(answ->getSource());
+			routingTable->onDiscovery(std::make_shared<KadContact>(key, path));
+		}
+		else if (contact->getPathLength() > answ->getRouteArraySize()-1) {
+			// contact is known, but we found a better path
+			kad_path path = routingTable->getContact(answ->getSource())->getPath();
+			path.push_back(answ->getSource());
+			contact->setPath(path);
+		}
 	}
 }
 

@@ -54,6 +54,7 @@ public:
 	inline size_t getPathLength() const { return path.size(); }
 	/// sets the path to reach this contact
 	inline void setPath(kad_path path) { this->path = path; }
+	inline const kad_path& getPath() const { return path; }
 
 private:
 	const OverlayKey key;	/// the OverlayKey of this contact

@@ -36,9 +36,13 @@ public:
 	void addNeighbor(nodeid_t nodeId, const OverlayKey& key);
 	/// removes the entry with the given node id if present
 	void removeNeighbor(nodeid_t nodeId);
+	/// returns a vector of all known neigbors
+	std::vector<OverlayKey> getNeighbors();
 	/// returns the node id of the neighbor with the given key.
 	/// @returns unspecified_node if the key is not found
 	nodeid_t getNodeId(const OverlayKey& key);
+	/// returns true if the key belongs to a known neigbor
+	inline bool isNeighbor(const OverlayKey& key) { return getNodeId(key) != undefined_node; }
 	/// clears the table
 	void clear();
 private:

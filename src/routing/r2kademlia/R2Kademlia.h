@@ -65,6 +65,7 @@ class R2Kademlia : public RPCProtocol
 	virtual void handlePacket(KadHello_p packet);
 	/// responds to ping request
 	virtual void handlePacket(KadPing_p packet);
+	virtual void handlePacket(std::unique_ptr<KadGetNeighborsCall> packet);
 	virtual void handlePacket(KadAnswer_p packet);
 	/// fallback
 	virtual void handlePacket(KadPacket_p packet);
@@ -84,6 +85,8 @@ class R2Kademlia : public RPCProtocol
 		{ routePacket(std::move(packet), std::make_unique<NodePkt>()); }
 	/// sends a ping request to the given contact
 	void sendPing(KadContact_p contact);
+	/// sends a "get neighbors" call to the contact
+	void sendGetNeighbors(KadContact_p contact);
 	//@}
 
 	/** @name policy foo */
@@ -124,6 +127,7 @@ private:
 	/** @name callbacks for rpc calls */
 	//@{
 	void handlePingAnswer(KadPacket_p answer, RPCState& rpcState);
+	void handleGetNeighborsAnswer(KadPacket_p answer, RPCState& rpcState);
 	//@}
 private:
 	OverlayKey myOverlayKey;

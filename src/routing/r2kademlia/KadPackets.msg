@@ -15,7 +15,6 @@
 cplusplus {{
 #include "BaseTypes.h"
 #include "OverlayKey.h"
-#include "RPC.h"
 #include "KadPacket.h"
 #include <memory>
 class KadPacket;
@@ -24,28 +23,39 @@ class KadPacket;
 namespace routingsim;
 class KadPacket extends cPacket;
 class noncobject nodeid_t;
+class noncobject OverlayKey;
 
 enum KadErrorType {
 	KAD_PACKET_INVALID = 0;
 	KAD_NEXT_HOP_UNAVAILABLE = 1;
 }
 
-packet KadAnswer extends KadPacket {
+packet KadAnswer extends KadPacket {}
+
+// ERROR
+packet KadError extends KadAnswer {
+	uint8_t errorType enum(KadErrorType);
 }
 
+// HELLO
 packet KadHello extends KadPacket {
 	type = KAD_HELLO;
 	nodeid_t sourceId;
 }
 
+// PING
 packet KadPing extends KadPacket {
 	type = KAD_PING;
 }
-
-packet KadError extends KadAnswer {
-	uint8_t errorType enum(KadErrorType);
-}
-
 packet KadPong extends KadAnswer {
 	type = KAD_PONG;
+}
+
+// GET NEIGHBORS
+packet KadGetNeighborsCall extends KadPacket {
+	type = KAD_GET_NEIGHBORS_CALL;
+}
+packet KadGetNeighborsAnswer extends KadPacket {
+	type = KAD_GET_NEIGHBORS_ANSWER;
+	OverlayKey neighbors[];
 }

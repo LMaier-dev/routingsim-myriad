@@ -35,12 +35,25 @@ void NeighborTable::addNeighbor(nodeid_t nodeId, const OverlayKey& key){
 		std::get<OverlayKey>(*itId) = key;
 	}
 }
+
 void NeighborTable::removeNeighbor(nodeid_t nodeId){
 	auto it = getIter(nodeId);
 	if (it != table.end())
 		table.erase(it);
 	
 }
+
+std::vector<OverlayKey> NeighborTable::getNeighbors()
+{
+	std::vector<OverlayKey> result{};
+	result.reserve(table.size());
+	for (auto& pair : table) {
+		result.push_back(std::get<OverlayKey>(pair));
+	}
+	return result;
+}
+
+
 nodeid_t NeighborTable::getNodeId(const OverlayKey& key) {
 	auto it = getIter(key);
 	if (it != table.end())

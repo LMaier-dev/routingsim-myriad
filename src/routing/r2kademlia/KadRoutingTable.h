@@ -83,6 +83,8 @@ public:
 	 * If there are not enough contacts found, the list is shorter.
 	 */
 	KadContactList getClosestContacts(const OverlayKey& key, size_type n);
+	/// returns true if the key is known, i.e. there is a contact present
+	inline bool isKnown(const OverlayKey& key) { return getContact(key).get() != nullptr;}
 	
 protected:
 	/** @name bucket access */
@@ -101,6 +103,7 @@ protected:
 	size_type getFirstOnBucketLevel(size_type index) { return index - (index % ((1 << b) - 1));}
 	//@}
 
+public:
 	/** @name policy foo */
 	//@{
 	/** called when a new contact is discovered */
