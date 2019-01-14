@@ -126,7 +126,7 @@ void NetworkManager::handleMessage(cMessage *msg) {
 		switch (di->type) {
 		case DynamicsInfo::nodeFailure:
 			topology->disableNode(di->source);
-			resetNode(di->source);
+			topology->resetNode(di->source);
 			break;
 		case DynamicsInfo::nodeRecovery:
 			topology->enableNode(di->source);
@@ -169,10 +169,6 @@ unsigned int NetworkManager::getNetworkSize() {
 }
 
 void NetworkManager::finish() {
-}
-
-void NetworkManager::resetNode(nodeid_t n) {
-	getTopology().resetNode(n);
 }
 
 void NetworkManager::sampleStatistics( Statistics& stats ) {

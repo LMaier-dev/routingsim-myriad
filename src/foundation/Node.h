@@ -51,10 +51,6 @@ public:
 	/// Unbind the module
 	void unbind( int type, cModule* mod );
 
-	/// call reset on all Protocols
-	void reset();
-
-
 protected:
 	friend class NetworkTopology;
 	virtual void initialize();

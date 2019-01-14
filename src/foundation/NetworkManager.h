@@ -63,7 +63,6 @@ protected:
 private:
 	NetworkTopology* topology;
 	NetworkDynamics* dynamics;
-	void resetNode(nodeid_t node);
 
 	// Topology Statistics
 	bool evaluateStatistics;
