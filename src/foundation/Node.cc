@@ -53,8 +53,8 @@ Node::~Node() { gnodeid = 1; }
 void Node::doBuildInside() {
 	// create node modules
 	const char* nodeModules = par("protocols");
-	cModuleType* type = cModuleType::get(nodeModules);
-	cModule* protocol = type->create( "protocol0", this );
+	cModuleType* protocolType = cModuleType::get(nodeModules);
+	cModule* protocol = protocolType->create( "protocol0", this->getParentModule() );
 	protocol->finalizeParameters();
 
 	// connect gates
