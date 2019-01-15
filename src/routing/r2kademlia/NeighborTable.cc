@@ -67,6 +67,14 @@ void NeighborTable::clear()
 	table.clear();
 }
 
+
+std::ostream& operator<<(std::ostream& os, const NeighborTable& c) {
+	os << "(" << c.table.size() << ") ";
+	for (auto pair : c.table)
+		os << pair.first.toString().substr(0,5) << "->" << pair.second << "  ";
+	return os;
+}
+
 inner_table::iterator NeighborTable::getIter(nodeid_t nodeId){
 	for(auto it=table.begin(); it != table.end(); it++){
 		if(std::get<nodeid_t>(*it) == nodeId)

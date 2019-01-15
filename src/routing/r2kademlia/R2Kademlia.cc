@@ -29,6 +29,8 @@ void R2Kademlia::onInitialize() {
 	//TODO parameters for bucketSize and b (accelerated lookup parameter)
 	routingTable = std::make_unique<KadRoutingTable>(myOverlayKey);
 	sendToNeighbors(makeHelloPacket());
+	WATCH(myOverlayKey);
+	WATCH(neighborTable);
 }
 
 void R2Kademlia::onConnect( nodeid_t nid ) {
@@ -78,6 +80,7 @@ void R2Kademlia::reset() {
 void R2Kademlia::handlePacket(KadHello_p packet) {
 	EV << "recieved hello packet from " << packet->getSourceId() << endl;
 	neighborTable.addNeighbor(packet->getSourceId(), packet->getSource());
+	EV_TRACE << "neighbor table: "<< neighborTable << endl;
 	//TODO special treatment for neighbors?
 	routingTable->onDiscovery(std::make_shared<KadContact>(packet->getSource()));
 }

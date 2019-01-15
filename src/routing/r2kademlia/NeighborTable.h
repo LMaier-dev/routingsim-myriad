@@ -45,6 +45,9 @@ public:
 	inline bool isNeighbor(const OverlayKey& key) { return getNodeId(key) != undefined_node; }
 	/// clears the table
 	void clear();
+
+	/// Common stdc++ console output method
+	friend std::ostream& operator<<(std::ostream& os, const NeighborTable& c);
 private:
 	/// returns an iterator pointing to the entry with the given node id
 	inner_table::iterator getIter(nodeid_t nodeId);
