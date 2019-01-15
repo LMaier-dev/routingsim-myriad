@@ -22,8 +22,8 @@ network DefaultNetwork
 {
     submodules:
         manager: NetworkManager;
- //   	  dynamics: CatastrophicFailure;
-    //	dynamics: LifetimeChurn;
-//    connections:
-//        dynamics.toManager --> manager.dynamics;
+        dynamics: CatastrophicFailure;
+//         dynamics: LifetimeChurn;
+    connections:
+        dynamics.toManager --> manager.dynamics;
 }
