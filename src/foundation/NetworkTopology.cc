@@ -710,7 +710,7 @@ void NetworkTopology::extractFromNetwork(cModule *networkManager) {
 				EV << "Node " << fromID << " (mod-id: " << submodp->getId() << ")" << endl;
 				for (int i=0; i<toNeighbors->size(); i++) {
 					cGate *outGate = submodp->gate("toNeighbors$o",i);
-					Node *to = dynamic_cast<Node *>(outGate->getNextGate()->getOwnerModule());
+					Node *to = Node::getOtherNode(outGate);
 					EV << "\tconnected to node " << to->getNodeId() << endl;
 					edges.push_back( pair<long long, long long>(fromID, to->getNodeId()));
 				}
@@ -743,7 +743,7 @@ void NetworkTopology::createNetwork(cModule *parent) {
 
 	// create nodes from bgl representation
 	BGLVertexIt vi, ve;
-	cModuleType *moduleType = cModuleType::get("routingsim.foundation.Node");
+	cModuleType *moduleType = cModuleType::get("routingsim.foundation.NodeWrapper");
 
 	for ( tie(vi,ve) = vertices(*BGLtopology); vi!=ve; vi++) {
 
@@ -755,16 +755,16 @@ void NetworkTopology::createNetwork(cModule *parent) {
 		char name[256];
 		snprintf(name, 255, "Node%llu", (long long)*vi);
 		cModule *mod = moduleType->create(name, parent);
-		mod->par("id") = *vi;
+		mod->par("nodeId") = *vi;
 		moduleMap[*vi] = mod;
 	}
 	EV << "Created node modules." << endl;
 
 	// setup and connect gates
+	// vi = vertex iterator, ve = vertex end iterator
 	for ( tie(vi, ve) = vertices(*BGLtopology); vi!=ve; vi++ ) {
 		nodeid_t fromId = *vi;
 		cModule *fromModule, *toModule;
-		//cGate *fromIn, *toOut;
 		cGate *fromOut, *toIn;
 
 		// jump over disabled nodes
@@ -797,32 +797,33 @@ void NetworkTopology::createNetwork(cModule *parent) {
 	// start simulation
 	boost::unordered_map<nodeid_t, cModule *>::iterator modMapIt;
 	for (modMapIt = moduleMap.begin(); modMapIt != moduleMap.end(); modMapIt++) {
+		cModule *module = modMapIt->second;
 
 		// finalize parameters
-		modMapIt->second->finalizeParameters();
+		module->finalizeParameters();
 
 		properties_t nodeProp = (*BGLtopology)[modMapIt->first].properties;
 		// set display strings
 		foreach(properties_t::value_type& value, nodeProp) {
 			if (value.first=="!ds")
-				modMapIt->second->getDisplayString().updateWith(value.second.c_str());
+				module->getDisplayString().updateWith(value.second.c_str());
 		}
 
-		modMapIt->second->buildInside();
+		module->buildInside();
 
 		// set parameters of inside modules
 		foreach(properties_t::value_type& value, nodeProp) {
 			if (value.first.find('!')!=string::npos) continue;
-			for (cModule::SubmoduleIterator i(modMapIt->second); !i.end(); i++) {
-				cModule *smod = *i;
-				if (smod->findPar(value.first.c_str())!=-1) {
-					cPar& p = smod->par(value.first.c_str());
+			for (cModule::SubmoduleIterator i(module); !i.end(); i++) {
+				cModule *submod = *i;
+				if (submod->findPar(value.first.c_str())!=-1) {
+					cPar& p = submod->par(value.first.c_str());
 					if (p.getType() == cPar::STRING)
 						p.setStringValue(value.second);
 					else
 						p.parse(value.second.c_str());
 				} else {
-					EV <<"Module " << smod->getId() << " of type " << smod->getClassName() << " does not have a parameter " << value.second << endl;
+					EV <<"Module " << submod->getId() << " of type " << submod->getClassName() << " does not have a parameter " << value.second << endl;
 				}
 			}
 		}
@@ -1207,7 +1208,7 @@ void NetworkTopology::resetNode(nodeid_t n) {
 	int size = node->gate("toProtocols$o", 0)->size();
 	for (int i = 0; i < size; i++) {
 		cGate *tnm = node->gate("toProtocols$o", i);
-		check_and_cast<Protocol *> (tnm->getNextGate()->getOwner())->reset();
+		check_and_cast<Protocol *> (tnm->getPathEndGate()->getOwner())->reset();
 	}
 }
 

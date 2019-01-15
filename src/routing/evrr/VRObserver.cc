@@ -147,7 +147,7 @@ VRObserver& getVRObserver() {
 
 // delivery ratio and stretch
 void VRObserver::messageRegister(cMessage* msg, bool anycast_msg) {
-	cModule* srcNode = getSimulation()->getContextModule()->getParentModule();
+	cModule* srcNode = getSimulation()->getContextModule();
 	msg->setContextPointer(srcNode);
 	if (anycast_msg) anycast->messageRegister(msg);
 	else general->messageRegister(msg);
@@ -169,10 +169,10 @@ void VRObserver::messageDelivered(cMessage* msg, vid_t dest, distance_t routingD
 	NetworkTopology& topology = getNetworkManager()->getTopology();
 
 	// get source / destination node
-	cModule* srcNode 	= static_cast<cModule*>(msg->getContextPointer());
-	nodeid_t srcNodeID 	= check_and_cast<Node *>(srcNode)->getNodeId();
-	cModule* dstNode 	= getSimulation()->getContextModule()->getParentModule();
-	nodeid_t dstNodeID = check_and_cast<Node *>(dstNode)->getNodeId();
+	Node* srcNode 	= Node::getNode(static_cast<cModule *>(msg->getContextPointer()));
+	nodeid_t srcNodeID 	= srcNode->getNodeId();
+	Node* dstNode 	= Node::getNode(getSimulation()->getContextModule());
+	nodeid_t dstNodeID = dstNode->getNodeId();
 	// calculate stretch
 	distance_t realDistance = 0;
 	if (getNetworkManager() != NULL) {

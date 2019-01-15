@@ -509,13 +509,12 @@ void VirtualRing::visualize( bool neighbors_valid ) {
 	}
 	TEXT(s, str.str() );
 
-	if (!connected) {
-		node().getDisplayString().setTagArg("i", 1, "#ff0000");
-	} else
-	if (neighbors_valid)
-		node().getDisplayString().setTagArg("i", 1, "#00ff00");
+	if (!connected)
+		node().setColor("#ff0000");
+	else if (neighbors_valid)
+		node().setColor("#00ff00");
 	else
-		node().getDisplayString().setTagArg("i", 1, "");
+		node().setColor("");
 }
 
 } //namespace

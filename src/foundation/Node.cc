@@ -27,6 +27,25 @@ Define_Module(Node);
 /// is no problem)
 static nodeid_t gnodeid=0;
 
+Node* Node::getNode(cModule *mod) {
+	cModule *submod= mod->getSubmodule("node");
+	if (submod) {
+		// we have a node submodule
+		return check_and_cast<Node *>(submod);
+	}
+	if (mod->hasGate("toNode$o")) {
+		// we have a protocol, so we follow the toNode gate
+		return getOtherNode(mod->gate("toNode$o"));
+	}
+	// last we try to cast it
+	return check_and_cast<Node *>(mod);
+}
+
+Node* Node::getOtherNode(cGate *gate) {
+	ASSERT(gate->getType() == cGate::OUTPUT);
+	return check_and_cast<Node *>(gate->getPathEndGate()->getOwnerModule());
+}
+
 void Node::initialize() {
 	// we need to be sure that the network manager is also initialized for topologies
 	// read from RoutingSim-unaware ned files
@@ -53,32 +72,39 @@ Node::~Node() { gnodeid = 1; }
 void Node::doBuildInside() {
 	// create node modules
 	const char* nodeModules = par("protocols");
-	cModuleType* type = cModuleType::get(nodeModules);
-	Protocol* module =
-			dynamic_cast<Protocol*>(type->create( "module0", this ));
-	module->finalizeParameters();
+	cModuleType* protocolType = cModuleType::get(nodeModules);
+	cModule* protocol = protocolType->create( "protocol0", this->getParentModule() );
+	protocol->finalizeParameters();
 
 	// connect gates
 	cGate* in = NULL, *out = NULL;
 	getOrCreateFirstUnconnectedGatePair("toProtocols", false, true, in, out );
-	module->gate("toNode$o")->connectTo(in);
-	out->connectTo( module->gate("toNode$i") );
+	protocol->gate("toNode$o")->connectTo(in);
+	out->connectTo( protocol->gate("toNode$i") );
 
-	// create internals, and schedule it
-	module->buildInside();
-	module->scheduleStart(simTime());
+	// We do not need to buildInside or scheduleStart, this is done
+	// automatically since protocol is not a submodule.
 }
 
 /// Binds a module to the given packet type
-void Node::bind( int type, Protocol* mod ) {
-	assert( bindings.count(type) == 0);
-	bindings.insert( make_pair(type,mod) );
+void Node::bind( int type, cModule* mod ) {
+	ASSERT( bindings.count(type) == 0);
+	cGate* gate = mod->gate("toNode$i")->getPathStartGate();
+	ASSERT( gate->getOwnerModule() == this );
+	ASSERT( strcmp( gate->getName(), "toProtocols$o" ) == 0);
+	bindings.insert( make_pair(type, gate->getIndex()) );
 }
 
 /// Unbind the module
-void Node::unbind( int type, Protocol* mod ) {
-	assert( bindings[type]==mod );
+void Node::unbind( int type, cModule* mod ) {
+	assert( bindings[type]==mod->gate("toNode$i")->getPathStartGate()->getIndex() );
 	bindings.erase(type);
+}
+
+///
+void Node::setColor( const char *color ) {
+	getDisplayString().setTagArg("i", 1, color);
+	getParentModule()->getDisplayString().setTagArg("i", 1, color);
 }
 
 void Node::handleMessage(cMessage *msg) {
@@ -120,10 +146,10 @@ void Node::handleMessage(cMessage *msg) {
 
 	// send to binding
 	if (bindings.count(np->getType())!=0) {
-		cGate* g = bindings[np->getType()]->gate("toNode$i")->getPathStartGate();
-		send(np,g);
+		int gateIndex = bindings[np->getType()];
+		send(np, "toProtocols$o", gateIndex);
 	} else {
-		EV << "Binding to packet type " << np->getType() << " unknown -- did you register your module to this packet type by calling bind()?";
+		EV_WARN << "Binding to packet type " << np->getType() << " unknown -- did you register your module to this packet type by calling bind()?";
 		delete np;
 	}
 }
@@ -182,7 +208,7 @@ void Node::sendToNeighbors( NodePkt* np ) {
 void Node::sendNotify(NodePkt *packet, cGate *dg) {
 	Enter_Method_Silent("Node::sendNotify");
 	take(packet);
-	//cout << "sendNotify from " << id << "to " << dynamic_cast<Node *>(dg->getNextGate()->getOwnerModule())->id << endl;
+	//cout << "sendNotify from " << id << "to " << getOtherNode(dg)->id << endl;
 	send(packet, dg);
 }
 
@@ -237,7 +263,7 @@ bool Node::disableLink(cModule *mod, const char *gatename) {
 		return false;
 
 	for(int i=0; i<gateSize(gatename); i++) {
-		if (mod == gate(gatename, i)->getNextGate()->getOwnerModule()) {
+		if (mod == getOtherNode(gate(gatename, i))) {
 			disableGate(gate(gatename, i));
 			if (cSimulation::getActiveEnvir()->isGUI()) {
 				cDisplayString ds = gate(gatename,i)->getDisplayString();
@@ -260,7 +286,7 @@ bool Node::enableLink(cModule *mod, const char *gatename) {
 	}
 
 	for(int i=0; i<gateSize(gatename); i++) {
-		if (mod == gate(gatename, i)->getNextGate()->getOwnerModule()) {
+		if (mod == getOtherNode(gate(gatename, i))) {
 			enableGate(gate(gatename, i));
 			if (cSimulation::getActiveEnvir()->isGUI()) {
 				cDisplayString ds = gate(gatename,i)->getDisplayString();

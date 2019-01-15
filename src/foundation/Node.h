@@ -35,6 +35,11 @@ namespace routingsim {
  */
 class Node: public cSimpleModule {
 public:
+	/// returns the node, that is either a submodule, the node of a protocol, etc
+	static Node* getNode(cModule *mod);
+	/// returns the node on the other side of this outgoing gate
+	static Node* getOtherNode(cGate *gate);
+
 	/// returns the node_id of this node
 	inline nodeid_t getNodeId() const {
 		return id;
@@ -46,14 +51,13 @@ public:
 	}
 
 	/// Binds a module to the given packet type
-	void bind( int type, Protocol* mod );
+	void bind( int type, cModule* mod );
 
 	/// Unbind the module
-	void unbind( int type, Protocol* mod );
+	void unbind( int type, cModule* mod );
 
-	/// call reset on all Protocols
-	void reset();
-
+	/// sets the color of the display string of this Node (and its wrapper).
+	void setColor(const char *color);
 
 protected:
 	friend class NetworkTopology;
@@ -73,7 +77,8 @@ protected:
 	nodeid_t id;
 
 	/// the bindings of the node modules
-	boost::unordered_map<int, Protocol*> bindings;
+	/// maps type int to gate index
+	boost::unordered_map<int, int> bindings;
 
 	/// Neighbors of the node
 	vector_set<nodeid_t> neighbor_set;

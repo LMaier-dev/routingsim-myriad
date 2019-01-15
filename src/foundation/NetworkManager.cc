@@ -85,6 +85,10 @@ void NetworkManager::initialize() {
 		if (dynamicsModel != string("None") ) {
 			string modelName = string("routingsim.dynamics.")+dynamicsModel;
 			cModuleType* type = cModuleType::get(modelName.c_str());
+			// TODO: this causes problems with the qtenv in omnet++ 5.4
+			// qtenv does not like it if a outside gate is connected to a submodule.
+			// To avoid this, just create the dynamics module manually
+			// next to the NetworkManager in the ned file.
 			cModule* mod = type->create( "dynamics", this );
 			mod->finalizeParameters();
 
@@ -126,7 +130,7 @@ void NetworkManager::handleMessage(cMessage *msg) {
 		switch (di->type) {
 		case DynamicsInfo::nodeFailure:
 			topology->disableNode(di->source);
-			resetNode(di->source);
+			topology->resetNode(di->source);
 			break;
 		case DynamicsInfo::nodeRecovery:
 			topology->enableNode(di->source);
@@ -169,10 +173,6 @@ unsigned int NetworkManager::getNetworkSize() {
 }
 
 void NetworkManager::finish() {
-}
-
-void NetworkManager::resetNode(nodeid_t n) {
-	getTopology().resetNode(n);
 }
 
 void NetworkManager::sampleStatistics( Statistics& stats ) {
