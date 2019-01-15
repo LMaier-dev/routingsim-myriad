@@ -106,12 +106,17 @@ void R2Kademlia::routePacket(KadPacket_p packet, NodePkt_p nodePkt) {
 		onMissingNeighbor(std::move(packet), std::move(nodePkt));
 	}
 }
+void R2Kademlia::sendPacket(KadPacket_p packet) {
+	ASSERT(packet->getSource() == myOverlayKey);
+	routePacket(std::move(packet), std::make_unique<NodePkt>(packet->getName()));
+}
+
 // -------------------- rpc methods ---------------------------
 
 
 // PING
 void R2Kademlia::sendPing(KadContact_p contact) {
-	sendRpcCall(makePacket<KadPing>(contact), std::bind(&R2Kademlia::handlePingAnswer, this, _1, _2));
+	sendRpcCall(makePacket<KadPing>(contact, "KadPing"), std::bind(&R2Kademlia::handlePingAnswer, this, _1, _2));
 	EV_TRACE << "ping sent to" << contact->getKey() << endl;
 }
 
@@ -150,7 +155,7 @@ void R2Kademlia::handlePingAnswer(KadPacket_p answer, RPCState& rpcState) {
 void R2Kademlia::sendGetNeighbors(KadContact_p contact)
 {
 	sendRpcCall(
-		makePacket<KadGetNeighborsCall>(contact),
+		makePacket<KadGetNeighborsCall>(contact, "KadGetNeighbors"),
 		std::bind(&R2Kademlia::handleGetNeighborsAnswer, this, _1, _2)
 	);
 }
@@ -198,19 +203,21 @@ NodePkt_p R2Kademlia::makeHelloPacket()
 {
 	KadHello_p hello = std::make_unique<KadHello>();
 	OverlayKey k(0);
+	hello->setName("KadHello");
 	hello->appendHop(k);
 	hello->setSource(myOverlayKey);
 	hello->setSourceId(node().getNodeId());
 	hello->setNonce(0);
-	NodePkt_p nodePkt = std::make_unique<NodePkt>();
+	NodePkt_p nodePkt = std::make_unique<NodePkt>(hello->getName());
 	nodePkt->setType(PAYLOAD_TYPE);
 	nodePkt->encapsulate(hello.release());
 	return nodePkt;
 }
 
 template<typename T>
-std::unique_ptr<T> R2Kademlia::makePacket(KadContact_p contact) {
+std::unique_ptr<T> R2Kademlia::makePacket(KadContact_p contact, const char *name) {
 	auto packet = std::make_unique<T>();
+	packet->setName(name);
 	// TODO optimization: do this in one go
 	packet->setSource(myOverlayKey);
 	packet->appendRoute(contact->getPath());
@@ -221,6 +228,7 @@ std::unique_ptr<T> R2Kademlia::makePacket(KadContact_p contact) {
 template<typename T>
 std::unique_ptr<T> R2Kademlia::makeAnswer(KadPacket& original) {
 	auto answer = std::make_unique<T>();
+	answer->setName((std::string(original.getName()) + std::string("Answer")).c_str());
 	answer->setReturnPathFrom(original);
 	ASSERT(answer->getSource() == myOverlayKey);
 	answer->setNonce(original.getNonce());

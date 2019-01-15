@@ -81,8 +81,7 @@ class R2Kademlia : public RPCProtocol
 	 */
 	void routePacket(KadPacket_p packet, NodePkt_p nodePkt);
 	/// routes a packet to a neighbor based on the source route in the packet
-	void sendPacket(KadPacket_p packet) override
-		{ routePacket(std::move(packet), std::make_unique<NodePkt>()); }
+	void sendPacket(KadPacket_p packet) override;
 	/// sends a ping request to the given contact
 	void sendPing(KadContact_p contact);
 	/// sends a "get neighbors" call to the contact
@@ -100,7 +99,7 @@ private:
 	NodePkt_p makeHelloPacket();
 	/// crafts a packet of type T, sets the route to the given contact.
 	template<typename T>
-	std::unique_ptr<T> makePacket(KadContact_p contact);
+	std::unique_ptr<T> makePacket(KadContact_p contact, const char *name=nullptr);
 	/// crafts a packet of type T, sets the route and nonce according to original
 	template<typename T>
 	std::unique_ptr<T> makeAnswer(KadPacket& original);
