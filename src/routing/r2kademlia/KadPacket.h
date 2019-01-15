@@ -26,16 +26,18 @@ namespace routingsim {
 class KadPacket : public KadPacket_Base
 {
 public:
-	// member functions needed for minimal implementation
+	/** @name member functions needed for minimal implementation */
+	//@{
 	KadPacket(const char *name=nullptr, short kind=0) : KadPacket_Base(name, kind) {}
 	KadPacket(const KadPacket& other) : KadPacket_Base(other) {}
 	~KadPacket() {};
 	KadPacket& operator=(const KadPacket& other)
 		{KadPacket_Base::operator=(other); return *this;}
 	virtual KadPacket *dup() const override {return new KadPacket(*this);}
+	//@}
 
-	// ==== other functions ====
-	// --- utility foo
+	/** @name utility functions */
+	//@{
 	/// sets the progress index to the specified int
 	virtual void setProgress(uint16_t progress) override
 		{ ASSERT(progress < route_arraysize); this->progress = progress; }
@@ -60,8 +62,10 @@ public:
 	/// sets the path of this packet to the reverse path of the other packet
 	/// taking into acount the progress of the other packet
 	void setReturnPathFrom(KadPacket& other);
-	
-	
+	//@}
+
+	/** @name inline utility functions */
+	//@{
 	// --- inline utility foo
 	/// returns the index of the next hop
 	inline uint getNextHopIndex() const { return progress + 1;}
@@ -83,6 +87,7 @@ public:
 	inline kad_path getRemainingPath() { return getPath(getNextHopIndex()); }
 	/// returns the previous source route path until the current hop
 	inline kad_path getPreviousPath() { return getPath(0, getNextHopIndex()); }
+	//@}
 };
 } // namespace
 #endif // __ROUTINGSIM_KadPacket_H_
