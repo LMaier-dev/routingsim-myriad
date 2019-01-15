@@ -27,6 +27,25 @@ Define_Module(Node);
 /// is no problem)
 static nodeid_t gnodeid=0;
 
+Node* Node::getNode(cModule *mod) {
+	cModule *submod= mod->getSubmodule("node");
+	if (submod) {
+		// we have a node submodule
+		return check_and_cast<Node *>(submod);
+	}
+	if (mod->hasGate("toNode$o")) {
+		// we have a protocol, so we follow the toNode gate
+		return getOtherNode(mod->gate("toNode$o"));
+	}
+	// last we try to cast it
+	return check_and_cast<Node *>(mod);
+}
+
+Node* Node::getOtherNode(cGate *gate) {
+	ASSERT(gate->getType() == cGate::OUTPUT);
+	return check_and_cast<Node *>(gate->getPathEndGate()->getOwnerModule());
+}
+
 void Node::initialize() {
 	// we need to be sure that the network manager is also initialized for topologies
 	// read from RoutingSim-unaware ned files
@@ -184,7 +203,7 @@ void Node::sendToNeighbors( NodePkt* np ) {
 void Node::sendNotify(NodePkt *packet, cGate *dg) {
 	Enter_Method_Silent("Node::sendNotify");
 	take(packet);
-	//cout << "sendNotify from " << id << "to " << dynamic_cast<Node *>(dg->getNextGate()->getOwnerModule())->id << endl;
+	//cout << "sendNotify from " << id << "to " << getOtherNode(dg)->id << endl;
 	send(packet, dg);
 }
 
@@ -239,7 +258,7 @@ bool Node::disableLink(cModule *mod, const char *gatename) {
 		return false;
 
 	for(int i=0; i<gateSize(gatename); i++) {
-		if (mod == gate(gatename, i)->getNextGate()->getOwnerModule()) {
+		if (mod == getOtherNode(gate(gatename, i))) {
 			disableGate(gate(gatename, i));
 			if (cSimulation::getActiveEnvir()->isGUI()) {
 				cDisplayString ds = gate(gatename,i)->getDisplayString();
@@ -262,7 +281,7 @@ bool Node::enableLink(cModule *mod, const char *gatename) {
 	}
 
 	for(int i=0; i<gateSize(gatename); i++) {
-		if (mod == gate(gatename, i)->getNextGate()->getOwnerModule()) {
+		if (mod == getOtherNode(gate(gatename, i))) {
 			enableGate(gate(gatename, i));
 			if (cSimulation::getActiveEnvir()->isGUI()) {
 				cDisplayString ds = gate(gatename,i)->getDisplayString();

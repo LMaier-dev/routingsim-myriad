@@ -709,7 +709,7 @@ void NetworkTopology::extractFromNetwork(cModule *networkManager) {
 				EV << "Node " << fromID << " (mod-id: " << submodp->getId() << ")" << endl;
 				for (int i=0; i<toNeighbors->size(); i++) {
 					cGate *outGate = submodp->gate("toNeighbors$o",i);
-					Node *to = dynamic_cast<Node *>(outGate->getNextGate()->getOwnerModule());
+					Node *to = Node::getOtherNode(outGate);
 					EV << "\tconnected to node " << to->getNodeId() << endl;
 					edges.push_back( pair<long long, long long>(fromID, to->getNodeId()));
 				}

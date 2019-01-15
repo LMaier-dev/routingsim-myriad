@@ -20,7 +20,7 @@ namespace routingsim {
 //Define_Module(Protocol);
 
 void Protocol::initialize() {
-	parent = check_and_cast<Node*>(getParentModule());
+	parent = Node::getOtherNode(gate("toNode$o"));
 	assert(parent!=NULL);
 	this->onInitialize();
 }

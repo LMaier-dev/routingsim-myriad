@@ -35,6 +35,11 @@ namespace routingsim {
  */
 class Node: public cSimpleModule {
 public:
+	/// returns the node, that is either a submodule, the node of a protocol, etc
+	static Node* getNode(cModule *mod);
+	/// returns the node on the other side of this outgoing gate
+	static Node* getOtherNode(cGate *gate);
+
 	/// returns the node_id of this node
 	inline nodeid_t getNodeId() const {
 		return id;
