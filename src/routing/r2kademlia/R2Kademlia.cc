@@ -127,7 +127,7 @@ void R2Kademlia::handlePingAnswer(KadPacket_p answer, RPCState& rpcState) {
 	EV_TRACE << "got ping answer from " << pong->getSource();
 	EV_TRACE << " with nonce " << pong->getNonce() << endl;
 	//TODO add contact to routing table and mark seen
-	const OverlayKey& key = answer->getSource();
+	const OverlayKey& key = pong->getSource();
 	KadContact_p contact = routingTable->getContact(key);
 	//TODO check if return path was the same
 	kad_path path = rpcState.original_packet->getIntermediatePath();

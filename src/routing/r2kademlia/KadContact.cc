@@ -24,7 +24,7 @@ namespace routingsim {
 
 std::vector<KadContact_p>::iterator findContactInList(KadContactList& list, const OverlayKey& key){
 	auto it = list.begin();
-	for (;!(*it)->hasKey(key) && it !=  list.end(); it++);
+	for (; it !=  list.end() && !(*it)->hasKey(key); it++);
 	return it;
 }
 
