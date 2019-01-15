@@ -82,9 +82,8 @@ void Node::doBuildInside() {
 	protocol->gate("toNode$o")->connectTo(in);
 	out->connectTo( protocol->gate("toNode$i") );
 
-	// create internals, and schedule it
-	protocol->buildInside();
-	protocol->scheduleStart(simTime());
+	// We do not need to buildInside or scheduleStart, this is done
+	// automatically since protocol is not a submodule.
 }
 
 /// Binds a module to the given packet type
