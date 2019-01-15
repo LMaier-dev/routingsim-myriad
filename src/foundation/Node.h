@@ -56,6 +56,9 @@ public:
 	/// Unbind the module
 	void unbind( int type, cModule* mod );
 
+	/// sets the color of the display string of this Node (and its wrapper).
+	void setColor(const char *color);
+
 protected:
 	friend class NetworkTopology;
 	virtual void initialize();

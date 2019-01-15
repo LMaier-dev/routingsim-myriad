@@ -101,6 +101,12 @@ void Node::unbind( int type, cModule* mod ) {
 	bindings.erase(type);
 }
 
+///
+void Node::setColor( const char *color ) {
+	getDisplayString().setTagArg("i", 1, color);
+	getParentModule()->getDisplayString().setTagArg("i", 1, color);
+}
+
 void Node::handleMessage(cMessage *msg) {
 #ifdef NDEBUG
 	NodePkt* np = reinterpret_cast<NodePkt*>(msg);
