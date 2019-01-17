@@ -42,7 +42,7 @@ using KadPong_p = std::unique_ptr<KadPong>;
  * TODO: sources
  * @author Jakob Thomas
  */
-class R2Kademlia : public RPCProtocol
+class R2Kademlia : public RPCProtocol, public KadPolicy
 {
   protected:
 	/** @name Protocol interface */
@@ -91,6 +91,17 @@ class R2Kademlia : public RPCProtocol
 	/** @name policy foo */
 	//@{
 	void onMissingNeighbor(KadPacket_p packet, NodePkt_p pkt);
+public:
+	/** called when a new contact is discovered */
+	virtual void onDiscovery(KadContact_p) override {}
+	/** called when there is space in a bucket and the bucket is not empty */
+	virtual void onBucketSpace(KadBucket& bucket) override {}
+	/** called when last contact is removed from a bucket*/
+	virtual void onBucketEmpty(KadBucket& bucket) override {}
+	/**  called when a bucket needs to be refreshed */
+	virtual void onBucketRefresh(KadBucket& bucket) override {}
+	/** called when a contact could be replaced by a new one */
+	virtual void onBucketFull(KadBucket& bucket, KadContact_p contact) override {}
 	//@}
 private:
 	/** @name message generation */
@@ -131,7 +142,7 @@ private:
 private:
 	OverlayKey myOverlayKey;
 	NeighborTable neighborTable;
-	std::unique_ptr<KadRoutingTable> routingTable;
+	KadRoutingTable routingTable;
 	static const int PAYLOAD_TYPE=5;
 private:
 	class PingRPCState;

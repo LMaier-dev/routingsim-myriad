@@ -22,14 +22,21 @@
 #include <algorithm>
 
 namespace routingsim {
-KadRoutingTable::KadRoutingTable(const OverlayKey& myKey, size_type b, size_type bucketSize):
-	b(b), myKey(myKey), bucketSize(bucketSize)
+void KadRoutingTable::init(const OverlayKey& myKey, KadPolicy* policy, size_type b, size_type bucketSize)
 {
+	ASSERT(this->myKey.isUnspecified());
+	ASSERT(not myKey.isUnspecified());
+	this->myKey = myKey;
+	this->b = b;
+	this->bucketSize = bucketSize;
+	this->policy = policy;
 	size_type numBuckets = myKey.getLength()/b * ((1 << b) - 1);
+	ASSERT(buckets.size() == 0);
 	buckets.reserve(numBuckets);
 	for(size_type i=0; i<numBuckets; i++){
 		buckets.emplace_back();
 	}
+	WATCH_VECTOR(buckets);
 }
 
 size_type KadRoutingTable::getBucketIndex(const OverlayKey& key)
@@ -97,47 +104,39 @@ bool KadRoutingTable::addContact(KadContact_p contact)
 {
 	// contact must not be present
 	ASSERT(not getContact(contact->getKey()));
-	KadBucket* bucket = getBucket(contact);
-	if (bucket->size() == bucketSize){
-		onBucketFull(bucket, contact);
+	KadBucket& bucket = getBucket(contact);
+	if (bucket.size() == bucketSize){
+		policy->onBucketFull(bucket, contact);
 		return false;
 	}
 	else {
-		bucket->contacts.push_back(contact);
+		bucket.contacts.push_back(contact);
 		return true;
 	}
 }
 
 bool KadRoutingTable::removeContact(const OverlayKey& key)
 {
-	KadBucket* bucket = getBucket(key);
-	bool result = bucket->removeContact(key);
-	if (bucket->empty())
-		onBucketEmpty(bucket);
+	KadBucket& bucket = getBucket(key);
+	bool result = bucket.removeContact(key);
+	if (bucket.empty())
+		policy->onBucketEmpty(bucket);
 	if (result)
-		onBucketSpace(bucket);
+		policy->onBucketSpace(bucket);
 	else
-		bucket->removeContactFromReplacements(key);
+		bucket.removeContactFromReplacements(key);
 	return result;
 }
 
-KadBucket* KadRoutingTable::getBucket(const OverlayKey& key)
+KadBucket& KadRoutingTable::getBucket(const OverlayKey& key)
 {
 	size_type index = getBucketIndex(key);
-	return &buckets.at(index);
+	return buckets.at(index);
 }
 
 KadContact_p KadRoutingTable::getContact(const OverlayKey& key)
 {
-	KadBucket* bucket = getBucket(key);
-	return bucket->getContact(key);
-}
-
-void KadRoutingTable::onBucketFull(KadBucket* bucket, KadContact_p contact)
-{
-	if (bucket->refillContacts.size() < bucketSize){
-		bucket->refillContacts.push_back(contact);
-	}
+	return getBucket(key).getContact(key);
 }
 
 //----------- KadBucket --------------
@@ -147,8 +146,8 @@ KadContact_p KadBucket::getContact(const OverlayKey& key)
 	auto it = findContactInList(contacts, key);
 	if (it != contacts.end())
 		return *it;
-	it = findContactInList(refillContacts, key);
-	if (it != refillContacts.end())
+	it = findContactInList(contactReplacements, key);
+	if (it != contactReplacements.end())
 		return *it;
 	return KadContact_p();
 }

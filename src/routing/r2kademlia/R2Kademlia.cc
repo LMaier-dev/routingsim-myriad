@@ -27,10 +27,11 @@ void R2Kademlia::onInitialize() {
 	myOverlayKey = OverlayKey::random(getRNG(0));
 	bind(PAYLOAD_TYPE);
 	//TODO parameters for bucketSize and b (accelerated lookup parameter)
-	routingTable = std::make_unique<KadRoutingTable>(myOverlayKey);
+	routingTable.init(myOverlayKey, this);
 	sendToNeighbors(makeHelloPacket());
 	WATCH(myOverlayKey);
 	WATCH(neighborTable);
+	WATCH_OBJ(routingTable);
 }
 
 void R2Kademlia::onConnect( nodeid_t nid ) {
@@ -73,7 +74,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 void R2Kademlia::reset() {
 	EV << "resetting state of R2Kademlia" << endl;
 	neighborTable.clear();
-	routingTable = std::make_unique<KadRoutingTable>(myOverlayKey);
+	routingTable = KadRoutingTable();
 	//TODO optimization: implement clear function in routing table
 }
 
@@ -136,7 +137,7 @@ void R2Kademlia::handlePingAnswer(KadPacket_p answer, RPCState& rpcState) {
 	EV_TRACE << " with nonce " << pong->getNonce() << endl;
 	//TODO add contact to routing table and mark seen
 	const OverlayKey& key = pong->getSource();
-	KadContact_p contact = routingTable->getContact(key);
+	KadContact_p contact = routingTable.getContact(key);
 	//TODO check if return path was the same
 	kad_path path = rpcState.original_packet->getIntermediatePath();
 	if (contact){
@@ -150,7 +151,7 @@ void R2Kademlia::handlePingAnswer(KadPacket_p answer, RPCState& rpcState) {
 		// create new contact
 		contact = std::make_shared<KadContact>(key, path);
 		contact->seen();
-		routingTable->addContact(contact);
+		routingTable.addContact(contact);
 	}
 }
 
@@ -179,16 +180,16 @@ void R2Kademlia::handleGetNeighborsAnswer(KadPacket_p answer, RPCState& rpcState
 	EV_TRACE << "recieved get neighbors answer" << endl;
 	for (uint i=0; i < answ->getNeighborsArraySize(); i++) {
 		const OverlayKey& key = answ->getNeighbors(i);
-		KadContact_p contact = routingTable->getContact(key);
+		KadContact_p contact = routingTable.getContact(key);
 		if (contact.get() == nullptr) {
 			// contact is not known
-			kad_path path = routingTable->getContact(answ->getSource())->getPath();
+			kad_path path = routingTable.getContact(answ->getSource())->getPath();
 			path.push_back(answ->getSource());
-			routingTable->onDiscovery(std::make_shared<KadContact>(key, path));
+			onDiscovery(std::make_shared<KadContact>(key, path));
 		}
 		else if (contact->getPathLength() > answ->getRouteArraySize()-1) {
 			// contact is known, but we found a better path
-			kad_path path = routingTable->getContact(answ->getSource())->getPath();
+			kad_path path = routingTable.getContact(answ->getSource())->getPath();
 			path.push_back(answ->getSource());
 			contact->setPath(path);
 		}

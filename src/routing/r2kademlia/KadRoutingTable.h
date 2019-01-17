@@ -36,25 +36,49 @@ public:
 	/** returns the contact if found, nullptr otherwise */
 	KadContact_p getContact(const OverlayKey& key);
 	/** tries to remove the contact, returns true if found */
-	inline bool removeContact(const OverlayKey& key) { return removeContactFromList(contacts, key);}
+	inline bool removeContact(const OverlayKey& key) { return removeContactFromList(contacts, key); }
 	/** tries to remove the contact from replacement list, returns true if found */
-	inline bool removeContactFromReplacements(const OverlayKey& key) { return removeContactFromList(refillContacts, key);}
+	inline bool removeContactFromReplacements(const OverlayKey& key) { return removeContactFromList(contactReplacements, key); }
 	/** returns true if the contact list is empty */
 	inline bool empty() { return contacts.empty(); }
 	/** returns the size of the contact list */
 	inline size_type size() { return contacts.size(); }
-protected:
+	/// Common stdc++ console output method
+	friend std::ostream& operator<<(std::ostream& os, const KadBucket& b) {
+		return os << b.contacts.size() << " contacts, " << b.contactReplacements.size() << " replacements";
+	}
 	KadContactList contacts;
-	KadContactList refillContacts;
+	KadContactList contactReplacements;
 };
 
 /**
+ * A class with callback functions that are called then the routing table
+ * encounters things.
  */
-class KadRoutingTable
+class KadPolicy {
+public:
+	/** called when a new contact is discovered */
+	virtual void onDiscovery(KadContact_p) = 0;
+	/** called when there is space in a bucket and the bucket is not empty */
+	virtual void onBucketSpace(KadBucket& bucket) = 0;
+	/** called when last contact is removed from a bucket*/
+	virtual void onBucketEmpty(KadBucket& bucket) = 0;
+	/**  called when a bucket needs to be refreshed */
+	virtual void onBucketRefresh(KadBucket& bucket) = 0;
+	/** called when a contact could be replaced by a new one */
+	virtual void onBucketFull(KadBucket& bucket, KadContact_p contact) = 0;
+};
+
+/**
+ * Models a kademlia routing table that stores contacts in buckets depending
+ * on the overlay key of the node.
+ */
+class KadRoutingTable : public cObject
 {
 	friend KadBucket;
 public:
-	KadRoutingTable(const OverlayKey& myKey, size_type b=1, size_type bucketSize=20);
+	KadRoutingTable() {}
+	void init(const OverlayKey& myKey, KadPolicy* policy, size_type b=1, size_type bucketSize=20);
 	/**
 	 * Tries to add the contact to the routing table.
 	 * A contact with this key must not be present.
@@ -95,38 +119,23 @@ protected:
 	inline size_type getBucketIndex(KadContact_p contact) { return getBucketIndex(contact->getKey());}
 
 	/** returns the bucket corresponding to the given overlay key */
-	KadBucket* getBucket(const OverlayKey& key);
+	KadBucket& getBucket(const OverlayKey& key);
 	/** returns the bucket corresponding to the given contact */
-	inline KadBucket* getBucket(KadContact_p contact) { return getBucket(contact->getKey());}
+	inline KadBucket& getBucket(KadContact_p contact) { return getBucket(contact->getKey());}
 
 	/** returns the index of the bucket that is the first on the level of the given bucket */
 	size_type getFirstOnBucketLevel(size_type index) { return index - (index % ((1 << b) - 1));}
 	//@}
 
-public:
-	/** @name policy foo */
-	//@{
-	/** called when a new contact is discovered */
-	void onDiscovery(KadContact_p) {};
-	/** called when we hear about a node id */
-	void onRumor(const OverlayKey& key) {};
-	/** called when there is space in a bucket and the bucket is not empty */
-	void onBucketSpace(KadBucket* bucket) {};
-	/** called when last contact is removed from a bucket*/
-	void onBucketEmpty(KadBucket* bucket) {};
-	/**  called when a bucket needs to be refreshed */
-	void onBucketRefresh(KadBucket* bucket) {};
-	/** called when a contact could be replaced by a new one */
-	void onBucketFull(KadBucket* bucket, KadContact_p contact);
-	//@}
 private:
 	/** acceleration factor, number of bits used for accelerated lookup */
-	const size_type b;
+	size_type b;
 	/** the key of this overlay node */
-	const OverlayKey myKey;
+	OverlayKey myKey = OverlayKey::UNSPECIFIED_KEY;
 	/** max size of the buckets, called "k" in research papers (k-Buckets) */
-	const size_type bucketSize;
+	size_type bucketSize;
 	std::vector<KadBucket> buckets;
+	KadPolicy* policy = nullptr;
 
 	//------ private inline helper functions -------
 	/** returns a random access iterator situated on the bucket with the given index */
