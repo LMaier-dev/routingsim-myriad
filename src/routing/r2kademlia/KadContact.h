@@ -56,6 +56,8 @@ public:
 	inline void setPath(kad_path path) { this->path = path; }
 	inline const kad_path& getPath() const { return path; }
 
+	/// Common stdc++ console output method
+	friend std::ostream& operator<<(std::ostream& os, const KadContact& c);
 private:
 	const OverlayKey key;	/// the OverlayKey of this contact
 	simtime_t lastSeen;		/// the last time this contact was seen

@@ -39,4 +39,16 @@ bool removeContactFromList(KadContactList& list, const OverlayKey& key)
 		return false;
 }
 
+std::ostream& operator<<(std::ostream& os, const KadContact& c) {
+	os << c.getKey();
+	if (c.getPath().size() == 0)
+		return os << " (no path)";
+	else {
+		os << " via";
+		for (auto key : c.getPath())
+			os << " " << key.toString().substr(0, 6);
+	}
+	return os;
+}
+
 } // namespace
