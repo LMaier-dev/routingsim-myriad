@@ -20,6 +20,7 @@
 
 #include "KadRoutingTable.h"
 #include <algorithm>
+#include "BaseTypes.h"
 
 namespace routingsim {
 void KadRoutingTable::init(const OverlayKey& myKey, KadPolicy* policy, size_type b, size_type bucketSize)
@@ -51,7 +52,7 @@ size_type KadRoutingTable::getBucketIndex(const OverlayKey& key)
 	for (i = key.getLength() - b; i >= 0 && delta.getBitRange(i, b) == 0;
 		i -= b);
 	if (i < 0)
-		return -1;
+		throw cRuntimeError("You cannot get the bucket index of your own key!");
 	return (i / b) * ((1 << b) - 1) + (delta.getBitRange(i, b) - 1);
 }
 
