@@ -127,12 +127,15 @@ protected:
 	inline KadBucket& getBucket(KadContact_p contact) { return getBucket(contact->getKey());}
 
 	/** returns the index of the bucket that is the first on the level of the given bucket */
-	size_type getFirstOnBucketLevel(size_type index) { return index - (index % ((1 << b) - 1));}
+	size_type getFirstOnBucketLevel(size_type index) { return index - (index % ((1 << accelerationFactor) - 1));}
 	//@}
 
 private:
-	/** acceleration factor, number of bits used for accelerated lookup */
-	size_type b;
+	/**
+	 * number of bits used for accelerated lookup
+	 * called "b" in research papers.
+	 */
+	size_type accelerationFactor;
 	/** the key of this overlay node */
 	OverlayKey myKey = OverlayKey::UNSPECIFIED_KEY;
 	/** max size of the buckets, called "k" in research papers (k-Buckets) */

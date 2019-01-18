@@ -23,15 +23,15 @@
 #include "BaseTypes.h"
 
 namespace routingsim {
-void KadRoutingTable::init(const OverlayKey& myKey, KadPolicy* policy, size_type b, size_type bucketSize)
+void KadRoutingTable::init(const OverlayKey& myKey, KadPolicy* policy, size_type accelerationFactor, size_type bucketSize)
 {
 	ASSERT(this->myKey.isUnspecified());
 	ASSERT(not myKey.isUnspecified());
 	this->myKey = myKey;
-	this->b = b;
+	this->accelerationFactor = accelerationFactor;
 	this->bucketSize = bucketSize;
 	this->policy = policy;
-	size_type numBuckets = myKey.getLength()/b * ((1 << b) - 1);
+	size_type numBuckets = myKey.getLength()/accelerationFactor * ((1 << accelerationFactor) - 1);
 	ASSERT(buckets.size() == 0);
 	buckets.reserve(numBuckets);
 	for(size_type i=0; i<numBuckets; i++){
@@ -49,11 +49,11 @@ size_type KadRoutingTable::getBucketIndex(const OverlayKey& key)
 	OverlayKey delta = key ^ myKey;
 	// find first subinteger that is not zero...
 	int i;
-	for (i = key.getLength() - b; i >= 0 && delta.getBitRange(i, b) == 0;
-		i -= b);
+	for (i = key.getLength() - accelerationFactor; i >= 0 && delta.getBitRange(i, accelerationFactor) == 0;
+		i -= accelerationFactor);
 	if (i < 0)
 		throw cRuntimeError("You cannot get the bucket index of your own key!");
-	return (i / b) * ((1 << b) - 1) + (delta.getBitRange(i, b) - 1);
+	return (i / accelerationFactor) * ((1 << accelerationFactor) - 1) + (delta.getBitRange(i, accelerationFactor) - 1);
 }
 
 KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_type n)
