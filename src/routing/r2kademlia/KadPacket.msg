@@ -28,6 +28,7 @@ enum KadPacketType {
 	KAD_PONG = 3;
 	KAD_GET_NEIGHBORS_CALL = 4;
 	KAD_GET_NEIGHBORS_ANSWER = 5;
+	KAD_ERROR = 6;
 }
 
 class noncobject OverlayKey;

@@ -34,6 +34,7 @@ packet KadAnswer extends KadPacket {}
 
 // ERROR
 packet KadError extends KadAnswer {
+	type = KAD_ERROR;
 	uint8_t errorType enum(KadErrorType);
 }
 
