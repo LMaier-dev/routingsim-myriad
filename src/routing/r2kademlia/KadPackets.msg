@@ -56,7 +56,7 @@ packet KadPong extends KadAnswer {
 packet KadGetNeighborsCall extends KadPacket {
 	type = KAD_GET_NEIGHBORS_CALL;
 }
-packet KadGetNeighborsAnswer extends KadPacket {
+packet KadGetNeighborsAnswer extends KadAnswer {
 	type = KAD_GET_NEIGHBORS_ANSWER;
 	OverlayKey neighbors[];
 }

@@ -67,10 +67,6 @@ class R2Kademlia : public RPCProtocol, public KadPolicy
 	virtual void handlePacket(KadPing_p packet);
 	virtual void handlePacket(std::unique_ptr<KadGetNeighborsCall> packet);
 	virtual void handlePacket(KadAnswer_p packet);
-	/// fallback
-	virtual void handlePacket(KadPacket_p packet);
-	/// for packets with no remaining source route and target != myOverlayKey
-	virtual void handleStrandedPacket(KadPacket_p packet){};
 	//@}
 
 	/** @name sending packets out*/

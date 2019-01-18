@@ -58,6 +58,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	packet->advanceProgress(); // increase hop count
 	ASSERT(packet->getCurrentHop() == myOverlayKey);
 	if (packet->hasRemainingHops()){
+		EV_TRACE << "i will route this..." << endl;
 		// TODO learn routes form passing packets
 		// TODO learn about failiures from passing packets
 		// we are not the recipient
@@ -67,11 +68,12 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	else {
 		// no hops left, packet is adressed to me
 		//TODO learn route from packet
+		EV_TRACE << "this is for me!" << endl;
 		if (handleIfFitting<KadAnswer>(packet)) return;
 		if (handleIfFitting<KadPing>(packet)) return;
 		if (handleIfFitting<KadGetNeighborsCall>(packet)) return;
+		EV_ERROR << "dropping unhandled packet of type " << packet->getType() << endl;
 	}
-	handleStrandedPacket(std::move(packet));
 }
 
 void R2Kademlia::reset() {
@@ -90,13 +92,10 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 }
 
 void R2Kademlia::handlePacket(KadAnswer_p packet) {
+	EV << "received answer packet" << endl;
 	if (packet->getType() == KAD_ERROR)
 		onErrorPacket(*check_and_cast<KadError *>(packet.get()));
 	handleAnswer(std::move(packet));
-}
-
-void R2Kademlia::handlePacket(KadPacket_p packet) {
-	EV_ERROR << "dropping unhandled packet..." << endl;
 }
 
 void R2Kademlia::routePacket(KadPacket_p packet, NodePkt_p nodePkt) {
@@ -163,6 +162,7 @@ void R2Kademlia::handlePingAnswer(KadPacket_p answer, RPCState& rpcState) {
 // GET NEIGHBOR
 void R2Kademlia::sendGetNeighbors(KadContact_p contact)
 {
+	EV_TRACE << "sending KadGetNeighbors to " << *contact << endl;
 	sendRpcCall(
 		makePacket<KadGetNeighborsCall>(contact, "KadGetNeighbors"),
 		std::bind(&R2Kademlia::handleGetNeighborsAnswer, this, _1, _2)
@@ -170,6 +170,7 @@ void R2Kademlia::sendGetNeighbors(KadContact_p contact)
 }
 
 void R2Kademlia::handlePacket(std::unique_ptr<KadGetNeighborsCall> packet) {
+	EV_TRACE << "recieved KadGetNeighbors from " << packet->getSource() << endl;
 	auto answer = makeAnswer<KadGetNeighborsAnswer>(*packet);
 	std::vector<OverlayKey> neighbors = neighborTable.getNeighbors();
 	answer->setNeighborsArraySize(neighbors.size());
@@ -182,9 +183,10 @@ void R2Kademlia::handleGetNeighborsAnswer(KadPacket_p answer, RPCState& rpcState
 {
 	if (rpcState.status != RPC_SUCCESS) return;
 	auto answ = safe_packet_cast<KadGetNeighborsAnswer>(answer);
-	EV_TRACE << "recieved get neighbors answer" << endl;
+	EV_TRACE << "recieved " << answ->getNeighborsArraySize() << " neighbors from " << answ->getSource().toString().substr(6) << endl;
 	for (uint i=0; i < answ->getNeighborsArraySize(); i++) {
 		const OverlayKey& key = answ->getNeighbors(i);
+		if(key == myOverlayKey) continue;
 		KadContact_p contact = routingTable.getContact(key);
 		if (contact.get() == nullptr) {
 			// contact is not known
@@ -232,6 +234,8 @@ void R2Kademlia::onBucketSpace(KadBucket& bucket) {
 	KadContact_p replacement = bucket.contactReplacements.back();
 	bucket.contactReplacements.pop_back();
 	bucket.contacts.push_back(replacement);
+	// TODO remove this
+	sendGetNeighbors(replacement);
 }
 void R2Kademlia::onBucketEmpty(KadBucket& bucket) {
 	EV << "bucket empty" << endl;
