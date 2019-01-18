@@ -91,17 +91,22 @@ class R2Kademlia : public RPCProtocol, public KadPolicy
 	/** @name policy foo */
 	//@{
 	void onMissingNeighbor(KadPacket_p packet, NodePkt_p pkt);
-public:
+	/** Called when an error packet is encountered, updates routing information */
+	void onErrorPacket(KadError& error);
 	/** called when a new contact is discovered */
-	virtual void onDiscovery(KadContact_p) override {}
+	void onDiscovery(const OverlayKey& key, kad_path path);
+	//@}
+public:
+	/** @name policy functions called by routing table */
+	//@{
 	/** called when there is space in a bucket and the bucket is not empty */
-	virtual void onBucketSpace(KadBucket& bucket) override {}
+	virtual void onBucketSpace(KadBucket& bucket) override;
 	/** called when last contact is removed from a bucket*/
-	virtual void onBucketEmpty(KadBucket& bucket) override {}
+	virtual void onBucketEmpty(KadBucket& bucket) override;
 	/**  called when a bucket needs to be refreshed */
-	virtual void onBucketRefresh(KadBucket& bucket) override {}
+	virtual void onBucketRefresh(KadBucket& bucket) override;
 	/** called when a contact could be replaced by a new one */
-	virtual void onBucketFull(KadBucket& bucket, KadContact_p contact) override {}
+	virtual void onBucketFull(KadBucket& bucket, KadContact_p contact) override;
 	//@}
 private:
 	/** @name message generation */

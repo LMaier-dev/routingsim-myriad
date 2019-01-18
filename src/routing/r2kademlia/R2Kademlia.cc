@@ -15,6 +15,7 @@
 
 #include "R2Kademlia.h"
 #include "BaseTypes.h"
+#include "KadRoutingTable.h"
 
 namespace routingsim {
 // for std::bind with callback functions
@@ -57,6 +58,8 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	packet->advanceProgress(); // increase hop count
 	ASSERT(packet->getCurrentHop() == myOverlayKey);
 	if (packet->hasRemainingHops()){
+		// TODO learn routes form passing packets
+		// TODO learn about failiures from passing packets
 		// we are not the recipient
 		routePacket(std::move(packet), std::move(pkt));
 		return;
@@ -83,10 +86,12 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 	neighborTable.addNeighbor(packet->getSourceId(), packet->getSource());
 	EV_TRACE << "neighbor table: "<< neighborTable << endl;
 	//TODO special treatment for neighbors?
-	routingTable->onDiscovery(std::make_shared<KadContact>(packet->getSource()));
+	onDiscovery(packet->getSource(), kad_path());
 }
 
 void R2Kademlia::handlePacket(KadAnswer_p packet) {
+	if (packet->getType() == KAD_ERROR)
+		onErrorPacket(*check_and_cast<KadError *>(packet.get()));
 	handleAnswer(std::move(packet));
 }
 
@@ -185,7 +190,7 @@ void R2Kademlia::handleGetNeighborsAnswer(KadPacket_p answer, RPCState& rpcState
 			// contact is not known
 			kad_path path = routingTable.getContact(answ->getSource())->getPath();
 			path.push_back(answ->getSource());
-			onDiscovery(std::make_shared<KadContact>(key, path));
+			onDiscovery(key, path);
 		}
 		else if (contact->getPathLength() > answ->getRouteArraySize()-1) {
 			// contact is known, but we found a better path
@@ -200,7 +205,45 @@ void R2Kademlia::handleGetNeighborsAnswer(KadPacket_p answer, RPCState& rpcState
 
 void R2Kademlia::onMissingNeighbor(KadPacket_p packet, NodePkt_p pkt) {
 	returnToSender(KAD_NEXT_HOP_UNAVAILABLE, std::move(packet), std::move(pkt));
-};
+}
+
+void R2Kademlia::onErrorPacket(KadError& error) {
+	if (error.getErrorType() == KAD_NEXT_HOP_UNAVAILABLE) {
+		KadPacket* original = check_and_cast<KadPacket *>(error.getEncapsulatedPacket());
+		ASSERT(original->getNonce() == error.getNonce());
+		ASSERT(original->getSource() == myOverlayKey);
+		EV_INFO << "Removing contact " << original->getTarget() << " because of error packet" << endl;
+		routingTable.removeContact(original->getTarget());
+	}
+	// currently there are no more error types
+}
+
+void R2Kademlia::onDiscovery(const OverlayKey& key, kad_path path) {
+	KadContact_p contact = routingTable.getContact(key);
+	if (contact) {
+		EV << "double discovery " << contact << endl;
+		//TODO update contact
+	}
+	else
+		routingTable.addCandidate(std::make_shared<KadContact>(key, std::move(path)));
+}
+
+void R2Kademlia::onBucketSpace(KadBucket& bucket) {
+	KadContact_p replacement = bucket.contactReplacements.back();
+	bucket.contactReplacements.pop_back();
+	bucket.contacts.push_back(replacement);
+}
+void R2Kademlia::onBucketEmpty(KadBucket& bucket) {
+	EV << "bucket empty" << endl;
+	// TODO probe
+}
+void R2Kademlia::onBucketRefresh(KadBucket& bucket) {
+	// TODO probe?
+}
+void R2Kademlia::onBucketFull(KadBucket& bucket, KadContact_p contact) {
+	EV << "bucket full" << endl;
+	// TODO contact replacement
+}
 
 // -------------------- private helper methods --------------------
 NodePkt_p R2Kademlia::makeHelloPacket()

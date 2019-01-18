@@ -100,20 +100,41 @@ KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_t
 	return result;
 }
 
-bool KadRoutingTable::addContact(KadContact_p contact)
+void KadRoutingTable::addCandidate(KadContact_p contact)
 {
+	EV << "adding candidate " << *contact << endl;
 	// contact must not be present
-	ASSERT(not getContact(contact->getKey()));
+	if(getContact(contact->getKey())) {
+		KadContact_p other = getContact(contact->getKey());
+		EV << "contact with key allready present" << contact << endl;
+		ASSERT(contact == other);
+		return;
+	}
 	KadBucket& bucket = getBucket(contact);
-	if (bucket.size() == bucketSize){
-		policy->onBucketFull(bucket, contact);
-		return false;
+	if (bucket.contactReplacements.size() == bucketSize) {
+		ASSERT(bucket.size() == bucketSize);
+		return; // the bucket is completely full!
 	}
 	else {
-		bucket.contacts.push_back(contact);
-		return true;
+		bucket.contactReplacements.push_back(contact);
+		if (bucket.size() < bucketSize)
+			policy->onBucketSpace(bucket);
 	}
 }
+
+void KadRoutingTable::addContact(KadContact_p contact)
+{
+	EV << "adding contact" << *contact << endl;
+	// contact must not be present
+	// TODO could it be in the replacements?
+	ASSERT(not getContact(contact->getKey()));
+	KadBucket& bucket = getBucket(contact);
+	if (bucket.size() == bucketSize)
+		policy->onBucketFull(bucket, contact);
+	else
+		bucket.contacts.push_back(contact);
+}
+
 
 bool KadRoutingTable::removeContact(const OverlayKey& key)
 {
@@ -150,6 +171,16 @@ KadContact_p KadBucket::getContact(const OverlayKey& key)
 	if (it != contactReplacements.end())
 		return *it;
 	return KadContact_p();
+}
+
+void KadBucket::replaceContact(KadContact_p oldContact, KadContact_p newContact)
+{
+	auto oldIt = findContactInList(contacts, oldContact->getKey());
+	ASSERT(oldContact == *oldIt);
+	ASSERT(findContactInList(contacts, newContact->getKey()) == contacts.end());
+	ASSERT(findContactInList(contactReplacements, newContact->getKey()) == contactReplacements.end());
+	*oldIt = std::move(newContact);
+	// TODO add old contact to contact replacements?
 }
 
 } // namespace

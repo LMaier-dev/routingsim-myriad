@@ -43,6 +43,7 @@ public:
 	inline bool empty() { return contacts.empty(); }
 	/** returns the size of the contact list */
 	inline size_type size() { return contacts.size(); }
+	void replaceContact(KadContact_p oldContact, KadContact_p newContact);
 	/// Common stdc++ console output method
 	friend std::ostream& operator<<(std::ostream& os, const KadBucket& b) {
 		return os << b.contacts.size() << " contacts, " << b.contactReplacements.size() << " replacements";
@@ -57,8 +58,6 @@ public:
  */
 class KadPolicy {
 public:
-	/** called when a new contact is discovered */
-	virtual void onDiscovery(KadContact_p) = 0;
 	/** called when there is space in a bucket and the bucket is not empty */
 	virtual void onBucketSpace(KadBucket& bucket) = 0;
 	/** called when last contact is removed from a bucket*/
@@ -80,13 +79,17 @@ public:
 	KadRoutingTable() {}
 	void init(const OverlayKey& myKey, KadPolicy* policy, size_type b=1, size_type bucketSize=20);
 	/**
-	 * Tries to add the contact to the routing table.
-	 * A contact with this key must not be present.
+	 * Adds the contact to the replacement cache and calls a policy function
+	 * to trigger adding the contact to the bucket.
+	 */
+	void addCandidate(KadContact_p contact);
+	/**
+	 * Adds the contact to the routing table.
 	 * If the corresponding bucket is full, the contact is handled by the
 	 * onBucketFull policy.
-	 * @returns true if the contact was added
 	 */
-	bool addContact(KadContact_p contact);
+	void addContact(KadContact_p contact);
+
 	/**
 	 * Removes the contact with the givne key from the routing table.
 	 * @returns true if the contact was removed, false if it was not present
