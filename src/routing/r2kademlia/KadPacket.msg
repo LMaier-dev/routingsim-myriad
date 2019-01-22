@@ -24,11 +24,13 @@ namespace routingsim;
 enum KadPacketType {
 	KAD_INVALID = 0;
 	KAD_HELLO = 1;
-	KAD_PING = 2;
-	KAD_PONG = 3;
-	KAD_GET_NEIGHBORS_CALL = 4;
-	KAD_GET_NEIGHBORS_ANSWER = 5;
-	KAD_ERROR = 6;
+	KAD_ERROR = 2;
+	KAD_PING = 3;
+	KAD_PONG = 4;
+	KAD_GET_NEIGHBORS_CALL = 5;
+	KAD_GET_NEIGHBORS_ANSWER = 6;
+	KAD_FIND_NODE_CALL = 7;
+	KAD_FIND_NODE_ANSWER = 8;
 }
 
 class noncobject OverlayKey;

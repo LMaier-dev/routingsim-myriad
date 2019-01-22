@@ -66,6 +66,7 @@ class R2Kademlia : public RPCProtocol, public KadPolicy
 	/// responds to ping request
 	virtual void handlePacket(KadPing_p packet);
 	virtual void handlePacket(std::unique_ptr<KadGetNeighborsCall> packet);
+	virtual void handlePacket(std::unique_ptr<KadFindNodeCall> packet);
 	virtual void handlePacket(KadAnswer_p packet);
 	//@}
 
@@ -82,6 +83,8 @@ class R2Kademlia : public RPCProtocol, public KadPolicy
 	void sendPing(KadContact_p contact);
 	/// sends a "get neighbors" call to the contact
 	void sendGetNeighbors(KadContact_p contact);
+	/// sends a find node call to find this node
+	void sendFindNode(const OverlayKey& key);
 	//@}
 
 	/** @name policy foo */
@@ -91,6 +94,7 @@ class R2Kademlia : public RPCProtocol, public KadPolicy
 	void onErrorPacket(KadError& error);
 	/** called when a new contact is discovered */
 	void onDiscovery(const OverlayKey& key, kad_path path);
+	void onPathDiscovery(const OverlayKey& key, kad_path path, const OverlayKey& via=OverlayKey::UNSPECIFIED_KEY);
 	//@}
 public:
 	/** @name policy functions called by routing table */
@@ -133,18 +137,21 @@ private:
 	 */
 	template<typename T>
 	bool handleIfFitting(KadPacket_p& packet);
+	kad_path concatViaPath(const kad_path& viaPath, const OverlayKey& viaKey, const kad_path& path);
 	//@}
 
 	/** @name callbacks for rpc calls */
 	//@{
 	void handlePingAnswer(KadPacket_p answer, RPCState& rpcState);
 	void handleGetNeighborsAnswer(KadPacket_p answer, RPCState& rpcState);
+	void handleFindNodeAnswer(KadPacket_p answer, RPCState& rpcState);
 	//@}
 private:
 	OverlayKey myOverlayKey;
 	NeighborTable neighborTable;
 	KadRoutingTable routingTable;
 	static const int PAYLOAD_TYPE=5;
+	static const uint findNodeNumber=20;
 private:
 	class PingRPCState;
 };

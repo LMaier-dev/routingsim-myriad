@@ -187,22 +187,51 @@ void R2Kademlia::handleGetNeighborsAnswer(KadPacket_p answer, RPCState& rpcState
 	for (uint i=0; i < answ->getNeighborsArraySize(); i++) {
 		const OverlayKey& key = answ->getNeighbors(i);
 		if(key == myOverlayKey) continue;
-		KadContact_p contact = routingTable.getContact(key);
-		if (contact.get() == nullptr) {
-			// contact is not known
-			kad_path path = routingTable.getContact(answ->getSource())->getPath();
-			path.push_back(answ->getSource());
-			onDiscovery(key, path);
-		}
-		else if (contact->getPathLength() > answ->getRouteArraySize()-1) {
-			// contact is known, but we found a better path
-			kad_path path = routingTable.getContact(answ->getSource())->getPath();
-			path.push_back(answ->getSource());
-			contact->setPath(path);
-		}
+		else onPathDiscovery(key, kad_path(), answ->getSource());
 	}
 }
 
+// FIND NODE
+void R2Kademlia::sendFindNode(const OverlayKey& key) {
+	auto contacts = routingTable.getClosestContacts(key, 1);
+	// TODO select more and choose
+	ASSERT(contacts.size() == 1);
+	KadContact_p contact = contacts.front();
+	auto packet = makePacket<KadFindNodeCall>(contact, "FindNode");
+	packet->setQuery(key);
+	sendRpcCall(
+		std::move(packet),
+		std::bind(&R2Kademlia::handleFindNodeAnswer, this, _1, _2)
+	);
+}
+void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeCall> packet) {
+	auto answer = makeAnswer<KadFindNodeAnswer>(*packet);
+	if (packet->getQuery() == myOverlayKey) {
+		sendPacket(std::move(answer));
+		return;
+	}
+	auto contacts = routingTable.getClosestContacts(packet->getQuery(), findNodeNumber);
+	answer->setContactArraySize(contacts.size());
+	answer->setPathArraySize(contacts.size());
+	for(size_t i = 0; i < contacts.size(); i++) {
+		answer->setContact(i, contacts[i]->getKey());
+		answer->setPath(i, contacts[i]->getPath());
+	}
+	sendPacket(std::move(answer));
+}
+void R2Kademlia::handleFindNodeAnswer(KadPacket_p answer_, RPCState& rpcState) {
+	if (rpcState.status != RPC_SUCCESS) return;
+	auto answer = safe_packet_cast<KadFindNodeAnswer>(answer_);
+	ASSERT(answer->getContactArraySize() == answer->getPathArraySize());
+	for (size_t i = 0; i < answer->getContactArraySize(); i++) {
+		onPathDiscovery(
+			answer->getContact(i),
+			std::move(answer->getPath(i)),
+			answer->getSource()
+		);
+	}
+	// TODO try again
+}
 // ------------------------- policy foo --------------------------------------
 
 void R2Kademlia::onMissingNeighbor(KadPacket_p packet, NodePkt_p pkt) {
@@ -228,6 +257,35 @@ void R2Kademlia::onDiscovery(const OverlayKey& key, kad_path path) {
 	}
 	else
 		routingTable.addCandidate(std::make_shared<KadContact>(key, std::move(path)));
+}
+
+void R2Kademlia::onPathDiscovery(const OverlayKey& key, kad_path path, const OverlayKey& via) {
+	// find via contact
+	KadContact_p viaContact{nullptr};
+	viaContact = routingTable.getContact(via);
+	if(!viaContact)
+		throw cRuntimeError("VIA contact not known");
+
+	// find contact
+	KadContact_p contact = routingTable.getContact(key);
+	if(contact) {
+		// contact known
+		if(contact->getPathLength() > viaContact->getPathLength() + 1 + path.size()) {
+			contact->setPath(concatViaPath(viaContact->getPath(), via, path));
+		}
+	}
+	else {
+		// contact unknown
+		onDiscovery(key, concatViaPath(viaContact->getPath(), via, path));
+	}
+}
+kad_path R2Kademlia::concatViaPath(const kad_path& viaPath, const OverlayKey& viaKey, const kad_path& path) {
+	kad_path newPath{};
+	newPath.reserve(viaPath.size() + 1 + path.size());
+	std::copy(viaPath.begin(), viaPath.end(), std::back_inserter(newPath));
+	newPath.push_back(viaKey);
+	std::copy(path.begin(), path.end(), std::back_inserter(newPath));
+	return newPath;
 }
 
 void R2Kademlia::onBucketSpace(KadBucket& bucket) {

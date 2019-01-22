@@ -17,13 +17,16 @@ cplusplus {{
 #include "OverlayKey.h"
 #include "KadPacket.h"
 #include <memory>
+#include <vector>
 class KadPacket;
+typedef std::vector<OverlayKey> key_vector_t;
 }}
 
 namespace routingsim;
 class KadPacket extends cPacket;
 class noncobject nodeid_t;
 class noncobject OverlayKey;
+class noncobject key_vector_t;
 
 enum KadErrorType {
 	KAD_PACKET_INVALID = 0;
@@ -56,7 +59,20 @@ packet KadPong extends KadAnswer {
 packet KadGetNeighborsCall extends KadPacket {
 	type = KAD_GET_NEIGHBORS_CALL;
 }
+
 packet KadGetNeighborsAnswer extends KadAnswer {
 	type = KAD_GET_NEIGHBORS_ANSWER;
 	OverlayKey neighbors[];
+}
+
+// FIND NODE
+packet KadFindNodeCall extends KadPacket {
+	type = KAD_FIND_NODE_CALL;
+	OverlayKey query;
+	bool recursive = false;
+}
+packet KadFindNodeAnswer extends KadAnswer {
+	type = KAD_FIND_NODE_ANSWER;
+	OverlayKey contact[];
+	key_vector_t path[];
 }
