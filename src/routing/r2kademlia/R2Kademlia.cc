@@ -77,9 +77,11 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 }
 
 void R2Kademlia::reset() {
+	Enter_Method_Silent();
 	EV << "resetting state of R2Kademlia" << endl;
 	neighborTable.clear();
 	routingTable = KadRoutingTable();
+	unbind(PAYLOAD_TYPE);
 	onInitialize();
 	//TODO optimization: implement clear function in routing table
 }
