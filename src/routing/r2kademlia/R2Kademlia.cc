@@ -48,17 +48,12 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	ASSERT(pkt->getType() == PAYLOAD_TYPE);
 	KadPacket_p packet = \
 		std::unique_ptr<KadPacket>(check_and_cast<KadPacket*>(pkt->decapsulate()));
-	EV_TRACE << "received KadPacket of type " << (int)packet->getType() << endl;
-	EV_TRACE << "my key " << myOverlayKey << endl;
-	EV_TRACE << "source " << packet->getSource() << endl;
-	EV_TRACE << "target " << packet->getTarget() << endl;
 	// hello packets do not include my key
 	if (handleIfFitting<KadHello>(packet)) return;
 	// other packets should do so
 	packet->advanceProgress(); // increase hop count
 	ASSERT(packet->getCurrentHop() == myOverlayKey);
 	if (packet->hasRemainingHops()){
-		EV_TRACE << "i will route this..." << endl;
 		// TODO learn routes form passing packets
 		// TODO learn about failiures from passing packets
 		// we are not the recipient
@@ -68,7 +63,6 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	else {
 		// no hops left, packet is adressed to me
 		//TODO learn route from packet
-		EV_TRACE << "this is for me!" << endl;
 		if (handleIfFitting<KadAnswer>(packet)) return;
 		if (handleIfFitting<KadPing>(packet)) return;
 		if (handleIfFitting<KadGetNeighborsCall>(packet)) return;
