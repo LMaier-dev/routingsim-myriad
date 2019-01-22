@@ -31,10 +31,10 @@ void KadRoutingTable::init(const OverlayKey& myKey, KadPolicy* policy, size_type
 	this->accelerationFactor = accelerationFactor;
 	this->bucketSize = bucketSize;
 	this->policy = policy;
-	size_type numBuckets = myKey.getLength()/accelerationFactor * ((1 << accelerationFactor) - 1);
+	size_type numBuckets = getLevelWidth() + 1;
 	ASSERT(buckets.size() == 0);
-	buckets.reserve(numBuckets);
-	for(size_type i=0; i<numBuckets; i++){
+	buckets.reserve(getMaxNumBuckets());
+	for (size_type i = 0; i < numBuckets; i++) {
 		buckets.emplace_back();
 	}
 	WATCH_VECTOR(buckets);
@@ -57,7 +57,35 @@ size_type KadRoutingTable::getBucketIndex(const OverlayKey& key)
 	// we reverse the bucket order. now the bigges bucket is on the left.
 	// for accelerationFactor = 1 this is just (key.getLength() - i)
 	size_type index = (key.getLength()/accelerationFactor - i) * getLevelWidth() - delta.getBitRange(i, accelerationFactor) + 1;
-	return min(buckets.size()-1, index);
+	ASSERT(index <= getMaxNumBuckets());
+	return std::min(buckets.size()-1, index);
+}
+
+void KadRoutingTable::splitLastBucket() {
+	EV << "splitting bucket" << endl;
+	ASSERT(buckets.size() < getMaxNumBuckets());
+	KadBucket oldBucket{};
+	std::swap(oldBucket, buckets.back());
+	ASSERT(oldBucket.size() >= bucketSize);
+	// create new buckets
+	size_type newSize = buckets.size() + getLevelWidth();
+	if (newSize > getMaxNumBuckets()) {
+		ASSERT(newSize == getMaxNumBuckets()-1);
+		newSize--;
+		// this happens when we create the last level
+		// then we do not need a to create a last bucket to catch contacts that
+		// need to be resorted later
+		EV << "reached full routing table depth" << endl;
+	}
+	buckets.reserve(newSize);
+	while(buckets.size() < newSize)
+		buckets.emplace_back();
+	// sort contacts into new buckets
+	for(KadContact_p contact : oldBucket.contacts)
+		getBucket(contact).contacts.push_back(contact);
+	for(KadContact_p contact : oldBucket.contactReplacements)
+		getBucket(contact).contactReplacements.push_back(contact);
+	// TODO optimization: use std::move for contacts
 }
 
 KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_type n)
@@ -120,7 +148,7 @@ void KadRoutingTable::addCandidate(KadContact_p contact)
 	}
 	else {
 		bucket.contactReplacements.push_back(contact);
-		if (bucket.size() < bucketSize)
+		if (bucket.size() < bucketSize || isSplittable(bucket))
 			policy->onBucketSpace(bucket);
 	}
 }
@@ -133,7 +161,12 @@ void KadRoutingTable::addContact(KadContact_p contact)
 	ASSERT(not getContact(contact->getKey()));
 	KadBucket& bucket = getBucket(contact);
 	if (bucket.size() == bucketSize)
-		policy->onBucketFull(bucket, contact);
+		if (isSplittable(bucket)) {
+			splitLastBucket();
+			addContact(contact);
+		}
+		else
+			policy->onBucketFull(bucket, contact);
 	else
 		bucket.contacts.push_back(contact);
 }

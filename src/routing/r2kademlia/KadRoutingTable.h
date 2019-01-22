@@ -76,8 +76,8 @@ class KadRoutingTable : public cObject
 {
 	friend KadBucket;
 public:
-	KadRoutingTable() {}
-	void init(const OverlayKey& myKey, KadPolicy* policy, size_type b=1, size_type bucketSize=20);
+	KadRoutingTable() {};
+	void init(const OverlayKey& myKey, KadPolicy* policy, size_type accelerationFactor=1, size_type bucketSize=10);
 	/**
 	 * Adds the contact to the replacement cache and calls a policy function
 	 * to trigger adding the contact to the bucket.
@@ -121,19 +121,26 @@ protected:
 	//@{
 	/** returns the index of the bucket corresponding to the given overlay key. */
 	size_type getBucketIndex(const OverlayKey& key);
+	/** splits the deepest bucket */
+	void splitLastBucket();
 	/** returns the index of the bucket corresponding to the given contact */
 	inline size_type getBucketIndex(KadContact_p contact) { return getBucketIndex(contact->getKey());}
 
 	/** returns the bucket corresponding to the given overlay key */
 	KadBucket& getBucket(const OverlayKey& key);
 	/** returns the bucket corresponding to the given contact */
-	inline KadBucket& getBucket(KadContact_p contact) { return getBucket(contact->getKey());}
+	inline KadBucket& getBucket(KadContact_p contact) { return getBucket(contact->getKey()); }
+	/** returns true if we could split this bucket */
+	inline bool isSplittable(KadBucket& bucket) { return &bucket == &buckets.back() && buckets.size() < getMaxNumBuckets(); }
 
 	/** returns the width of a level in the accelerated lookup tree */
 	inline size_type getLevelWidth() { return (1 << accelerationFactor) - 1; }
+	
+	/** returns the theoretica number of buckets that we could have */
+	inline size_type getMaxNumBuckets() { return myKey.getLength()/accelerationFactor * getLevelWidth(); }
 
 	/** returns the index of the bucket that is the first on the level of the given bucket */
-	inline size_type getFirstOnBucketLevel(size_type index) { return index - (index % getLevelWidth());}
+	inline size_type getFirstOnBucketLevel(size_type index) { return index - (index % getLevelWidth()); }
 	//@}
 
 private:

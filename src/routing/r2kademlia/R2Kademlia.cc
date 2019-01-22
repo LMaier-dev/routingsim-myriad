@@ -27,7 +27,7 @@ void R2Kademlia::onInitialize() {
 	EV << "R2Kademlia::onInitialize()" << endl;
 	myOverlayKey = OverlayKey::random(getRNG(0));
 	bind(PAYLOAD_TYPE);
-	//TODO parameters for bucketSize and b (accelerated lookup parameter)
+	//TODO parameters for bucketSize and accelerated lookup parameter
 	routingTable.init(myOverlayKey, this);
 	sendToNeighbors(makeHelloPacket());
 	WATCH(myOverlayKey);
@@ -291,7 +291,7 @@ kad_path R2Kademlia::concatViaPath(const kad_path& viaPath, const OverlayKey& vi
 void R2Kademlia::onBucketSpace(KadBucket& bucket) {
 	KadContact_p replacement = bucket.contactReplacements.back();
 	bucket.contactReplacements.pop_back();
-	bucket.contacts.push_back(replacement);
+	routingTable.addContact(replacement);
 	// TODO remove this
 	sendGetNeighbors(replacement);
 }
@@ -303,7 +303,7 @@ void R2Kademlia::onBucketRefresh(KadBucket& bucket) {
 	// TODO probe?
 }
 void R2Kademlia::onBucketFull(KadBucket& bucket, KadContact_p contact) {
-	EV << "bucket full" << endl;
+	EV << "bucket full, dropping contact " << contact << endl;
 	// TODO contact replacement
 }
 
