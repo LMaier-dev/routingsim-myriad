@@ -55,8 +55,8 @@ size_type KadRoutingTable::getBucketIndex(const OverlayKey& key)
 		throw cRuntimeError("You cannot get the bucket index of your own key!");
 	// i is now the index of the LSB of the first non zero subinteger
 	// we reverse the bucket order. now the bigges bucket is on the left.
-	// for accelerationFactor = 1 this is just (key.getLength() - i)
-	size_type index = (key.getLength()/accelerationFactor - i) * getLevelWidth() - delta.getBitRange(i, accelerationFactor) + 1;
+	// for accelerationFactor = 1 this is just (key.getLength() - i - 1)
+	size_type index = (key.getLength() - i - 1)/accelerationFactor * getLevelWidth() - delta.getBitRange(i, accelerationFactor) + 1;
 	ASSERT(index <= getMaxNumBuckets());
 	return std::min(buckets.size()-1, index);
 }
