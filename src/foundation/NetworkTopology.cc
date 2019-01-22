@@ -864,7 +864,7 @@ void NetworkTopology::disableLink(nodeid_t f, nodeid_t t) {
 				<< endl;
 		return;
 	}
-	check_and_cast<Node *> (from)->disableLink(to, "toNeighbors$o");
+	Node::getNode(from)->disableLink(Node::getNode(to), "toNeighbors$o");
 }
 
 void NetworkTopology::enableLink(nodeid_t f, nodeid_t t) {
@@ -900,8 +900,7 @@ void NetworkTopology::enableLink(nodeid_t f, nodeid_t t) {
 				<< endl;
 		return;
 	}
-
-	check_and_cast<Node *> (from)->enableLink(to, "toNeighbors$o");
+	Node::getNode(from)->enableLink(Node::getNode(to), "toNeighbors$o");
 }
 
 void NetworkTopology::disableNode(nodeid_t n) {
@@ -933,7 +932,7 @@ void NetworkTopology::disableNode(nodeid_t n) {
 
 	// set display string status icon i2
 	if (cSimulation::getActiveEnvir()->isGUI()) {
-		cDisplayString &ds = (check_and_cast<Node *> (moduleMap[n]))->getDisplayString();
+		cDisplayString &ds = moduleMap[n]->getDisplayString();
 		ds.setTagArg("i2", 0, "status/stop");
 	}
 }
@@ -967,7 +966,7 @@ void NetworkTopology::enableNode(nodeid_t n) {
 
 	// set display string status icon i2
 	if (cSimulation::getActiveEnvir()->isGUI()) {
-		cDisplayString &ds = (check_and_cast<Node *> (moduleMap[n]))->getDisplayString();
+		cDisplayString &ds = moduleMap[n]->getDisplayString();
 		ds.setTagArg("i2", 0, "");
 	}
 }
@@ -1204,7 +1203,7 @@ void NetworkTopology::setShortestPathCalculationMode(string mode) {
 }
 
 void NetworkTopology::resetNode(nodeid_t n) {
-	cModule *node = moduleMap[n];
+	cModule *node = Node::getNode(moduleMap[n]);
 	int size = node->gate("toProtocols$o", 0)->size();
 	for (int i = 0; i < size; i++) {
 		cGate *tnm = node->gate("toProtocols$o", i);

@@ -28,7 +28,7 @@ Define_Module(Node);
 static nodeid_t gnodeid=0;
 
 Node* Node::getNode(cModule *mod) {
-	cModule *submod= mod->getSubmodule("node");
+	cModule *submod = mod->getSubmodule("node");
 	if (submod) {
 		// we have a node submodule
 		return check_and_cast<Node *>(submod);
@@ -258,7 +258,7 @@ void Node::onGoodbye( NodePkt* pkt ) {
 	sendToModules(pkt->dup());
 }
 
-bool Node::disableLink(cModule *mod, const char *gatename) {
+bool Node::disableLink(Node *mod, const char *gatename) {
 	if (!hasGate(gatename))
 		return false;
 
@@ -279,7 +279,7 @@ bool Node::disableLink(cModule *mod, const char *gatename) {
 	return false;
 }
 
-bool Node::enableLink(cModule *mod, const char *gatename) {
+bool Node::enableLink(Node *mod, const char *gatename) {
 	if (!hasGate(gatename)) {
 		EV_WARN << "Node " << getNodeId() << ": Gate " << gatename << " does not exist" << endl;
 		return false;

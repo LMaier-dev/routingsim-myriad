@@ -66,9 +66,9 @@ protected:
 	virtual void doBuildInside();
 	virtual ~Node();
 	/// Disable link to neighbor mod in gate vector gatename
-	bool disableLink(cModule *mod, const char *gatename);
+	bool disableLink(Node *mod, const char *gatename);
 	/// Enable link to neighbor mod in gate vector gatename
-	bool enableLink(cModule *mod, const char *gatename);
+	bool enableLink(Node *mod, const char *gatename);
 	/// sendNotify is called from the context of NetworkManager
 	void sendNotify(NodePkt *packet, cGate *dg);
 

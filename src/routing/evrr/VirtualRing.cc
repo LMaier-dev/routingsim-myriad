@@ -205,7 +205,6 @@ void VirtualRing::onInitialize() {
 	char str[30];
 	sprintf(str,"%d",id);
 	node().getDisplayString().setTagArg("t",0,str);
-	node().setName("");
 
 	// start timer and main-loop
 	timer = new NodePkt();
