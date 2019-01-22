@@ -42,7 +42,7 @@ void KadRoutingTable::init(const OverlayKey& myKey, KadPolicy* policy, size_type
 
 size_type KadRoutingTable::getBucketIndex(const OverlayKey& key)
 {
-	// taken from OverSim Kademlia.cc
+	// based on OverSim Kademlia.cc
 	// Copyright (C) 2006 Institut fuer Telematik, Universitaet Karlsruhe (TH)
 	// licenced GPLv2 or later
 	// calculate XOR distance
@@ -53,7 +53,11 @@ size_type KadRoutingTable::getBucketIndex(const OverlayKey& key)
 		i -= accelerationFactor);
 	if (i < 0)
 		throw cRuntimeError("You cannot get the bucket index of your own key!");
-	return (i / accelerationFactor) * ((1 << accelerationFactor) - 1) + (delta.getBitRange(i, accelerationFactor) - 1);
+	// i is now the index of the LSB of the first non zero subinteger
+	// we reverse the bucket order. now the bigges bucket is on the left.
+	// for accelerationFactor = 1 this is just (key.getLength() - i)
+	size_type index = (key.getLength()/accelerationFactor - i) * getLevelWidth() - delta.getBitRange(i, accelerationFactor) + 1;
+	return min(buckets.size()-1, index);
 }
 
 KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_type n)
@@ -91,11 +95,9 @@ KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_t
 		}
     };
 	std::sort(result.begin(), result.end(), KadContactCompare(key));
-	// if whe have found move than n contacts, we need to remove some
+	// if we have found move than n contacts, we need to remove some
 	if (result.size() > n) {
-		auto it = result.begin();
-		std::advance(it, n);
-		result.erase(it, result.end());
+		result.resize(n);
 	}
 	result.shrink_to_fit();
 	return result;

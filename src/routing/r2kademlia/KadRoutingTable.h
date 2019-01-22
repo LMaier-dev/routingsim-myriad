@@ -111,7 +111,10 @@ public:
 	 */
 	KadContactList getClosestContacts(const OverlayKey& key, size_type n);
 	/// returns true if the key is known, i.e. there is a contact present
-	inline bool isKnown(const OverlayKey& key) { return getContact(key).get() != nullptr;}
+	inline bool isKnown(const OverlayKey& key) { return getContact(key).get() != nullptr; }
+
+	inline OverlayKey distance(const OverlayKey& a, const OverlayKey& b) { return a ^ b; }
+	inline OverlayKey distance(const OverlayKey& key) { return key ^ myKey; }
 	
 protected:
 	/** @name bucket access */
@@ -126,8 +129,11 @@ protected:
 	/** returns the bucket corresponding to the given contact */
 	inline KadBucket& getBucket(KadContact_p contact) { return getBucket(contact->getKey());}
 
+	/** returns the width of a level in the accelerated lookup tree */
+	inline size_type getLevelWidth() { return (1 << accelerationFactor) - 1; }
+
 	/** returns the index of the bucket that is the first on the level of the given bucket */
-	size_type getFirstOnBucketLevel(size_type index) { return index - (index % ((1 << accelerationFactor) - 1));}
+	inline size_type getFirstOnBucketLevel(size_type index) { return index - (index % getLevelWidth());}
 	//@}
 
 private:
