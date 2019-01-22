@@ -80,6 +80,7 @@ void R2Kademlia::reset() {
 	EV << "resetting state of R2Kademlia" << endl;
 	neighborTable.clear();
 	routingTable = KadRoutingTable();
+	onInitialize();
 	//TODO optimization: implement clear function in routing table
 }
 

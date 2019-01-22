@@ -36,6 +36,7 @@ using size_type = std::size_t;
 class KadContact
 {
 public:
+	KadContact(const KadContact&) = delete;
 	KadContact(const OverlayKey& key): key(key), path(){};
 	KadContact(const OverlayKey& key, kad_path path): key(key), path(path) {};
 	/// returns the key of this contact
