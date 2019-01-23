@@ -151,7 +151,9 @@ private:
 	NeighborTable neighborTable;
 	KadRoutingTable routingTable;
 	static const int PAYLOAD_TYPE=5;
+	// TODO: move to parameter
 	static const uint findNodeNumber=20;
+	static const uint discoveryRadius=5;
 private:
 	class PingRPCState;
 };

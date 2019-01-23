@@ -145,12 +145,12 @@ void R2Kademlia::handlePingAnswer(KadPacket_p answer, RPCState& rpcState) {
 		// update contact
 		contact->seen();
 		if (contact->isStale() or (contact->getPathLength() > path.size()))
-			contact->setPath(path);
+			contact->setPath(std::move(path));
 		contact->setStale(false);
 	}
 	else {
 		// create new contact
-		contact = std::make_shared<KadContact>(key, path);
+		contact = std::make_shared<KadContact>(key, std::move(path));
 		contact->seen();
 		routingTable.addContact(contact);
 	}
@@ -252,8 +252,13 @@ void R2Kademlia::onDiscovery(const OverlayKey& key, kad_path path) {
 		EV << "double discovery " << contact << endl;
 		//TODO update contact
 	}
-	else
-		routingTable.addCandidate(std::make_shared<KadContact>(key, std::move(path)));
+	else {
+		contact = std::make_shared<KadContact>(key, std::move(path));
+		routingTable.addCandidate(contact);
+		if(contact->getPathLength() < discoveryRadius) {
+			sendGetNeighbors(contact);
+		}
+	}
 }
 
 void R2Kademlia::onPathDiscovery(const OverlayKey& key, kad_path path, const OverlayKey& via) {
@@ -289,8 +294,6 @@ void R2Kademlia::onBucketSpace(KadBucket& bucket) {
 	KadContact_p replacement = bucket.contactReplacements.back();
 	bucket.contactReplacements.pop_back();
 	routingTable.addContact(replacement);
-	// TODO remove this
-	sendGetNeighbors(replacement);
 }
 void R2Kademlia::onBucketEmpty(KadBucket& bucket) {
 	EV << "bucket empty" << endl;
