@@ -155,7 +155,7 @@ void KadRoutingTable::addCandidate(KadContact_p contact)
 
 void KadRoutingTable::addContact(KadContact_p contact)
 {
-	EV << "adding contact" << *contact << endl;
+	EV << "adding contact " << *contact << endl;
 	// contact must not be present
 	// TODO could it be in the replacements?
 	ASSERT(not getContact(contact->getKey()));
