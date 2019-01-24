@@ -303,14 +303,15 @@ void Statistics::addSample(StatisticSample* sample ) {
 
 void Statistics::registerMessage( cMessage* msg ) {
 	msgs.insert(msg);
-	cModule* srcNode = getSimulation()->getContextModule()->getParentModule();
-	msg->setContextPointer(srcNode);
+	// save current context module for getting the source node later
+	msg->setContextPointer(getSimulation()->getContextModule());
 }
 
 void Statistics::dropMessage( cMessage* msg, nodeid_t dstNode ) {
 	if (msgs.count(msg)==0) return;
 
-	nodeid_t srcNode = dynamic_cast<Node *>(static_cast<cModule*>(msg->getContextPointer()))->getNodeId();
+	// the context pointer is set in registerMessage
+	nodeid_t srcNode = Node::getNode(static_cast<cModule*>(msg->getContextPointer()))->getNodeId();
 
 	if (recordShortestPathDeliveryRatio) {
 		if (getNetworkManager()!=NULL) {
@@ -329,10 +330,14 @@ void Statistics::dropMessage( cMessage* msg, nodeid_t dstNode ) {
 const char* stretchStr="stretch";
 
 void Statistics::deliveredMessage( cMessage* msg, int hop_count ) {
-	if (msgs.count(msg)==0) return;
+	if (msgs.count(msg)==0) {
+		EV_ERROR << "unregistered message delivered: " << msg << " - " <<  msg->getId() << endl;
+		return;
+	}
 	hopCount->collect(hop_count);
-	nodeid_t srcNode = dynamic_cast<Node *>(static_cast<cModule*>(msg->getContextPointer()))->getNodeId();
-	nodeid_t dstNode = dynamic_cast<Node *>(getSimulation()->getContextModule()->getParentModule())->getNodeId();
+	// the context pointer is set in registerMessage
+	nodeid_t srcNode = Node::getNode(static_cast<cModule*>(msg->getContextPointer()))->getNodeId();
+	nodeid_t dstNode = Node::getNode(getSimulation()->getContextModule())->getNodeId();
 	if (getNetworkManager()!=NULL) {
 		int realDistance = (int)getNetworkManager()->getDistance(srcNode, dstNode);
 		if (realDistance >= 0) {
@@ -340,6 +345,7 @@ void Statistics::deliveredMessage( cMessage* msg, int hop_count ) {
 			addStretch->collect(hop_count-realDistance);
 			if (realDistance>0.5) {
 				double stretch = (double)hop_count / (double)realDistance;
+				ASSERT(not std::isnan(stretch));
 				mulStretch->collect(stretch);
 			}
 		}
@@ -363,22 +369,19 @@ void Statistics::deliveredMessage( cMessage* msg, int hop_count ) {
 const char* STATS_MAIN = "mainStatistics";
 const char* STATS_TRAFFIC = "trafficStatistics";
 
-inline Statistics& createStats( const char* name = STATS_MAIN ) {
+inline Statistics *createStats( const char* name = STATS_MAIN ) {
 	cModuleType* type =
 			cModuleType::get("routingsim.foundation.Statistics");
-	cModule* mod = getSimulation()->getContextModule();
-	while (mod->getParentModule() != NULL)
-		mod = mod->getParentModule();
-	Statistics& s = *dynamic_cast<Statistics*> (type->create(name, mod));
-	return s;
+	cModule* mod = getSimulation()->getModuleByPath("<root>");
+	return dynamic_cast<Statistics*> (type->create(name, mod));
 }
 
 Statistics& getStatistics( const char* name ) {
 	if (name != NULL) {
-		if (statsMap.count(name)==0) statsMap.insert(make_pair(name, &createStats(name)));
+		if (statsMap.count(name)==0) statsMap.insert(make_pair(name, createStats(name)));
 		return *statsMap[name];
 	}
-	if (name == NULL && stats == NULL) stats = &createStats();
+	if (name == NULL && stats == NULL) stats = createStats();
 	return *stats;
 }
 
