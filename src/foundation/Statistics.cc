@@ -141,6 +141,7 @@ public:
 	}
 
 	void record(cSimpleModule* module) {
+		ASSERT(n != 0);
 		double value = avg / n;
 		if (eqTrigger != INFINITY) {
 			if (eqTrigger == value)
@@ -285,6 +286,8 @@ void Statistics::handleMessage(cMessage *msg) {
 }
 
 void Statistics::value(const char* name, double value, bool average) {
+	ASSERT(not std::isnan(value));
+	ASSERT(not std::isnan(average));
 	if (values.count(name) == 0)
 		values.insert(make_pair(name, new Value(name, samples.size())));
 	values[name]->add(value, average);
