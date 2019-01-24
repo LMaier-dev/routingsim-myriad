@@ -58,7 +58,7 @@ void NetworkTopology::readTopology(string path, string topologytype, bool useOnl
 	// sanity check for number of nodes
 	set<nodeid_t> nodeset;
 
-	EV << "Reading Topology from " << path << "(file format: " << topologytype << ")" << endl;
+	EV_INFO << "Reading Topology from " << path << "(file format: " << topologytype << ")" << endl;
 
 	ifstream topologyFile(path.c_str());
 	if (!topologyFile) {
@@ -68,7 +68,7 @@ void NetworkTopology::readTopology(string path, string topologytype, bool useOnl
 	}
 
 	if (!topologytype.compare("SELF_DEFINED")) {
-		EV << "using bidirectional parameter read from topology file " << path << "!" << endl;
+		EV_INFO << "using bidirectional parameter read from topology file " << path << "!" << endl;
 		readSelfDefinedTopology(topologyFile, nodeset, edgesRead, nodeproperties);
 	}
 	else if (!topologytype.compare("DIMES")) {
@@ -117,7 +117,7 @@ void NetworkTopology::readTopology(string path, string topologytype, bool useOnl
 			nodeset.insert(newID);
 			nodeset.erase( nodeset.find(maxElement) );
 
-			EV << "Node ID " << maxElement << " has been reassigned to ID " << newID << endl;
+			EV_INFO << "Node ID " << maxElement << " has been reassigned to ID " << newID << endl;
 
 		} while ((maxElement=*max_element(nodeset.begin(), nodeset.end())) > maxVectorEntries);
 	}
@@ -476,7 +476,7 @@ void NetworkTopology::readDimesTopology(ifstream &topologyFile, set<nodeid_t> &n
 }
 
 bool NetworkTopology::readShortestPaths(string shortestPathFile) {
-	EV << "readShortestPaths currently not implemented (shortest paths are calculated)" << endl;
+	EV_ERROR << "readShortestPaths currently not implemented (shortest paths are calculated)" << endl;
 
 	// TODO:
 	/* read shortest paths into bgl distance matrix
@@ -823,17 +823,17 @@ void NetworkTopology::createNetwork(cModule *parent) {
 					else
 						p.parse(value.second.c_str());
 				} else {
-					EV <<"Module " << submod->getId() << " of type " << submod->getClassName() << " does not have a parameter " << value.second << endl;
+					EV_WARN <<"Module " << submod->getId() << " of type " << submod->getClassName() << " does not have a parameter " << value.second << endl;
 				}
 			}
 		}
 	}
-	EV << "Modules ready to start." << endl;
+	EV_INFO << "Modules ready to start." << endl;
 
 	for (modMapIt = moduleMap.begin(); modMapIt != moduleMap.end(); modMapIt++) {
 		modMapIt->second->scheduleStart(simTime());
 	}
-	EV << "Modules started." << endl;
+	EV_INFO << "Modules started." << endl;
 }
 
 void NetworkTopology::disableLink(nodeid_t f, nodeid_t t) {
@@ -860,7 +860,7 @@ void NetworkTopology::disableLink(nodeid_t f, nodeid_t t) {
 	to = moduleMap[t];
 
 	if (from == NULL || to == NULL) {
-		EV << "Could not determine cModule (Node) for " << f << " or " << t
+		EV_WARN << "Could not determine cModule (Node) for " << f << " or " << t
 				<< endl;
 		return;
 	}
@@ -896,7 +896,7 @@ void NetworkTopology::enableLink(nodeid_t f, nodeid_t t) {
 	to = moduleMap[t];
 
 	if (from == NULL || to == NULL) {
-		EV << "Could not determine cModule (Node) for " << f << " or " << t
+		EV_WARN << "Could not determine cModule (Node) for " << f << " or " << t
 				<< endl;
 		return;
 	}
@@ -1047,7 +1047,7 @@ float NetworkTopology::getDistance(nodeid_t from, nodeid_t to) {
 		}
 
 		FilteredGraph fg(*BGLtopology, activeEdges<topologyGraph>(*BGLtopology), activeNodes<topologyGraph>(*BGLtopology));
-		EV << "Recalculating Shortest Paths at Simtime " << simTime() << endl;
+		EV_DETAIL << "Recalculating Shortest Paths at Simtime " << simTime() << endl;
 		time(&start);
 		// use floyd warshall for dense graphs only
 		if ( (totalNodes*num_edges(*BGLtopology)*log(totalNodes)) < pow(totalNodes, 3) ) {
@@ -1056,7 +1056,7 @@ float NetworkTopology::getDistance(nodeid_t from, nodeid_t to) {
 			floyd_warshall_all_pairs_shortest_paths(fg, spath, weight_map(get(&BGLEdge::weight, fg)));
 		}
 		time(&end);
-		EV << "... took " << difftime(end, start) << " seconds." << endl;
+		EV_DETAIL << "... took " << difftime(end, start) << " seconds." << endl;
 		spathAvailable = true;
 		topologyAltered = false;
 
@@ -1153,7 +1153,7 @@ vector<nodeid_t> NetworkTopology::getFullTopologyPath(nodeid_t from, nodeid_t to
 bool NetworkTopology::FullTopologyPathFailed(nodeid_t from, nodeid_t to) const {
 	vector<nodeid_t> path = getFullTopologyPath(from, to);
 
-	EV << "Checking whether path from " << from << " to " << "to " << to << " has failed" << endl;
+	EV_DEBUG << "Checking whether path from " << from << " to " << "to " << to << " has failed" << endl;
 
 	graph_traits<topologyGraph>::vertex_iterator vi, ve;
 
@@ -1184,7 +1184,7 @@ bool NetworkTopology::FullTopologyPathFailed(nodeid_t from, nodeid_t to) const {
 		}
 		//only if the edge exists
 		if ( edge(prev, *pit, *BGLtopology).second ) {
-			EV << "\t(" << prev << "\t" << *pit << ") active : " <<  (*BGLtopology)[ edge(prev, *pit, *BGLtopology).first ].active  << endl;
+			EV_TRACE << "\t(" << prev << "\t" << *pit << ") active : " <<  (*BGLtopology)[ edge(prev, *pit, *BGLtopology).first ].active  << endl;
 			if ( (*BGLtopology)[ edge(prev, *pit, *BGLtopology).first ].active == false ) {
 				// failed edge on path
 				return true;

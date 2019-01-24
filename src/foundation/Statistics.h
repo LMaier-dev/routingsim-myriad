@@ -82,14 +82,14 @@ public:
 
 	// delivery ratio of messages
 
-	// register a message
+	/// register a message
 	void registerMessage( cMessage* msg );
 
-	// notify that the message has been dropped;
-	// as dstNode pass the final destination of the packet
+	/// notify that the message has been dropped;
+	/// as dstNode pass the final destination of the packet
 	void dropMessage( cMessage* msg, nodeid_t dstNode  );
 
-	// notify that the message has been delivered
+	/// notify that the message has been delivered
 	void deliveredMessage( cMessage* msg, int hopCount );
 };
 

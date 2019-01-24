@@ -28,7 +28,7 @@ private:
 	unsigned int messagesDropped;
 
 public:
-	// init recording
+	/// init recording
 	MessageStatistics(const char* prefix) {
 		// create names
 		string p = string(prefix);
@@ -70,7 +70,7 @@ public:
 		messagesDropped = 0;
 	}
 
-	// finish recording
+	/// finish recording
 	void finish() {
 		distanceRouting->record();
 		distanceReality->record();
@@ -83,7 +83,7 @@ public:
 		delete stretchMultiplicative;
 	}
 
-	// sample delivery ratio
+	/// sample delivery ratio
 	void sample() {
 		if ((messagesDelivered + messagesDropped) != 0)
 			deliveryRatio->record(
@@ -96,12 +96,12 @@ public:
 		messagesDropped = 0;
 	}
 
-	// register a message
+	/// call to register a message
 	void messageRegister(cMessage* msg) {
 		msgs.insert(msg->getId());
 	}
 
-	// message delivered
+	/// call when message delivered
 	void messageDelivered(cMessage* msg,
 			distance_t distRouting, distance_t distReality) {
 
@@ -123,13 +123,14 @@ public:
 		stretchMultiplicative->collect(stretch);
 	}
 
-	// message dropped
+	/// call when message dropped
 	void messageDrop(cMessage* msg) {
 		if (msgs.count(msg->getId()) == 0) return;
 		messagesDropped++;
 		msgs.erase(msg->getId());
 	}
 
+	/// returns true if this message was registered
 	bool messageRegistered(cMessage* msg) const {
 		return msgs.count(msg->getId()) != 0;
 	}
