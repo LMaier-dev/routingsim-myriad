@@ -128,7 +128,7 @@ private:
 	 * the original packet is encapsulated on the error packet
 	 * @errorType the error type for the error packet
 	 */
-	void returnToSender(uint8_t errorType, KadPacket_p packet, NodePkt_p nodePkt);
+	void returnToSender(uint8_t errorType, KadPacket_p packet);
 	/**
 	 * Tries to cast packet to type T.
 	 * If this succeeds, the method handlePacket(T) is called, the given pointer

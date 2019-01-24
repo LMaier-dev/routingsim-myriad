@@ -13,8 +13,11 @@
 // along with this program.  If not, see http://www.gnu.org/licenses/.
 // 
 
+#include <BaseTypes.h>
+
+#include "Statistics.h"
+
 #include "R2Kademlia.h"
-#include "BaseTypes.h"
 #include "KadRoutingTable.h"
 
 namespace routingsim {
@@ -63,6 +66,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	else {
 		// no hops left, packet is adressed to me
 		//TODO learn route from packet
+		getStatistics().deliveredMessage(pkt.get(), packet->getProgress());
 		if (handleIfFitting<KadAnswer>(packet)) return;
 		if (handleIfFitting<KadPing>(packet)) return;
 		if (handleIfFitting<KadGetNeighborsCall>(packet)) return;
@@ -113,7 +117,9 @@ void R2Kademlia::routePacket(KadPacket_p packet, NodePkt_p nodePkt) {
 }
 void R2Kademlia::sendPacket(KadPacket_p packet) {
 	ASSERT(packet->getSource() == myOverlayKey);
-	routePacket(std::move(packet), std::make_unique<NodePkt>(packet->getName()));
+	auto nodePkt = std::make_unique<NodePkt>(packet->getName());
+	getStatistics().registerMessage(nodePkt.get());
+	routePacket(std::move(packet), std::move(nodePkt));
 }
 
 // -------------------- rpc methods ---------------------------
@@ -232,7 +238,9 @@ void R2Kademlia::handleFindNodeAnswer(KadPacket_p answer_, RPCState& rpcState) {
 // ------------------------- policy foo --------------------------------------
 
 void R2Kademlia::onMissingNeighbor(KadPacket_p packet, NodePkt_p pkt) {
-	returnToSender(KAD_NEXT_HOP_UNAVAILABLE, std::move(packet), std::move(pkt));
+//  	getStatistics().dropMessage(pkt, undefined_node);
+	// what if we are the sender?
+	returnToSender(KAD_NEXT_HOP_UNAVAILABLE, std::move(packet));
 }
 
 void R2Kademlia::onErrorPacket(KadError& error) {
@@ -249,8 +257,15 @@ void R2Kademlia::onErrorPacket(KadError& error) {
 void R2Kademlia::onDiscovery(const OverlayKey& key, kad_path path) {
 	KadContact_p contact = routingTable.getContact(key);
 	if (contact) {
-		EV << "double discovery " << contact << endl;
-		//TODO update contact
+		if(path.size() == 0) {
+			// neighbor discovery
+			contact->getPath().clear();
+		}
+		else{
+			// this should never happen, path updates should be handled by
+			// onPathDiscovery
+			EV_ERROR << "double discovery " << *contact << endl;
+		}
 	}
 	else {
 		contact = std::make_shared<KadContact>(key, std::move(path));
@@ -265,9 +280,10 @@ void R2Kademlia::onPathDiscovery(const OverlayKey& key, kad_path path, const Ove
 	// find via contact
 	KadContact_p viaContact{nullptr};
 	viaContact = routingTable.getContact(via);
-	if(!viaContact)
-		throw cRuntimeError("VIA contact not known");
-
+	if(!viaContact) {
+		EV_ERROR << "Failed to hande path discovery, via contact " << via << " was not found" << endl;
+		return;
+	}
 	// find contact
 	KadContact_p contact = routingTable.getContact(key);
 	if(contact) {
@@ -344,11 +360,11 @@ std::unique_ptr<T> R2Kademlia::makeAnswer(KadPacket& original) {
 	return answer;
 }
 
-void R2Kademlia::returnToSender(uint8_t errorType, KadPacket_p packet, NodePkt_p nodePkt) {
+void R2Kademlia::returnToSender(uint8_t errorType, KadPacket_p packet) {
 	KadError_p answer = makeAnswer<KadError>(*packet);
 	answer->setErrorType(errorType);
 	answer->encapsulate(packet.release());
-	routePacket(std::move(answer), std::move(nodePkt));
+	sendPacket(std::move(answer));
 }
 
 template<typename T> bool R2Kademlia::handleIfFitting(KadPacket_p& packet) {
