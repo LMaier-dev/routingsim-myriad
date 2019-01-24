@@ -259,7 +259,7 @@ void R2Kademlia::onDiscovery(const OverlayKey& key, kad_path path) {
 	if (contact) {
 		if(path.size() == 0) {
 			// neighbor discovery
-			contact->getPath().clear();
+			contact->setPath(path);
 		}
 		else{
 			// this should never happen, path updates should be handled by
