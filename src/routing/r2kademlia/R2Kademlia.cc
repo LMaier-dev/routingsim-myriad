@@ -60,7 +60,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		// TODO learn routes form passing packets
 		// TODO learn about failiures from passing packets
 		// we are not the recipient
-		routePacket(std::move(packet), std::move(pkt));
+		forwardPacket(std::move(packet), std::move(pkt));
 		return;
 	}
 	else {
@@ -99,7 +99,7 @@ void R2Kademlia::handlePacket(KadAnswer_p packet) {
 	handleAnswer(std::move(packet));
 }
 
-void R2Kademlia::routePacket(KadPacket_p packet, NodePkt_p nodePkt) {
+void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt) {
 	// we do not route hello packets!
 	ASSERT(packet->getType() != KAD_HELLO);
 	ASSERT(packet->hasRemainingHops());
@@ -119,7 +119,7 @@ void R2Kademlia::sendPacket(KadPacket_p packet) {
 	ASSERT(packet->getSource() == myOverlayKey);
 	auto nodePkt = std::make_unique<NodePkt>(packet->getName());
 	getStatistics().registerMessage(nodePkt.get());
-	routePacket(std::move(packet), std::move(nodePkt));
+	forwardPacket(std::move(packet), std::move(nodePkt));
 }
 
 // -------------------- rpc methods ---------------------------

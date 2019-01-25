@@ -73,10 +73,11 @@ class R2Kademlia : public RPCProtocol, public KadPolicy
 	/** @name sending packets out*/
 	//@{
 	/**
-	 * routes a packet to a neighbor based on the source route in the packet.
+	 * forwards a packet to a neighbor based on the source route in the packet.
 	 * uses the given NodePkt for encapsulation.
+	 * This does not make any routing decision.
 	 */
-	void routePacket(KadPacket_p packet, NodePkt_p nodePkt);
+	void forwardPacket(KadPacket_p packet, NodePkt_p nodePkt);
 	/// routes a packet to a neighbor based on the source route in the packet
 	void sendPacket(KadPacket_p packet) override;
 	/// sends a ping request to the given contact
@@ -94,7 +95,7 @@ class R2Kademlia : public RPCProtocol, public KadPolicy
 	void onErrorPacket(KadError& error);
 	/** called when a new contact is discovered */
 	void onDiscovery(const OverlayKey& key, kad_path path);
-	void onPathDiscovery(const OverlayKey& key, kad_path path, const OverlayKey& via=OverlayKey::UNSPECIFIED_KEY);
+	void onPathDiscovery(const OverlayKey& key, kad_path path, const OverlayKey& via);
 	//@}
 public:
 	/** @name policy functions called by routing table */
