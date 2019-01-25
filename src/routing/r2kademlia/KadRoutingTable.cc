@@ -185,6 +185,20 @@ bool KadRoutingTable::removeContact(const OverlayKey& key)
 	return result;
 }
 
+
+size_type KadRoutingTable::getNumContacts() {
+	size_type sum = 0;
+	for (KadBucket& b : buckets)
+		sum += b.size();
+	return sum;
+}
+size_type KadRoutingTable::getNumReplacements() {
+	size_type sum = 0;
+	for (KadBucket& b : buckets)
+		sum += b.replacementSize();
+	return sum;
+}
+
 KadBucket& KadRoutingTable::getBucket(const OverlayKey& key)
 {
 	size_type index = getBucketIndex(key);

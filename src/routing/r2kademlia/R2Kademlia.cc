@@ -33,6 +33,7 @@ void R2Kademlia::onInitialize() {
 	//TODO parameters for bucketSize and accelerated lookup parameter
 	routingTable.init(myOverlayKey, this);
 	sendToNeighbors(makeHelloPacket());
+	getStatistics().addSample(this);
 	WATCH(myOverlayKey);
 	WATCH(neighborTable);
 	WATCH_OBJ(routingTable);
@@ -66,11 +67,13 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	else {
 		// no hops left, packet is adressed to me
 		//TODO learn route from packet
+		recievedPackets++;
 		getStatistics().deliveredMessage(pkt.get(), packet->getProgress());
 		if (handleIfFitting<KadAnswer>(packet)) return;
 		if (handleIfFitting<KadPing>(packet)) return;
 		if (handleIfFitting<KadGetNeighborsCall>(packet)) return;
 		EV_ERROR << "dropping unhandled packet of type " << packet->getType() << endl;
+		droppedPackets++;
 	}
 }
 
@@ -110,6 +113,7 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt) {
 		nodePkt->setType(PAYLOAD_TYPE);
 		nodePkt->encapsulate(packet.release());
 		sendToNode(nid, std::move(nodePkt));
+		forwardedPackets++;
 	}
 	else {
 		onMissingNeighbor(std::move(packet), std::move(nodePkt));
@@ -119,6 +123,7 @@ void R2Kademlia::sendPacket(KadPacket_p packet) {
 	ASSERT(packet->getSource() == myOverlayKey);
 	auto nodePkt = std::make_unique<NodePkt>(packet->getName());
 	getStatistics().registerMessage(nodePkt.get());
+	sentPackets++;
 	forwardPacket(std::move(packet), std::move(nodePkt));
 }
 
@@ -240,6 +245,7 @@ void R2Kademlia::handleFindNodeAnswer(KadPacket_p answer_, RPCState& rpcState) {
 void R2Kademlia::onMissingNeighbor(KadPacket_p packet, NodePkt_p pkt) {
 //  	getStatistics().dropMessage(pkt, undefined_node);
 	// what if we are the sender?
+	droppedPackets++;
 	returnToSender(KAD_NEXT_HOP_UNAVAILABLE, std::move(packet));
 }
 
@@ -305,6 +311,12 @@ kad_path R2Kademlia::concatViaPath(const kad_path& viaPath, const OverlayKey& vi
 	std::copy(path.begin(), path.end(), std::back_inserter(newPath));
 	return newPath;
 }
+
+
+void R2Kademlia::sampleStatistics (Statistics &stats) {
+	
+}
+// -------------- kad policy -------------
 
 void R2Kademlia::onBucketSpace(KadBucket& bucket) {
 	KadContact_p replacement = bucket.contactReplacements.back();

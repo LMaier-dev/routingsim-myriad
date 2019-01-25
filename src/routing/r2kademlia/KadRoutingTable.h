@@ -43,6 +43,7 @@ public:
 	inline bool empty() { return contacts.empty(); }
 	/** returns the size of the contact list */
 	inline size_type size() { return contacts.size(); }
+	inline size_type replacementSize() { return contactReplacements.size(); }
 	void replaceContact(KadContact_p oldContact, KadContact_p newContact);
 	/// Common stdc++ console output method
 	friend std::ostream& operator<<(std::ostream& os, const KadBucket& b) {
@@ -110,10 +111,18 @@ public:
 	 * If there are not enough contacts found, the list is shorter.
 	 */
 	KadContactList getClosestContacts(const OverlayKey& key, size_type n);
+	/// returns the number of contacts in buckets
+	size_type getNumContacts();
+	/// returns the number of contact replacements in buckets
+	size_type getNumReplacements();
+	/// returns the number of buckets currenty held
+	inline size_type getNumBuckets() { return buckets.size(); }
 	/// returns true if the key is known, i.e. there is a contact present
 	inline bool isKnown(const OverlayKey& key) { return getContact(key).get() != nullptr; }
 
+	/// returns the distance between the two keys
 	inline OverlayKey distance(const OverlayKey& a, const OverlayKey& b) { return a ^ b; }
+	/// returns the distance of the given key to my key
 	inline OverlayKey distance(const OverlayKey& key) { return key ^ myKey; }
 	
 protected:

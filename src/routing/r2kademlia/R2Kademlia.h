@@ -42,7 +42,7 @@ using KadPong_p = std::unique_ptr<KadPong>;
  * TODO: sources
  * @author Jakob Thomas
  */
-class R2Kademlia : public RPCProtocol, public KadPolicy
+class R2Kademlia : public RPCProtocol, public KadPolicy, public StatisticSample
 {
   protected:
 	/** @name Protocol interface */
@@ -97,6 +97,7 @@ class R2Kademlia : public RPCProtocol, public KadPolicy
 	void onDiscovery(const OverlayKey& key, kad_path path);
 	void onPathDiscovery(const OverlayKey& key, kad_path path, const OverlayKey& via);
 	//@}
+	virtual void sampleStatistics (Statistics &stats) override;
 public:
 	/** @name policy functions called by routing table */
 	//@{
@@ -155,6 +156,11 @@ private:
 	// TODO: move to parameter
 	static const uint findNodeNumber=20;
 	static const uint discoveryRadius=5;
+	// statistics
+	uint forwardedPackets = 0;
+	uint droppedPackets = 0;
+	uint sentPackets = 0;
+	uint recievedPackets = 0;
 private:
 	class PingRPCState;
 };
