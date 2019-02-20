@@ -26,6 +26,11 @@ void Protocol::initialize() {
 }
 
 void Protocol::handleMessage(cMessage *msg) {
+	if (msg->isSelfMessage()) {
+		onSelfMessage(msg);
+		return;
+	}
+
 #ifdef NDEBUG
 	NodePkt* np = reinterpret_cast<NodePkt*>(msg);
 #else

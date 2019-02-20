@@ -251,13 +251,6 @@ void VirtualRing::onDisconnect(nodeid_t nid) {
 
 /// on message
 void VirtualRing::onMessage(NodePkt* pkt) {
-	// handle timer and re-schedule
-	if (pkt == timer) {
-		onTimer();
-		scheduleAt(simTime() + roundTime, timer);
-		return;
-	}
-
 	// process packet from neighbors
 	switch (pkt->getType()) {
 
@@ -282,6 +275,16 @@ void VirtualRing::onMessage(NodePkt* pkt) {
 	}
 
 	}
+}
+
+void VirtualRing::onSelfMessage(cMessage* msg) {
+	// handle timer and re-schedule
+	if (msg == timer) {
+		onTimer();
+		scheduleAt(simTime() + roundTime, timer);
+		return;
+	}
+	delete msg;
 }
 
 void VirtualRing::flushBacklog() {

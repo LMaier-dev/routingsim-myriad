@@ -57,6 +57,9 @@ protected:
 	/// on message
 	virtual void onMessage( NodePkt* pkt ) override;
 
+	/// on self message (timer)
+	virtual void onSelfMessage( cMessage* msg ) override;
+
 	/// on timer message
 	void onTimer();
 

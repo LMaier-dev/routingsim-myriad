@@ -67,6 +67,9 @@ protected:
 	/// on message
 	virtual void onMessage( NodePkt* pkt ) = 0;
 
+	/// on self message (e.g. timer)
+	virtual void onSelfMessage( cMessage* msg ) { delete msg; }
+
 	/// reset state of Protocol to initial state (Node Failure)
 	virtual void reset() = 0;
 
