@@ -36,21 +36,25 @@ enum KadErrorType {
 packet KadAnswer extends KadPacket {}
 
 // ERROR
+// compare ErrorInd
 packet KadError extends KadAnswer {
 	type = KAD_ERROR;
 	uint8_t errorType enum(KadErrorType);
 }
 
 // HELLO
+// compare PHello
 packet KadHello extends KadPacket {
 	type = KAD_HELLO;
 	nodeid_t sourceId;
 }
 
 // PING
+// compare ProbeReq
 packet KadPing extends KadPacket {
 	type = KAD_PING;
 }
+// compare ProbeRsp
 packet KadPong extends KadAnswer {
 	type = KAD_PONG;
 }
