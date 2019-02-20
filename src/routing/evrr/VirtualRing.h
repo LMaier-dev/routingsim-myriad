@@ -46,25 +46,28 @@ namespace routingsim {
 class VirtualRing: public LegacyProtocol, public StatisticSample {
 protected:
  	/// initialize
-	virtual void onInitialize();
+	virtual void onInitialize() override;
 
 	/// called when a new node is connected
-	virtual void onConnect( nodeid_t nid );
+	virtual void onConnect( nodeid_t nid ) override;
 
 	/// called when a node is disconnected
-	virtual void onDisconnect( nodeid_t nid );
+	virtual void onDisconnect( nodeid_t nid ) override;
 
 	/// on message
-	virtual void onMessage( NodePkt* pkt );
+	virtual void onMessage( NodePkt* pkt ) override;
+
+	/// on self message (timer)
+	virtual void onSelfMessage( cMessage* msg ) override;
 
 	/// on timer message
 	void onTimer();
 
 	/// reset state of Protocol to initial state (Node Failure)
-	void reset();
+	void reset() override;
 
 	/// sample statistics
-	virtual void sampleStatistics( Statistics& stats );
+	virtual void sampleStatistics( Statistics& stats ) override;
 
 private:
 	// routing table
@@ -72,7 +75,7 @@ private:
 	Table* table;
 
 	/// round timer
-	NodePkt* timer;
+	cMessage* timer;
 
 	// parameters
 	simtime_t roundTime;
