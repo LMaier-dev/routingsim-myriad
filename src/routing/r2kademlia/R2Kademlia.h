@@ -48,15 +48,15 @@ class R2Kademlia : public RPCProtocol, public KadPolicy, public StatisticSample
 	/** @name Protocol interface */
 	//@{
 	/// called at initialization time of the Protocol
-	void onInitialize();
+	void onInitialize() override;
 	/// called when a new node is connected
-	void onConnect(nodeid_t nid);
+	void onConnect(nodeid_t nid) override;
 	/// called when a node is disconnected
-	void onDisconnect(nodeid_t nid);
+	void onDisconnect(nodeid_t nid) override;
 	/// on message
-	void onMessage(NodePkt_p pkt);
+	void onMessage(NodePkt_p pkt) override;
 	/// reset state of Protocol to initial state (Node Failure)
-	void reset();
+	void reset() override;
 	//@}
 
 	/** @name packet handling */
