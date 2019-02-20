@@ -65,13 +65,15 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		return;
 	}
 	else {
+		packet->setControlInfo(pkt.release());
 		// no hops left, packet is adressed to me
 		//TODO learn route from packet
-		recievedPackets++;
-		getStatistics().deliveredMessage(pkt.get(), packet->getProgress());
+		// these types may forward packets, so they count themselves
+		if (handleIfFitting<KadGetNeighborsCall>(packet)) return;
+		// these types never forward packets
+		countRecieved(*packet);
 		if (handleIfFitting<KadAnswer>(packet)) return;
 		if (handleIfFitting<KadPing>(packet)) return;
-		if (handleIfFitting<KadGetNeighborsCall>(packet)) return;
 		EV_ERROR << "dropping unhandled packet of type " << packet->getType() << endl;
 		droppedPackets++;
 	}
@@ -106,6 +108,7 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt) {
 	// we do not route hello packets!
 	ASSERT(packet->getType() != KAD_HELLO);
 	ASSERT(packet->hasRemainingHops());
+	ASSERT(packet->getControlInfo() == nullptr);
 	//TODO optimization: we could check if the target is a neighbor...
 	const OverlayKey& nextHop = packet->getNextHop();
 	nodeid_t nid = neighborTable.getNodeId(nextHop);
@@ -119,8 +122,15 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt) {
 		onMissingNeighbor(std::move(packet), std::move(nodePkt));
 	}
 }
+
+void R2Kademlia::resendPacket(KadPacket_p packet) {
+	NodePkt_p nodePkt = NodePkt_p(check_and_cast<NodePkt *>(packet->removeControlInfo()));
+	forwardPacket(std::move(packet), std::move(nodePkt));
+}
+
 void R2Kademlia::sendPacket(KadPacket_p packet) {
 	ASSERT(packet->getSource() == myOverlayKey);
+	ASSERT(packet->getControlInfo() == nullptr);
 	auto nodePkt = std::make_unique<NodePkt>(packet->getName());
 	getStatistics().registerMessage(nodePkt.get());
 	sentPackets++;
@@ -216,18 +226,30 @@ void R2Kademlia::sendFindNode(const OverlayKey& key) {
 }
 void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeCall> packet) {
 	auto answer = makeAnswer<KadFindNodeAnswer>(*packet);
-	if (packet->getQuery() == myOverlayKey) {
+	OverlayKey& query = packet->getQuery();
+	if (query == myOverlayKey) {
+		countRecieved(*packet);
 		sendPacket(std::move(answer));
 		return;
 	}
-	auto contacts = routingTable.getClosestContacts(packet->getQuery(), findNodeNumber);
-	answer->setContactArraySize(contacts.size());
-	answer->setPathArraySize(contacts.size());
-	for(size_t i = 0; i < contacts.size(); i++) {
-		answer->setContact(i, contacts[i]->getKey());
-		answer->setPath(i, contacts[i]->getPath());
+	KadContact_p contact = routingTable.getClosestContact(packet->getQuery());
+	//TODO if recursive routing
+	if (routingTable.distance(query) < routingTable.distance(contact->getKey(), query)) {
+		auto contacts = routingTable.getClosestContacts(packet->getQuery(), findNodeNumber);
+		answer->setContactArraySize(contacts.size());
+		answer->setPathArraySize(contacts.size());
+		for(size_t i = 0; i < contacts.size(); i++) {
+			answer->setContact(i, contacts[i]->getKey());
+			answer->setPath(i, contacts[i]->getPath());
+		}
+		countRecieved(*packet);
+		sendPacket(std::move(answer));
 	}
-	sendPacket(std::move(answer));
+	else {
+		// forward request
+		packet->appendRoute(contact->getPath());
+		resendPacket(std::move(packet));
+	}
 }
 bool R2Kademlia::handleFindNodeAnswer(KadPacket_p answer_, RPCState& rpcState) {
 	if (rpcState.status != RPC_SUCCESS) return true;
@@ -377,6 +399,14 @@ std::unique_ptr<T> R2Kademlia::makeAnswer(KadPacket& original) {
 	ASSERT(answer->getSource() == myOverlayKey);
 	answer->setNonce(original.getNonce());
 	return answer;
+}
+
+void R2Kademlia::countRecieved(KadPacket& packet) {
+	recievedPackets++;
+	getStatistics().deliveredMessage(
+		check_and_cast<cMessage *>(packet.getControlInfo()),
+		packet.getProgress()
+	);
 }
 
 void R2Kademlia::returnToSender(uint8_t errorType, KadPacket_p packet) {

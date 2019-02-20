@@ -78,6 +78,8 @@ class R2Kademlia : public RPCProtocol, public KadPolicy, public StatisticSample
 	 * This does not make any routing decision.
 	 */
 	void forwardPacket(KadPacket_p packet, NodePkt_p nodePkt);
+	/// sends a recieved packet again after the source route was manipulated
+	void resendPacket(KadPacket_p packet);
 	/// routes a packet to a neighbor based on the source route in the packet
 	void sendPacket(KadPacket_p packet) override;
 	/// sends a ping request to the given contact
@@ -125,6 +127,8 @@ private:
 	
 	/** @name private helpers */
 	//@{
+	/// does statistics on recieved packet
+	void countRecieved(KadPacket& packet);
 	/**
 	 * sends an error packet to the sender of the given packet
 	 * the original packet is encapsulated on the error packet
