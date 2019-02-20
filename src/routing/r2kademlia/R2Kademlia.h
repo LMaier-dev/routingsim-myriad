@@ -55,6 +55,8 @@ class R2Kademlia : public RPCProtocol, public KadPolicy, public StatisticSample
 	void onDisconnect(nodeid_t nid) override;
 	/// on message
 	void onMessage(NodePkt_p pkt) override;
+	/// on self message
+	void onSelfMessage(cMessage_p msg) override;
 	/// reset state of Protocol to initial state (Node Failure)
 	void reset() override;
 	//@}
@@ -125,6 +127,13 @@ private:
 	std::unique_ptr<T> makeAnswer(KadPacket& original);
 	//@}
 	
+	/** @name timer functions */
+	//@{
+	/// adds a timer to the timer vectors, sends a timer packet
+	void addTimer(simtime_t duration, std::function<void()> callback);
+	void probe();
+	//@}
+
 	/** @name private helpers */
 	//@{
 	/// does statistics on recieved packet
@@ -159,12 +168,16 @@ private:
 	static const int PAYLOAD_TYPE=5;
 	// TODO: move to parameter
 	static const uint findNodeNumber=20;
-	static const uint discoveryRadius=5;
+	static const uint discoveryRadius=4;
 	// statistics
 	uint forwardedPackets = 0;
 	uint droppedPackets = 0;
 	uint sentPackets = 0;
 	uint recievedPackets = 0;
+	// timer data
+	std::vector<simtime_t> timerDuration;
+	std::vector<std::function<void()>> timerCallback;
+	std::vector<cMessage *> timerMsg;
 private:
 	class PingRPCState;
 };

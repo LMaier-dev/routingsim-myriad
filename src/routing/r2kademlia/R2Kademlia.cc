@@ -79,6 +79,16 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	}
 }
 
+void R2Kademlia::onSelfMessage(cMessage_p msg) {
+	// handle timer
+	short timerId = msg->getKind();
+	ASSERT(timerId < timerDuration.size());
+	ASSERT(timerMsg[timerId] == msg.get());
+	timerCallback[timerId]();
+	// reschedule timer
+	scheduleAt(simTime() + timerDuration[timerId], msg.release());
+}
+
 void R2Kademlia::reset() {
 	Enter_Method_Silent();
 	EV << "resetting state of R2Kademlia" << endl;
@@ -87,6 +97,8 @@ void R2Kademlia::reset() {
 	unbind(PAYLOAD_TYPE);
 	onInitialize();
 	//TODO optimization: implement clear function in routing table
+	//TODO clear timers
+	//TODO clear rpc states
 }
 
 void R2Kademlia::handlePacket(KadHello_p packet) {
@@ -400,6 +412,20 @@ std::unique_ptr<T> R2Kademlia::makeAnswer(KadPacket& original) {
 	answer->setNonce(original.getNonce());
 	return answer;
 }
+
+
+void R2Kademlia::addTimer(simtime_t duration, std::function<void()> callback) {
+	ASSERT(timerDuration.size() == timerCallback.size());
+	ASSERT(timerDuration.size() < std::numeric_limits<short>::max());
+	timerDuration.push_back(duration);
+	timerCallback.push_back(callback);
+	cMessage *msg = new cMessage(nullptr, timerDuration.size()-1);
+	timerMsg.push_back(msg);
+	simtime_t initialOffset = uniform(0, duration);
+	scheduleAt(duration+initialOffset, msg);
+}
+
+void R2Kademlia::probe() {}
 
 void R2Kademlia::countRecieved(KadPacket& packet) {
 	recievedPackets++;
