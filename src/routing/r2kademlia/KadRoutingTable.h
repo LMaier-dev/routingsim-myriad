@@ -107,6 +107,10 @@ public:
 	 */
 	KadContact_p getContact(const OverlayKey& key);
 	/**
+	 * Returns the closest known contact to the given key.
+	 */
+	KadContact_p getClosestContact(const OverlayKey& key);
+	/**
 	 * Returns a list of n contacts that are closest to the given key if possible.
 	 * If there are not enough contacts found, the list is shorter.
 	 */
