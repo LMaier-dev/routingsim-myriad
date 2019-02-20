@@ -75,7 +75,7 @@ private:
 	Table* table;
 
 	/// round timer
-	NodePkt* timer;
+	cMessage* timer;
 
 	// parameters
 	simtime_t roundTime;

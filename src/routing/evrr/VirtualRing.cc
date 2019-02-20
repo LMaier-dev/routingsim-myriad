@@ -207,7 +207,7 @@ void VirtualRing::onInitialize() {
 	node().getDisplayString().setTagArg("t",0,str);
 
 	// start timer and main-loop
-	timer = new NodePkt();
+	timer = new cMessage();
 	double startupDelay = (double)intuniform(10,1000)/1000.0;
 	scheduleAt(simTime() + roundTime + startupDelay, timer);
 }
