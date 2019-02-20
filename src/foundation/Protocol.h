@@ -28,6 +28,7 @@ class Protocol;
 
 namespace routingsim {
 using NodePkt_p = std::unique_ptr<NodePkt>;
+using cMessage_p = std::unique_ptr<cMessage>;
 
 /**
  * Class that models a protocol unit.
@@ -75,7 +76,7 @@ protected:
 	virtual void onMessage( NodePkt_p pkt ) = 0;
 
 	/// on self message (e.g. timer)
-	virtual void onSelfMessage( cMessage* msg ) { delete msg; }
+	virtual void onSelfMessage( cMessage_p msg ) {}
 
 	/// reset state of Protocol to initial state (Node Failure)
 	virtual void reset() = 0;
@@ -93,9 +94,14 @@ private:
  */
 class LegacyProtocol : public Protocol {
 	/// on message
-	virtual void onMessage( NodePkt_p pkt ) { onMessage(pkt.release());}
+	virtual void onMessage( NodePkt_p pkt ) { onMessage(pkt.release()); }
 	/// on message for code that needs unwraped pointers
 	virtual void onMessage( NodePkt* pkt ) = 0;
+
+	/// on self message (e.g. timer)
+	virtual void onSelfMessage( cMessage_p msg ) { onSelfMessage(msg.release()); }
+	/// on self message (e.g. timer) for code that needs unwraped pointers
+	virtual void onSelfMessage( cMessage* msg ) { delete msg; }
 };
 
 } //namespace

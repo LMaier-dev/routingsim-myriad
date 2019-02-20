@@ -27,7 +27,7 @@ void Protocol::initialize() {
 
 void Protocol::handleMessage(cMessage *msg) {
 	if (msg->isSelfMessage()) {
-		onSelfMessage(msg);
+		onSelfMessage(std::unique_ptr<cMessage>(msg));
 		return;
 	}
 
