@@ -317,7 +317,11 @@ kad_path R2Kademlia::concatViaPath(const kad_path& viaPath, const OverlayKey& vi
 
 
 void R2Kademlia::sampleStatistics (Statistics &stats) {
-	
+	stats.value("forwardedPackets", forwardedPackets-sentPackets);
+	stats.value("sentPackets", sentPackets);
+	stats.value("receivedPackets", recievedPackets);
+	stats.value("routingTableContacts", routingTable.getNumContacts());
+	stats.value("routingTableBuckets", routingTable.getNumBuckets());
 }
 // -------------- kad policy -------------
 
