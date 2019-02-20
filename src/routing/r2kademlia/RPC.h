@@ -37,7 +37,8 @@ protected:
 	enum RPC_STATUS { RPC_WAITING, RPC_TIMEOUT, RPC_ERROR, RPC_SUCCESS};
 	/// represents the state of an rpc call, gets called
 	struct RPCState;
-	using rpc_callback_t = std::function<void(packet_p, RPCState&)>;
+	/// a function that handles some rpc state change, returns true if rpc is done
+	using rpc_callback_t = std::function<bool(packet_p, RPCState&)>;
 	struct RPCState {
 	public:
 		nonce_t nonce;

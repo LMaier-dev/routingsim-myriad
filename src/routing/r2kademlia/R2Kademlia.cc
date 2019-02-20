@@ -141,8 +141,8 @@ void R2Kademlia::handlePacket(KadPing_p packet) {
 	sendPacket(makeAnswer<KadPong>(*packet));
 }
 
-void R2Kademlia::handlePingAnswer(KadPacket_p answer, RPCState& rpcState) {
-	if (rpcState.status != RPC_SUCCESS) return;
+bool R2Kademlia::handlePingAnswer(KadPacket_p answer, RPCState& rpcState) {
+	if (rpcState.status != RPC_SUCCESS) return true;
 	ASSERT(answer->getSource() == rpcState.original_packet->getTarget());
 	KadPong_p pong = safe_packet_cast<KadPong>(answer);
 	EV_TRACE << "got ping answer from " << pong->getSource();
@@ -165,6 +165,7 @@ void R2Kademlia::handlePingAnswer(KadPacket_p answer, RPCState& rpcState) {
 		contact->seen();
 		routingTable.addContact(contact);
 	}
+	return true;
 }
 
 // GET NEIGHBOR
@@ -187,9 +188,9 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadGetNeighborsCall> packet) {
 	sendPacket(std::move(answer));
 }
 
-void R2Kademlia::handleGetNeighborsAnswer(KadPacket_p answer, RPCState& rpcState)
+bool R2Kademlia::handleGetNeighborsAnswer(KadPacket_p answer, RPCState& rpcState)
 {
-	if (rpcState.status != RPC_SUCCESS) return;
+	if (rpcState.status != RPC_SUCCESS) return true;
 	auto answ = safe_packet_cast<KadGetNeighborsAnswer>(answer);
 	EV_TRACE << "recieved " << answ->getNeighborsArraySize() << " neighbors from " << answ->getSource().toString().substr(6) << endl;
 	for (uint i=0; i < answ->getNeighborsArraySize(); i++) {
@@ -197,6 +198,7 @@ void R2Kademlia::handleGetNeighborsAnswer(KadPacket_p answer, RPCState& rpcState
 		if(key == myOverlayKey) continue;
 		else onPathDiscovery(key, kad_path(), answ->getSource());
 	}
+	return true;
 }
 
 // FIND NODE
@@ -227,8 +229,8 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeCall> packet) {
 	}
 	sendPacket(std::move(answer));
 }
-void R2Kademlia::handleFindNodeAnswer(KadPacket_p answer_, RPCState& rpcState) {
-	if (rpcState.status != RPC_SUCCESS) return;
+bool R2Kademlia::handleFindNodeAnswer(KadPacket_p answer_, RPCState& rpcState) {
+	if (rpcState.status != RPC_SUCCESS) return true;
 	auto answer = safe_packet_cast<KadFindNodeAnswer>(answer_);
 	ASSERT(answer->getContactArraySize() == answer->getPathArraySize());
 	for (size_t i = 0; i < answer->getContactArraySize(); i++) {
@@ -239,6 +241,7 @@ void R2Kademlia::handleFindNodeAnswer(KadPacket_p answer_, RPCState& rpcState) {
 		);
 	}
 	// TODO try again
+	return true;
 }
 // ------------------------- policy foo --------------------------------------
 

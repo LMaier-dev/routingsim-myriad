@@ -144,9 +144,9 @@ private:
 
 	/** @name callbacks for rpc calls */
 	//@{
-	void handlePingAnswer(KadPacket_p answer, RPCState& rpcState);
-	void handleGetNeighborsAnswer(KadPacket_p answer, RPCState& rpcState);
-	void handleFindNodeAnswer(KadPacket_p answer, RPCState& rpcState);
+	bool handlePingAnswer(KadPacket_p answer, RPCState& rpcState);
+	bool handleGetNeighborsAnswer(KadPacket_p answer, RPCState& rpcState);
+	bool handleFindNodeAnswer(KadPacket_p answer, RPCState& rpcState);
 	//@}
 private:
 	OverlayKey myOverlayKey;

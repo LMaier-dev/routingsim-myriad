@@ -53,9 +53,10 @@ void RPCProtocol::handleAnswer(packet_p answer)
 	RPCState& rpcState = it->second;
 	// TODO check for error
 	rpcState.status = RPC_SUCCESS;
-	rpcState.success_callback(std::move(answer), rpcState);
+	bool result = rpcState.success_callback(std::move(answer), rpcState);
 	// erase at last, because we give around references to it!
-	states.erase(it);
+	if (result)
+		states.erase(it);
 }
 
 } // namespace
