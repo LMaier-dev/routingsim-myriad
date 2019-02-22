@@ -240,11 +240,18 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeCall> packet) {
 	auto answer = makeAnswer<KadFindNodeAnswer>(*packet);
 	OverlayKey& query = packet->getQuery();
 	if (query == myOverlayKey) {
+		//TODO what if not exact needed, do we send contacts?
 		countRecieved(*packet);
 		sendPacket(std::move(answer));
 		return;
 	}
-	KadContact_p contact = routingTable.getClosestContact(packet->getQuery());
+	KadContact_p contact = routingTable.getClosestContact(
+		packet->getQuery(), packet->getSource());
+	if (contact->getKey() == packet->getSource()) {
+		countRecieved(*packet);
+		// TODO error packet
+		return;
+	}
 	//TODO if recursive routing
 	if (routingTable.distance(query) < routingTable.distance(contact->getKey(), query)) {
 		auto contacts = routingTable.getClosestContacts(packet->getQuery(), findNodeNumber);

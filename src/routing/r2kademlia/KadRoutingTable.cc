@@ -131,9 +131,13 @@ KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_t
 	return result;
 }
 
-KadContact_p KadRoutingTable::getClosestContact(const OverlayKey& key) {
+KadContact_p KadRoutingTable::getClosestContact(const OverlayKey& key, const OverlayKey& exclude) {
 	// TODO optimization: find better way to get one contact
-	return getClosestContacts(key, 1).front();
+	KadContact_p contact = getClosestContacts(key, 1).front();
+	if (not exclude.isUnspecified() and contact->getKey() == exclude)
+		return getClosestContacts(key, 2).back();
+	else
+		return contact;
 }
 
 void KadRoutingTable::addCandidate(KadContact_p contact)
