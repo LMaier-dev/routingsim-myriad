@@ -1,4 +1,3 @@
-
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
@@ -129,7 +128,7 @@ public:
 	inline OverlayKey distance(const OverlayKey& a, const OverlayKey& b) { return a ^ b; }
 	/// returns the distance of the given key to my key
 	inline OverlayKey distance(const OverlayKey& key) { return key ^ myKey; }
-	
+
 protected:
 	/** @name bucket access */
 	//@{
@@ -149,7 +148,7 @@ protected:
 
 	/** returns the width of a level in the accelerated lookup tree */
 	inline size_type getLevelWidth() { return (1 << accelerationFactor) - 1; }
-	
+
 	/** returns the theoretica number of buckets that we could have */
 	inline size_type getMaxNumBuckets() { return myKey.getLength()/accelerationFactor * getLevelWidth(); }
 
@@ -171,15 +170,8 @@ private:
 	KadPolicy* policy = nullptr;
 
 	//------ private inline helper functions -------
-	/** returns a random access iterator situated on the bucket with the given index */
-	auto inline getBucketIterator(size_type index=0) {
-		auto it=buckets.begin();
-		std::advance(it, index);
-		return it;
-	}
-
 	/** copies all contacts from one contact list to the end of the other contact list*/
-	void inline copyContacts(KadContactList& source, KadContactList target) {
+	void inline copyContacts(KadContactList& source, KadContactList& target) {
 		std::copy(source.begin(), source.end(), std::back_inserter(target));
 	}
 };

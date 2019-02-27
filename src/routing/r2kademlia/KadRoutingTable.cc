@@ -93,21 +93,20 @@ KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_t
 	KadContactList result{};
 	// find correct bucket and copy contents
 	size_type index = getBucketIndex(key);
-	auto bucket = getBucketIterator(index);
+	auto bucket = buckets.begin() + index;
 	copyContacts(bucket->contacts, result);
 	if(result.size() < n){
 		// not enough contacts in first bucket
 		// now we scan the level of the accelerated lookup
 		// and then we go down the tree
 		size_type firstOnLevelIndex = getFirstOnBucketLevel(index);
-		auto otherBucket = getBucketIterator(firstOnLevelIndex);
+		auto otherBucket = buckets.begin() + firstOnLevelIndex;
 		while(result.size() < n && otherBucket != buckets.end()) {
-			if(otherBucket == bucket)
-				continue;
-			copyContacts(otherBucket->contacts, result);
+			if (otherBucket != bucket)
+				copyContacts(otherBucket->contacts, result);
 			otherBucket++;
 		}
-		otherBucket = getBucketIterator(firstOnLevelIndex);
+		otherBucket = buckets.begin() + firstOnLevelIndex;
 		// if we still do not have enough contacts, we go up the tree
 		while(result.size() < n && otherBucket != buckets.begin()) {
 			otherBucket--;
@@ -142,7 +141,6 @@ KadContact_p KadRoutingTable::getClosestContact(const OverlayKey& key, const Ove
 
 void KadRoutingTable::addCandidate(KadContact_p contact)
 {
-	EV << "adding candidate " << *contact << endl;
 	// contact must not be present
 	if(getContact(contact->getKey())) {
 		KadContact_p other = getContact(contact->getKey());
@@ -159,6 +157,8 @@ void KadRoutingTable::addCandidate(KadContact_p contact)
 		bucket.contactReplacements.push_back(contact);
 		if (bucket.size() < bucketSize || isSplittable(bucket))
 			policy->onBucketSpace(bucket);
+		else
+			EV << "added candidate " << *contact << endl;
 	}
 }
 
