@@ -87,6 +87,8 @@ public:
 	inline kad_path getRemainingPath() { return getPath(getNextHopIndex()); }
 	/// returns the previous source route path until the current hop
 	inline kad_path getPreviousPath() { return getPath(0, getNextHopIndex()); }
+	/// reverses the given path, returns the result
+	inline kad_path reversePath(kad_path path) { std::reverse(path.begin(), path.end()); return path; }
 	//@}
 };
 } // namespace
