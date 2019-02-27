@@ -127,12 +127,12 @@ private:
 	template<typename T>
 	std::unique_ptr<T> makeAnswer(KadPacket& original);
 	//@}
-	
+
 	/** @name timer functions */
 	//@{
 	/// adds a timer to the timer vectors, sends a timer packet
 	void addTimer(simtime_t duration, std::function<void()> callback);
-	void probe();
+	void findRandom();
 	//@}
 
 	/** @name private helpers */

@@ -34,6 +34,7 @@ void R2Kademlia::onInitialize() {
 	routingTable.init(myOverlayKey, this);
 	sendToNeighbors(makeHelloPacket());
 	getStatistics().addSample(this);
+	addTimer(4, std::bind(&R2Kademlia::findRandom, this));
 	WATCH(myOverlayKey);
 	WATCH(neighborTable);
 	WATCH_OBJ(routingTable);
@@ -69,12 +70,13 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		// no hops left, packet is adressed to me
 		//TODO learn route from packet
 		// these types may forward packets, so they count themselves
-		if (handleIfFitting<KadGetNeighborsCall>(packet)) return;
+		if (handleIfFitting<KadFindNodeCall>(packet)) return;
 		// these types never forward packets
 		countRecieved(*packet);
+		if (handleIfFitting<KadGetNeighborsCall>(packet)) return;
 		if (handleIfFitting<KadAnswer>(packet)) return;
 		if (handleIfFitting<KadPing>(packet)) return;
-		EV_ERROR << "dropping unhandled packet of type " << packet->getType() << endl;
+		EV_ERROR << "dropping unhandled packet of type " << (int)packet->getType() << endl;
 		droppedPackets++;
 	}
 }
@@ -82,7 +84,8 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 void R2Kademlia::onSelfMessage(cMessage_p msg) {
 	// handle timer
 	short timerId = msg->getKind();
-	ASSERT(timerId < timerDuration.size());
+	ASSERT(timerId >= 0);
+	ASSERT((size_t)timerId < timerDuration.size());
 	ASSERT(timerMsg[timerId] == msg.get());
 	timerCallback[timerId]();
 	// reschedule timer
@@ -223,10 +226,12 @@ bool R2Kademlia::handleGetNeighborsAnswer(KadPacket_p answer, RPCState& rpcState
 
 // FIND NODE
 void R2Kademlia::sendFindNode(const OverlayKey& key) {
+	EV_TRACE << "sendFindNode w/ " << key << endl;
 	auto contacts = routingTable.getClosestContacts(key, 1);
 	// TODO select more and choose
 	ASSERT(contacts.size() == 1);
 	KadContact_p contact = contacts.front();
+	EV_TRACE << "closest contact found: " << *contact << endl;
 	auto packet = makePacket<KadFindNodeCall>(contact, "FindNode");
 	packet->setQuery(key);
 	sendRpcCall(
@@ -260,11 +265,14 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeCall> packet) {
 			answer->setPath(i, contacts[i]->getPath());
 		}
 		countRecieved(*packet);
+		EV_TRACE << "KadFindNodeCall revieved query: " << packet->getQuery() << " answering with list size" << contacts.size() << endl;
 		sendPacket(std::move(answer));
 	}
 	else {
 		// forward request
+		EV_TRACE << "KadFindNodeCall revieved query: " << packet->getQuery() << endl << " next hop is " << *contact << endl;
 		packet->appendRoute(contact->getPath());
+		packet->appendHop(contact->getKey());
 		resendPacket(std::move(packet));
 	}
 }
@@ -272,6 +280,9 @@ bool R2Kademlia::handleFindNodeAnswer(KadPacket_p answer_, RPCState& rpcState) {
 	if (rpcState.status != RPC_SUCCESS) return true;
 	auto answer = safe_packet_cast<KadFindNodeAnswer>(answer_);
 	ASSERT(answer->getContactArraySize() == answer->getPathArraySize());
+	EV_TRACE << "recieved FindNodeAnswer for " << check_and_cast<KadFindNodeCall *>(rpcState.original_packet.get())->getQuery();
+	EV_TRACE << " from " << answer->getSource() << " with " << answer->getContactArraySize() << " contacts"<< endl;
+	onPathDiscovery(answer->getSource(), answer->reversePath(answer->getIntermediatePath()));
 	for (size_t i = 0; i < answer->getContactArraySize(); i++) {
 		onPathDiscovery(
 			answer->getContact(i),
@@ -432,15 +443,22 @@ std::unique_ptr<T> R2Kademlia::makeAnswer(KadPacket& original) {
 void R2Kademlia::addTimer(simtime_t duration, std::function<void()> callback) {
 	ASSERT(timerDuration.size() == timerCallback.size());
 	ASSERT(timerDuration.size() < std::numeric_limits<short>::max());
+	ASSERT(duration > 0);
 	timerDuration.push_back(duration);
 	timerCallback.push_back(callback);
-	cMessage *msg = new cMessage(nullptr, timerDuration.size()-1);
+	cMessage *msg = new cMessage("TimerMsg", timerDuration.size()-1);
 	timerMsg.push_back(msg);
 	simtime_t initialOffset = uniform(0, duration);
-	scheduleAt(duration+initialOffset, msg);
+	scheduleAt(simTime() + duration + initialOffset, msg);
+	EV_TRACE << "sheduled timer msg " << msg << " with duration " << duration <<  endl;
 }
 
-void R2Kademlia::probe() {}
+void R2Kademlia::findRandom() {
+	uint32_t index = intuniform(0, myOverlayKey.getLength()-1);
+	OverlayKey probeKey = myOverlayKey;
+	probeKey[index] ^= 1;
+	sendFindNode(probeKey);
+}
 
 void R2Kademlia::countRecieved(KadPacket& packet) {
 	recievedPackets++;
