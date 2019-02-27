@@ -214,11 +214,9 @@ bool R2Kademlia::handleGetNeighborsAnswer(KadPacket_p answer, RPCState& rpcState
 {
 	if (rpcState.status != RPC_SUCCESS) return true;
 	auto answ = safe_packet_cast<KadGetNeighborsAnswer>(answer);
-	EV_TRACE << "recieved " << answ->getNeighborsArraySize() << " neighbors from " << answ->getSource().toString().substr(6) << endl;
+	EV_TRACE << "recieved " << answ->getNeighborsArraySize() << " neighbors from " << answ->getSource().toString().substr(0, 6) << endl;
 	for (uint i=0; i < answ->getNeighborsArraySize(); i++) {
-		const OverlayKey& key = answ->getNeighbors(i);
-		if(key == myOverlayKey) continue;
-		else onPathDiscovery(key, kad_path(), answ->getSource());
+		onPathDiscovery(answ->getNeighbors(i), kad_path(), answ->getSource());
 	}
 	return true;
 }
@@ -327,24 +325,34 @@ void R2Kademlia::onDiscovery(const OverlayKey& key, kad_path path) {
 }
 
 void R2Kademlia::onPathDiscovery(const OverlayKey& key, kad_path path, const OverlayKey& via) {
+	if (key == myOverlayKey) return; // nothing to do here
 	// find via contact
 	KadContact_p viaContact{nullptr};
-	viaContact = routingTable.getContact(via);
-	if(!viaContact) {
-		EV_ERROR << "Failed to hande path discovery, via contact " << via << " was not found" << endl;
-		return;
+	if (!via.isUnspecified()) {
+		viaContact = routingTable.getContact(via);
+		if(!viaContact) {
+			EV_ERROR << "Failed to hande path discovery, via contact " << via << " was not found" << endl;
+			return;
+		}
 	}
 	// find contact
 	KadContact_p contact = routingTable.getContact(key);
 	if(contact) {
 		// contact known
-		if(contact->getPathLength() > viaContact->getPathLength() + 1 + path.size()) {
-			contact->setPath(concatViaPath(viaContact->getPath(), via, path));
+		size_t viaPathLength = viaContact ? viaContact->getPathLength() + 1 : 0;
+		if(contact->getPathLength() > viaPathLength + path.size()) {
+			if (viaContact)
+				contact->setPath(concatViaPath(viaContact->getPath(), via, path));
+			else
+				contact->setPath(path);
 		}
 	}
 	else {
 		// contact unknown
-		onDiscovery(key, concatViaPath(viaContact->getPath(), via, path));
+		if (viaContact)
+			onDiscovery(key, concatViaPath(viaContact->getPath(), via, path));
+		else
+			onDiscovery(key, path);
 	}
 }
 kad_path R2Kademlia::concatViaPath(const kad_path& viaPath, const OverlayKey& viaKey, const kad_path& path) {

@@ -99,7 +99,8 @@ class R2Kademlia : public RPCProtocol, public KadPolicy, public StatisticSample
 	void onErrorPacket(KadError& error);
 	/** called when a new contact is discovered */
 	void onDiscovery(const OverlayKey& key, kad_path path);
-	void onPathDiscovery(const OverlayKey& key, kad_path path, const OverlayKey& via);
+	/** called when a path to a potentially new contact is discovered */
+	void onPathDiscovery(const OverlayKey& key, kad_path path, const OverlayKey& via=OverlayKey::UNSPECIFIED_KEY);
 	//@}
 	virtual void sampleStatistics (Statistics &stats) override;
 public:
