@@ -41,8 +41,12 @@ public:
 	/// returns the node id of the neighbor with the given key.
 	/// @returns unspecified_node if the key is not found
 	nodeid_t getNodeId(const OverlayKey& key);
+	/// returns the overlay key of the given neigbor node id if known, else unspecified
+	const OverlayKey& getOverlayKey(nodeid_t nodeId);
 	/// returns true if the key belongs to a known neigbor
 	inline bool isNeighbor(const OverlayKey& key) { return getNodeId(key) != undefined_node; }
+	/// returns true if the node id belongs to a known neigbor
+	inline bool isNeighbor(nodeid_t nodeId) { return !getOverlayKey(nodeId).isUnspecified(); }
 	/// clears the table
 	void clear();
 
