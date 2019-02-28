@@ -43,4 +43,5 @@ packet KadPacket {
 	uint16_t progress = 0;
 	nonce_t nonce;
 	uint8_t type enum(KadPacketType);
+	uint16_t hopLimit = 100;
 }

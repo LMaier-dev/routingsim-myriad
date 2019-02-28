@@ -12,6 +12,7 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with this program.  If not, see http://www.gnu.org/licenses/.
 // 
+
 cplusplus {{
 #include "BaseTypes.h"
 #include "OverlayKey.h"
@@ -34,6 +35,27 @@ enum KadErrorType {
 }
 
 packet KadAnswer extends KadPacket {}
+
+packet KadRTableReq extends KadPacket {
+	// reserved flag is ommited
+	bool contactsOnly = false;
+	uint8_t neighborHood = 63;
+}
+packet KadRTableRsp extends KadAnswer {
+	// count is clear
+	OverlayKey contact[];
+	key_vector_t path[];
+	bool unknownFlag[];
+	bool intermediateFlag[];
+}
+//
+
+packet KadFindNodeReq extends KadRTableReq {}
+packet KadFindNodeRsp extends KadRTableRsp {}
+packet KadQueryRouteReq extends KadRTableReq {}
+packet KadQueryRouteRsp extends KadRTableRsp {}
+
+// ------------
 
 // ERROR
 // compare ErrorInd
