@@ -1,5 +1,4 @@
-
-BUILD_OPTIONS = -f --deep -o RoutingSim -I. -Ifoundation -I../../omnetpp/include/omnetpp -DAUTOIMPORT_OMNETPP_NAMESPACE
+BUILD_OPTIONS = -f --deep -o RoutingSim -I. -Ifoundation -I../../omnetpp/include/omnetpp -I../../omnetpp/include -DAUTOIMPORT_OMNETPP_NAMESPACE
 
 all: checkmakefiles
 	cd src && $(MAKE)
