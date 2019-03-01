@@ -185,6 +185,8 @@ bool KadRoutingTable::removeContact(const OverlayKey& key)
 {
 	KadBucket& bucket = getBucket(key);
 	bool result = bucket.removeContact(key);
+	if (!result)
+		EV << "failed to remove contact " << key << endl;
 	if (bucket.empty())
 		policy->onBucketEmpty(bucket);
 	if (result)
