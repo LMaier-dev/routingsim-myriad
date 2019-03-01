@@ -36,11 +36,15 @@ enum KadErrorType {
 
 packet KadAnswer extends KadPacket {}
 
+/// compare RTableRequestType from Spec
 packet KadRTableReq extends KadPacket {
 	// reserved flag is ommited
 	bool contactsOnly = false;
 	uint8_t neighborHood = 63;
 }
+
+/// compare RTable or ContactList from Spec
+/// if ContactList, all other array stay empty
 packet KadRTableRsp extends KadAnswer {
 	// count is clear
 	OverlayKey contact[];
@@ -48,12 +52,14 @@ packet KadRTableRsp extends KadAnswer {
 	bool unknownFlag[];
 	bool intermediateFlag[];
 }
-//
+
 
 packet KadFindNodeReq extends KadRTableReq {}
 packet KadFindNodeRsp extends KadRTableRsp {}
 packet KadQueryRouteReq extends KadRTableReq {}
 packet KadQueryRouteRsp extends KadRTableRsp {}
+//TODO: KadUpdateRouteReq
+//TODO: KadDataMsg
 
 // ------------
 
