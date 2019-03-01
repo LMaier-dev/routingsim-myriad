@@ -19,7 +19,7 @@ package routingsim.foundation;
 simple Statistics
 {
     parameters:
-        double samplingInterval = 1.0;
+        double samplingInterval = default(1.0s) @unit(s);
         @display("i=msg/package;is=l");
         bool recordShortestPathDeliveryRatio = default(true);
 }

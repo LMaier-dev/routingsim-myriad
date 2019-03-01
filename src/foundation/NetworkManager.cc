@@ -155,10 +155,9 @@ void NetworkManager::handleMessage(cMessage *msg) {
 		default:
 			EV_ERROR << "undefined event, did you forget to set DynamicsInfo::type?" << endl;
 		}
-
 		delete di;
-		delete msg;
 	}
+	delete msg;
 }
 
 float NetworkManager::getDistance(nodeid_t from, nodeid_t to) {

@@ -41,3 +41,8 @@ images/original
 *.kdev4
 RoutingSim
 RoutingSim_dbg
+*.project
+*.cbp
+*.layout
+*.cmdenv-log
+*.qtenvrc

@@ -1153,7 +1153,7 @@ vector<nodeid_t> NetworkTopology::getFullTopologyPath(nodeid_t from, nodeid_t to
 bool NetworkTopology::FullTopologyPathFailed(nodeid_t from, nodeid_t to) const {
 	vector<nodeid_t> path = getFullTopologyPath(from, to);
 
-	EV_DEBUG << "Checking whether path from " << from << " to " << "to " << to << " has failed" << endl;
+	EV_DEBUG << "Checking whether path from " << from << " to " << to << " has failed" << endl;
 
 	graph_traits<topologyGraph>::vertex_iterator vi, ve;
 
