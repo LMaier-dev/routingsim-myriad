@@ -45,8 +45,11 @@ void R2Kademlia::onConnect( nodeid_t nid ) {
 }
 
 void R2Kademlia::onDisconnect( nodeid_t nid ) {
+	OverlayKey key = neighborTable.getOverlayKey(nid);
 	neighborTable.removeNeighbor(nid);
-	//TODO remove neighbor from routing table
+	ASSERT(routingTable.getContact(key));
+	routingTable.removeContact(key);
+	//TODO remove contacts from routing table with this neighbor as next hop
 }
 
 void R2Kademlia::onMessage( NodePkt_p pkt ) {
@@ -57,7 +60,12 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	if (handleIfFitting<KadHello>(packet)) return;
 	// other packets should do so
 	packet->advanceProgress(); // increase hop count
-	ASSERT(packet->getCurrentHop() == myOverlayKey);
+	if (packet->getCurrentHop() != myOverlayKey) {
+		EV_ERROR << "dropping packet, current hop does not fit!" << endl;
+		//TODO how does this happen?
+		droppedPackets++;
+		return;
+	}
 	if (packet->hasRemainingHops()){
 		// TODO learn routes form passing packets
 		// TODO learn about failiures from passing packets
@@ -297,7 +305,6 @@ bool R2Kademlia::handleFindNodeAnswer(KadPacket_p answer_, RPCState& rpcState) {
 
 void R2Kademlia::onMissingNeighbor(KadPacket_p packet, NodePkt_p pkt) {
 //  	getStatistics().dropMessage(pkt, undefined_node);
-	// what if we are the sender?
 	droppedPackets++;
 	returnToSender(KAD_NEXT_HOP_UNAVAILABLE, std::move(packet));
 }
@@ -386,6 +393,7 @@ void R2Kademlia::sampleStatistics (Statistics &stats) {
 // -------------- kad policy -------------
 
 void R2Kademlia::onBucketSpace(KadBucket& bucket) {
+	ASSERT(bucket.size() > 0 || bucket.replacementSize() > 0);
 	KadContact_p replacement = bucket.contactReplacements.back();
 	bucket.contactReplacements.pop_back();
 	routingTable.addContact(replacement);
@@ -472,7 +480,10 @@ void R2Kademlia::returnToSender(uint8_t errorType, KadPacket_p packet) {
 	KadError_p answer = makeAnswer<KadError>(*packet);
 	answer->setErrorType(errorType);
 	answer->encapsulate(packet.release());
-	sendPacket(std::move(answer));
+	if (answer->hasRemainingHops())
+		sendPacket(std::move(answer));
+	else // we sent this packet!
+		handleAnswer(std::move(answer));
 }
 
 template<typename T> bool R2Kademlia::handleIfFitting(KadPacket_p& packet) {
