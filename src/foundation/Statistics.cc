@@ -378,10 +378,16 @@ inline Statistics *createStats( const char* name = STATS_MAIN ) {
 
 Statistics& getStatistics( const char* name ) {
 	if (name != NULL) {
-		if (statsMap.count(name)==0) statsMap.insert(make_pair(name, createStats(name)));
+		if (statsMap.count(name)==0)
+			statsMap.insert(make_pair(name, createStats(name)));
 		return *statsMap[name];
 	}
-	if (name == NULL && stats == NULL) stats = createStats();
+	if (name == NULL && stats == NULL) {
+		stats = dynamic_cast<Statistics*>(
+			getSimulation()->getModuleByPath(STATS_MAIN));
+		if (stats == NULL)
+			stats = createStats();
+	}
 	return *stats;
 }
 
