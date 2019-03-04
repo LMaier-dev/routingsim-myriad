@@ -45,8 +45,14 @@ void R2Kademlia::onConnect( nodeid_t nid ) {
 }
 
 void R2Kademlia::onDisconnect( nodeid_t nid ) {
+	// if this node is taken down, the packets arrive after the reset
+	if(neighborTable.size() == 0) return;
 	OverlayKey key = neighborTable.getOverlayKey(nid);
+	ASSERT(!key.isUnspecified());
+	ASSERT(neighborTable.getNodeId(key) == nid );
+
 	neighborTable.removeNeighbor(nid);
+	ASSERT(neighborTable.getNodeId(key) == undefined_node);
 	ASSERT(routingTable.getContact(key));
 	routingTable.removeContact(key);
 	//TODO remove contacts from routing table with this neighbor as next hop
@@ -394,7 +400,7 @@ void R2Kademlia::sampleStatistics (Statistics &stats) {
 // -------------- kad policy -------------
 
 void R2Kademlia::onBucketSpace(KadBucket& bucket) {
-	ASSERT(bucket.size() > 0 || bucket.replacementSize() > 0);
+	ASSERT(bucket.replacementSize() > 0);
 	KadContact_p replacement = bucket.contactReplacements.back();
 	bucket.contactReplacements.pop_back();
 	routingTable.addContact(replacement);
@@ -463,6 +469,7 @@ void R2Kademlia::addTimer(simtime_t duration, std::function<void()> callback) {
 }
 
 void R2Kademlia::findRandom() {
+	if (neighborTable.size() == 0) return; // we are isolated
 	uint32_t index = intuniform(0, myOverlayKey.getLength()-1);
 	OverlayKey probeKey = myOverlayKey;
 	probeKey[index] ^= 1;

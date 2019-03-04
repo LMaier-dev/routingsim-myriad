@@ -49,6 +49,8 @@ public:
 	inline bool isNeighbor(nodeid_t nodeId) { return !getOverlayKey(nodeId).isUnspecified(); }
 	/// clears the table
 	void clear();
+	/// returns the number of saved neighbors
+	size_t size() { return table.size(); }
 
 	/// Common stdc++ console output method
 	friend std::ostream& operator<<(std::ostream& os, const NeighborTable& c);
