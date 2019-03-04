@@ -97,7 +97,8 @@ void R2Kademlia::onSelfMessage(cMessage_p msg) {
 	ASSERT(timerMsg[timerId] == msg.get());
 	timerCallback[timerId]();
 	// reschedule timer
-	scheduleAt(simTime() + timerDuration[timerId], msg.release());
+	simtime_t time = uniform(timerDuration[timerId]/2, timerDuration[timerId]/2*3);
+	scheduleAt(simTime() + time, msg.release());
 }
 
 void R2Kademlia::reset() {
