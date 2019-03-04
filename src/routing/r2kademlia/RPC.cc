@@ -50,10 +50,16 @@ void RPCProtocol::handleAnswer(packet_p answer)
 		EV_WARN << "recieved answer packet with unknown nonce" << endl;
 		return;
 	}
+	bool result;
 	RPCState& rpcState = it->second;
-	// TODO check for error
-	rpcState.status = RPC_SUCCESS;
-	bool result = rpcState.success_callback(std::move(answer), rpcState);
+	if (answer->getType() == KAD_ERROR) {
+		rpcState.status = RPC_ERROR;
+		result = rpcState.error_callback(std::move(answer), rpcState);
+	}
+	else {
+		rpcState.status = RPC_SUCCESS;
+		result = rpcState.success_callback(std::move(answer), rpcState);
+	}
 	// erase at last, because we give around references to it!
 	if (result)
 		states.erase(it);
