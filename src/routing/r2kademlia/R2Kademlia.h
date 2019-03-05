@@ -163,13 +163,16 @@ private:
 	bool handleFindNodeAnswer(KadPacket_p answer, RPCState& rpcState);
 	//@}
 private:
+	/// the overlay key of this node
 	OverlayKey myOverlayKey;
 	NeighborTable neighborTable;
 	KadRoutingTable routingTable;
+	/// packet type used for Node::bind()
 	static const int PAYLOAD_TYPE=5;
-	// TODO: move to parameter
-	static const uint findNodeNumber=20;
-	static const uint discoveryRadius=4;
+	/// number of contacts returned by find node response, called "k" in research papers
+	uint findNodeNumber;
+	/// radius of physical neighborhood discovery
+	uint discoveryRadius;
 	// statistics
 	uint forwardedPackets = 0;
 	uint droppedPackets = 0;

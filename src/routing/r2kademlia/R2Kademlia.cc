@@ -30,14 +30,26 @@ void R2Kademlia::onInitialize() {
 	EV << "R2Kademlia::onInitialize()" << endl;
 	myOverlayKey = OverlayKey::random(getRNG(0));
 	bind(PAYLOAD_TYPE);
-	//TODO parameters for bucketSize and accelerated lookup parameter
-	routingTable.init(myOverlayKey, this);
-	sendToNeighbors(makeHelloPacket());
+
+	ASSERT(par("accelerationFactor").intValue() > 0);
+	ASSERT(par("bucketSize").intValue() > 1);
+	routingTable.init(
+		myOverlayKey, this,
+		par("accelerationFactor").intValue(),
+		par("bucketSize").intValue());
+
+	ASSERT(par("discoveryRadius").intValue() > 0);
+	discoveryRadius = (uint)par("discoveryRadius").intValue();
+	ASSERT(par("findNodeNumber").intValue() > 0);
+	findNodeNumber = (uint)par("findNodeNumber").intValue();
+
 	getStatistics().addSample(this);
 	addTimer(4, std::bind(&R2Kademlia::findRandom, this));
 	WATCH(myOverlayKey);
 	WATCH(neighborTable);
 	WATCH_OBJ(routingTable);
+
+	sendToNeighbors(makeHelloPacket());
 }
 
 void R2Kademlia::onConnect( nodeid_t nid ) {

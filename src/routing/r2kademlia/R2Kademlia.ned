@@ -23,4 +23,12 @@ simple R2Kademlia extends routingsim.foundation.Protocol
     parameters:
 		@class(R2Kademlia);
 		@display("i=misc/node");
+		/// number of bits used for accelerated lookup called "b" in research papers.
+		int accelerationFactor = default(1);
+		/// max size of the buckets, called "k" in research papers (k-Buckets)
+		int bucketSize = default(20);
+		/// radius of physical neighborhood discovery
+		int discoveryRadius = default(4);
+		/// number of contacts returned by find node response, called "k" in research papers
+		int findNodeNumber = default(20);
 }
