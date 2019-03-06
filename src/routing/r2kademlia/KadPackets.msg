@@ -40,7 +40,7 @@ packet KadAnswer extends KadPacket {}
 packet KadRTableReq extends KadPacket {
 	// reserved flag is ommited
 	bool contactsOnly = false;
-	uint8_t neighborHood = 63;
+	uint8_t neighborhood = 63;
 }
 
 /// compare RTable or ContactList from Spec
@@ -52,9 +52,6 @@ packet KadRTableRsp extends KadAnswer {
 	bool unknownFlag[];
 	bool intermediateFlag[];
 }
-
-packet KadQueryRouteReq extends KadRTableReq {}
-packet KadQueryRouteRsp extends KadRTableRsp {}
 //TODO: KadUpdateRouteReq
 //TODO: KadDataMsg
 
@@ -82,14 +79,14 @@ packet KadProbeRsp extends KadAnswer {
 }
 
 // GET NEIGHBORS
-packet KadGetNeighborsCall extends KadPacket {
+packet KadQueryRouteReq extends KadRTableReq {
 	type = KAD_GET_NEIGHBORS_CALL;
 }
 
-packet KadGetNeighborsAnswer extends KadAnswer {
+packet KadQueryRouteRsp extends KadRTableRsp {
 	type = KAD_GET_NEIGHBORS_ANSWER;
-	OverlayKey neighbors[];
 }
+
 
 // FIND NODE
 packet KadFindNodeReq extends KadRTableReq {

@@ -65,7 +65,7 @@ class R2Kademlia : public RPCProtocol, public KadPolicy, public StatisticSample
 	virtual void handlePacket(KadHello_p packet);
 	/// responds to probe request
 	virtual void handlePacket(std::unique_ptr<KadProbeReq> packet);
-	virtual void handlePacket(std::unique_ptr<KadGetNeighborsCall> packet);
+	virtual void handlePacket(std::unique_ptr<KadQueryRouteReq> packet);
 	virtual void handlePacket(std::unique_ptr<KadFindNodeReq> packet);
 	virtual void handlePacket(KadAnswer_p packet);
 	//@}
@@ -157,7 +157,7 @@ private:
 	/** @name callbacks for rpc calls */
 	//@{
 	bool handleProbeResponse(KadPacket_p answer, RPCState& rpcState);
-	bool handleGetNeighborsAnswer(KadPacket_p answer, RPCState& rpcState);
+	bool handleQueryRouteResponse(KadPacket_p answer, RPCState& rpcState);
 	bool handleFindNodeResponse(KadPacket_p answer, RPCState& rpcState);
 	//@}
 private:

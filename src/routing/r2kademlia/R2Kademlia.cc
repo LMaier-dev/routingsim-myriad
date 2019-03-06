@@ -99,7 +99,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		if (handleIfFitting<KadFindNodeReq>(packet)) return;
 		// these types never forward packets
 		countRecieved(*packet);
-		if (handleIfFitting<KadGetNeighborsCall>(packet)) return;
+		if (handleIfFitting<KadQueryRouteReq>(packet)) return;
 		if (handleIfFitting<KadAnswer>(packet)) return;
 		if (handleIfFitting<KadProbeReq>(packet)) return;
 		EV_ERROR << "dropping unhandled packet of type " << (int)packet->getType() << endl;
@@ -221,30 +221,36 @@ bool R2Kademlia::handleProbeResponse(KadPacket_p answer, RPCState& rpcState) {
 // GET NEIGHBOR
 void R2Kademlia::sendGetNeighbors(KadContact_p contact)
 {
-	EV_TRACE << "sending KadGetNeighbors to " << *contact << endl;
+	EV_TRACE << "sending query route request to " << *contact << endl;
+	auto req = makePacket<KadQueryRouteReq>(contact, "KadQueryRouteReq");
+	req->setNeighborhood(1);
+	req->setContactsOnly(true);
 	sendRpcCall(
-		makePacket<KadGetNeighborsCall>(contact, "KadGetNeighbors"),
-		std::bind(&R2Kademlia::handleGetNeighborsAnswer, this, _1, _2)
+		std::move(req),
+		std::bind(&R2Kademlia::handleQueryRouteResponse, this, _1, _2)
 	);
 }
 
-void R2Kademlia::handlePacket(std::unique_ptr<KadGetNeighborsCall> packet) {
-	EV_TRACE << "recieved KadGetNeighbors from " << packet->getSource() << endl;
-	auto answer = makeAnswer<KadGetNeighborsAnswer>(*packet);
+void R2Kademlia::handlePacket(std::unique_ptr<KadQueryRouteReq> packet) {
+	EV_TRACE << "recieved KadQueryRouteRsp from " << packet->getSource() << endl;
+	ASSERT(packet->getNeighborhood() == 1);
+	ASSERT(packet->getContactsOnly());
+	auto response = makeAnswer<KadQueryRouteRsp>(*packet);
 	std::vector<OverlayKey> neighbors = neighborTable.getNeighbors();
-	answer->setNeighborsArraySize(neighbors.size());
+	response->setContactArraySize(neighbors.size());
 	for (uint i = 0; i < neighbors.size(); i++)
-		answer->setNeighbors(i, neighbors[i]);
-	sendPacket(std::move(answer));
+		response->setContact(i, neighbors[i]);
+	sendPacket(std::move(response));
 }
 
-bool R2Kademlia::handleGetNeighborsAnswer(KadPacket_p answer, RPCState& rpcState)
+bool R2Kademlia::handleQueryRouteResponse(KadPacket_p answer, RPCState& rpcState)
 {
 	if (rpcState.status != RPC_SUCCESS) return true;
-	auto answ = safe_packet_cast<KadGetNeighborsAnswer>(answer);
-	EV_TRACE << "recieved " << answ->getNeighborsArraySize() << " neighbors from " << answ->getSource().toString().substr(0, 6) << endl;
-	for (uint i=0; i < answ->getNeighborsArraySize(); i++) {
-		onPathDiscovery(answ->getNeighbors(i), kad_path(), answ->getSource());
+	auto response = safe_packet_cast<KadQueryRouteRsp>(answer);
+	ASSERT(response->getRouteArraySize() == 0);
+	EV_TRACE << "recieved " << response->getContactArraySize() << " neighbors from " << response->getSource().toString().substr(0, 6) << endl;
+	for (uint i=0; i < response->getContactArraySize(); i++) {
+		onPathDiscovery(response->getContact(i), kad_path(), response->getSource());
 	}
 	return true;
 }
