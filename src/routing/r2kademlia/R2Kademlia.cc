@@ -101,7 +101,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		countRecieved(*packet);
 		if (handleIfFitting<KadGetNeighborsCall>(packet)) return;
 		if (handleIfFitting<KadAnswer>(packet)) return;
-		if (handleIfFitting<KadPing>(packet)) return;
+		if (handleIfFitting<KadProbeReq>(packet)) return;
 		EV_ERROR << "dropping unhandled packet of type " << (int)packet->getType() << endl;
 		droppedPackets++;
 	}
@@ -183,24 +183,22 @@ void R2Kademlia::sendPacket(KadPacket_p packet) {
 
 
 // PING
-void R2Kademlia::sendPing(KadContact_p contact) {
-	sendRpcCall(makePacket<KadPing>(contact, "KadPing"), std::bind(&R2Kademlia::handlePingAnswer, this, _1, _2));
-	EV_TRACE << "ping sent to" << contact->getKey() << endl;
+void R2Kademlia::sendProbe(KadContact_p contact) {
+	sendRpcCall(
+		makePacket<KadProbeReq>(contact, "KadProbeReq"),
+		std::bind(&R2Kademlia::handleProbeResponse, this, _1, _2));
 }
 
-void R2Kademlia::handlePacket(KadPing_p packet) {
-	EV_TRACE << "recieved ping packet from " << packet->getSource() << endl;
-	sendPacket(makeAnswer<KadPong>(*packet));
+void R2Kademlia::handlePacket(std::unique_ptr<KadProbeReq> packet) {
+	sendPacket(makeAnswer<KadProbeRsp>(*packet));
 }
 
-bool R2Kademlia::handlePingAnswer(KadPacket_p answer, RPCState& rpcState) {
+bool R2Kademlia::handleProbeResponse(KadPacket_p answer, RPCState& rpcState) {
 	if (rpcState.status != RPC_SUCCESS) return true;
 	ASSERT(answer->getSource() == rpcState.original_packet->getTarget());
-	KadPong_p pong = safe_packet_cast<KadPong>(answer);
-	EV_TRACE << "got ping answer from " << pong->getSource();
-	EV_TRACE << " with nonce " << pong->getNonce() << endl;
+	std::unique_ptr<KadProbeRsp> probeRsp = safe_packet_cast<KadProbeRsp>(answer);
 	//TODO add contact to routing table and mark seen
-	const OverlayKey& key = pong->getSource();
+	const OverlayKey& key = probeRsp->getSource();
 	KadContact_p contact = routingTable.getContact(key);
 	//TODO check if return path was the same
 	kad_path path = rpcState.original_packet->getIntermediatePath();

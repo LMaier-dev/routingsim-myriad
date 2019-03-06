@@ -77,13 +77,11 @@ packet KadHello extends KadPacket {
 	nodeid_t sourceId;
 }
 
-// PING
-// compare ProbeReq
-packet KadPing extends KadPacket {
+// PROBE
+packet KadProbeReq extends KadPacket {
 	type = KAD_PING;
 }
-// compare ProbeRsp
-packet KadPong extends KadAnswer {
+packet KadProbeRsp extends KadAnswer {
 	type = KAD_PONG;
 }
 

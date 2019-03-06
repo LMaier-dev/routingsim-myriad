@@ -33,8 +33,6 @@ using KadPacket_p = std::unique_ptr<KadPacket>;
 using KadAnswer_p = std::unique_ptr<KadAnswer>;
 using KadHello_p = std::unique_ptr<KadHello>;
 using KadError_p = std::unique_ptr<KadError>;
-using KadPing_p = std::unique_ptr<KadPing>;
-using KadPong_p = std::unique_ptr<KadPong>;
 
 /**
  * Implementation of R2Kademlia.
@@ -65,8 +63,8 @@ class R2Kademlia : public RPCProtocol, public KadPolicy, public StatisticSample
 	//@{
 	/// adds the neighbor to the neighbor table
 	virtual void handlePacket(KadHello_p packet);
-	/// responds to ping request
-	virtual void handlePacket(KadPing_p packet);
+	/// responds to probe request
+	virtual void handlePacket(std::unique_ptr<KadProbeReq> packet);
 	virtual void handlePacket(std::unique_ptr<KadGetNeighborsCall> packet);
 	virtual void handlePacket(std::unique_ptr<KadFindNodeCall> packet);
 	virtual void handlePacket(KadAnswer_p packet);
@@ -84,8 +82,8 @@ class R2Kademlia : public RPCProtocol, public KadPolicy, public StatisticSample
 	void resendPacket(KadPacket_p packet);
 	/// routes a packet to a neighbor based on the source route in the packet
 	void sendPacket(KadPacket_p packet) override;
-	/// sends a ping request to the given contact
-	void sendPing(KadContact_p contact);
+	/// sends a probe request to the given contact
+	void sendProbe(KadContact_p contact);
 	/// sends a "get neighbors" call to the contact
 	void sendGetNeighbors(KadContact_p contact);
 	/// sends a find node call to find this node
@@ -158,7 +156,7 @@ private:
 
 	/** @name callbacks for rpc calls */
 	//@{
-	bool handlePingAnswer(KadPacket_p answer, RPCState& rpcState);
+	bool handleProbeResponse(KadPacket_p answer, RPCState& rpcState);
 	bool handleGetNeighborsAnswer(KadPacket_p answer, RPCState& rpcState);
 	bool handleFindNodeAnswer(KadPacket_p answer, RPCState& rpcState);
 	//@}
