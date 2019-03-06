@@ -141,14 +141,15 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 
 void R2Kademlia::handlePacket(KadAnswer_p packet) {
 	EV << "received answer packet" << endl;
-	if (packet->getType() == KAD_ERROR)
+	if (packet->getType() == KAD_Error)
 		onErrorPacket(*check_and_cast<KadError *>(packet.get()));
 	handleAnswer(std::move(packet));
 }
 
 void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt) {
 	// we do not route hello packets!
-	ASSERT(packet->getType() != KAD_HELLO);
+	ASSERT(packet->getType() != KAD_PNHello);
+	//TODO do stuff with hop count
 	ASSERT(packet->hasRemainingHops());
 	ASSERT(packet->getControlInfo() == nullptr);
 	//TODO optimization: we could check if the target is a neighbor...

@@ -59,41 +59,41 @@ packet KadRTableRsp extends KadAnswer {
 
 // ERROR
 packet KadError extends KadAnswer {
-	type = KAD_ERROR;
+	type = KAD_Error;
 	uint8_t errorType enum(KadErrorType);
 }
 
 // HELLO
 // compare PHello
 packet KadHello extends KadPacket {
-	type = KAD_HELLO;
+	type = KAD_PNHello;
 	nodeid_t sourceId;
 }
 
 // PROBE
 packet KadProbeReq extends KadPacket {
-	type = KAD_PING;
+	type = KAD_ProbeReq;
 }
 packet KadProbeRsp extends KadAnswer {
-	type = KAD_PONG;
+	type = KAD_ProbeRsp;
 }
 
-// GET NEIGHBORS
+// QUERY ROUTE
 packet KadQueryRouteReq extends KadRTableReq {
-	type = KAD_GET_NEIGHBORS_CALL;
+	type = KAD_QueryRouteReq;
 }
 
 packet KadQueryRouteRsp extends KadRTableRsp {
-	type = KAD_GET_NEIGHBORS_ANSWER;
+	type = KAD_QueryRouteRsp;
 }
 
 
 // FIND NODE
 packet KadFindNodeReq extends KadRTableReq {
-	type = KAD_FIND_NODE_CALL;
+	type = KAD_FindNodeReq;
 	//TODO use destId for this
 	OverlayKey query;
 }
 packet KadFindNodeRsp extends KadRTableRsp {
-	type = KAD_FIND_NODE_ANSWER;
+	type = KAD_FindNodeRsp;
 }

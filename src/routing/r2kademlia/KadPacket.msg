@@ -21,16 +21,22 @@ cplusplus {{
 
 namespace routingsim;
 
-enum KadPacketType {
-	KAD_INVALID = 0;
-	KAD_HELLO = 1;
-	KAD_ERROR = 2;
-	KAD_PING = 3;
-	KAD_PONG = 4;
-	KAD_GET_NEIGHBORS_CALL = 5;
-	KAD_GET_NEIGHBORS_ANSWER = 6;
-	KAD_FIND_NODE_CALL = 7;
-	KAD_FIND_NODE_ANSWER = 8;
+enum KadPDUType {
+	KAD_PNHello = 			0x01;
+	KAD_PNDiscReq = 		0x03;
+	KAD_PNDiscRsp = 		0x04;
+
+	KAD_FindNodeReq = 		0x09;
+	KAD_FindNodeRsp = 		0x0a;
+	KAD_QueryRouteReq = 	0x0b;
+	KAD_QueryRouteRsp = 	0x0c;
+	KAD_UpdateRouteReq = 	0x0d;
+
+	KAD_Error =				0x71;
+	KAD_ProbeReq = 			0x81;
+	KAD_ProbeRsp = 			0x82;
+
+	KAD_Data = 				0x10;
 }
 
 class noncobject OverlayKey;
@@ -42,6 +48,6 @@ packet KadPacket {
 	OverlayKey route[];
 	uint16_t progress = 0;
 	nonce_t nonce;
-	uint8_t type enum(KadPacketType);
+	uint8_t type enum(KadPDUType);
 	uint16_t hopLimit = 100;
 }

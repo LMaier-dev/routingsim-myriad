@@ -52,11 +52,12 @@ void RPCProtocol::handleAnswer(packet_p answer)
 	}
 	bool result;
 	RPCState& rpcState = it->second;
-	if (answer->getType() == KAD_ERROR) {
+	if (answer->getType() == KAD_Error) {
 		rpcState.status = RPC_ERROR;
 		result = rpcState.error_callback(std::move(answer), rpcState);
 	}
 	else {
+		ASSERT(answer->getType() == rpcState.original_packet->getType() + 1);
 		rpcState.status = RPC_SUCCESS;
 		result = rpcState.success_callback(std::move(answer), rpcState);
 	}
