@@ -248,7 +248,7 @@ bool R2Kademlia::handleQueryRouteResponse(KadPacket_p answer, RPCState& rpcState
 {
 	if (rpcState.status != RPC_SUCCESS) return true;
 	auto response = safe_packet_cast<KadQueryRouteRsp>(answer);
-	ASSERT(response->getRouteArraySize() == 0);
+	ASSERT(response->getPathArraySize() == 0);
 	EV_TRACE << "recieved " << response->getContactArraySize() << " neighbors from " << response->getSource().toString().substr(0, 6) << endl;
 	for (uint i=0; i < response->getContactArraySize(); i++) {
 		onPathDiscovery(response->getContact(i), kad_path(), response->getSource());
