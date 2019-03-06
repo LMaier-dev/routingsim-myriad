@@ -65,7 +65,11 @@ void R2Kademlia::onDisconnect( nodeid_t nid ) {
 
 	neighborTable.removeNeighbor(nid);
 	ASSERT(neighborTable.getNodeId(key) == undefined_node);
-	ASSERT(routingTable.getContact(key));
+	if(!routingTable.getContact(key)) {
+		//TODO why does this happen?????
+		EV_ERROR << "missing contact" << nid << " " << key << " on node " << node().getNodeId() << endl;
+		return;
+	}
 	routingTable.removeContact(key);
 	//TODO remove contacts from routing table with this neighbor as next hop
 }
