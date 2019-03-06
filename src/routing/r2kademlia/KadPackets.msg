@@ -53,9 +53,6 @@ packet KadRTableRsp extends KadAnswer {
 	bool intermediateFlag[];
 }
 
-
-packet KadFindNodeReq extends KadRTableReq {}
-packet KadFindNodeRsp extends KadRTableRsp {}
 packet KadQueryRouteReq extends KadRTableReq {}
 packet KadQueryRouteRsp extends KadRTableRsp {}
 //TODO: KadUpdateRouteReq
@@ -64,7 +61,6 @@ packet KadQueryRouteRsp extends KadRTableRsp {}
 // ------------
 
 // ERROR
-// compare ErrorInd
 packet KadError extends KadAnswer {
 	type = KAD_ERROR;
 	uint8_t errorType enum(KadErrorType);
@@ -96,13 +92,11 @@ packet KadGetNeighborsAnswer extends KadAnswer {
 }
 
 // FIND NODE
-packet KadFindNodeCall extends KadPacket {
+packet KadFindNodeReq extends KadRTableReq {
 	type = KAD_FIND_NODE_CALL;
+	//TODO use destId for this
 	OverlayKey query;
-	bool recursive = false;
 }
-packet KadFindNodeAnswer extends KadAnswer {
+packet KadFindNodeRsp extends KadRTableRsp {
 	type = KAD_FIND_NODE_ANSWER;
-	OverlayKey contact[];
-	key_vector_t path[];
 }

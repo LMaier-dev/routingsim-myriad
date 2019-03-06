@@ -96,7 +96,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		// no hops left, packet is adressed to me
 		//TODO learn route from packet
 		// these types may forward packets, so they count themselves
-		if (handleIfFitting<KadFindNodeCall>(packet)) return;
+		if (handleIfFitting<KadFindNodeReq>(packet)) return;
 		// these types never forward packets
 		countRecieved(*packet);
 		if (handleIfFitting<KadGetNeighborsCall>(packet)) return;
@@ -257,15 +257,15 @@ void R2Kademlia::sendFindNode(const OverlayKey& key) {
 	ASSERT(contacts.size() == 1);
 	KadContact_p contact = contacts.front();
 	EV_TRACE << "closest contact found: " << *contact << endl;
-	auto packet = makePacket<KadFindNodeCall>(contact, "FindNode");
+	auto packet = makePacket<KadFindNodeReq>(contact, "FindNode");
 	packet->setQuery(key);
 	sendRpcCall(
 		std::move(packet),
-		std::bind(&R2Kademlia::handleFindNodeAnswer, this, _1, _2)
+		std::bind(&R2Kademlia::handleFindNodeResponse, this, _1, _2)
 	);
 }
-void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeCall> packet) {
-	auto answer = makeAnswer<KadFindNodeAnswer>(*packet);
+void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
+	auto answer = makeAnswer<KadFindNodeRsp>(*packet);
 	OverlayKey& query = packet->getQuery();
 	if (query == myOverlayKey) {
 		//TODO what if not exact needed, do we send contacts?
@@ -290,22 +290,22 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeCall> packet) {
 			answer->setPath(i, contacts[i]->getPath());
 		}
 		countRecieved(*packet);
-		EV_TRACE << "KadFindNodeCall revieved query: " << packet->getQuery() << " answering with list size" << contacts.size() << endl;
+		EV_TRACE << "KadFindNodeReq revieved query: " << packet->getQuery() << " answering with list size" << contacts.size() << endl;
 		sendPacket(std::move(answer));
 	}
 	else {
 		// forward request
-		EV_TRACE << "KadFindNodeCall revieved query: " << packet->getQuery() << endl << " next hop is " << *contact << endl;
+		EV_TRACE << "KadFindNodeReq revieved query: " << packet->getQuery() << endl << " next hop is " << *contact << endl;
 		packet->appendRoute(contact->getPath());
 		packet->appendHop(contact->getKey());
 		resendPacket(std::move(packet));
 	}
 }
-bool R2Kademlia::handleFindNodeAnswer(KadPacket_p answer_, RPCState& rpcState) {
+bool R2Kademlia::handleFindNodeResponse(KadPacket_p answer_, RPCState& rpcState) {
 	if (rpcState.status != RPC_SUCCESS) return true;
-	auto answer = safe_packet_cast<KadFindNodeAnswer>(answer_);
+	auto answer = safe_packet_cast<KadFindNodeRsp>(answer_);
 	ASSERT(answer->getContactArraySize() == answer->getPathArraySize());
-	EV_TRACE << "recieved FindNodeAnswer for " << check_and_cast<KadFindNodeCall *>(rpcState.original_packet.get())->getQuery();
+	EV_TRACE << "recieved FindNodeRsp for " << check_and_cast<KadFindNodeReq *>(rpcState.original_packet.get())->getQuery();
 	EV_TRACE << " from " << answer->getSource() << " with " << answer->getContactArraySize() << " contacts"<< endl;
 	onPathDiscovery(answer->getSource(), answer->reversePath(answer->getIntermediatePath()));
 	for (size_t i = 0; i < answer->getContactArraySize(); i++) {
