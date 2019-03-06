@@ -330,7 +330,11 @@ bool R2Kademlia::handleFindNodeResponse(KadPacket_p answer_, RPCState& rpcState)
 void R2Kademlia::onMissingNeighbor(KadPacket_p packet, NodePkt_p pkt) {
 //  	getStatistics().dropMessage(pkt, undefined_node);
 	droppedPackets++;
-	returnToSender(KAD_NEXT_HOP_UNAVAILABLE, std::move(packet));
+	if(packet->getType() == KAD_Error) {
+		EV << "dropping error packet" << endl;
+	}
+	else
+		returnToSender(KAD_NEXT_HOP_UNAVAILABLE, std::move(packet));
 }
 
 void R2Kademlia::onErrorPacket(KadError& error) {
