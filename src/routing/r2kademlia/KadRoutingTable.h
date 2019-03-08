@@ -77,7 +77,7 @@ class KadRoutingTable : public cObject
 	friend KadBucket;
 public:
 	KadRoutingTable() {};
-	void init(const OverlayKey& myKey, KadPolicy* policy, size_type accelerationFactor=1, size_type bucketSize=10);
+	void init(const OverlayKey& myKey, KadPolicy* policy, size_type accelerationFactor, size_type bucketSize);
 	/**
 	 * Adds the contact to the replacement cache and calls a policy function
 	 * to trigger adding the contact to the bucket.
@@ -121,6 +121,8 @@ public:
 	size_type getNumReplacements();
 	/// returns the number of buckets currenty held
 	inline size_type getNumBuckets() { return buckets.size(); }
+	/// returns the maximum size of a bucket, i.e. the size after which a bucket is split
+	inline size_type getSplitSize() { return bucketSize; }
 	/// returns true if the key is known, i.e. there is a contact present
 	inline bool isKnown(const OverlayKey& key) { return getContact(key).get() != nullptr; }
 
