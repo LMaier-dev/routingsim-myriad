@@ -184,6 +184,12 @@ void R2Kademlia::sendPacket(KadPacket_p packet) {
 	forwardPacket(std::move(packet), std::move(nodePkt));
 }
 
+const KadContact& R2Kademlia::chooseNextHop(const KadContactList& contacts, const OverlayKey& target, const OverlayKey& source) {
+	//TODO implement Proximity Routing
+	ASSERT(contacts.front()->getKey() != target);
+	return *(contacts.front());
+}
+
 // -------------------- rpc methods ---------------------------
 
 
@@ -267,7 +273,6 @@ void R2Kademlia::sendFindNode(const OverlayKey& key) {
 	// TODO select more and choose
 	ASSERT(contacts.size() == 1);
 	KadContact_p contact = contacts.front();
-	EV_TRACE << "closest contact found: " << *contact << endl;
 	auto packet = makePacket<KadFindNodeReq>(contact, "FindNode");
 	packet->setQuery(key);
 	sendRpcCall(
@@ -276,42 +281,39 @@ void R2Kademlia::sendFindNode(const OverlayKey& key) {
 	);
 }
 void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
-	auto answer = makeAnswer<KadFindNodeRsp>(*packet);
 	OverlayKey& query = packet->getQuery();
-	if (query == myOverlayKey) {
-		//TODO what if not exact needed, do we send contacts?
-		countRecieved(*packet);
-		sendPacket(std::move(answer));
-		return;
-	}
-	KadContact_p contact = routingTable.getClosestContact(
-		packet->getQuery(), packet->getSource());
-	if (contact->getKey() == packet->getSource()) {
-		countRecieved(*packet);
-		// TODO error packet
-		return;
-	}
-	//TODO if recursive routing
-	if (routingTable.distance(query) < routingTable.distance(contact->getKey(), query)) {
-		auto contacts = routingTable.getClosestContacts(packet->getQuery(), findNodeNumber);
-		answer->setContactArraySize(contacts.size());
-		answer->setPathArraySize(contacts.size());
-		for(size_t i = 0; i < contacts.size(); i++) {
-			answer->setContact(i, contacts[i]->getKey());
-			answer->setPath(i, contacts[i]->getPath());
+	size_t contactsLen = std::max((size_t)findNodeNumber, routingTable.getSplitSize());
+	KadContactList contacts = routingTable.getClosestContacts(packet->getQuery(), contactsLen);
+	ASSERT(contacts.size() > 0); // routing table has at least one entry
+	if (query != myOverlayKey) {
+		if (contacts.front()->getKey() == packet->getSource()) {
+			if(contacts.size() == 0) {
+				// TODO should we send an error instead of an empty answer?
+				sendPacket(makeAnswer<KadFindNodeRsp>(*packet));
+				return;
+			}
+			else
+				contacts.erase(contacts.begin());
 		}
-		countRecieved(*packet);
-		EV_TRACE << "KadFindNodeReq revieved query: " << packet->getQuery() << " answering with list size" << contacts.size() << endl;
-		sendPacket(std::move(answer));
+		if ((contacts.front()->getKey() ^ query) < (myOverlayKey ^ query)) {
+			// we have found a closer contact
+			// => forward request
+			const KadContact& contact = chooseNextHop(contacts, query, packet->getSource());
+			EV_TRACE << "KadFindNodeReq revieved query: " << packet->getQuery() << endl << " next hop is " << contact << endl;
+			packet->appendRoute(contact.getPath());
+			packet->appendHop(contact.getKey());
+			resendPacket(std::move(packet));
+			return;
+		}
 	}
-	else {
-		// forward request
-		EV_TRACE << "KadFindNodeReq revieved query: " << packet->getQuery() << endl << " next hop is " << *contact << endl;
-		packet->appendRoute(contact->getPath());
-		packet->appendHop(contact->getKey());
-		resendPacket(std::move(packet));
-	}
+	// answer request
+	auto answer = makeAnswer<KadFindNodeRsp>(*packet);
+	fillRTableRsp(*answer, contacts);
+	countRecieved(*packet);
+	EV_TRACE << "KadFindNodeReq revieved query: " << packet->getQuery() << " answering with list size" << contacts.size() << endl;
+	sendPacket(std::move(answer));
 }
+
 bool R2Kademlia::handleFindNodeResponse(KadPacket_p answer_, RPCState& rpcState) {
 	if (rpcState.status != RPC_SUCCESS) return true;
 	auto answer = safe_packet_cast<KadFindNodeRsp>(answer_);
@@ -477,6 +479,23 @@ std::unique_ptr<T> R2Kademlia::makeAnswer(KadPacket& original) {
 	ASSERT(answer->getSource() == myOverlayKey);
 	answer->setNonce(original.getNonce());
 	return answer;
+}
+
+
+void R2Kademlia::fillRTableRsp(KadRTableRsp& packet, const KadContactList& contacts, bool includePaths){
+	ASSERT(packet.getContactArraySize() == 0);
+	ASSERT(packet.getPathArraySize() == 0);
+	ASSERT(contacts.size() > 0);
+	packet.setContactArraySize(contacts.size());
+	if (includePaths) {
+		packet.setPathArraySize(contacts.size());
+	}
+	for (size_t i = 0; i < contacts.size(); i++) {
+		packet.setContact(i, contacts[i]->getKey());
+		if (includePaths) {
+			packet.setPath(i, contacts[i]->getPath());
+		}
+	}
 }
 
 

@@ -82,6 +82,8 @@ class R2Kademlia : public RPCProtocol, public KadPolicy, public StatisticSample
 	void resendPacket(KadPacket_p packet);
 	/// routes a packet to a neighbor based on the source route in the packet
 	void sendPacket(KadPacket_p packet) override;
+	/// chooses the contact to forward a request to according to the overlay metric.
+	const KadContact& chooseNextHop(const KadContactList&, const OverlayKey& target, const OverlayKey& source);
 	/// sends a probe request to the given contact
 	void sendProbe(KadContact_p contact);
 	/// sends a "get neighbors" call to the contact
@@ -124,6 +126,10 @@ private:
 	/// crafts a packet of type T, sets the route and nonce according to original
 	template<typename T>
 	std::unique_ptr<T> makeAnswer(KadPacket& original);
+	/**
+	 * saves the contact list to the given packet.
+	 */
+	void fillRTableRsp(KadRTableRsp& packet, const KadContactList& contacts, bool includePaths=true);
 	//@}
 
 	/** @name timer functions */
