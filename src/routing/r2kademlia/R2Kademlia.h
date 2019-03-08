@@ -177,6 +177,10 @@ private:
 	size_type findNodeNumber;
 	/// radius of physical neighborhood discovery
 	uint discoveryRadius;
+	/// activates proximity routing
+	bool proximityRouting;
+	/// activates proximity neighbor selection
+	bool proximityNeighborSelection;
 	// statistics
 	uint forwardedPackets = 0;
 	uint droppedPackets = 0;

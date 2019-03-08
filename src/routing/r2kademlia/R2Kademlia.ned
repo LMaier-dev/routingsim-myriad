@@ -31,4 +31,6 @@ simple R2Kademlia extends routingsim.foundation.Protocol
 		int discoveryRadius = default(4);
 		/// number of contacts returned by find node response, called "k" in research papers
 		int findNodeNumber = default(20);
+		bool proximityRouting = default(true);
+		bool proximityNeighborSelection = default(true);
 }
