@@ -41,7 +41,7 @@ void R2Kademlia::onInitialize() {
 	ASSERT(par("discoveryRadius").intValue() > 0);
 	discoveryRadius = (uint)par("discoveryRadius").intValue();
 	ASSERT(par("findNodeNumber").intValue() > 0);
-	findNodeNumber = (uint)par("findNodeNumber").intValue();
+	findNodeNumber = (size_type)par("findNodeNumber").intValue();
 
 	getStatistics().addSample(this);
 	addTimer(4, std::bind(&R2Kademlia::findRandom, this));

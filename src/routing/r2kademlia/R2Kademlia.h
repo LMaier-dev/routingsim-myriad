@@ -168,7 +168,7 @@ private:
 	/// packet type used for Node::bind()
 	static const int PAYLOAD_TYPE=5;
 	/// number of contacts returned by find node response, called "k" in research papers
-	uint findNodeNumber;
+	size_type findNodeNumber;
 	/// radius of physical neighborhood discovery
 	uint discoveryRadius;
 	// statistics
