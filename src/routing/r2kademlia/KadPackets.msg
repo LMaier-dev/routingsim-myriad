@@ -49,8 +49,8 @@ packet KadRTableRsp extends KadAnswer {
 	// count is clear
 	OverlayKey contact[];
 	key_vector_t path[];
-	bool unknownFlag[];
-	bool intermediateFlag[];
+	// bool unknownFlag[];
+	// bool intermediateFlag[];
 }
 //TODO: KadUpdateRouteReq
 //TODO: KadDataMsg
