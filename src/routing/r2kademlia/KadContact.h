@@ -38,7 +38,7 @@ class KadContact
 public:
 	KadContact(const KadContact&) = delete;
 	KadContact(const OverlayKey& key): key(key), path(){};
-	KadContact(const OverlayKey& key, kad_path path): key(key), path(path) {};
+	KadContact(const OverlayKey& key, kad_path path): key(key), path(std::move(path)) {};
 	/// returns the key of this contact
 	inline const OverlayKey& getKey() const { return key; }
 	/// compares the given overlay key to the contacts overlay key
@@ -54,7 +54,7 @@ public:
 	/// i.e. the intermediate hops between me and this contact
 	inline size_t getPathLength() const { return path.size(); }
 	/// sets the path to reach this contact
-	inline void setPath(kad_path path) { this->path = path; }
+	inline void setPath(kad_path path) { this->path = std::move(path); }
 	inline const kad_path& getPath() const { return path; }
 
 	/// Common stdc++ console output method
