@@ -97,10 +97,6 @@ class R2Kademlia : public RPCProtocol, public KadPolicy, public StatisticSample
 	void onMissingNeighbor(KadPacket_p packet, NodePkt_p pkt);
 	/** Called when an error packet is encountered, updates routing information */
 	void onErrorPacket(KadError& error);
-	/** called when a new contact is discovered */
-	void onDiscovery(const OverlayKey& key, kad_path path);
-	/** called when a path to a potentially new contact is discovered */
-	void onPathDiscovery(const OverlayKey& key, kad_path path, const OverlayKey& via=OverlayKey::UNSPECIFIED_KEY);
 	//@}
 	virtual void sampleStatistics (Statistics &stats) override;
 public:
@@ -114,6 +110,7 @@ public:
 	virtual void onBucketRefresh(KadBucket& bucket) override;
 	/** called when a contact could be replaced by a new one */
 	virtual void onBucketFull(KadBucket& bucket, KadContact_p contact) override;
+	virtual void onNewContact(KadContact_p contact) override {};
 	//@}
 private:
 	/** @name message generation */

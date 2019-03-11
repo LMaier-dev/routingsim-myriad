@@ -40,6 +40,7 @@ void KadRoutingTable::init(const OverlayKey& myKey, KadPolicy* policy, size_type
 	WATCH_VECTOR(buckets);
 }
 
+
 size_type KadRoutingTable::getBucketIndex(const OverlayKey& key)
 {
 	// based on OverSim Kademlia.cc
@@ -59,6 +60,54 @@ size_type KadRoutingTable::getBucketIndex(const OverlayKey& key)
 	size_type index = (key.getLength() - i - 1)/accelerationFactor * getLevelWidth() - delta.getBitRange(i, accelerationFactor) + 1;
 	ASSERT(index <= getMaxNumBuckets());
 	return std::min(buckets.size()-1, index);
+}
+
+void KadRoutingTable::addPath(const OverlayKey& key, kad_path path)
+{
+	if (key == myKey) return;
+	KadContact_p contact = getContact(key);
+	if (contact) {
+		// contact is known
+		if (contact->getPathLength() > path.size()) {
+			contact->setPath(std::move(path));
+			//TODO onImprovement?
+			return;
+		}
+		// else new path is not interesting
+	}
+	else // contact is new
+		handleNewContact(key, std::move(path));
+}
+
+void KadRoutingTable::addPath(const OverlayKey& key, const kad_path& path, const OverlayKey& via)
+{
+	if (key == myKey) return;
+	ASSERT (via != OverlayKey::UNSPECIFIED_KEY);
+	KadContact_p viaContact = getContact(via);
+	KadContact_p contact = getContact(key);
+	if (contact) {
+		// contact is known
+		if (contact->getPathLength() > path.size() + 1 + viaContact->getPathLength()) {
+			contact->setPath(concatViaPath(*viaContact, path));
+			//TODO onImprovement?
+			return;
+		}
+		// else new path is not interesting
+	}
+	else // contact is new
+		handleNewContact(key, concatViaPath(*viaContact, path));
+}
+void KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path) {
+	KadContact_p contact = make_shared<KadContact>(key, std::move(path));
+	KadBucket& bucket = getBucket(key);
+	ASSERT(!bucket.getContact(key));
+	if(bucket.size() < bucketSize) {
+		bucket.contacts.push_back(std::move(contact));
+		return;
+	}
+	else {
+		// TODO replacement
+	}
 }
 
 void KadRoutingTable::splitLastBucket() {
@@ -219,6 +268,15 @@ KadBucket& KadRoutingTable::getBucket(const OverlayKey& key)
 KadContact_p KadRoutingTable::getContact(const OverlayKey& key)
 {
 	return getBucket(key).getContact(key);
+}
+
+kad_path KadRoutingTable::concatViaPath(KadContact& viaContact, const kad_path& path) {
+	kad_path newPath{};
+	newPath.reserve(viaContact.getPathLength() + 1 + path.size());
+	std::copy(viaContact.getPath().begin(), viaContact.getPath().end(), std::back_inserter(newPath));
+	newPath.push_back(viaContact.getKey());
+	std::copy(path.begin(), path.end(), std::back_inserter(newPath));
+	return newPath;
 }
 
 //----------- KadBucket --------------

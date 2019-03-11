@@ -66,6 +66,7 @@ public:
 	virtual void onBucketRefresh(KadBucket& bucket) = 0;
 	/** called when a contact could be replaced by a new one */
 	virtual void onBucketFull(KadBucket& bucket, KadContact_p contact) = 0;
+	virtual void onNewContact(KadContact_p contact) = 0;
 };
 
 /**
@@ -78,6 +79,10 @@ class KadRoutingTable : public cObject
 public:
 	KadRoutingTable() {};
 	void init(const OverlayKey& myKey, KadPolicy* policy, size_type accelerationFactor, size_type bucketSize);
+	/** called when a path to a potentially new contact is discovered */
+	void addPath(const OverlayKey& key, kad_path path);
+	/** called when a path to a potentially new contact is discovered */
+	void addPath(const OverlayKey& key, const kad_path& path, const OverlayKey& via);
 	/**
 	 * Adds the contact to the replacement cache and calls a policy function
 	 * to trigger adding the contact to the bucket.
@@ -132,6 +137,7 @@ public:
 	inline OverlayKey distance(const OverlayKey& key) { return key ^ myKey; }
 
 protected:
+	virtual void handleNewContact(const OverlayKey& key, kad_path path);
 	/** @name bucket access */
 	//@{
 	/** returns the index of the bucket corresponding to the given overlay key. */
@@ -171,11 +177,13 @@ private:
 	std::vector<KadBucket> buckets;
 	KadPolicy* policy = nullptr;
 
-	//------ private inline helper functions -------
+	//------ private helper functions -------
 	/** copies all contacts from one contact list to the end of the other contact list*/
 	void inline copyContacts(KadContactList& source, KadContactList& target) {
 		std::copy(source.begin(), source.end(), std::back_inserter(target));
 	}
+	/**  */
+	kad_path concatViaPath(KadContact& viaContact, const kad_path& path);
 };
 
 } //namespace

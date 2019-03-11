@@ -141,8 +141,7 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 	EV << "recieved hello packet from " << packet->getSourceId() << endl;
 	neighborTable.addNeighbor(packet->getSourceId(), packet->getSource());
 	EV_TRACE << "neighbor table: "<< neighborTable << endl;
-	//TODO special treatment for neighbors?
-	onDiscovery(packet->getSource(), kad_path());
+	routingTable.addPath(packet->getSource(), kad_path());
 }
 
 void R2Kademlia::handlePacket(KadAnswer_p packet) {
@@ -225,25 +224,7 @@ bool R2Kademlia::handleProbeResponse(KadPacket_p answer, RPCState& rpcState) {
 	if (rpcState.status != RPC_SUCCESS) return true;
 	ASSERT(answer->getSource() == rpcState.original_packet->getTarget());
 	std::unique_ptr<KadProbeRsp> probeRsp = safe_packet_cast<KadProbeRsp>(answer);
-	//TODO add contact to routing table and mark seen
-	const OverlayKey& key = probeRsp->getSource();
-	KadContact_p contact = routingTable.getContact(key);
-	//TODO check if return path was the same
-	kad_path path = rpcState.original_packet->getIntermediatePath();
-	if (contact){
-		// update contact
-		contact->seen();
-		if (contact->isStale() or (contact->getPathLength() > path.size()))
-			contact->setPath(std::move(path));
-		contact->setStale(false);
-	}
-	else {
-		// create new contact
-		contact = std::make_shared<KadContact>(key, std::move(path));
-		contact->seen();
-		routingTable.addContact(contact);
-	}
-	return true;
+	//TODO is there anything to do here?
 }
 
 // GET NEIGHBOR
@@ -278,7 +259,10 @@ bool R2Kademlia::handleQueryRouteResponse(KadPacket_p answer, RPCState& rpcState
 	ASSERT(response->getPathArraySize() == 0);
 	EV_TRACE << "recieved " << response->getContactArraySize() << " neighbors from " << response->getSource().toString().substr(0, 6) << endl;
 	for (uint i=0; i < response->getContactArraySize(); i++) {
-		onPathDiscovery(response->getContact(i), kad_path(), response->getSource());
+		if (response->getContact(i) != myOverlayKey)
+			routingTable.addPath(response->getContact(i), 
+								 kad_path(),
+								 response->getSource());
 	}
 	return true;
 }
@@ -337,15 +321,17 @@ bool R2Kademlia::handleFindNodeResponse(KadPacket_p answer_, RPCState& rpcState)
 	ASSERT(answer->getContactArraySize() == answer->getPathArraySize());
 	EV_TRACE << "recieved FindNodeRsp for " << check_and_cast<KadFindNodeReq *>(rpcState.original_packet.get())->getQuery();
 	EV_TRACE << " from " << answer->getSource() << " with " << answer->getContactArraySize() << " contacts"<< endl;
-	onPathDiscovery(answer->getSource(), answer->reversePath(answer->getIntermediatePath()));
+	// TODO dont we do that centrally?
+	// TODO optimization: isPathInteresting
+	routingTable.addPath(answer->getSource(), answer->reversePath(answer->getIntermediatePath()));
+	// TODO combine this with QueryRouteRsp
 	for (size_t i = 0; i < answer->getContactArraySize(); i++) {
-		onPathDiscovery(
+		routingTable.addPath(
 			answer->getContact(i),
 			std::move(answer->getPath(i)),
 			answer->getSource()
 		);
 	}
-	// TODO try again
 	return true;
 }
 // ------------------------- policy foo --------------------------------------
@@ -371,67 +357,10 @@ void R2Kademlia::onErrorPacket(KadError& error) {
 	// currently there are no more error types
 }
 
-void R2Kademlia::onDiscovery(const OverlayKey& key, kad_path path) {
-	KadContact_p contact = routingTable.getContact(key);
-	if (contact) {
-		if(path.size() == 0) {
-			// neighbor discovery
-			contact->setPath(path);
-		}
-		else{
-			// this should never happen, path updates should be handled by
-			// onPathDiscovery
-			EV_ERROR << "double discovery " << *contact << endl;
-		}
-	}
-	else {
-		contact = std::make_shared<KadContact>(key, std::move(path));
-		routingTable.addCandidate(contact);
-		if(contact->getPathLength() < discoveryRadius) {
-			sendGetNeighbors(contact);
-		}
-	}
-}
 
-void R2Kademlia::onPathDiscovery(const OverlayKey& key, kad_path path, const OverlayKey& via) {
-	if (key == myOverlayKey) return; // nothing to do here
-	// find via contact
-	KadContact_p viaContact{nullptr};
-	if (!via.isUnspecified()) {
-		viaContact = routingTable.getContact(via);
-		if(!viaContact) {
-			EV_ERROR << "Failed to hande path discovery, via contact " << via << " was not found" << endl;
-			return;
-		}
-	}
-	// find contact
-	KadContact_p contact = routingTable.getContact(key);
-	if(contact) {
-		// contact known
-		size_t viaPathLength = viaContact ? viaContact->getPathLength() + 1 : 0;
-		if(contact->getPathLength() > viaPathLength + path.size()) {
-			if (viaContact)
-				contact->setPath(concatViaPath(viaContact->getPath(), via, path));
-			else
-				contact->setPath(path);
-		}
-	}
-	else {
-		// contact unknown
-		if (viaContact)
-			onDiscovery(key, concatViaPath(viaContact->getPath(), via, path));
-		else
-			onDiscovery(key, path);
-	}
-}
-kad_path R2Kademlia::concatViaPath(const kad_path& viaPath, const OverlayKey& viaKey, const kad_path& path) {
-	kad_path newPath{};
-	newPath.reserve(viaPath.size() + 1 + path.size());
-	std::copy(viaPath.begin(), viaPath.end(), std::back_inserter(newPath));
-	newPath.push_back(viaKey);
-	std::copy(path.begin(), path.end(), std::back_inserter(newPath));
-	return newPath;
-}
+//		if(contact->getPathLength() < discoveryRadius) {
+	//		sendGetNeighbors(contact);
+		//}
 
 
 void R2Kademlia::sampleStatistics (Statistics &stats) {
