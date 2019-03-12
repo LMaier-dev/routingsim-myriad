@@ -380,6 +380,10 @@ void R2Kademlia::onBucketEmpty(KadBucket& bucket) {
 void R2Kademlia::onBucketRefresh(KadBucket& bucket) {
 	// TODO probe?
 }
+void R2Kademlia::onNewContact(KadContact_p contact) {
+	if (contact->getPathLength() < discoveryRadius)
+		sendGetNeighbors(contact);
+}
 
 // -------------------- private helper methods --------------------
 NodePkt_p R2Kademlia::makeHelloPacket()

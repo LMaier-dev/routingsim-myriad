@@ -45,13 +45,13 @@ public:
 	friend std::ostream& operator<<(std::ostream& os, const KadBucket& b) {
 		return os << b.contacts.size() << " contacts";
 	}
-	KadContactList contacts;
 protected:
 	/**
 	 * Returns an iterator at the contacts position.
 	 * Returns contacts->end() if the contact is not found.
 	 */
 	std::vector<KadContact_p>::iterator findContact(const OverlayKey& key);
+	KadContactList contacts;
 };
 
 /**

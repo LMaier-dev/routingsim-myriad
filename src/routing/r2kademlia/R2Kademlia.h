@@ -106,7 +106,7 @@ public:
 	virtual void onBucketEmpty(KadBucket& bucket) override;
 	/**  called when a bucket needs to be refreshed */
 	virtual void onBucketRefresh(KadBucket& bucket) override;
-	virtual void onNewContact(KadContact_p contact) override {};
+	virtual void onNewContact(KadContact_p contact) override;
 	//@}
 private:
 	/** @name message generation */

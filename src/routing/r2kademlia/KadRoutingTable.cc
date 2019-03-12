@@ -110,7 +110,24 @@ void KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path)
 		return;
 	}
 	else {
-		// TODO replacement
+		auto& contacts = bucket.contacts;
+		auto result = contacts.end();
+		size_type maxLen = contact->getPathLength();
+		for (auto it = contacts.begin(); it!=contacts.end(); it++) {
+			if( (*it)->getPathLength() > maxLen) {
+				maxLen = (*it)->getPathLength();
+				result = it;
+			}
+		}
+		if (result != contacts.end()) {
+			EV_INFO << "replacing contact, new: " << contact << " old: " << *result << endl;
+			*result = contact;
+			policy->onNewContact(*result);
+		}
+		else {
+			// drop contact
+			EV_INFO << "dropping new contact " << contact << endl;
+		}
 	}
 }
 
