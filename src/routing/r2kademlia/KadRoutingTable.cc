@@ -102,7 +102,7 @@ void KadRoutingTable::addPath(const OverlayKey& key, const kad_path& path, const
 }
 void KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path)
 {
-	KadContact_p contact = make_shared<KadContact>(key, std::move(path));
+	auto contact = std::make_unique<KadContact>(key, std::move(path));
 	KadBucket& bucket = getBucket(key);
 	ASSERT(!bucket.getContact(key));
 	if(bucket.size() < bucketSize) {
@@ -120,13 +120,13 @@ void KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path)
 			}
 		}
 		if (result != contacts.end()) {
-			EV_INFO << "replacing contact, new: " << contact << " old: " << *result << endl;
-			*result = contact;
-			policy->onNewContact(*result);
+			EV_INFO << "replacing contact, new: " << *contact << " old: " << **result << endl;
+			*result = std::move(contact);
+			policy->onNewContact(result->get());
 		}
 		else {
 			// drop contact
-			EV_INFO << "dropping new contact " << contact << endl;
+			EV_INFO << "dropping new contact " << *contact << endl;
 		}
 	}
 }
@@ -151,8 +151,8 @@ void KadRoutingTable::splitLastBucket() {
 	while(buckets.size() < newSize)
 		buckets.emplace_back();
 	// sort contacts into new buckets
-	for(KadContact_p contact : oldBucket.contacts)
-		getBucket(contact).contacts.push_back(contact);
+	for(std::unique_ptr<KadContact>& contact : oldBucket.contacts)
+		getBucket(contact.get()).contacts.push_back(std::move(contact));
 	// TODO optimization: use std::move for contacts
 }
 
@@ -242,16 +242,8 @@ KadContact_p KadBucket::getContact(const OverlayKey& key)
 {
 	auto it = findContact(key);
 	if (it != contacts.end())
-		return *it;
-	return KadContact_p();
-}
-
-void KadBucket::replaceContact(KadContact_p oldContact, KadContact_p newContact)
-{
-	auto oldIt = findContact(oldContact->getKey());
-	ASSERT(oldContact == *oldIt);
-	ASSERT(findContact(newContact->getKey()) == contacts.end());
-	*oldIt = std::move(newContact);
+		return it->get();
+	return nullptr;
 }
 
 bool KadBucket::removeContact(const OverlayKey& key)
@@ -265,7 +257,7 @@ bool KadBucket::removeContact(const OverlayKey& key)
 		return false;
 }
 
-std::vector<KadContact_p>::iterator KadBucket::findContact(const OverlayKey& key)
+std::vector<std::unique_ptr<KadContact>>::iterator KadBucket::findContact(const OverlayKey& key)
 {
 	auto it = contacts.begin();
 	for (; it !=  contacts.end() && !(*it)->hasKey(key); it++);

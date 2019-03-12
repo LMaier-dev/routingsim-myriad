@@ -65,9 +65,6 @@ private:
 	kad_path path;			/// the best known source routing path to reach this contact
 	bool stale;				/// true if the contact is not answering
 };
-// contact type definitions
-using KadContact_p = std::shared_ptr<KadContact>;
-using KadContactList = std::vector<KadContact_p>;
 
 }; // namespace
 #endif // __ROUTINGSIM_KadContact_H_

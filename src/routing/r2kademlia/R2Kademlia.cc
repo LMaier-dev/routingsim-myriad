@@ -188,14 +188,14 @@ void R2Kademlia::sendPacket(KadPacket_p packet) {
 const KadContact& R2Kademlia::chooseNextHop(const KadContactList& contacts, const OverlayKey& target, const OverlayKey& source) {
 	//TODO implement Proximity Routing
 	if (proximityRouting && contacts.size() > 1) {
-		const KadContact* contact = contacts.front().get();
+		const KadContact* contact = contacts.front();
 		int dprefix = (contact->getKey() ^ target).log_2();
 		size_t dproxMin = contact->getPathLength();
 		for (auto it = contacts.begin()+1; it != contacts.end(); it++) {
 			if (((*it)->getKey() ^ target).log_2() > dprefix) break;
 			if ((*it)->getPathLength() < dproxMin) {
 				dproxMin = (*it)->getPathLength();
-				contact = it->get();
+				contact = *it;
 			}
 		}
 		return *contact;

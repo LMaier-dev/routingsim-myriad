@@ -51,7 +51,7 @@ public:
 	/// appends the key of the specified contact to the source route
 	inline void appendHop(KadContact& contact) { appendHop(contact.getKey()); }
 	/// appends the key of the specified contact to the source route
-	inline void appendHop(KadContact_p contact) { appendHop(*contact); }
+	inline void appendHop(KadContact* contact) { appendHop(*contact); }
 	/// returns the source route as a kad_path (std::vector) from the given position
 	/// until the given "to" position (excluding "to")
 	kad_path getPath(uint from, uint to);

@@ -28,6 +28,10 @@
 namespace routingsim {
 class KadRoutingTable;
 
+// contact type definitions
+using KadContact_p = KadContact*;
+using KadContactList = std::vector<KadContact_p>;
+
 class KadBucket
 {
 	friend KadRoutingTable;
@@ -40,7 +44,6 @@ public:
 	inline bool empty() { return contacts.empty(); }
 	/** returns the size of the contact list */
 	inline size_type size() { return contacts.size(); }
-	void replaceContact(KadContact_p oldContact, KadContact_p newContact);
 	/// Common stdc++ console output method
 	friend std::ostream& operator<<(std::ostream& os, const KadBucket& b) {
 		return os << b.contacts.size() << " contacts";
@@ -50,8 +53,8 @@ protected:
 	 * Returns an iterator at the contacts position.
 	 * Returns contacts->end() if the contact is not found.
 	 */
-	std::vector<KadContact_p>::iterator findContact(const OverlayKey& key);
-	KadContactList contacts;
+	std::vector<std::unique_ptr<KadContact>>::iterator findContact(const OverlayKey& key);
+	std::vector<std::unique_ptr<KadContact>> contacts;
 };
 
 /**
@@ -112,7 +115,7 @@ public:
 	/// returns the maximum size of a bucket, i.e. the size after which a bucket is split
 	inline size_type getSplitSize() { return bucketSize; }
 	/// returns true if the key is known, i.e. there is a contact present
-	inline bool isKnown(const OverlayKey& key) { return getContact(key).get() != nullptr; }
+	inline bool isKnown(const OverlayKey& key) { return getContact(key) != nullptr; }
 
 	/// returns the distance between the two keys
 	inline OverlayKey distance(const OverlayKey& a, const OverlayKey& b) { return a ^ b; }
@@ -162,8 +165,10 @@ private:
 
 	//------ private helper functions -------
 	/** copies all contacts from one contact list to the end of the other contact list*/
-	void inline copyContacts(KadContactList& source, KadContactList& target) {
-		std::copy(source.begin(), source.end(), std::back_inserter(target));
+	void inline copyContacts(std::vector<std::unique_ptr<KadContact>>& source, KadContactList& target) {
+		target.reserve(target.size() + source.size());
+		for(auto it = source.begin(); it != source.end(); it++)
+			target.push_back(it->get());
 	}
 	/**  */
 	kad_path concatViaPath(KadContact& viaContact, const kad_path& path);
