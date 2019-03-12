@@ -21,24 +21,6 @@
 #include "KadContact.h"
 
 namespace routingsim {
-
-std::vector<KadContact_p>::iterator findContactInList(KadContactList& list, const OverlayKey& key){
-	auto it = list.begin();
-	for (; it !=  list.end() && !(*it)->hasKey(key); it++);
-	return it;
-}
-
-bool removeContactFromList(KadContactList& list, const OverlayKey& key)
-{
-	auto it = findContactInList(list, key);
-	if (it != list.end()){
-		list.erase(it);
-		return true;
-	}
-	else
-		return false;
-}
-
 std::ostream& operator<<(std::ostream& os, const KadContact& c) {
 	os << c.getKey();
 	if (c.getPath().size() == 0)

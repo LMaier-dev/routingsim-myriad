@@ -35,7 +35,7 @@ public:
 	/** returns the contact if found, nullptr otherwise */
 	KadContact_p getContact(const OverlayKey& key);
 	/** tries to remove the contact, returns true if found */
-	inline bool removeContact(const OverlayKey& key) { return removeContactFromList(contacts, key); }
+	inline bool removeContact(const OverlayKey& key);
 	/** returns true if the contact list is empty */
 	inline bool empty() { return contacts.empty(); }
 	/** returns the size of the contact list */
@@ -46,6 +46,12 @@ public:
 		return os << b.contacts.size() << " contacts";
 	}
 	KadContactList contacts;
+protected:
+	/**
+	 * Returns an iterator at the contacts position.
+	 * Returns contacts->end() if the contact is not found.
+	 */
+	std::vector<KadContact_p>::iterator findContact(const OverlayKey& key);
 };
 
 /**

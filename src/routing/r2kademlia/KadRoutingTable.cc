@@ -223,8 +223,7 @@ kad_path KadRoutingTable::concatViaPath(KadContact& viaContact, const kad_path& 
 //----------- KadBucket --------------
 KadContact_p KadBucket::getContact(const OverlayKey& key)
 {
-
-	auto it = findContactInList(contacts, key);
+	auto it = findContact(key);
 	if (it != contacts.end())
 		return *it;
 	return KadContact_p();
@@ -232,10 +231,28 @@ KadContact_p KadBucket::getContact(const OverlayKey& key)
 
 void KadBucket::replaceContact(KadContact_p oldContact, KadContact_p newContact)
 {
-	auto oldIt = findContactInList(contacts, oldContact->getKey());
+	auto oldIt = findContact(oldContact->getKey());
 	ASSERT(oldContact == *oldIt);
-	ASSERT(findContactInList(contacts, newContact->getKey()) == contacts.end());
+	ASSERT(findContact(newContact->getKey()) == contacts.end());
 	*oldIt = std::move(newContact);
+}
+
+bool KadBucket::removeContact(const OverlayKey& key)
+{
+	auto it = findContact(key);
+	if (it != contacts.end()){
+		contacts.erase(it);
+		return true;
+	}
+	else
+		return false;
+}
+
+std::vector<KadContact_p>::iterator KadBucket::findContact(const OverlayKey& key)
+{
+	auto it = contacts.begin();
+	for (; it !=  contacts.end() && !(*it)->hasKey(key); it++);
+	return it;
 }
 
 } // namespace
