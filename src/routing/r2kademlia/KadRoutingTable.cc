@@ -100,7 +100,8 @@ void KadRoutingTable::addPath(const OverlayKey& key, const kad_path& path, const
 	else // contact is new
 		handleNewContact(key, concatViaPath(*viaContact, path));
 }
-void KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path) {
+void KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path)
+{
 	KadContact_p contact = make_shared<KadContact>(key, std::move(path));
 	KadBucket& bucket = getBucket(key);
 	ASSERT(!bucket.getContact(key));
@@ -179,16 +180,6 @@ KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_t
 	result.shrink_to_fit();
 	return result;
 }
-
-KadContact_p KadRoutingTable::getClosestContact(const OverlayKey& key, const OverlayKey& exclude) {
-	// TODO optimization: find better way to get one contact
-	KadContact_p contact = getClosestContacts(key, 1).front();
-	if (not exclude.isUnspecified() and contact->getKey() == exclude)
-		return getClosestContacts(key, 2).back();
-	else
-		return contact;
-}
-
 
 size_type KadRoutingTable::getNumContacts() {
 	size_type sum = 0;
