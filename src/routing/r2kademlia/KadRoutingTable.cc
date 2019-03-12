@@ -82,8 +82,11 @@ void KadRoutingTable::addPath(const OverlayKey& key, kad_path path)
 void KadRoutingTable::addPath(const OverlayKey& key, const kad_path& path, const OverlayKey& via)
 {
 	if (key == myKey) return;
-	ASSERT (via != OverlayKey::UNSPECIFIED_KEY);
 	KadContact_p viaContact = getContact(via);
+	if (!viaContact) {
+		EV_ERROR << "Via discovery failed, via contact not known." << endl;
+		return;
+	}
 	KadContact_p contact = getContact(key);
 	if (contact) {
 		// contact is known
