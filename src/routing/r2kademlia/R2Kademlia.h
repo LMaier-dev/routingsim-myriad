@@ -102,14 +102,10 @@ class R2Kademlia : public RPCProtocol, public KadPolicy, public StatisticSample
 public:
 	/** @name policy functions called by routing table */
 	//@{
-	/** called when there is space in a bucket and the bucket is not empty */
-	virtual void onBucketSpace(KadBucket& bucket) override;
 	/** called when last contact is removed from a bucket*/
 	virtual void onBucketEmpty(KadBucket& bucket) override;
 	/**  called when a bucket needs to be refreshed */
 	virtual void onBucketRefresh(KadBucket& bucket) override;
-	/** called when a contact could be replaced by a new one */
-	virtual void onBucketFull(KadBucket& bucket, KadContact_p contact) override;
 	virtual void onNewContact(KadContact_p contact) override {};
 	//@}
 private:

@@ -224,6 +224,7 @@ bool R2Kademlia::handleProbeResponse(KadPacket_p answer, RPCState& rpcState) {
 	if (rpcState.status != RPC_SUCCESS) return true;
 	ASSERT(answer->getSource() == rpcState.original_packet->getTarget());
 	std::unique_ptr<KadProbeRsp> probeRsp = safe_packet_cast<KadProbeRsp>(answer);
+	return true;
 	//TODO is there anything to do here?
 }
 
@@ -372,22 +373,12 @@ void R2Kademlia::sampleStatistics (Statistics &stats) {
 }
 // -------------- kad policy -------------
 
-void R2Kademlia::onBucketSpace(KadBucket& bucket) {
-	ASSERT(bucket.replacementSize() > 0);
-	KadContact_p replacement = bucket.contactReplacements.back();
-	bucket.contactReplacements.pop_back();
-	routingTable.addContact(replacement);
-}
 void R2Kademlia::onBucketEmpty(KadBucket& bucket) {
 	EV << "bucket empty" << endl;
 	// TODO probe
 }
 void R2Kademlia::onBucketRefresh(KadBucket& bucket) {
 	// TODO probe?
-}
-void R2Kademlia::onBucketFull(KadBucket& bucket, KadContact_p contact) {
-	EV << "bucket full, dropping contact " << contact << endl;
-	// TODO contact replacement
 }
 
 // -------------------- private helper methods --------------------

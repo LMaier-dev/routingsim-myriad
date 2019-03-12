@@ -135,8 +135,6 @@ void KadRoutingTable::splitLastBucket() {
 	// sort contacts into new buckets
 	for(KadContact_p contact : oldBucket.contacts)
 		getBucket(contact).contacts.push_back(contact);
-	for(KadContact_p contact : oldBucket.contactReplacements)
-		getBucket(contact).contactReplacements.push_back(contact);
 	// TODO optimization: use std::move for contacts
 }
 
@@ -191,45 +189,12 @@ KadContact_p KadRoutingTable::getClosestContact(const OverlayKey& key, const Ove
 		return contact;
 }
 
-void KadRoutingTable::addCandidate(KadContact_p contact)
-{
-	// contact must not be present
-	if(getContact(contact->getKey())) {
-		KadContact_p other = getContact(contact->getKey());
-		EV << "contact with key allready present" << contact << endl;
-		ASSERT(contact == other);
-		return;
-	}
-	KadBucket& bucket = getBucket(contact);
-	if (bucket.contactReplacements.size() == bucketSize) {
-		ASSERT(bucket.size() == bucketSize);
-		return; // the bucket is completely full!
-	}
-	else {
-		bucket.contactReplacements.push_back(contact);
-		if (bucket.size() < bucketSize || isSplittable(bucket))
-			policy->onBucketSpace(bucket);
-		else
-			EV << "added candidate " << *contact << endl;
-	}
-}
 
-void KadRoutingTable::addContact(KadContact_p contact)
-{
-	EV << "adding contact " << *contact << endl;
-	// contact must not be present
-	// TODO could it be in the replacements?
-	ASSERT(not getContact(contact->getKey()));
-	KadBucket& bucket = getBucket(contact);
-	if (bucket.size() == bucketSize)
-		if (isSplittable(bucket)) {
-			splitLastBucket();
-			addContact(contact);
-		}
-		else
-			policy->onBucketFull(bucket, contact);
-	else
-		bucket.contacts.push_back(contact);
+size_type KadRoutingTable::getNumContacts() {
+	size_type sum = 0;
+	for (KadBucket& b : buckets)
+		sum += b.size();
+	return sum;
 }
 
 
@@ -241,25 +206,7 @@ bool KadRoutingTable::removeContact(const OverlayKey& key)
 		EV << "failed to remove contact " << key << endl;
 	if (bucket.empty())
 		policy->onBucketEmpty(bucket);
-	if (result && bucket.replacementSize() > 0)
-		policy->onBucketSpace(bucket);
-	else
-		bucket.removeContactFromReplacements(key);
 	return result;
-}
-
-
-size_type KadRoutingTable::getNumContacts() {
-	size_type sum = 0;
-	for (KadBucket& b : buckets)
-		sum += b.size();
-	return sum;
-}
-size_type KadRoutingTable::getNumReplacements() {
-	size_type sum = 0;
-	for (KadBucket& b : buckets)
-		sum += b.replacementSize();
-	return sum;
 }
 
 KadBucket& KadRoutingTable::getBucket(const OverlayKey& key)
@@ -289,9 +236,6 @@ KadContact_p KadBucket::getContact(const OverlayKey& key)
 	auto it = findContactInList(contacts, key);
 	if (it != contacts.end())
 		return *it;
-	it = findContactInList(contactReplacements, key);
-	if (it != contactReplacements.end())
-		return *it;
 	return KadContact_p();
 }
 
@@ -300,9 +244,7 @@ void KadBucket::replaceContact(KadContact_p oldContact, KadContact_p newContact)
 	auto oldIt = findContactInList(contacts, oldContact->getKey());
 	ASSERT(oldContact == *oldIt);
 	ASSERT(findContactInList(contacts, newContact->getKey()) == contacts.end());
-	ASSERT(findContactInList(contactReplacements, newContact->getKey()) == contactReplacements.end());
 	*oldIt = std::move(newContact);
-	// TODO add old contact to contact replacements?
 }
 
 } // namespace

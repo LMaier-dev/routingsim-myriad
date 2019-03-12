@@ -36,20 +36,16 @@ public:
 	KadContact_p getContact(const OverlayKey& key);
 	/** tries to remove the contact, returns true if found */
 	inline bool removeContact(const OverlayKey& key) { return removeContactFromList(contacts, key); }
-	/** tries to remove the contact from replacement list, returns true if found */
-	inline bool removeContactFromReplacements(const OverlayKey& key) { return removeContactFromList(contactReplacements, key); }
 	/** returns true if the contact list is empty */
 	inline bool empty() { return contacts.empty(); }
 	/** returns the size of the contact list */
 	inline size_type size() { return contacts.size(); }
-	inline size_type replacementSize() { return contactReplacements.size(); }
 	void replaceContact(KadContact_p oldContact, KadContact_p newContact);
 	/// Common stdc++ console output method
 	friend std::ostream& operator<<(std::ostream& os, const KadBucket& b) {
-		return os << b.contacts.size() << " contacts, " << b.contactReplacements.size() << " replacements";
+		return os << b.contacts.size() << " contacts";
 	}
 	KadContactList contacts;
-	KadContactList contactReplacements;
 };
 
 /**
@@ -58,14 +54,10 @@ public:
  */
 class KadPolicy {
 public:
-	/** called when there is space in a bucket and the bucket is not empty */
-	virtual void onBucketSpace(KadBucket& bucket) = 0;
 	/** called when last contact is removed from a bucket*/
 	virtual void onBucketEmpty(KadBucket& bucket) = 0;
 	/**  called when a bucket needs to be refreshed */
 	virtual void onBucketRefresh(KadBucket& bucket) = 0;
-	/** called when a contact could be replaced by a new one */
-	virtual void onBucketFull(KadBucket& bucket, KadContact_p contact) = 0;
 	virtual void onNewContact(KadContact_p contact) = 0;
 };
 
@@ -79,22 +71,14 @@ class KadRoutingTable : public cObject
 public:
 	KadRoutingTable() {};
 	void init(const OverlayKey& myKey, KadPolicy* policy, size_type accelerationFactor, size_type bucketSize);
-	/** called when a path to a potentially new contact is discovered */
+	/**
+	 * add a potentially new path, adds a contactz or updates an existing one
+	 */
 	void addPath(const OverlayKey& key, kad_path path);
-	/** called when a path to a potentially new contact is discovered */
+	/**
+	 * add a potentially new path, adds a contactz or updates an existing one
+	 */
 	void addPath(const OverlayKey& key, const kad_path& path, const OverlayKey& via);
-	/**
-	 * Adds the contact to the replacement cache and calls a policy function
-	 * to trigger adding the contact to the bucket.
-	 */
-	void addCandidate(KadContact_p contact);
-	/**
-	 * Adds the contact to the routing table.
-	 * If the corresponding bucket is full, the contact is handled by the
-	 * onBucketFull policy.
-	 */
-	void addContact(KadContact_p contact);
-
 	/**
 	 * Removes the contact with the givne key from the routing table.
 	 * @returns true if the contact was removed, false if it was not present
@@ -122,8 +106,6 @@ public:
 	KadContactList getClosestContacts(const OverlayKey& key, size_type n);
 	/// returns the number of contacts in buckets
 	size_type getNumContacts();
-	/// returns the number of contact replacements in buckets
-	size_type getNumReplacements();
 	/// returns the number of buckets currenty held
 	inline size_type getNumBuckets() { return buckets.size(); }
 	/// returns the maximum size of a bucket, i.e. the size after which a bucket is split
