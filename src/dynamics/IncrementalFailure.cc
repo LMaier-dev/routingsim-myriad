@@ -19,8 +19,6 @@
 
 namespace routingsim {
 
-using namespace boost;
-
 Define_Module(IncrementalFailure);
 
 void IncrementalFailure::initialize() {

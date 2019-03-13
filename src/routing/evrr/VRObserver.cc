@@ -21,7 +21,6 @@ namespace routingsim {
 
 Define_Module(VRObserver);
 
-using namespace boost;
 using namespace std;
 
 void VRObserver::initialize() {

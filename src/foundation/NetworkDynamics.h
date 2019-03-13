@@ -58,6 +58,7 @@ protected:
 
 	/**
 	 * Sub-classes need to implement this function to schedule dynamic events.
+	 * Must return the sim time when it should be called again.
 	 */
 	virtual simtime_t scheduleDynamics() = 0;
 

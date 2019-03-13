@@ -25,16 +25,6 @@ namespace routingsim {
 
 Define_Module(LinkFailure);
 
-LinkFailure::LinkFailure() {
-	// TODO Auto-generated constructor stub
-}
-
-LinkFailure::~LinkFailure() {
-	// TODO Auto-generated destructor stub
-}
-
-void LinkFailure::initialize() {
-}
 
 simtime_t LinkFailure::scheduleDynamics() {
 

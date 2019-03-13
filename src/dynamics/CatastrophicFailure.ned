@@ -42,5 +42,5 @@ parameters:
     double period @unit(s) = default(200s);
 
     /// duration of failures
-    double duration @unit(s) = default(100s);		
+    double duration @unit(s) = default(100s);
 }

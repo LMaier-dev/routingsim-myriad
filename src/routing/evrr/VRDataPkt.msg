@@ -14,11 +14,13 @@
 // 
 cplusplus {{
 #include "foundation.h"
+#include "VirtualRing.h"
 }}
 
 namespace routingsim;
 
 class noncobject nodeid_t;
+class noncobject vid_t;
 
 // virtual ring data packet
 packet VRDataPkt {
@@ -29,7 +31,7 @@ packet VRDataPkt {
     int hopcount;
     
     // best distance (zero in the end)
-    nodeid_t best;
+    vid_t best;
     
     // source address
     nodeid_t src;

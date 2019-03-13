@@ -31,7 +31,7 @@ parameters:
     double period @unit(s) = default(200s);
     	
     /// duration of failure after period start
-    double duration @unit(s) = default(100s);	
+    double duration @unit(s) = default(100s);
     
     /// Kind of links to fail
     /// None: Deactivates failures
@@ -41,5 +41,5 @@ parameters:
     string linkSelection @enum("none", "highestDegree", "degreeRange", "random") = default("none");
     
     int minDegree = 4;
-    int maxDegree = 10;	
+    int maxDegree = 10;
 }

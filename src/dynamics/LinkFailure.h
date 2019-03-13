@@ -13,11 +13,9 @@
 // along with this program.  If not, see http://www.gnu.org/licenses/.
 // 
 
-#ifndef LINKFAILURE_H_
-#define LINKFAILURE_H_
+#ifndef __ROUTINGSIM_LINKFAILURE_H_
+#define __ROUTINGSIM_LINKFAILURE_H_
 #include "NetworkDynamics.h"
-#include <list>
-#include <utility>
 
 namespace routingsim {
 
@@ -25,12 +23,11 @@ class LinkFailure: public NetworkDynamics {
 private:
 
 public:
-	LinkFailure();
-	virtual ~LinkFailure();
-	virtual void initialize();
-	virtual simtime_t scheduleDynamics();
-
+	LinkFailure() {};
+	virtual ~LinkFailure() override {};
+	virtual void initialize() override {};
+	virtual simtime_t scheduleDynamics() override;
 };
 
 } /* namespace routingsim */
-#endif /* LINKFAILURE_H_ */
+#endif /* __ROUTINGSIM_LINKFAILURE_H_ */

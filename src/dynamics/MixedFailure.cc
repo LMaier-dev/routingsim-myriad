@@ -19,8 +19,6 @@
 
 namespace routingsim {
 
-using namespace boost;
-
 Define_Module(MixedFailure);
 
 void MixedFailure::initialize() {
