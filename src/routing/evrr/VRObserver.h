@@ -29,7 +29,6 @@ class VRObserver;
 
 namespace routingsim {
 
-using namespace boost;
 using namespace std;
 
 class MessageStatistics;
