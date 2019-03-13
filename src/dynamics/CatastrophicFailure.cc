@@ -19,8 +19,6 @@
 
 namespace routingsim {
 
-using namespace boost;
-
 Define_Module(CatastrophicFailure);
 
 void CatastrophicFailure::initialize() {
@@ -85,8 +83,8 @@ simtime_t CatastrophicFailure::scheduleDynamics() {
 	}
 
 	/// the catastrophic failure is repeated each occurrence seconds
-	first=false;
-	return simTime()+period;
+	first = false;
+	return simTime() + period;
 }
 
 } //namespace

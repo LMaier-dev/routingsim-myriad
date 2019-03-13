@@ -19,8 +19,6 @@
 
 namespace routingsim {
 
-using namespace boost;
-
 Define_Module(LifetimeChurn);
 
 void LifetimeChurn::initialize() {
@@ -64,7 +62,6 @@ simtime_t LifetimeChurn::scheduleDynamics() {
 }
 
 double LifetimeChurn::distributionFunction() {
-
 	// weibull
 	if ( distribution == "Weibull") {
 	    double p = meanLifetime / tgamma(1 + (1 / distParameter));
