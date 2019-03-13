@@ -19,16 +19,18 @@
 
 #include "R2Kademlia.h"
 #include "KadRoutingTable.h"
+#include "KadObserver.h"
 
 namespace routingsim {
 // for std::bind with callback functions
-using namespace std::placeholders;
+namespace ph = std::placeholders;
 
 Define_Module(R2Kademlia);
 
 void R2Kademlia::onInitialize() {
 	EV << "R2Kademlia::onInitialize()" << endl;
 	myOverlayKey = OverlayKey::random(getRNG(0));
+	getKadObserver().registerUp(myOverlayKey, node().getNodeId());
 	bind(PAYLOAD_TYPE);
 
 	ASSERT(par("accelerationFactor").intValue() > 0);
@@ -128,6 +130,7 @@ void R2Kademlia::onSelfMessage(cMessage_p msg) {
 void R2Kademlia::reset() {
 	Enter_Method_Silent();
 	EV << "resetting state of R2Kademlia" << endl;
+	getKadObserver().registerDown(myOverlayKey, node().getNodeId());
 	neighborTable.clear();
 	routingTable = KadRoutingTable();
 	unbind(PAYLOAD_TYPE);
@@ -213,7 +216,7 @@ const KadContact& R2Kademlia::chooseNextHop(const KadContactList& contacts, cons
 void R2Kademlia::sendProbe(KadContact_p contact) {
 	sendRpcCall(
 		makePacket<KadProbeReq>(contact, "KadProbeReq"),
-		std::bind(&R2Kademlia::handleProbeResponse, this, _1, _2));
+		std::bind(&R2Kademlia::handleProbeResponse, this, ph::_1, ph::_2));
 }
 
 void R2Kademlia::handlePacket(std::unique_ptr<KadProbeReq> packet) {
@@ -237,7 +240,7 @@ void R2Kademlia::sendGetNeighbors(KadContact_p contact)
 	req->setContactsOnly(true);
 	sendRpcCall(
 		std::move(req),
-		std::bind(&R2Kademlia::handleQueryRouteResponse, this, _1, _2)
+		std::bind(&R2Kademlia::handleQueryRouteResponse, this, ph::_1, ph::_2)
 	);
 }
 
@@ -279,7 +282,7 @@ void R2Kademlia::sendFindNode(const OverlayKey& key) {
 	packet->setQuery(key);
 	sendRpcCall(
 		std::move(packet),
-		std::bind(&R2Kademlia::handleFindNodeResponse, this, _1, _2)
+		std::bind(&R2Kademlia::handleFindNodeResponse, this, ph::_1, ph::_2)
 	);
 }
 void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
