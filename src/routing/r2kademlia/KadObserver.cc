@@ -21,6 +21,7 @@
 #include "KadObserver.h"
 
 namespace routingsim {
+Define_Module(KadObserver);
 
 void KadObserver::initialize() {}
 void KadObserver::finish() {
@@ -37,8 +38,8 @@ void KadObserver::registerUp(const OverlayKey& key, nodeid_t owner) {
 }
 void KadObserver::registerDown(const OverlayKey& key, nodeid_t owner) {
 	auto it = nodes.right.find(owner);
-	ASSERT(it != nodes.left.end());
-	ASSERT(*it == key);
+	ASSERT(it != nodes.right.end());
+	ASSERT(it->second == key);
 	nodes.right.erase(it);
 }
 
@@ -62,7 +63,7 @@ static KadObserver* observer = NULL;
 KadObserver& getKadObserver() {
 	if (observer == NULL) {
 		cModuleType* type = cModuleType::get(
-				"routingsim.routing.R2Kademlia.KadObserver");
+				"routingsim.routing.r2kademlia.KadObserver");
 		cModule* mod = getSimulation()->getModuleByPath("<root>");
 		observer = dynamic_cast<KadObserver*>(type->create("vrobserver", mod));
 	}
