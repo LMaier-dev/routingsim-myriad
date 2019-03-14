@@ -110,6 +110,10 @@ void KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path)
 		return;
 	}
 	else {
+		if (getBucketIndex(key) == buckets.size() - 1) {
+			splitLastBucket();
+			return;
+		}
 		auto& contacts = bucket.contacts;
 		auto result = contacts.end();
 		size_type maxLen = contact->getPathLength();
@@ -153,7 +157,6 @@ void KadRoutingTable::splitLastBucket() {
 	// sort contacts into new buckets
 	for(std::unique_ptr<KadContact>& contact : oldBucket.contacts)
 		getBucket(contact.get()).contacts.push_back(std::move(contact));
-	// TODO optimization: use std::move for contacts
 }
 
 KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_type n)
