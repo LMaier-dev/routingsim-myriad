@@ -73,8 +73,8 @@ protected:
 	void scheduleNodeFailure(nodeid_t node, simtime_t occurence, simtime_t duration );
 
 	/// schedules a (unidirectional) link failure of the link connecting (from/to).
-	/// if the "full" link is supposed to fail, call the function a second time with (to/from)
-	void scheduleLinkFailure(nodeid_t from, nodeid_t to, simtime_t occurence, simtime_t duration );
+	/// if the "full" link is supposed to fail, set bidir to true.
+	void scheduleLinkFailure(nodeid_t from, nodeid_t to, simtime_t occurence, simtime_t duration, bool bidir=true);
 public:
 	inline NetworkTopology& getTopology() { return *topology; }
 	inline NetworkManager& getManager() { return *manager; }

@@ -73,7 +73,7 @@ simtime_t LinkFailure::scheduleDynamics() {
 		} else if (linkSelection == "random") {
 			vector<nodeid_t> neighbors;
 
-			source = getTopology().getRandomNode(intuniform(0, std::numeric_limits<int>::max()));
+			source = getTopology().getRandomNode(getRNG(0));
 			ntop.getNeighborNodeIDs(source, neighbors);
 			if (neighbors.size()==0)
                         	continue;

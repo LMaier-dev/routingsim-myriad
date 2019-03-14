@@ -188,10 +188,10 @@ public:
 	/**
 	 * Returns a random node from the set of active nodes
 	 *
-	 * @param rndvalue a random value.
+	 * @param rng a random number generator.
 	 * @return a random node identifier.
 	 */
-	nodeid_t getRandomNode( size_t rndvalue ) const;
+	nodeid_t getRandomNode(cRNG *rng) const;
 
 	/// Return k random distinct pairs of active nodes in a vector (-> Sampling)
 	/// Random Edge Sampling ("Sampling from Large Graphs", Jure Leskovec and Christos Faloutsos, 2006)
@@ -277,8 +277,7 @@ public:
 
 	/// return true if either a link or a node of the shortest path within the
 	/// unaltered original topology failed; false otherwise
-	/// XXX: currently only considers node failures
-	bool FullTopologyPathFailed(nodeid_t from, nodeid_t to) const;
+	bool fullTopologyPathFailed(nodeid_t from, nodeid_t to) const;
 
 	/// reset all protocols on the Node identified by nodeid n
 	void resetNode(nodeid_t n);

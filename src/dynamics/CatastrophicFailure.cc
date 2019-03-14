@@ -73,7 +73,7 @@ simtime_t CatastrophicFailure::scheduleDynamics() {
 	}
 
 	for (size_t i = 0; i < min(numNodesFail, nodeDegreeMapSize); i++) {
-		size_t rnd = intuniform(0,std::numeric_limits<int>::max()) % nodeDegreeMap.size();
+		size_t rnd = getRNG(0)->intRand(nodeDegreeMap.size());
 		advance(ndit=nodeDegreeMap.begin(), rnd);
 		nodeid_t rndnode = ndit->first;
 		nodeDegreeMap.erase(ndit);

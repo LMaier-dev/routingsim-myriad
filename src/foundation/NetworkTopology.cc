@@ -487,12 +487,12 @@ bool NetworkTopology::readShortestPaths(string shortestPathFile) {
 	return true;
 }
 
-nodeid_t NetworkTopology::getRandomNode(size_t rndvalue) const {
+nodeid_t NetworkTopology::getRandomNode(cRNG *rng) const {
 	ActiveBGLVertexIt vi, vi_end;
 	FilteredGraph fg(*BGLtopology, activeEdges<topologyGraph>(*BGLtopology), activeNodes<topologyGraph>(*BGLtopology));
 	tie(vi, vi_end) = vertices(fg);
 	unsigned int n = getActiveNumberNodes();
-	advance(vi, rndvalue % n);
+	std::advance(vi, rng->intRand(n));
 	return *vi;
 }
 
@@ -515,10 +515,10 @@ vector<pair<nodeid_t, nodeid_t> > NetworkTopology::getRandomNodePairs( cRNG *rng
 		bool insertPair = true;
 
 		tie(vi, ve) = vertices(fg);
-		advance(vi, intuniform(rng, 0, std::numeric_limits<int>::max()) % n);
+		std::advance(vi, rng->intRand(n));
 		src = *vi;
 		tie(vi, ve) = vertices(fg);
-		advance(vi, intuniform(rng, 0, std::numeric_limits<int>::max()) % n);
+		std::advance(vi, rng->intRand(n));
 		dst = *vi;
 
 		// ignore self-messages
@@ -1150,7 +1150,7 @@ vector<nodeid_t> NetworkTopology::getFullTopologyPath(nodeid_t from, nodeid_t to
 	return path;
 }
 
-bool NetworkTopology::FullTopologyPathFailed(nodeid_t from, nodeid_t to) const {
+bool NetworkTopology::fullTopologyPathFailed(nodeid_t from, nodeid_t to) const {
 	vector<nodeid_t> path = getFullTopologyPath(from, to);
 
 	EV_DEBUG << "Checking whether path from " << from << " to " << to << " has failed" << endl;
@@ -1164,7 +1164,6 @@ bool NetworkTopology::FullTopologyPathFailed(nodeid_t from, nodeid_t to) const {
 		if ( (*BGLtopology)[*vi].disabled == true ) {
 			continue;
 		}
-
 		/// if a failed node is on the path, return true
 		if ( (*BGLtopology)[*vi].active == false ) {
 			if ( find(path.begin(), path.end(), *vi) != path.end() ) {
@@ -1172,7 +1171,6 @@ bool NetworkTopology::FullTopologyPathFailed(nodeid_t from, nodeid_t to) const {
 			}
 		}
 	}
-
 
 	// check for link failures
 	vector<nodeid_t>::const_iterator pit = path.begin();
@@ -1194,7 +1192,6 @@ bool NetworkTopology::FullTopologyPathFailed(nodeid_t from, nodeid_t to) const {
 			}
 		}
 	}
-
 	return false;
 }
 

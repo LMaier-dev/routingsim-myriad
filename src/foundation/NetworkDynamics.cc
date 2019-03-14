@@ -71,12 +71,12 @@ void NetworkDynamics::scheduleNodeFailure(nodeid_t node, simtime_t occurrence,
 	}
 	dim->setContextPointer(di);
 	sendDelayed(dim, di->occurrence, "toManager");
+	// if node fails forever, do not schedule recovery msg
+	if (duration == SIMTIME_MAX) return;
 
-	di = new DynamicsInfo();
+	di = new DynamicsInfo(*di);
 	di->type = DynamicsInfo::nodeRecovery;
-	di->source = node;
-	di->occurrence = (duration==SIMTIME_MAX ? SIMTIME_MAX : occurrence + duration);
-	di->duration = duration;
+	di->occurrence += duration;
 	if (cSimulation::getActiveEnvir()->isGUI()) {
 		stringstream rls;
 		rls << "Recovery Node " << di->source;
@@ -86,16 +86,10 @@ void NetworkDynamics::scheduleNodeFailure(nodeid_t node, simtime_t occurrence,
 		dim = new cMessage();
 	}
 	dim->setContextPointer(di);
-
-	// if nodes fail forever, do not schedule the recovery msg but free msgs
-	if (duration != SIMTIME_MAX) {
-		sendDelayed(dim, di->occurrence, "toManager");
-	} else {
-		delete di; delete dim;
-	}
+	sendDelayed(dim, di->occurrence, "toManager");
 }
 
-void NetworkDynamics::scheduleLinkFailure(nodeid_t from, nodeid_t to, simtime_t occurrence, simtime_t duration) {
+void NetworkDynamics::scheduleLinkFailure(nodeid_t from, nodeid_t to, simtime_t occurrence, simtime_t duration, bool bidir) {
 	DynamicsInfo* di;
 	cMessage* dim;
 
@@ -105,6 +99,7 @@ void NetworkDynamics::scheduleLinkFailure(nodeid_t from, nodeid_t to, simtime_t 
 	di->destination = to;
 	di->occurrence = occurrence;
 	di->duration = duration;
+	di->bidirectionalLinkFailure = bidir;
 	if (cSimulation::getActiveEnvir()->isGUI()) {
 		stringstream fls;
 		fls << "Fail Link [" << from << "," << to << "]";
@@ -115,13 +110,12 @@ void NetworkDynamics::scheduleLinkFailure(nodeid_t from, nodeid_t to, simtime_t 
 	}
 	dim->setContextPointer(di);
 	sendDelayed(dim, di->occurrence, "toManager");
+	// if link fails forever, do not schedule recovery msg
+	if (duration == SIMTIME_MAX) return;
 
-	di = new DynamicsInfo();
+	di = new DynamicsInfo(*di); // copy failure info
 	di->type = DynamicsInfo::linkRecovery;
-	di->source = from;
-	di->destination = to;
-	di->occurrence = (duration==SIMTIME_MAX ? SIMTIME_MAX : occurrence + duration);
-	di->duration = duration;
+	di->occurrence += duration;
 	if (cSimulation::getActiveEnvir()->isGUI()) {
 		stringstream rls;
 		rls << "Recovery Link [" << from << "," << to << "]";
@@ -131,13 +125,7 @@ void NetworkDynamics::scheduleLinkFailure(nodeid_t from, nodeid_t to, simtime_t 
 		dim = new cMessage();
 	}
 	dim->setContextPointer(di);
-
-	// if nodes fail forever, do not schedule the recovery msg but free msgs
-	if (duration != SIMTIME_MAX) {
-		sendDelayed(dim, di->occurrence, "toManager");
-	} else {
-		delete di; delete dim;
-	}
+	sendDelayed(dim, di->occurrence, "toManager");
 }
 
 /*
