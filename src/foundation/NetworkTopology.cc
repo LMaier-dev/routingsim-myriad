@@ -313,6 +313,7 @@ void NetworkTopology::readSelfDefinedTopology(ifstream &topologyFile, set<nodeid
 	while (std::getline(topologyFile, line)) {
 		int tokenNumber = 0;
 		lineNumber++;
+		// escape char: "\", seperator "\t" and " ", quote chars " and '
 		escaped_list_separator<char> sep("\\","\t ","\"'");
 		typedef boost::tokenizer<escaped_list_separator<char> > tokenizer_t;
 		tokenizer_t tok(line,sep);
@@ -402,7 +403,7 @@ void NetworkTopology::readSelfDefinedTopology(ifstream &topologyFile, set<nodeid
 					}
 					nodeset.insert(toNode);
 				} else {
-					EV << "Attention: omitting reflexive link ("<< fromNode<<","<<toNode<<" as implicitly contained!" << endl;
+					EV_WARN << "Attention: omitting reflexive link ("<< fromNode<<","<<toNode<<" as implicitly contained!" << endl;
 				}
 			}
 
