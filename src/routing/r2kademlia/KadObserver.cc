@@ -42,8 +42,23 @@ void KadObserver::registerDown(const OverlayKey& key, nodeid_t owner) {
 	nodes.right.erase(it);
 }
 
-static KadObserver* observer = NULL;
+const OverlayKey& KadObserver::getRandomNodeKey() {
+	auto it = nodes.left.begin();
+	//TODO optimization: this is O(n), find something better!
+	std::advance(it, intuniform(0, nodes.size() - 1));
+	return it->first;
+}
 
+const OverlayKey& KadObserver::getClosestExistingKey(const OverlayKey& key) {
+	ASSERT(nodes.size() > 0);
+	auto itLower = nodes.left.lower_bound(key);
+	if (itLower == nodes.left.end()) return (++itLower)->first;
+	if (itLower->first == key) return key;
+	auto itUpper = itLower--;
+	return ((itLower->first ^ key) < (itUpper->first ^ key)) ? itLower->first : itUpper->first;
+}
+
+static KadObserver* observer = NULL;
 KadObserver& getKadObserver() {
 	if (observer == NULL) {
 		cModuleType* type = cModuleType::get(

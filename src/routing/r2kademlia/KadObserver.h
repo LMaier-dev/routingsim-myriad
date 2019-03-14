@@ -38,10 +38,25 @@ private:
 
 public:
 
-	// register / unregister normal ring identifiers
+	/// register a node with a key
 	void registerUp(const OverlayKey& key, nodeid_t owner);
+	/// deregister a node with a key
 	void registerDown(const OverlayKey& key, nodeid_t owner);
 
+	/// returns the key of a given node id, if it is unknown std::out_of_range is thrown
+	inline const OverlayKey& getNodeKey(nodeid_t owner) { return nodes.right.at(owner); };
+	/// returns the node id of a given overlay key, if it is unknown std::out_of_range is thrown
+	inline nodeid_t getNodeID(const OverlayKey& key) { return nodes.left.at(key); };
+	/// returns true if a node with the given key is known
+	inline bool exists(const OverlayKey& key) { return nodes.left.count(key) > 0; };
+
+	/// returns the closest key that is assigned to a node
+	const OverlayKey& getClosestExistingKey(const OverlayKey& key);
+	/// returns the key of a random node (chosen uniformly at random)
+	const OverlayKey& getRandomNodeKey();
+	/// returns chooses a key at random and returns the closest existing key.
+	/// note that this is not uniform over the nodes.
+	const OverlayKey& getRandomExistingKey() { return getClosestExistingKey(OverlayKey::random(getRNG(0))); };
 };
 
 KadObserver& getKadObserver();
