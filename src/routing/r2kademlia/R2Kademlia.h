@@ -115,7 +115,11 @@ private:
 	NodePkt_p makeHelloPacket();
 	/// crafts a packet of type T, sets the route to the given contact.
 	template<typename T>
-	std::unique_ptr<T> makePacket(KadContact_p contact, const char *name=nullptr);
+	std::unique_ptr<T> makePacket(const KadContact* contact, const char *name=nullptr);
+	template<typename T>
+	std::unique_ptr<T> makePacket(const KadContact& contact, const char *name=nullptr){
+		return makePacket<T>(&contact, name);
+	};
 	/// crafts a packet of type T, sets the route and nonce according to original
 	template<typename T>
 	std::unique_ptr<T> makeAnswer(KadPacket& original);

@@ -274,10 +274,9 @@ bool R2Kademlia::handleQueryRouteResponse(KadPacket_p answer, RPCState& rpcState
 // FIND NODE
 void R2Kademlia::sendFindNode(const OverlayKey& key) {
 	EV_TRACE << "sendFindNode w/ " << key << endl;
-	auto contacts = routingTable.getClosestContacts(key, 1);
-	// TODO select more and choose
-	ASSERT(contacts.size() == 1);
-	KadContact_p contact = contacts.front();
+	auto contacts = routingTable.getClosestContacts(key, findNodeNumber);
+	ASSERT(contacts.size() > 0);
+	const KadContact& contact = chooseNextHop(contacts, key, myOverlayKey);
 	auto packet = makePacket<KadFindNodeReq>(contact, "FindNode");
 	packet->setQuery(key);
 	sendRpcCall(
