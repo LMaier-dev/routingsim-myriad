@@ -277,8 +277,7 @@ public:
 
 	/// return true if either a link or a node of the shortest path within the
 	/// unaltered original topology failed; false otherwise
-	/// XXX: currently only considers node failures
-	bool FullTopologyPathFailed(nodeid_t from, nodeid_t to) const;
+	bool fullTopologyPathFailed(nodeid_t from, nodeid_t to) const;
 
 	/// reset all protocols on the Node identified by nodeid n
 	void resetNode(nodeid_t n);

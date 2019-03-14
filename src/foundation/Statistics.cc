@@ -315,14 +315,13 @@ void Statistics::dropMessage( cMessage* msg, nodeid_t dstNode ) {
 
 	if (recordShortestPathDeliveryRatio) {
 		if (getNetworkManager()!=NULL) {
-			if (getNetworkManager()->getTopology().FullTopologyPathFailed(srcNode, dstNode)) {
+			if (getNetworkManager()->getTopology().fullTopologyPathFailed(srcNode, dstNode)) {
 				shortestPathMessagesDropped++;
 			} else {
 				shortestPathMessagesDelivered++;
 			}
 		}
 	}
-
 	messagesDropped++;
 	msgs.erase(msg);
 }
@@ -351,14 +350,13 @@ void Statistics::deliveredMessage( cMessage* msg, int hop_count ) {
 		}
 
 		if (recordShortestPathDeliveryRatio) {
-			if (getNetworkManager()->getTopology().FullTopologyPathFailed(srcNode, dstNode)) {
+			if (getNetworkManager()->getTopology().fullTopologyPathFailed(srcNode, dstNode)) {
 				shortestPathMessagesDropped++;
 			} else {
 				shortestPathMessagesDelivered++;
 			}
 		}
 	}
-
 	messagesDelivered++;
 	msgs.erase(msg);
 }
