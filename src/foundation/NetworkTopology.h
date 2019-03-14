@@ -188,10 +188,10 @@ public:
 	/**
 	 * Returns a random node from the set of active nodes
 	 *
-	 * @param rndvalue a random value.
+	 * @param rng a random number generator.
 	 * @return a random node identifier.
 	 */
-	nodeid_t getRandomNode( size_t rndvalue ) const;
+	nodeid_t getRandomNode(cRNG *rng) const;
 
 	/// Return k random distinct pairs of active nodes in a vector (-> Sampling)
 	/// Random Edge Sampling ("Sampling from Large Graphs", Jure Leskovec and Christos Faloutsos, 2006)

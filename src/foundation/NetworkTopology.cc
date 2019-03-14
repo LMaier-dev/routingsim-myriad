@@ -486,12 +486,12 @@ bool NetworkTopology::readShortestPaths(string shortestPathFile) {
 	return true;
 }
 
-nodeid_t NetworkTopology::getRandomNode(size_t rndvalue) const {
+nodeid_t NetworkTopology::getRandomNode(cRNG *rng) const {
 	ActiveBGLVertexIt vi, vi_end;
 	FilteredGraph fg(*BGLtopology, activeEdges<topologyGraph>(*BGLtopology), activeNodes<topologyGraph>(*BGLtopology));
 	tie(vi, vi_end) = vertices(fg);
 	unsigned int n = getActiveNumberNodes();
-	advance(vi, rndvalue % n);
+	std::advance(vi, rng->intRand(n));
 	return *vi;
 }
 
@@ -514,10 +514,10 @@ vector<pair<nodeid_t, nodeid_t> > NetworkTopology::getRandomNodePairs( cRNG *rng
 		bool insertPair = true;
 
 		tie(vi, ve) = vertices(fg);
-		advance(vi, intuniform(rng, 0, std::numeric_limits<int>::max()) % n);
+		std::advance(vi, rng->intRand(n));
 		src = *vi;
 		tie(vi, ve) = vertices(fg);
-		advance(vi, intuniform(rng, 0, std::numeric_limits<int>::max()) % n);
+		std::advance(vi, rng->intRand(n));
 		dst = *vi;
 
 		// ignore self-messages
