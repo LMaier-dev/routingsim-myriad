@@ -123,10 +123,10 @@ private:
 	/// crafts a packet of type T, sets the route and nonce according to original
 	template<typename T>
 	std::unique_ptr<T> makeAnswer(KadPacket& original);
-	/**
-	 * saves the contact list to the given packet.
-	 */
+	/// saves the contact list to the given packet.
 	void fillRTableRsp(KadRTableRsp& packet, const KadContactList& contacts, bool includePaths=true);
+	/// reads the contacts from the packet and adds the paths to the routing table
+	void readRTableRsp(std::unique_ptr<KadRTableRsp> packet);
 	//@}
 
 	/** @name timer functions */

@@ -79,26 +79,21 @@ void KadRoutingTable::addPath(const OverlayKey& key, kad_path path)
 		handleNewContact(key, std::move(path));
 }
 
-void KadRoutingTable::addPath(const OverlayKey& key, const kad_path& path, const OverlayKey& via)
+void KadRoutingTable::addPath(const OverlayKey& key, const kad_path& path, const kad_path& viaPath)
 {
 	if (key == myKey) return;
-	KadContact_p viaContact = getContact(via);
-	if (!viaContact) {
-		EV_ERROR << "Via discovery failed, via contact not known." << endl;
-		return;
-	}
 	KadContact_p contact = getContact(key);
 	if (contact) {
 		// contact is known
-		if (contact->getPathLength() > path.size() + 1 + viaContact->getPathLength()) {
-			contact->setPath(concatViaPath(*viaContact, path));
+		if (contact->getPathLength() > path.size() + viaPath.size()) {
+			contact->setPath(concatViaPath(viaPath, path));
 			//TODO onImprovement?
 			return;
 		}
 		// else new path is not interesting
 	}
 	else // contact is new
-		handleNewContact(key, concatViaPath(*viaContact, path));
+		handleNewContact(key, concatViaPath(viaPath, path));
 }
 void KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path)
 {
@@ -231,11 +226,10 @@ KadContact_p KadRoutingTable::getContact(const OverlayKey& key)
 	return getBucket(key).getContact(key);
 }
 
-kad_path KadRoutingTable::concatViaPath(KadContact& viaContact, const kad_path& path) {
+kad_path KadRoutingTable::concatViaPath(const kad_path& viaPath, const kad_path& path) {
 	kad_path newPath{};
-	newPath.reserve(viaContact.getPathLength() + 1 + path.size());
-	std::copy(viaContact.getPath().begin(), viaContact.getPath().end(), std::back_inserter(newPath));
-	newPath.push_back(viaContact.getKey());
+	newPath.reserve(viaPath.size() + path.size());
+	std::copy(viaPath.begin(), viaPath.end(), std::back_inserter(newPath));
 	std::copy(path.begin(), path.end(), std::back_inserter(newPath));
 	return newPath;
 }

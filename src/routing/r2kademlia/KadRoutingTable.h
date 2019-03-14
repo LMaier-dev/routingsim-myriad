@@ -85,9 +85,9 @@ public:
 	 */
 	void addPath(const OverlayKey& key, kad_path path);
 	/**
-	 * add a potentially new path, adds a contactz or updates an existing one
+	 * add a potentially new path, adds a contact or updates an existing one
 	 */
-	void addPath(const OverlayKey& key, const kad_path& path, const OverlayKey& via);
+	void addPath(const OverlayKey& key, const kad_path& path, const kad_path& via);
 	/**
 	 * Removes the contact with the givne key from the routing table.
 	 * @returns true if the contact was removed, false if it was not present
@@ -171,7 +171,7 @@ private:
 			target.push_back(it->get());
 	}
 	/**  */
-	kad_path concatViaPath(KadContact& viaContact, const kad_path& path);
+	kad_path concatViaPath(const kad_path& viaPath, const kad_path& path);
 };
 
 } //namespace

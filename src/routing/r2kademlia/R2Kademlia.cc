@@ -237,7 +237,7 @@ void R2Kademlia::sendGetNeighbors(KadContact_p contact)
 	EV_TRACE << "sending query route request to " << *contact << endl;
 	auto req = makePacket<KadQueryRouteReq>(contact, "KadQueryRouteReq");
 	req->setNeighborhood(1);
-	req->setContactsOnly(true);
+	req->setContactsOnly(false);
 	sendRpcCall(
 		std::move(req),
 		std::bind(&R2Kademlia::handleQueryRouteResponse, this, ph::_1, ph::_2)
@@ -247,10 +247,11 @@ void R2Kademlia::sendGetNeighbors(KadContact_p contact)
 void R2Kademlia::handlePacket(std::unique_ptr<KadQueryRouteReq> packet) {
 	EV_TRACE << "recieved KadQueryRouteRsp from " << packet->getSource() << endl;
 	ASSERT(packet->getNeighborhood() == 1);
-	ASSERT(packet->getContactsOnly());
+	ASSERT(!packet->getContactsOnly());
 	auto response = makeAnswer<KadQueryRouteRsp>(*packet);
 	std::vector<OverlayKey> neighbors = neighborTable.getNeighbors();
 	response->setContactArraySize(neighbors.size());
+	response->setPathArraySize(neighbors.size());
 	for (uint i = 0; i < neighbors.size(); i++)
 		response->setContact(i, neighbors[i]);
 	sendPacket(std::move(response));
@@ -260,14 +261,8 @@ bool R2Kademlia::handleQueryRouteResponse(KadPacket_p answer, RPCState& rpcState
 {
 	if (rpcState.status != RPC_SUCCESS) return true;
 	auto response = safe_packet_cast<KadQueryRouteRsp>(answer);
-	ASSERT(response->getPathArraySize() == 0);
 	EV_TRACE << "recieved " << response->getContactArraySize() << " neighbors from " << response->getSource().toString().substr(0, 6) << endl;
-	for (uint i=0; i < response->getContactArraySize(); i++) {
-		if (response->getContact(i) != myOverlayKey)
-			routingTable.addPath(response->getContact(i), 
-								 kad_path(),
-								 response->getSource());
-	}
+	readRTableRsp(std::move(response));
 	return true;
 }
 
@@ -324,17 +319,7 @@ bool R2Kademlia::handleFindNodeResponse(KadPacket_p answer_, RPCState& rpcState)
 	ASSERT(answer->getContactArraySize() == answer->getPathArraySize());
 	EV_TRACE << "recieved FindNodeRsp for " << check_and_cast<KadFindNodeReq *>(rpcState.original_packet.get())->getQuery();
 	EV_TRACE << " from " << answer->getSource() << " with " << answer->getContactArraySize() << " contacts"<< endl;
-	// TODO dont we do that centrally?
-	// TODO optimization: isPathInteresting
-	routingTable.addPath(answer->getSource(), answer->reversePath(answer->getIntermediatePath()));
-	// TODO combine this with QueryRouteRsp
-	for (size_t i = 0; i < answer->getContactArraySize(); i++) {
-		routingTable.addPath(
-			answer->getContact(i),
-			std::move(answer->getPath(i)),
-			answer->getSource()
-		);
-	}
+	readRTableRsp(std::move(answer));
 	return true;
 }
 // ------------------------- policy foo --------------------------------------
@@ -359,12 +344,6 @@ void R2Kademlia::onErrorPacket(KadError& error) {
 	}
 	// currently there are no more error types
 }
-
-
-//		if(contact->getPathLength() < discoveryRadius) {
-	//		sendGetNeighbors(contact);
-		//}
-
 
 void R2Kademlia::sampleStatistics (Statistics &stats) {
 	stats.value("forwardedPackets", forwardedPackets-sentPackets);
@@ -404,7 +383,7 @@ NodePkt_p R2Kademlia::makeHelloPacket()
 }
 
 template<typename T>
-std::unique_ptr<T> R2Kademlia::makePacket(KadContact_p contact, const char *name) {
+std::unique_ptr<T> R2Kademlia::makePacket(const KadContact* contact, const char *name) {
 	auto packet = std::make_unique<T>();
 	packet->setName(name);
 	// TODO optimization: do this in one go
@@ -438,6 +417,20 @@ void R2Kademlia::fillRTableRsp(KadRTableRsp& packet, const KadContactList& conta
 		if (includePaths) {
 			packet.setPath(i, contacts[i]->getPath());
 		}
+	}
+}
+
+void R2Kademlia::readRTableRsp(std::unique_ptr<KadRTableRsp> packet) {
+	ASSERT(packet->getContactArrayLength() == packet->getPathArrayLength());
+	kad_path viaPath = packet->reversePath(packet->getIntermediatePath());
+	viaPath.push_back(packet->getSource());
+	for (size_t i = 0; i < packet->getContactArraySize(); i++) {
+		// TODO optimization: isPathInteresting
+		routingTable.addPath(
+			packet->getContact(i),
+			std::move(packet->getPath(i)),
+			viaPath
+		);
 	}
 }
 
