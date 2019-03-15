@@ -490,6 +490,11 @@ public:
 	 */
 	static void test();
 
+	/**
+	 * Returns the bit length of the commen prefix of the two keys.
+	 */
+	static int getCommonPrefixLength(const OverlayKey& a, const OverlayKey& b);
+
 private:
 	// private constants
 

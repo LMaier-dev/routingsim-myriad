@@ -659,6 +659,11 @@ OverlayKey OverlayKey::pow2( uint32_t exponent )
 	return newKey;
 }
 
+int OverlayKey::getCommonPrefixLength(const OverlayKey& a, const OverlayKey& b)
+{
+	return getLength() - (a ^ b).log_2();
+}
+
 //--------------------------------------------------------------------
 // private methods (mostly inlines)
 //--------------------------------------------------------------------
