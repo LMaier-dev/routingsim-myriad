@@ -31,12 +31,10 @@ void KadRoutingTable::init(const OverlayKey& myKey, KadPolicy* policy, size_type
 	this->accelerationFactor = accelerationFactor;
 	this->bucketSize = bucketSize;
 	this->policy = policy;
-	size_type numBuckets = getLevelWidth() + 1;
 	ASSERT(buckets.size() == 0);
-	buckets.reserve(getMaxNumBuckets());
-	for (size_type i = 0; i < numBuckets; i++) {
-		buckets.emplace_back();
-	}
+	//TODO optimization: implement adaptively
+	buckets.reserve(5);
+	buckets.emplace_back();
 	WATCH_VECTOR(buckets);
 }
 
