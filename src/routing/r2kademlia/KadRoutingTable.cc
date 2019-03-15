@@ -105,7 +105,7 @@ void KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path)
 		return;
 	}
 	else {
-		if (getBucketIndex(key) == buckets.size() - 1) {
+		if (&bucket == &buckets.back()) {
 			splitLastBucket();
 			return;
 		}

@@ -421,7 +421,7 @@ void R2Kademlia::fillRTableRsp(KadRTableRsp& packet, const KadContactList& conta
 }
 
 void R2Kademlia::readRTableRsp(std::unique_ptr<KadRTableRsp> packet) {
-	ASSERT(packet->getContactArrayLength() == packet->getPathArrayLength());
+	ASSERT(packet->getContactArraySize() == packet->getPathArraySize());
 	kad_path viaPath = packet->reversePath(packet->getIntermediatePath());
 	viaPath.push_back(packet->getSource());
 	for (size_t i = 0; i < packet->getContactArraySize(); i++) {
