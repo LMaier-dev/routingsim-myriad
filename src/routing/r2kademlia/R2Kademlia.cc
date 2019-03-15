@@ -184,7 +184,8 @@ void R2Kademlia::sendPacket(KadPacket_p packet) {
 	ASSERT(packet->getSource() == myOverlayKey);
 	ASSERT(packet->getControlInfo() == nullptr);
 	auto nodePkt = std::make_unique<NodePkt>(packet->getName());
-	getStatistics().registerMessage(nodePkt.get());
+	if(packet->getType() == KAD_FindNodeReq)
+		getStatistics().registerMessage(nodePkt.get());
 	sentPackets++;
 	forwardPacket(std::move(packet), std::move(nodePkt));
 }
