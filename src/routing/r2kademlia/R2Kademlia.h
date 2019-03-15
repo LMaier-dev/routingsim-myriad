@@ -178,6 +178,7 @@ private:
 	bool proximityRouting;
 	/// activates proximity neighbor selection
 	bool proximityNeighborSelection;
+	uint hopLimit;
 	// statistics
 	uint forwardedPackets = 0;
 	uint droppedPackets = 0;

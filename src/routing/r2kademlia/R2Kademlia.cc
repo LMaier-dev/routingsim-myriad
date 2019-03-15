@@ -46,6 +46,7 @@ void R2Kademlia::onInitialize() {
 	findNodeNumber = (size_type)par("findNodeNumber").intValue();
 	proximityRouting = par("proximityRouting").boolValue();
 	proximityNeighborSelection = par("proximityNeighborSelection").boolValue();
+	hopLimit = (uint)par("hopLimit").intValue();
 
 	getStatistics().addSample(this);
 	addTimer(4, std::bind(&R2Kademlia::findRandom, this));
@@ -300,6 +301,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 			const KadContact& contact = chooseNextHop(contacts, query, packet->getSource());
 			EV_TRACE << "KadFindNodeReq revieved query: " << packet->getQuery() << endl << " next hop is " << contact << endl;
 			packet->appendRoute(contact);
+			ASSERT(packet->getRouteArraySize() < hopLimit);
 			resendPacket(std::move(packet));
 			return;
 		}

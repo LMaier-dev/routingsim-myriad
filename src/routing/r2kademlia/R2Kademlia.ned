@@ -33,4 +33,5 @@ simple R2Kademlia extends routingsim.foundation.Protocol
 		int findNodeNumber = default(20);
 		bool proximityRouting = default(true);
 		bool proximityNeighborSelection = default(true);
+		int hopLimit = default(1000);
 }
