@@ -458,9 +458,9 @@ void R2Kademlia::addTimer(simtime_t duration, std::function<void()> callback) {
 
 void R2Kademlia::findRandom() {
 	if (neighborTable.size() == 0) return; // we are isolated
-	uint32_t index = intuniform(0, myOverlayKey.getLength()-1);
+	uint32_t index = intuniform(1, routingTable.getNumBuckets()*2);
 	OverlayKey probeKey = myOverlayKey;
-	probeKey[index] ^= 1;
+	probeKey[myOverlayKey.getLength() - index] ^= 1;
 	sendFindNode(probeKey);
 }
 
