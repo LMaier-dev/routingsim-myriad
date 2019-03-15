@@ -304,6 +304,10 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 			// => forward request
 			const KadContact& contact = chooseNextHop(contacts, query, packet->getSource());
 			EV_TRACE << "KadFindNodeReq revieved query: " << packet->getQuery() << endl << " next hop is " << contact << endl;
+			ASSERT((contact.getKey() ^ query).log_2() <= (myOverlayKey ^ query).log_2());
+			if((contact.getKey() ^ query).log_2() <= (myOverlayKey ^ query).log_2())
+				EV_WARN << "no prefix progress made" << endl;
+			ASSERT((contact.getKey() ^ query) < (myOverlayKey ^ query));
 			packet->appendRoute(contact);
 			ASSERT(packet->getRouteArraySize() < hopLimit);
 			resendPacket(std::move(packet));
