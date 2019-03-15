@@ -46,6 +46,7 @@ class noncobject nonce_t;
 packet KadPacket {
 	@customize(true);
 	OverlayKey route[];
+	bool active[];
 	uint16_t progress = 0;
 	nonce_t nonce;
 	uint8_t type enum(KadPDUType);

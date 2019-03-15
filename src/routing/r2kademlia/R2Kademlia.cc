@@ -299,8 +299,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 			// => forward request
 			const KadContact& contact = chooseNextHop(contacts, query, packet->getSource());
 			EV_TRACE << "KadFindNodeReq revieved query: " << packet->getQuery() << endl << " next hop is " << contact << endl;
-			packet->appendRoute(contact.getPath());
-			packet->appendHop(contact.getKey());
+			packet->appendRoute(contact);
 			resendPacket(std::move(packet));
 			return;
 		}
@@ -388,8 +387,7 @@ std::unique_ptr<T> R2Kademlia::makePacket(const KadContact* contact, const char 
 	packet->setName(name);
 	// TODO optimization: do this in one go
 	packet->setSource(myOverlayKey);
-	packet->appendRoute(contact->getPath());
-	packet->appendHop(contact->getKey());
+	packet->appendRoute(contact);
 	return packet;
 }
 

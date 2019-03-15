@@ -28,13 +28,31 @@ void KadPacket::setSource(const OverlayKey & source) {
 void KadPacket::appendRoute(const kad_path& path) {
 	auto old_size = getRouteArraySize();
 	setRouteArraySize(old_size + path.size());
-	for(size_t i=0; i<path.size(); i++)
+	setActiveArraySize(old_size + path.size());
+	for(size_t i = 0; i < path.size(); i++) {
 		setRoute(old_size + i, path[i]);
+		setActive(old_size + i, false);
+	}
 }
 void KadPacket::appendHop(const OverlayKey& key) {
 	auto index = getRouteArraySize();
 	setRouteArraySize(index+1);
+	setActiveArraySize(index+1);
 	setRoute(index, key);
+	setActive(index, true);
+}
+
+void KadPacket::appendRoute(const KadContact& contact) {
+	ASSERT(getRouteArraySize() == getActiveArraySize());
+	auto old_size = getRouteArraySize();
+	setRouteArraySize(old_size + contact.getPathLength() + 1);
+	setActiveArraySize(getRouteArraySize());
+	for(size_t i = 0; i < contact.getPathLength(); i++) {
+		setRoute(old_size + i, contact.getPath()[i]);
+		setActive(old_size + i, false);
+	}
+	setRoute(getRouteArraySize() - 1, contact.getKey());
+	setActive(getRouteArraySize() - 1, true);
 }
 
 kad_path KadPacket::getPath(uint from, uint to) {

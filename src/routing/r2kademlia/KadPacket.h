@@ -48,10 +48,10 @@ public:
 	void appendRoute(const kad_path& path);
 	/// appends the specified key to the source route
 	void appendHop(const OverlayKey& key);
-	/// appends the key of the specified contact to the source route
-	inline void appendHop(KadContact& contact) { appendHop(contact.getKey()); }
-	/// appends the key of the specified contact to the source route
-	inline void appendHop(KadContact* contact) { appendHop(*contact); }
+	/// appends the key and path of the specified contact to the source route
+	void appendRoute(const KadContact& contact);
+	/// appends the key and path of the specified contact to the source route
+	inline void appendRoute(const KadContact* contact) { appendRoute(*contact); }
 	/// returns the source route as a kad_path (std::vector) from the given position
 	/// until the given "to" position (excluding "to")
 	kad_path getPath(uint from, uint to);
