@@ -83,7 +83,7 @@ public://--------------------------------------- DSDV-Routing-Table-Entries ---
 	/// returns the table entry
 	const entry_t& operator [] ( size_t index ) const {
 		table_t::const_iterator it = table.begin();
-		advance(it,index);
+		std::advance(it,index);
 		return *it->second;
 	}
 

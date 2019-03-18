@@ -550,7 +550,7 @@ pair<nodeid_t, nodeid_t> NetworkTopology::getRandomEdge(size_t activeLinkNumber)
 	FilteredGraph fg(*BGLtopology, activeEdges<topologyGraph>(*BGLtopology), activeNodes<topologyGraph>(*BGLtopology));
 	tie(ei, ee) = edges(fg);
 	//unsigned int n = getActiveNumberLinks();
-	advance(ei, activeLinkNumber);
+	std::advance(ei, activeLinkNumber);
 	return pair<nodeid_t, nodeid_t>(source(*ei, fg), target(*ei, fg));
 }
 
