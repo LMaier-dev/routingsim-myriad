@@ -311,6 +311,7 @@ void NetworkTopology::readSelfDefinedTopology(ifstream &topologyFile, set<nodeid
 	bool undirectedGraph;
 
 	while (std::getline(topologyFile, line)) {
+		if(line.length() == 0 || line.front() == '#') continue;
 		int tokenNumber = 0;
 		lineNumber++;
 		// escape char: "\", seperator "\t" and " ", quote chars " and '
