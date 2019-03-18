@@ -176,8 +176,7 @@ private:
 	uint discoveryRadius;
 	/// activates proximity routing
 	bool proximityRouting;
-	/// activates proximity neighbor selection
-	bool proximityNeighborSelection;
+	/// proximityNeighborSelection is in KadRoutingTable
 	uint hopLimit;
 	// statistics
 	uint forwardedPackets = 0;

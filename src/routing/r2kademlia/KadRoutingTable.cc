@@ -23,7 +23,7 @@
 #include "BaseTypes.h"
 
 namespace routingsim {
-void KadRoutingTable::init(const OverlayKey& myKey, KadPolicy* policy, size_type accelerationFactor, size_type bucketSize)
+void KadRoutingTable::init(const OverlayKey& myKey, KadPolicy* policy, size_type accelerationFactor, size_type bucketSize, bool proximityNeighborSelection)
 {
 	ASSERT(this->myKey.isUnspecified());
 	ASSERT(not myKey.isUnspecified());
@@ -31,6 +31,7 @@ void KadRoutingTable::init(const OverlayKey& myKey, KadPolicy* policy, size_type
 	this->accelerationFactor = accelerationFactor;
 	this->bucketSize = bucketSize;
 	this->policy = policy;
+	this->proximityNeighborSelection = proximityNeighborSelection;
 	ASSERT(buckets.size() == 0);
 	//TODO optimization: implement adaptively
 	buckets.reserve(5);
@@ -93,6 +94,7 @@ void KadRoutingTable::addPath(const OverlayKey& key, const kad_path& path, const
 	else // contact is new
 		handleNewContact(key, concatViaPath(viaPath, path));
 }
+
 void KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path)
 {
 	auto contact = std::make_unique<KadContact>(key, std::move(path));
@@ -107,6 +109,11 @@ void KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path)
 			splitLastBucket();
 			return;
 		}
+		if (not proximityNeighborSelection) {
+			EV_INFO << "dropping new contact " << *contact << endl;
+			return;
+		}
+		// contact replacement
 		auto& contacts = bucket.contacts;
 		auto result = contacts.end();
 		size_type maxLen = contact->getPathLength();

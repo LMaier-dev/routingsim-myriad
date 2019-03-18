@@ -38,14 +38,14 @@ void R2Kademlia::onInitialize() {
 	routingTable.init(
 		myOverlayKey, this,
 		par("accelerationFactor").intValue(),
-		par("bucketSize").intValue());
+		par("bucketSize").intValue(),
+		par("proximityNeighborSelection").boolValue());
 
 	ASSERT(par("discoveryRadius").intValue() > 0);
 	discoveryRadius = (uint)par("discoveryRadius").intValue();
 	ASSERT(par("findNodeNumber").intValue() > 0);
 	findNodeNumber = (size_type)par("findNodeNumber").intValue();
 	proximityRouting = par("proximityRouting").boolValue();
-	proximityNeighborSelection = par("proximityNeighborSelection").boolValue();
 	hopLimit = (uint)par("hopLimit").intValue();
 
 	getStatistics().addSample(this);
