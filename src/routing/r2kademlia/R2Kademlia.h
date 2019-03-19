@@ -178,6 +178,8 @@ private:
 	bool proximityRouting;
 	/// proximityNeighborSelection is in KadRoutingTable
 	uint hopLimit;
+	bool collectPathsFromPassingPackets;
+
 	// statistics
 	uint forwardedPackets = 0;
 	uint droppedPackets = 0;

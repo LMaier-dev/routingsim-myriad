@@ -34,4 +34,5 @@ simple R2Kademlia extends routingsim.foundation.Protocol
 		bool proximityRouting = default(true);
 		bool proximityNeighborSelection = default(true);
 		int hopLimit = default(1000);
+		bool collectPathsFromPassingPackets = default(true);
 }

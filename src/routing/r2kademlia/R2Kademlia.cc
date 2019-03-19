@@ -47,6 +47,7 @@ void R2Kademlia::onInitialize() {
 	findNodeNumber = (size_type)par("findNodeNumber").intValue();
 	proximityRouting = par("proximityRouting").boolValue();
 	hopLimit = (uint)par("hopLimit").intValue();
+	collectPathsFromPassingPackets = par("collectPathsFromPassingPackets").boolValue();
 
 	getStatistics().addSample(this);
 	addTimer(4, std::bind(&R2Kademlia::findRandom, this));
@@ -94,16 +95,22 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		return;
 	}
 	if (packet->hasRemainingHops()){
-		// TODO learn routes form passing packets
-		// TODO learn about failiures from passing packets
 		// we are not the recipient
+		if (collectPathsFromPassingPackets) {
+			//TODO optimisation use isPathInteresting
+			routingTable.addPath(packet->getSource(), packet->reversePath(packet->getPath(1, packet->getProgress())));
+			routingTable.addPath(packet->getTarget(), packet->getPath(packet->getProgress()+1, packet->getRouteArraySize()-1));
+		}
+		//TODO learn about failiures from passing packets
 		forwardPacket(std::move(packet), std::move(pkt));
 		return;
 	}
-	else {
+	else { // no hops left, packet is adressed to me
 		packet->setControlInfo(pkt.release());
-		// no hops left, packet is adressed to me
-		//TODO learn route from packet
+		// learn route from packet
+		//TODO optimisation use isPathInteresting
+		routingTable.addPath(packet->getSource(), packet->reversePath(packet->getIntermediatePath())) ;
+
 		// these types may forward packets, so they count themselves
 		if (handleIfFitting<KadFindNodeReq>(packet)) return;
 		// these types never forward packets
