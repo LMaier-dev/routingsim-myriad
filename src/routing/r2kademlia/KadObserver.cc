@@ -23,20 +23,33 @@
 namespace routingsim {
 Define_Module(KadObserver);
 
-void KadObserver::initialize() {}
+/// singleton pointer
+static KadObserver* observer = NULL;
+
+void KadObserver::initialize() {
+	ASSERT(observer == NULL || observer == this);
+}
+
 void KadObserver::finish() {
 	nodes.clear();
+	ASSERT(observer == this);
+	observer = NULL;
 }
+
 void KadObserver::handleMessage(cMessage *msg) {
 	delete msg;
 }
 
 void KadObserver::registerUp(const OverlayKey& key, nodeid_t owner) {
+	ASSERT(not key.isUnspecified());
+	ASSERT(owner != undefined_node);
 	ASSERT(nodes.left.count(key) == 0);
 	ASSERT(nodes.right.count(owner) == 0);
 	nodes.insert({key, owner});
 }
 void KadObserver::registerDown(const OverlayKey& key, nodeid_t owner) {
+	ASSERT(not key.isUnspecified());
+	ASSERT(owner != undefined_node);
 	auto it = nodes.right.find(owner);
 	ASSERT(it != nodes.right.end());
 	ASSERT(it->second == key);
@@ -59,7 +72,6 @@ const OverlayKey& KadObserver::getClosestExistingKey(const OverlayKey& key) {
 	return ((itLower->first ^ key) < (itUpper->first ^ key)) ? itLower->first : itUpper->first;
 }
 
-static KadObserver* observer = NULL;
 KadObserver& getKadObserver() {
 	if (observer == NULL) {
 		cModuleType* type = cModuleType::get(
