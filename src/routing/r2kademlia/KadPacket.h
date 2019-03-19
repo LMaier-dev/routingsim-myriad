@@ -57,8 +57,6 @@ public:
 	kad_path getPath(uint from, uint to);
 	/// returns the source route as a kad_path (std::vector) from the given position
 	inline kad_path getPath(uint from = 0) { return getPath(from, route_arraysize); }
-	/// returns the source route as a kad_path (std::vector) only excluding target and source
-	inline kad_path getIntermediatePath() { return getPath(1, route_arraysize - 1); }
 	/// sets the path of this packet to the reverse path of the other packet
 	/// taking into acount the progress of the other packet
 	void setReturnPathFrom(KadPacket& other);
@@ -83,12 +81,10 @@ public:
 	inline const OverlayKey& getSource() const { return getHop(0); }
 	/// returns true if the packet still has hops to take
 	inline bool hasRemainingHops() const { return getNextHopIndex() < route_arraysize; }
-	/// returns the remaining source route path starting with the next hop
-	inline kad_path getRemainingPath() { return getPath(getNextHopIndex()); }
-	/// returns the previous source route path until the current hop
-	inline kad_path getPreviousPath() { return getPath(0, getNextHopIndex()); }
 	/// reverses the given path, returns the result
 	inline kad_path reversePath(kad_path path) { std::reverse(path.begin(), path.end()); return path; }
+	/// returns the source route as a kad_path (std::vector) only excluding target and source
+	inline kad_path getIntermediatePath() { return getPath(1, route_arraysize - 1); }
 	//@}
 };
 } // namespace
