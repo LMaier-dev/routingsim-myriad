@@ -34,7 +34,7 @@ Define_Module(Statistics);
 static Statistics* stats = NULL;
 static boost::unordered_map<const char*, Statistics*> statsMap;
 
-// convinience method, used in Statistics::Value()
+// convenience method, used in Statistics::Value()
 cHistogram* getDensityHistogram(const char* name1, const char* name2, size_t size) {
 	cHistogram* hist = new cHistogram((string(name1) + string(name2)).c_str());
 	hist->setNumBinsHint(512);
@@ -43,7 +43,7 @@ cHistogram* getDensityHistogram(const char* name1, const char* name2, size_t siz
 	return hist;
 }
 
-// convinience method, used in Statistics::initialize and MessageStatistics::MessageStatistics()
+// convenience method, used in Statistics::initialize and MessageStatistics::MessageStatistics()
 cHistogram* getIntHistogram(const char* name, int rangeLower, int rangeUpper, int numBins) {
 	cHistogram* hist = new cHistogram(name);
 	hist->setRange(rangeLower, rangeUpper);
