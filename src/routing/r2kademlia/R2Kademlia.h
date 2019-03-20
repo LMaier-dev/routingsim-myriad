@@ -170,6 +170,9 @@ private:
 	KadRoutingTable routingTable;
 	/// packet type used for Node::bind()
 	static const int PAYLOAD_TYPE=5;
+
+	/** @name config, set by parameters*/
+	//@{
 	/// number of contacts returned by find node response, called "k" in research papers
 	size_type findNodeNumber;
 	/// radius of physical neighborhood discovery
@@ -181,20 +184,29 @@ private:
 	uint hopLimit;
 	/// if activated the node collects path information from passing packets
 	bool pathSnooping;
+	//@}
 
-	// statistics
+	/** @name statistics */
+	//@{
 	uint forwardedPackets = 0;
 	uint droppedPackets = 0;
 	uint sentPackets = 0;
 	uint recievedPackets = 0;
-	// timer data
+	//@}
+
+	/** @name timer things */
+	//@{
 	std::vector<simtime_t> timerDuration;
 	std::vector<std::function<void()>> timerCallback;
 	std::vector<cMessage *> timerMsg;
+	//@}
 private:
 	class PingRPCState;
 };
 
+/**
+ * Cast a unique_ptr for a KadPacket to another unique_ptr for a different packet.
+ */
 template<typename T>
 std::unique_ptr<T> safe_packet_cast(KadPacket_p& packet);
 } //namespace
