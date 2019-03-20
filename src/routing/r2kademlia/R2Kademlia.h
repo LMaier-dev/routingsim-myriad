@@ -176,9 +176,11 @@ private:
 	uint discoveryRadius;
 	/// activates proximity routing
 	bool proximityRouting;
-	/// proximityNeighborSelection is in KadRoutingTable
+	// proximityNeighborSelection is in KadRoutingTable
+	///
 	uint hopLimit;
-	bool collectPathsFromPassingPackets;
+	/// if activated the node collects path information from passing packets
+	bool pathSnooping;
 
 	// statistics
 	uint forwardedPackets = 0;

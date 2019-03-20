@@ -47,7 +47,7 @@ void R2Kademlia::onInitialize() {
 	findNodeNumber = (size_type)par("findNodeNumber").intValue();
 	proximityRouting = par("proximityRouting").boolValue();
 	hopLimit = (uint)par("hopLimit").intValue();
-	collectPathsFromPassingPackets = par("collectPathsFromPassingPackets").boolValue();
+	pathSnooping = par("pathSnooping").boolValue();
 
 	getStatistics().addSample(this);
 	addTimer(4, std::bind(&R2Kademlia::findRandom, this));
@@ -96,7 +96,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	}
 	if (packet->hasRemainingHops()){
 		// we are not the recipient
-		if (collectPathsFromPassingPackets) {
+		if (pathSnooping) {
 			//TODO optimisation use isPathInteresting
 			routingTable.addPath(packet->getSource(), packet->reversePath(packet->getPath(1, packet->getProgress())));
 			routingTable.addPath(packet->getTarget(), packet->getPath(packet->getProgress()+1, packet->getRouteArraySize()-1));
