@@ -308,8 +308,10 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 			else
 				contacts.erase(contacts.begin());
 		}
-		if ((contacts.front()->getKey() ^ query) < (myOverlayKey ^ query)) {
-			// we have found a closer contact
+		//TODO: we should check if any contacts (not just front) are close enough
+		if ((contacts.front()->getKey() ^ query) < (myOverlayKey ^ query)
+				and packet->getRouteArraySize() + 1 + contacts.front()->getPathLength() < hopLimit) {
+			// we have found a closer contact that is close enough
 			// => forward request
 			const KadContact& contact = chooseNextHop(contacts, query, packet->getSource());
 			EV_TRACE << "KadFindNodeReq revieved query: " << packet->getQuery() << endl << " next hop is " << contact << endl;
@@ -318,7 +320,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 				EV_WARN << "no prefix progress made" << endl;
 			ASSERT((contact.getKey() ^ query) < (myOverlayKey ^ query));
 			packet->appendRoute(contact);
-			ASSERT(packet->getRouteArraySize() < hopLimit);
+			ASSERT(packet->getRouteArraySize() <= hopLimit);
 			resendPacket(std::move(packet));
 			return;
 		}
