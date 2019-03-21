@@ -36,4 +36,8 @@ simple R2Kademlia extends routingsim.foundation.Protocol
 		int hopLimit = default(1000);
 		/// if activated the node collects path information from passing packets
 		bool pathSnooping = default(true);
+		double probeInterval = default(4s) @unit(s);
+		///
+		/// 0=none, 1=random, 2=existing, 3=bucket_expand
+		int probeStrategy @enum(ProbeStrategy) = default(3);
 }

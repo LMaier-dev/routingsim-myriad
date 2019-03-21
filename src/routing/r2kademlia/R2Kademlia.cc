@@ -44,13 +44,14 @@ void R2Kademlia::onInitialize() {
 	ASSERT(par("discoveryRadius").intValue() > 0);
 	discoveryRadius = (uint)par("discoveryRadius").intValue();
 	ASSERT(par("findNodeNumber").intValue() > 0);
-	findNodeNumber = (size_type)par("findNodeNumber").intValue();
+	findNodeNumber = (size_type) par("findNodeNumber").intValue();
 	proximityRouting = par("proximityRouting").boolValue();
-	hopLimit = (uint)par("hopLimit").intValue();
+	hopLimit = (uint) par("hopLimit").intValue();
 	pathSnooping = par("pathSnooping").boolValue();
+	probeStrategy = (uint) par("probeStrategy").intValue();
 
 	getStatistics().addSample(this);
-	addTimer(4, std::bind(&R2Kademlia::findRandom, this));
+	addTimer((simtime_t) par("probeInterval").doubleValue(), std::bind(&R2Kademlia::doProbe, this));
 	WATCH(myOverlayKey);
 	WATCH(neighborTable);
 	WATCH_OBJ(routingTable);
@@ -463,11 +464,25 @@ void R2Kademlia::addTimer(simtime_t duration, std::function<void()> callback) {
 	EV_TRACE << "sheduled timer msg " << msg << " with duration " << duration <<  endl;
 }
 
-void R2Kademlia::findRandom() {
+void R2Kademlia::doProbe() {
 	if (neighborTable.size() == 0) return; // we are isolated
-	uint32_t index = intuniform(1, routingTable.getNumBuckets()*2);
-	OverlayKey probeKey = myOverlayKey;
-	probeKey[myOverlayKey.getLength() - index] ^= 1;
+	OverlayKey probeKey;
+	switch(probeStrategy) {
+		case 0:
+			return;
+		case 1:
+			probeKey = OverlayKey::random(getRNG(0));
+			break;
+		case 2:
+			probeKey = getKadObserver().getRandomNodeKey();
+			break;
+		case 3:
+			uint32_t index = intuniform(1, routingTable.getNumBuckets()*2);
+			probeKey = myOverlayKey;
+			probeKey[myOverlayKey.getLength() - index] ^= 1;
+			break;
+	}
+	if(probeKey == myOverlayKey) probeKey[0] ^= 1;
 	sendFindNode(probeKey);
 }
 

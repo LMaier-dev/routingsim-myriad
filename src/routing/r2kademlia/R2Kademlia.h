@@ -133,7 +133,7 @@ private:
 	//@{
 	/// adds a timer to the timer vectors, sends a timer packet
 	void addTimer(simtime_t duration, std::function<void()> callback);
-	void findRandom();
+	void doProbe();
 	//@}
 
 	/** @name private helpers */
@@ -176,7 +176,7 @@ private:
 	/// number of contacts returned by find node response, called "k" in research papers
 	size_type findNodeNumber;
 	/// radius of physical neighborhood discovery
-	uint discoveryRadius;
+	uint8_t discoveryRadius;
 	/// activates proximity routing
 	bool proximityRouting;
 	// proximityNeighborSelection is in KadRoutingTable
@@ -184,6 +184,7 @@ private:
 	uint hopLimit;
 	/// if activated the node collects path information from passing packets
 	bool pathSnooping;
+	uint8_t probeStrategy;
 	//@}
 
 	/** @name statistics */

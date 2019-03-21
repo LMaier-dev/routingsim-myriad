@@ -51,8 +51,8 @@ size_type KadRoutingTable::getBucketIndex(const OverlayKey& key)
 	int i;
 	for (i = key.getLength() - accelerationFactor; i >= 0 && delta.getBitRange(i, accelerationFactor) == 0;
 		i -= accelerationFactor);
-	if (i < 0)
-		throw cRuntimeError("You cannot get the bucket index of your own key!");
+	if (i < 0) // this is my key
+		return buckets.size() - 1;
 	// i is now the index of the LSB of the first non zero subinteger
 	// we reverse the bucket order. now the bigges bucket is on the left.
 	// for accelerationFactor = 1 this is just (key.getLength() - i - 1)
@@ -97,6 +97,7 @@ void KadRoutingTable::addPath(const OverlayKey& key, const kad_path& path, const
 
 void KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path)
 {
+	ASSERT(key != myKey);
 	auto contact = std::make_unique<KadContact>(key, std::move(path));
 	KadBucket& bucket = getBucket(key);
 	ASSERT(!bucket.getContact(key));
