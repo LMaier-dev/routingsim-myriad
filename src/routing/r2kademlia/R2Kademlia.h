@@ -89,7 +89,7 @@ class R2Kademlia : public RPCProtocol, public KadPolicy, public StatisticSample
 	/// sends a "get neighbors" call to the contact
 	void sendGetNeighbors(KadContact_p contact);
 	/// sends a find node call to find this node
-	void sendFindNode(const OverlayKey& key);
+	void sendFindNode(const OverlayKey& key, bool exact=false);
 	//@}
 
 	/** @name policy foo */
@@ -140,6 +140,8 @@ private:
 	//@{
 	/// does statistics on recieved packet
 	void countRecieved(KadPacket& packet);
+	/// does statistics on dropped packet
+	void countDropped(KadPacket& packet, const OverlayKey& target);
 	/**
 	 * sends an error packet to the sender of the given packet
 	 * the original packet is encapsulated on the error packet

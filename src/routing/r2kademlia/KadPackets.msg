@@ -30,8 +30,9 @@ class noncobject OverlayKey;
 class noncobject key_vector_t;
 
 enum KadErrorType {
-	KAD_PACKET_INVALID = 0;
-	KAD_NEXT_HOP_UNAVAILABLE = 1;
+	KAD_NoError = 0;
+	KAD_NodeUnreachable = 0x01;
+	KAD_SegmentFailure = 0x05;
 }
 
 packet KadAnswer extends KadPacket {}
@@ -93,6 +94,7 @@ packet KadFindNodeReq extends KadRTableReq {
 	type = KAD_FindNodeReq;
 	//TODO use destId for this
 	OverlayKey query;
+	bool exact = false;
 }
 packet KadFindNodeRsp extends KadRTableRsp {
 	type = KAD_FindNodeRsp;

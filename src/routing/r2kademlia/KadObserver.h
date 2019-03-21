@@ -46,7 +46,7 @@ public:
 	/// returns the key of a given node id, if it is unknown std::out_of_range is thrown
 	inline const OverlayKey& getNodeKey(nodeid_t owner) { return nodes.right.at(owner); };
 	/// returns the node id of a given overlay key, if it is unknown std::out_of_range is thrown
-	inline nodeid_t getNodeID(const OverlayKey& key) { return nodes.left.at(key); };
+	inline nodeid_t getNodeId(const OverlayKey& key) { return nodes.left.at(key); };
 	/// returns true if a node with the given key is known
 	inline bool exists(const OverlayKey& key) { return nodes.left.count(key) > 0; };
 

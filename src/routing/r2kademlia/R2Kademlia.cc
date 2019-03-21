@@ -280,13 +280,14 @@ bool R2Kademlia::handleQueryRouteResponse(KadPacket_p answer, RPCState& rpcState
 }
 
 // FIND NODE
-void R2Kademlia::sendFindNode(const OverlayKey& key) {
+void R2Kademlia::sendFindNode(const OverlayKey& key, bool exact) {
 	EV_TRACE << "sendFindNode w/ " << key << endl;
 	auto contacts = routingTable.getClosestContacts(key, findNodeNumber);
 	ASSERT(contacts.size() > 0);
 	const KadContact& contact = chooseNextHop(contacts, key, myOverlayKey);
 	auto packet = makePacket<KadFindNodeReq>(contact, "FindNode");
 	packet->setQuery(key);
+	packet->setExact(exact);
 	sendRpcCall(
 		std::move(packet),
 		std::bind(&R2Kademlia::handleFindNodeResponse, this, ph::_1, ph::_2)
@@ -321,6 +322,11 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 			resendPacket(std::move(packet));
 			return;
 		}
+		else if (packet->getExact()) {
+			countDropped(*packet, packet->getQuery());
+			returnToSender(KAD_NodeUnreachable, std::move(packet));
+			return;
+		}
 	}
 	// answer request
 	auto answer = makeAnswer<KadFindNodeRsp>(*packet);
@@ -348,11 +354,11 @@ void R2Kademlia::onMissingNeighbor(KadPacket_p packet, NodePkt_p pkt) {
 		EV << "dropping error packet" << endl;
 	}
 	else
-		returnToSender(KAD_NEXT_HOP_UNAVAILABLE, std::move(packet));
+		returnToSender(KAD_SegmentFailure, std::move(packet));
 }
 
 void R2Kademlia::onErrorPacket(KadError& error) {
-	if (error.getErrorType() == KAD_NEXT_HOP_UNAVAILABLE) {
+	if (error.getErrorType() == KAD_SegmentFailure) {
 		KadPacket* original = check_and_cast<KadPacket *>(error.getEncapsulatedPacket());
 		ASSERT(original->getNonce() == error.getNonce());
 		ASSERT(original->getSource() == myOverlayKey);
@@ -467,6 +473,7 @@ void R2Kademlia::addTimer(simtime_t duration, std::function<void()> callback) {
 void R2Kademlia::doProbe() {
 	if (neighborTable.size() == 0) return; // we are isolated
 	OverlayKey probeKey;
+	bool exact = false;
 	switch(probeStrategy) {
 		case 0:
 			return;
@@ -475,6 +482,7 @@ void R2Kademlia::doProbe() {
 			break;
 		case 2:
 			probeKey = getKadObserver().getRandomNodeKey();
+			exact = true;
 			break;
 		case 3:
 			uint32_t index = intuniform(1, routingTable.getNumBuckets()*2);
@@ -483,7 +491,7 @@ void R2Kademlia::doProbe() {
 			break;
 	}
 	if(probeKey == myOverlayKey) probeKey[0] ^= 1;
-	sendFindNode(probeKey);
+	sendFindNode(probeKey, exact);
 }
 
 void R2Kademlia::countRecieved(KadPacket& packet) {
@@ -491,6 +499,16 @@ void R2Kademlia::countRecieved(KadPacket& packet) {
 	getStatistics().deliveredMessage(
 		check_and_cast<cMessage *>(packet.getControlInfo()),
 		packet.getProgress()
+	);
+}
+
+void R2Kademlia::countDropped(KadPacket& packet, const OverlayKey& target) {
+	droppedPackets++;
+	nodeid_t nid = undefined_node;
+	if (getKadObserver().exists(target))
+		nid = getKadObserver().getNodeId(target);
+	getStatistics().dropMessage(
+		check_and_cast<cMessage *>(packet.getControlInfo()), nid
 	);
 }
 
