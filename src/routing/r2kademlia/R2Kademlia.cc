@@ -52,6 +52,7 @@ void R2Kademlia::onInitialize() {
 
 	getStatistics().addSample(this);
 	addTimer((simtime_t) par("probeInterval").doubleValue(), std::bind(&R2Kademlia::doProbe, this));
+	addTimer((simtime_t) par("probeInterval").doubleValue(), std::bind(&R2Kademlia::doReachabilityTest, this));
 	WATCH(myOverlayKey);
 	WATCH(neighborTable);
 	WATCH_OBJ(routingTable);
@@ -192,7 +193,7 @@ void R2Kademlia::sendPacket(KadPacket_p packet) {
 	ASSERT(packet->getSource() == myOverlayKey);
 	ASSERT(packet->getControlInfo() == nullptr);
 	auto nodePkt = std::make_unique<NodePkt>(packet->getName());
-	if(packet->getType() == KAD_FindNodeReq)
+	if(packet->getType() == KAD_FindNodeReq && check_and_cast<KadFindNodeReq*>(packet.get())->getExact())
 		getStatistics().registerMessage(nodePkt.get());
 	sentPackets++;
 	forwardPacket(std::move(packet), std::move(nodePkt));
@@ -477,6 +478,7 @@ void R2Kademlia::doProbe() {
 	if (neighborTable.size() == 0) return; // we are isolated
 	OverlayKey probeKey;
 	bool exact = false;
+	uint32_t index = 0;
 	switch(probeStrategy) {
 		case 0:
 			return;
@@ -488,13 +490,24 @@ void R2Kademlia::doProbe() {
 			exact = true;
 			break;
 		case 3:
-			uint32_t index = intuniform(1, routingTable.getNumBuckets()*2);
+			index = intuniform(1, routingTable.getDepth()*2);
 			probeKey = myOverlayKey;
 			probeKey[myOverlayKey.getLength() - index] ^= 1;
 			break;
+		case 4:
+			index = routingTable.getDepth();
+			probeKey = myOverlayKey.randomSuffix(myOverlayKey.getLength() - index, getRNG(0));
+			break;
+		default:
+			throw cRuntimeError("unknown probe strategy %i, values from 0 to 4 are allowed");
 	}
 	if(probeKey == myOverlayKey) probeKey[0] ^= 1;
 	sendFindNode(probeKey, exact);
+}
+
+void R2Kademlia::doReachabilityTest() {
+	if (neighborTable.size() == 0) return; // we are isolated
+	sendFindNode(getKadObserver().getRandomNodeKey(), true);
 }
 
 void R2Kademlia::countRecieved(KadPacket& packet) {

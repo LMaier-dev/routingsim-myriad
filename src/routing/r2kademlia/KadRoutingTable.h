@@ -19,6 +19,7 @@
 #include <omnetpp.h>
 #include <memory>
 #include <vector>
+#include <cmath>
 #include "KadContact.h"
 /**
  * @file KadRoutingTable.h
@@ -112,6 +113,7 @@ public:
 	size_type getNumContacts();
 	/// returns the number of buckets currenty held
 	inline size_type getNumBuckets() { return buckets.size(); }
+	inline size_type getDepth() { return ceil(getNumBuckets() / getLevelWidth());}
 	/// returns the maximum size of a bucket, i.e. the size after which a bucket is split
 	inline size_type getSplitSize() { return bucketSize; }
 	/// returns true if the key is known, i.e. there is a contact present

@@ -38,6 +38,6 @@ simple R2Kademlia extends routingsim.foundation.Protocol
 		bool pathSnooping = default(true);
 		double probeInterval = default(4s) @unit(s);
 		///
-		/// 0=none, 1=random, 2=existing, 3=bucket_expand
+		/// 0=none, 1=random, 2=existing, 3=bucket_expand, 4=random_suffix
 		int probeStrategy @enum(ProbeStrategy) = default(3);
 }
