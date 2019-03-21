@@ -300,9 +300,10 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 	ASSERT(contacts.size() > 0); // routing table has at least one entry
 	if (query != myOverlayKey) {
 		if (contacts.front()->getKey() == packet->getSource()) {
-			if(contacts.size() == 0) {
-				// TODO should we send an error instead of an empty answer?
-				sendPacket(makeAnswer<KadFindNodeRsp>(*packet));
+			if(contacts.size() == 1) {
+				// the only contact we know is the source
+				countDropped(*packet, packet->getQuery());
+				returnToSender(KAD_NodeUnreachable, std::move(packet));
 				return;
 			}
 			else
