@@ -492,7 +492,6 @@ void R2Kademlia::doProbe() {
 			break;
 		case 2:
 			probeKey = getKadObserver().getRandomNodeKey();
-			exact = true;
 			break;
 		case 3:
 			index = intuniform(1, routingTable.getDepth()*2);
