@@ -19,6 +19,7 @@
  */
 
 #include "KadRoutingTable.h"
+#include "KadObserver.h"
 #include <algorithm>
 #include "BaseTypes.h"
 
@@ -207,6 +208,27 @@ size_type KadRoutingTable::getNumContacts() {
 	for (KadBucket& b : buckets)
 		sum += b.size();
 	return sum;
+}
+
+double KadRoutingTable::getAveragePathLength() {
+	uint count = 0;
+	double sum = 0;
+	for(KadBucket& b : buckets)
+		for(auto& contact : b.contacts) {
+			sum += contact->getPathLength();
+			count++;
+		}
+	return count == 0 ? 0.0 : sum / count;
+}
+double KadRoutingTable::getAveragePathStretch() {
+	uint count = 0;
+	double sum = 0;
+	for(KadBucket& b : buckets)
+		for(auto& contact : b.contacts) {
+			sum += (contact->getPathLength()+1) / getKadObserver().getPhysicalDistance(myKey, contact->getKey());
+			count++;
+		}
+	return count == 0 ? 0.0 : sum / count;
 }
 
 

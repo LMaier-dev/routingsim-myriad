@@ -19,6 +19,7 @@
  */
 
 #include "KadObserver.h"
+#include "NetworkManager.h"
 
 namespace routingsim {
 Define_Module(KadObserver);
@@ -70,6 +71,12 @@ const OverlayKey& KadObserver::getClosestExistingKey(const OverlayKey& key) {
 	if (itLower->first == key) return key;
 	auto itUpper = itLower--;
 	return ((itLower->first ^ key) < (itUpper->first ^ key)) ? itLower->first : itUpper->first;
+}
+
+uint KadObserver::getPhysicalDistance(const OverlayKey& from, const OverlayKey& to) {
+	ASSERT(exists(from));
+	ASSERT(exists(to));
+	return (uint) getNetworkManager()->getDistance(getNodeId(from), getNodeId(to));
 }
 
 KadObserver& getKadObserver() {

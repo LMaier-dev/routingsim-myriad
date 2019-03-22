@@ -113,7 +113,11 @@ public:
 	size_type getNumContacts();
 	/// returns the number of buckets currenty held
 	inline size_type getNumBuckets() { return buckets.size(); }
-	inline size_type getDepth() { return ceil(getNumBuckets() / getLevelWidth());}
+	inline size_type getDepth() { return ceil(getNumBuckets() / getLevelWidth()); }
+	/// calculates the avarage path length of the known contacts
+	double getAveragePathLength();
+	/// calculates the avarage stretch of the known contacts
+	double getAveragePathStretch();
 	/// returns the maximum size of a bucket, i.e. the size after which a bucket is split
 	inline size_type getSplitSize() { return bucketSize; }
 	/// returns true if the key is known, i.e. there is a contact present

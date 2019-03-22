@@ -188,6 +188,7 @@ private:
 	/// if activated the node collects path information from passing packets
 	bool pathSnooping;
 	uint8_t probeStrategy;
+	bool detailedRoutingTableStats;
 	//@}
 
 	/** @name statistics */

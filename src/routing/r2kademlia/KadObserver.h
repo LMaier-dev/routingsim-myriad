@@ -57,6 +57,8 @@ public:
 	/// returns chooses a key at random and returns the closest existing key.
 	/// note that this is not uniform over the nodes.
 	const OverlayKey& getRandomExistingKey() { return getClosestExistingKey(OverlayKey::random(getRNG(0))); };
+	/// returns the physical distance between the to nodes with the keys. the keys MUST exist!
+	uint getPhysicalDistance(const OverlayKey& from, const OverlayKey& to);
 };
 
 KadObserver& getKadObserver();

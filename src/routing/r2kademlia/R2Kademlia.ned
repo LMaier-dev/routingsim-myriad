@@ -37,7 +37,8 @@ simple R2Kademlia extends routingsim.foundation.Protocol
 		/// if activated the node collects path information from passing packets
 		bool pathSnooping = default(true);
 		double probeInterval = default(4s) @unit(s);
-		///
-		/// 0=none, 1=random, 2=existing, 3=bucket_expand, 4=random_suffix
+		/// if true records avarage path lengths and stretch in routing tables.
+		bool detailedRoutingTableStats = default(false);
+		/// 0=none, 1=random, 2=exiting, 3=bucket_expand, 4=random_suffix
 		int probeStrategy @enum(ProbeStrategy) = default(3);
 }

@@ -49,6 +49,7 @@ void R2Kademlia::onInitialize() {
 	hopLimit = (uint) par("hopLimit").intValue();
 	pathSnooping = par("pathSnooping").boolValue();
 	probeStrategy = (uint) par("probeStrategy").intValue();
+	detailedRoutingTableStats = par("detailedRoutingTableStats").boolValue();
 
 	getStatistics().addSample(this);
 	addTimer((simtime_t) par("probeInterval").doubleValue(), std::bind(&R2Kademlia::doProbe, this));
@@ -378,6 +379,10 @@ void R2Kademlia::sampleStatistics (Statistics &stats) {
 	stats.value("receivedPackets", recievedPackets);
 	stats.value("routingTableContacts", routingTable.getNumContacts());
 	stats.value("routingTableBuckets", routingTable.getNumBuckets());
+	if(detailedRoutingTableStats) {
+		stats.value("routingTablePathLength", routingTable.getAveragePathLength());
+		stats.value("routingTablePathStretch", routingTable.getAveragePathStretch());
+	}
 }
 // -------------- kad policy -------------
 
