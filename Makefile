@@ -31,5 +31,9 @@ checkmakefiles:
 doxy:
 	doxygen doxy.cfg
 
+topologies: plcTopo fatTreeTopo
+
+-include topomake
+
 .PHONY: checkmakefiles makefiles clean cleanall doxy
 

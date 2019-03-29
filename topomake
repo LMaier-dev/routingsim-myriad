@@ -1,0 +1,25 @@
+TOPODIR = simulations/topologies
+SIZES = 101 102 103 104
+
+plcTopo: $(TOPODIR)/powerlaw_cluster_graph_n1001_m3_p0.5_seed0.txt \
+ $(TOPODIR)/powerlaw_cluster_graph_n100_m3_p0.5_seed0.txt \
+ $(TOPODIR)/powerlaw_cluster_graph_n200_m3_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n500_m3_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n1000_m3_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n2000_m3_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n5000_m3_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n10000_m3_p0.5_seed0.txt
+
+$(TOPODIR)/powerlaw_cluster_graph_%.txt:
+	echo $*	| sed -E "s#n([0-9]+)_m([0-9]+)_p([0-9]+\.?[0-9]*)_seed([0-9]+)#./scripts/graphgen.py --seed \4 -d $(TOPODIR) plc \1 \2 \3#" | bash
+
+fatTreeTopo: $(TOPODIR)/clos_fat_tree_24.txt \
+ $(TOPODIR)/clos_fat_tree_26.txt \
+ $(TOPODIR)/clos_fat_tree_28.txt \
+ $(TOPODIR)/clos_fat_tree_30.txt \
+ $(TOPODIR)/clos_fat_tree_48.txt \
+
+$(TOPODIR)/clos_fat_tree_%.txt:
+	./scripts/graphgen.py -d $(TOPODIR) cft $*
+
+	
