@@ -73,7 +73,7 @@ public:
 };
 
 /**
- * Models a kademlia routing table that stores contacts in buckets depending
+ * Models a Kademlia routing table that stores contacts in buckets depending
  * on the overlay key of the node.
  */
 class KadRoutingTable : public cObject
@@ -83,7 +83,7 @@ public:
 	KadRoutingTable() {};
 	void init(const OverlayKey& myKey, KadPolicy* policy, size_type accelerationFactor, size_type bucketSize, bool proximityNeighborSelection);
 	/**
-	 * add a potentially new path, adds a contactz or updates an existing one
+	 * add a potentially new path, adds a contacts or updates an existing one
 	 */
 	void addPath(const OverlayKey& key, kad_path path);
 	/**
@@ -91,7 +91,7 @@ public:
 	 */
 	void addPath(const OverlayKey& key, const kad_path& path, const kad_path& via);
 	/**
-	 * Removes the contact with the givne key from the routing table.
+	 * Removes the contact with the given key from the routing table.
 	 * @returns true if the contact was removed, false if it was not present
 	 */
 	bool removeContact(const OverlayKey& key);
@@ -112,13 +112,13 @@ public:
 	KadContactList getClosestContacts(const OverlayKey& key, size_type n);
 	/// returns the number of contacts in buckets
 	size_type getNumContacts();
-	/// returns the number of buckets currenty held
+	/// returns the number of buckets currently held
 	inline size_type getNumBuckets() { return buckets.size(); }
 	/// the position of the bit that defines the lowest bucket
 	inline size_type getDepth() { return std::min<size_type>(ceil(getNumBuckets() / getLevelWidth()) * accelerationFactor, myKey.getLength()); }
 	/// calculates the average path length of the known contacts
 	double getAveragePathLength();
-	/// calculates the avarage stretch of the known contacts
+	/// calculates the average stretch of the known contacts
 	double getAveragePathStretch();
 	/// returns the maximum size of a bucket, i.e. the size after which a bucket is split
 	inline size_type getSplitSize() { return bucketSize; }
