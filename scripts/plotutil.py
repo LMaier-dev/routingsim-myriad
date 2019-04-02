@@ -31,7 +31,7 @@ runs = list()
 def load_result_file(path):
     """Loads a omnet++ result file to the global data dict"""
     p = subprocess.run(['scavetool', 'x', '-o', '-', '-F', 'JSON', str(path)],
-                       capture_output=True)
+                       stdout=subprocess.PIPE)
     p.check_returncode()
     json_data.update(json.loads(p.stdout))
 
