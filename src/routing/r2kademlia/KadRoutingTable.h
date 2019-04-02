@@ -81,7 +81,9 @@ class KadRoutingTable : public cObject
 	friend KadBucket;
 public:
 	KadRoutingTable() {};
-	void init(const OverlayKey& myKey, KadPolicy* policy, size_type accelerationFactor, size_type bucketSize, bool proximityNeighborSelection);
+	void init(const OverlayKey& myKey, KadPolicy* policy,
+			size_type accelerationFactor, size_type bucketSize,
+			bool proximityNeighborSelection, bool pathSimplification=true);
 	/**
 	 * add a potentially new path, adds a contacts or updates an existing one
 	 */
@@ -131,6 +133,9 @@ public:
 	inline OverlayKey distance(const OverlayKey& key) { return key ^ myKey; }
 
 protected:
+	///
+	void simplifyPath(kad_path& path);
+	///
 	virtual void handleNewContact(const OverlayKey& key, kad_path path);
 	/** @name bucket access */
 	//@{
@@ -171,6 +176,7 @@ private:
 	std::vector<KadBucket> buckets;
 	KadPolicy* policy = nullptr;
 	bool proximityNeighborSelection;
+	bool pathSimplification;
 
 	//------ private helper functions -------
 	/** copies all contacts from one contact list to the end of the other contact list*/

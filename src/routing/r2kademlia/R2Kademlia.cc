@@ -39,7 +39,8 @@ void R2Kademlia::onInitialize() {
 		myOverlayKey, this,
 		par("accelerationFactor").intValue(),
 		par("bucketSize").intValue(),
-		par("proximityNeighborSelection").boolValue());
+		par("proximityNeighborSelection").boolValue(),
+		par("pathSimplification").boolValue());
 
 	ASSERT(par("discoveryRadius").intValue() > 0);
 	discoveryRadius = (uint)par("discoveryRadius").intValue();

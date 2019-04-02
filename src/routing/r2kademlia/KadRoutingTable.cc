@@ -24,7 +24,9 @@
 #include "BaseTypes.h"
 
 namespace routingsim {
-void KadRoutingTable::init(const OverlayKey& myKey, KadPolicy* policy, size_type accelerationFactor, size_type bucketSize, bool proximityNeighborSelection)
+void KadRoutingTable::init(const OverlayKey& myKey, KadPolicy* policy,
+		size_type accelerationFactor, size_type bucketSize,
+		bool proximityNeighborSelection, bool pathSimplification)
 {
 	ASSERT(this->myKey.isUnspecified());
 	ASSERT(not myKey.isUnspecified());
@@ -33,6 +35,7 @@ void KadRoutingTable::init(const OverlayKey& myKey, KadPolicy* policy, size_type
 	this->bucketSize = bucketSize;
 	this->policy = policy;
 	this->proximityNeighborSelection = proximityNeighborSelection;
+	this->pathSimplification = pathSimplification;
 	ASSERT(buckets.size() == 0);
 	//TODO optimization: implement adaptively
 	buckets.reserve(5);
@@ -70,6 +73,7 @@ size_type KadRoutingTable::getBucketIndex(const OverlayKey& key)
 void KadRoutingTable::addPath(const OverlayKey& key, kad_path path)
 {
 	if (key == myKey) return;
+	simplifyPath(path);
 	KadContact_p contact = getContact(key);
 	if (contact) {
 		// contact is known
@@ -87,6 +91,7 @@ void KadRoutingTable::addPath(const OverlayKey& key, kad_path path)
 void KadRoutingTable::addPath(const OverlayKey& key, const kad_path& path, const kad_path& viaPath)
 {
 	if (key == myKey) return;
+	if (pathSimplification) return addPath(key, concatViaPath(viaPath, path));
 	KadContact_p contact = getContact(key);
 	if (contact) {
 		// contact is known
@@ -99,6 +104,19 @@ void KadRoutingTable::addPath(const OverlayKey& key, const kad_path& path, const
 	}
 	else // contact is new
 		handleNewContact(key, concatViaPath(viaPath, path));
+}
+
+void KadRoutingTable::simplifyPath(kad_path& path)
+{
+	if (not pathSimplification) return;
+	for (auto right = path.end()-1; right != path.begin(); right--) {
+		auto left = std::find(path.begin(), right, *right);
+		if (left != right) {
+			ASSERT(*left == *right);
+			path.erase(left, right);
+			return;
+		}
+	}
 }
 
 void KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path)
@@ -264,6 +282,8 @@ kad_path KadRoutingTable::concatViaPath(const kad_path& viaPath, const kad_path&
 	newPath.reserve(viaPath.size() + path.size());
 	std::copy(viaPath.begin(), viaPath.end(), std::back_inserter(newPath));
 	std::copy(path.begin(), path.end(), std::back_inserter(newPath));
+	//TODO optimization: we can do this before copying
+	if (pathSimplification) simplifyPath(newPath);
 	return newPath;
 }
 
