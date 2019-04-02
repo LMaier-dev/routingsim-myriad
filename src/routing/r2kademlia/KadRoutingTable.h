@@ -20,6 +20,7 @@
 #include <memory>
 #include <vector>
 #include <cmath>
+#include <algorithm>
 #include "KadContact.h"
 /**
  * @file KadRoutingTable.h
@@ -113,8 +114,9 @@ public:
 	size_type getNumContacts();
 	/// returns the number of buckets currenty held
 	inline size_type getNumBuckets() { return buckets.size(); }
-	inline size_type getDepth() { return ceil(getNumBuckets() / getLevelWidth()); }
-	/// calculates the avarage path length of the known contacts
+	/// the position of the bit that defines the lowest bucket
+	inline size_type getDepth() { return std::min<size_type>(ceil(getNumBuckets() / getLevelWidth()) * accelerationFactor, myKey.getLength()); }
+	/// calculates the average path length of the known contacts
 	double getAveragePathLength();
 	/// calculates the avarage stretch of the known contacts
 	double getAveragePathStretch();
@@ -149,7 +151,7 @@ protected:
 	/** returns the width of a level in the accelerated lookup tree */
 	inline size_type getLevelWidth() { return (1 << accelerationFactor) - 1; }
 
-	/** returns the theoretica number of buckets that we could have */
+	/** returns the theoretical number of buckets that we could have */
 	inline size_type getMaxNumBuckets() { return myKey.getLength()/accelerationFactor * getLevelWidth(); }
 
 	/** returns the index of the bucket that is the first on the level of the given bucket */

@@ -494,7 +494,8 @@ void R2Kademlia::doProbe() {
 			probeKey = getKadObserver().getRandomNodeKey();
 			break;
 		case 3:
-			index = intuniform(1, routingTable.getDepth()*2);
+			index = std::min<size_type>(intuniform(1, 1 + routingTable.getDepth()*2),
+					myOverlayKey.getLength());
 			probeKey = myOverlayKey;
 			probeKey[myOverlayKey.getLength() - index] ^= 1;
 			break;
@@ -503,7 +504,8 @@ void R2Kademlia::doProbe() {
 			probeKey = myOverlayKey.randomSuffix(myOverlayKey.getLength() - index, getRNG(0));
 			break;
 		case 5:
-			index = intuniform(1, routingTable.getDepth()*2);
+			index = std::min<size_type>(intuniform(1, 1 + routingTable.getDepth()*2),
+					myOverlayKey.getLength());
 			probeKey = myOverlayKey.randomSuffix(myOverlayKey.getLength() - index, getRNG(0));
 			break;
 		default:

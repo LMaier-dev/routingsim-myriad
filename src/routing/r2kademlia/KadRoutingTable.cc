@@ -49,15 +49,20 @@ size_type KadRoutingTable::getBucketIndex(const OverlayKey& key)
 	// calculate XOR distance
 	OverlayKey delta = key ^ myKey;
 	// find first subinteger that is not zero...
-	int i;
-	for (i = key.getLength() - accelerationFactor; i >= 0 && delta.getBitRange(i, accelerationFactor) == 0;
+	int i = key.getLength() - accelerationFactor;
+	for (; i >= 0 && delta.getBitRange(i, accelerationFactor) == 0;
 		i -= accelerationFactor);
 	if (i < 0) // this is my key
 		return buckets.size() - 1;
 	// i is now the index of the LSB of the first non zero subinteger
-	// we reverse the bucket order. now the bigges bucket is on the left.
+	// we reverse the bucket order. bucket 0 is the farthest one from my id.
 	// for accelerationFactor = 1 this is just (key.getLength() - i - 1)
-	size_type index = (key.getLength() - i - 1)/accelerationFactor * getLevelWidth() - delta.getBitRange(i, accelerationFactor) + 1;
+	// levelId = (keylen - i) / accelerationFactor - 1
+	// levelBaseIndex =  levelId * levelWidth
+	// levelOffset = levelWidth - subint
+	// index = levelBaseIndex + levelOffset
+	// => index = (keylen - i)/accelerationFactor * levelWidth - subint
+	size_type index = (key.getLength() - i)/accelerationFactor * getLevelWidth()- delta.getBitRange(i, accelerationFactor);
 	ASSERT(index <= getMaxNumBuckets());
 	return std::min(buckets.size()-1, index);
 }
