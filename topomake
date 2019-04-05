@@ -1,7 +1,9 @@
 TOPODIR = simulations/topologies
 SIZES = 101 102 103 104
 
-plcTopo: $(TOPODIR)/powerlaw_cluster_graph_n1001_m3_p0.5_seed0.txt \
+plcTopo: plcTopoM3 plcTopoN1000
+
+plcTopoM3: $(TOPODIR)/powerlaw_cluster_graph_n1001_m3_p0.5_seed0.txt \
  $(TOPODIR)/powerlaw_cluster_graph_n100_m3_p0.5_seed0.txt \
  $(TOPODIR)/powerlaw_cluster_graph_n200_m3_p0.5_seed0.txt\
  $(TOPODIR)/powerlaw_cluster_graph_n500_m3_p0.5_seed0.txt\
@@ -9,6 +11,15 @@ plcTopo: $(TOPODIR)/powerlaw_cluster_graph_n1001_m3_p0.5_seed0.txt \
  $(TOPODIR)/powerlaw_cluster_graph_n2000_m3_p0.5_seed0.txt\
  $(TOPODIR)/powerlaw_cluster_graph_n5000_m3_p0.5_seed0.txt\
  $(TOPODIR)/powerlaw_cluster_graph_n10000_m3_p0.5_seed0.txt
+
+plcTopoN1000: $(TOPODIR)/powerlaw_cluster_graph_n1000_m1_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n1000_m2_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n1000_m3_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n1000_m4_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n1000_m5_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n1000_m6_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n1000_m7_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n1000_m8_p0.5_seed0.txt
 
 $(TOPODIR)/powerlaw_cluster_graph_%.txt:
 	echo $*	| sed -E "s#n([0-9]+)_m([0-9]+)_p([0-9]+\.?[0-9]*)_seed([0-9]+)#./scripts/graphgen.py --seed \4 -d $(TOPODIR) plc \1 \2 \3#" | bash
