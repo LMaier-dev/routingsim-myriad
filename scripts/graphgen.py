@@ -28,6 +28,10 @@ def main():
     parser_cft.add_argument('K', type=int, help='node degree')
     parser_cft.add_argument('--hosts', help='include hosts (degree 1)', action='store_true')
 
+    parser_plc = subparsers.add_parser('tree', help='perfectly balance R-tree with height H')
+    parser_plc.add_argument('R', type=int, help='tree degree')
+    parser_plc.add_argument('H', type=int, help='tree height')
+
     opt = parser.parse_args()
 
     print("generating graph...")
@@ -44,9 +48,18 @@ def main():
             ["", f"generated with NetworkX {networkx.__version__}"],
             ["", f"fat tree clos network, k = {opt.K}, with{'out' if not opt.hosts else ''} hosts"],
             ["", f"\t{(opt.K//2) **2} core nodes, {opt.K} pods with {opt.K} nodes each"],
-            ["", f"\tmakes {(opt.K//2)**2 + opt.K**2} nodes and up to {opt.K**3 // 4} hosts"]]
+            ["", f"\tmakes {(opt.K//2)**2 + opt.K**2} nodes and up to {opt.K**3 // 4} hosts"]
+            ["time", datetime.now()]]
 
         G.graph['filename'] = f"clos_fat_tree_{opt.K}{'_with_hosts' if opt.hosts else ''}.txt"
+    elif(opt.type == 'tree'):
+        G = networkx.balanced_tree(opt.R, opt.H)
+        G.graph['info'] = [
+            ["", f"generated with NetworkX {networkx.__version__}, networkx.balanced tree"],
+            ["", f"r = {opt.R}; h = {opt.H}"],
+            ["time", datetime.now()]]
+
+        G.graph['filename'] = f"tree_r{opt.R}_h{opt.H}.txt"
     else:
         exit()
     if not opt.nostats:
