@@ -73,7 +73,14 @@ size_type KadRoutingTable::getBucketIndex(const OverlayKey& key)
 void KadRoutingTable::addPath(const OverlayKey& key, kad_path path)
 {
 	if (key == myKey) return;
-	simplifyPath(path);
+	if (pathSimplification) {
+		// find my key
+		path.erase(path.begin(), std::find(path.rbegin(), path.rend(), myKey).base());
+		// find target key
+		path.erase(std::find(path.begin(), path.end(), key), path.end());
+		// find other duplicates
+		simplifyPath(path);
+	}
 	KadContact_p contact = getContact(key);
 	if (contact) {
 		// contact is known
@@ -91,7 +98,10 @@ void KadRoutingTable::addPath(const OverlayKey& key, kad_path path)
 void KadRoutingTable::addPath(const OverlayKey& key, const kad_path& path, const kad_path& viaPath)
 {
 	if (key == myKey) return;
-	if (pathSimplification) return addPath(key, concatViaPath(viaPath, path));
+	if (pathSimplification) {
+		addPath(key, concatViaPath(viaPath, path));
+		return;
+	}
 	KadContact_p contact = getContact(key);
 	if (contact) {
 		// contact is known
@@ -108,7 +118,7 @@ void KadRoutingTable::addPath(const OverlayKey& key, const kad_path& path, const
 
 void KadRoutingTable::simplifyPath(kad_path& path)
 {
-	if (not pathSimplification) return;
+	if (path.size() < 2) return;
 	for (auto right = path.end()-1; right != path.begin(); right--) {
 		auto left = std::find(path.begin(), right, *right);
 		if (left != right) {
@@ -160,7 +170,8 @@ void KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path)
 	}
 }
 
-void KadRoutingTable::splitLastBucket() {
+void KadRoutingTable::splitLastBucket()
+{
 	EV << "splitting bucket" << endl;
 	ASSERT(buckets.size() < getMaxNumBuckets());
 	KadBucket oldBucket{};
@@ -226,14 +237,16 @@ KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_t
 	return result;
 }
 
-size_type KadRoutingTable::getNumContacts() {
+size_type KadRoutingTable::getNumContacts()
+{
 	size_type sum = 0;
 	for (KadBucket& b : buckets)
 		sum += b.size();
 	return sum;
 }
 
-double KadRoutingTable::getAveragePathLength() {
+double KadRoutingTable::getAveragePathLength()
+{
 	uint count = 0;
 	double sum = 0;
 	for(KadBucket& b : buckets)
@@ -243,7 +256,8 @@ double KadRoutingTable::getAveragePathLength() {
 		}
 	return count == 0 ? 0.0 : sum / count;
 }
-double KadRoutingTable::getAveragePathStretch() {
+double KadRoutingTable::getAveragePathStretch()
+{
 	uint count = 0;
 	double sum = 0;
 	for(KadBucket& b : buckets)
@@ -277,13 +291,17 @@ KadContact_p KadRoutingTable::getContact(const OverlayKey& key)
 	return getBucket(key).getContact(key);
 }
 
-kad_path KadRoutingTable::concatViaPath(const kad_path& viaPath, const kad_path& path) {
+kad_path KadRoutingTable::concatViaPath(const kad_path& viaPath, const kad_path& path)
+{
 	kad_path newPath{};
-	newPath.reserve(viaPath.size() + path.size());
-	std::copy(viaPath.begin(), viaPath.end(), std::back_inserter(newPath));
-	std::copy(path.begin(), path.end(), std::back_inserter(newPath));
-	//TODO optimization: we can do this before copying
-	if (pathSimplification) simplifyPath(newPath);
+	auto left = viaPath.end();
+	auto right = pathSimplification ? path.rbegin() : path.rend();
+	for (;right != path.rend() and left == viaPath.end(); right++) {
+		left = std::find(viaPath.begin(), viaPath.end(), *right);
+	}
+	newPath.reserve((left - viaPath.begin()) + (path.end() - right.base()));
+	std::copy(viaPath.begin(), left, std::back_inserter(newPath));
+	std::copy(right.base(), path.end(), std::back_inserter(newPath));
 	return newPath;
 }
 
