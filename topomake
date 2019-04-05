@@ -3,14 +3,14 @@ SIZES = 101 102 103 104
 
 plcTopo: plcTopoM3 plcTopoN1000
 
-plcTopoM3: $(TOPODIR)/powerlaw_cluster_graph_n1001_m3_p0.5_seed0.txt \
- $(TOPODIR)/powerlaw_cluster_graph_n100_m3_p0.5_seed0.txt \
+plcTopoM3: $(TOPODIR)/powerlaw_cluster_graph_n100_m3_p0.5_seed0.txt \
  $(TOPODIR)/powerlaw_cluster_graph_n200_m3_p0.5_seed0.txt\
  $(TOPODIR)/powerlaw_cluster_graph_n500_m3_p0.5_seed0.txt\
  $(TOPODIR)/powerlaw_cluster_graph_n1000_m3_p0.5_seed0.txt\
  $(TOPODIR)/powerlaw_cluster_graph_n2000_m3_p0.5_seed0.txt\
  $(TOPODIR)/powerlaw_cluster_graph_n5000_m3_p0.5_seed0.txt\
- $(TOPODIR)/powerlaw_cluster_graph_n10000_m3_p0.5_seed0.txt
+ $(TOPODIR)/powerlaw_cluster_graph_n10000_m3_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n20000_m3_p0.5_seed0.txt
 
 plcTopoN1000: $(TOPODIR)/powerlaw_cluster_graph_n1000_m1_p0.5_seed0.txt\
  $(TOPODIR)/powerlaw_cluster_graph_n1000_m2_p0.5_seed0.txt\
