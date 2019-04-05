@@ -15,6 +15,7 @@ import subprocess
 import json
 import pathlib
 from collections import namedtuple
+import itertools
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -108,8 +109,8 @@ def _create_map(list_, attr_):
     return dict((getattr(item, attr_), item) for item in list_)
 
 
+########## Class definitions #########
 
-####### Class definitions ######
 class Vector:
     """Models an omnet++ result vector"""
     def __init__(self, vector_json, run=None):
@@ -121,22 +122,24 @@ class Vector:
         vec.module = vector_json['module']
         vec.json = vector_json
         vec.dict = dict(zip(vec.time, vec.value))
+        vec.average = np.average(self.value)
 
     def __repr__(self):
         return "<Vector {} of {} ({} values)>".format(
             self.name, self.module, len(self.time))
 
-    def plot(self, label=None, plot=plt, **kwargs):
+    def plot(self, label=None, *args, plot=plt, **kwargs):
         if label is None:
             label = self.name
         else:
             label = self.format_label(label)
-        return plot.plot(self.time, self.value, label=label, **kwargs)
+        return plot.plot(self.time, self.value, *args, label=label, **kwargs)
 
     def format_label(self, label):
         return label.format(run=self.run,
                             name=self.name,
                             module=self.module)
+
 
 class Run:
     """Models an omnet++ simulation run"""
@@ -168,14 +171,62 @@ class Run:
         return "{}/{}/{}".format(
             self.configname, self.measurement, self.runnumber)
 
-class Config:
-    """Models an omnet++ simulation configuratio, includes multiple runs."""
+
+def ret_collection(f):
+    return lambda *args, **kwargs: Collection(f(*args, **kwargs))
+
+
+class Collection:
+    def __init__(self, generator):
+        self._generator = generator;
+    def __iter__(self):
+        return iter(self._generator)
+
+    @ret_collection
+    def filter(self, **kwargs):
+        for item in self:
+            if all(getattr(item, k) == v for k,v in kwargs.items()):
+                yield item
+
+    @ret_collection
+    def select(self, attr, ignore_missing=False):
+        for item in self:
+            if ignore_missing or hasattr(item, attr):
+                yield getattr(item, attr)
+
+    @ret_collection
+    def sorted(self, attr=None, key=lambda x:x, reverse=False):
+        return sorted(
+            self,
+            key=key if attr is None else
+                lambda x: key(getattr(x, attr)),
+            reverse=reverse)
+
+    def __add__(self, other):
+        return Collection(itertools.chain(this, other))
+
+    def solidify(self):
+        if not isinstance(self._generator, list):
+            self._generator = list(self._generator)
+        return self
+
+    def reverse(self):
+        return reversed(self)
+
+    @ret_collection
+    def __reversed__(self):
+        return reversed(list(self))
+
+
+class Config(Collection):
+    """Models an omnet++ simulation configuration, includes multiple runs."""
     def __init__(self, runs):
         self.l = list(runs)
         self.d = _create_map(runs, 'measurement')
         self.runs = self.l
         self.moduleparams = dict(set.intersection(
             *(set(r.moduleparams.items()) for r in self.runs)))
+        Collection.__init__(self, self.l)
 
     def __getitem__(self, item):
         if isinstance(item, int):
@@ -185,17 +236,11 @@ class Config:
 
     def keys(self):
         return self.d.keys()
-    def __iter__(self):
-        return iter(self.l)
 
-    def sorted(self, attr='measurement', intval=False):
-        if intval:
-            key = lambda a: int(getattr(a, attr))
-        else:
-            key = lambda a: getattr(a, attr)
-        return sorted(self, key=key)
+    def sorted(self, attr=None, key=None):
+        if key is None:
+            key = lambda x:x
+            if attr is None:
+                attr = 'measurement'
+        return Collection.sorted(self, attr, key)
 
-    def filter(self, attr, val):
-        for run in self:
-            if getattr(run, attr) == val:
-                yield run
