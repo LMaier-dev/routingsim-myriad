@@ -48,7 +48,7 @@ def main():
             ["", f"generated with NetworkX {networkx.__version__}"],
             ["", f"fat tree clos network, k = {opt.K}, with{'out' if not opt.hosts else ''} hosts"],
             ["", f"\t{(opt.K//2) **2} core nodes, {opt.K} pods with {opt.K} nodes each"],
-            ["", f"\tmakes {(opt.K//2)**2 + opt.K**2} nodes and up to {opt.K**3 // 4} hosts"]
+            ["", f"\tmakes {(opt.K//2)**2 + opt.K**2} nodes and up to {opt.K**3 // 4} hosts"],
             ["time", datetime.now()]]
 
         G.graph['filename'] = f"clos_fat_tree_{opt.K}{'_with_hosts' if opt.hosts else ''}.txt"
