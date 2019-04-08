@@ -87,13 +87,19 @@ def parse():
     """Parses the global json data to set the configs object"""
     get_configs()
 
-def plot_points(points, plot=plt, **kwargs):
+def plot_points(points, *args, plot=plt, **kwargs):
     x = numpy.array()
     y = numpy.array()
     for a,b in sorted(points):
         x.append(a)
         y.append(b)
-    plot.plot(x,y, **kwargs)
+    plot.plot(x,y, *args, **kwargs)
+
+
+def savefig(name, *args, plot=plt, **kwargs):
+    """Saves a figure in svg, png and pdf format."""
+    for ext in ('.pdf', '.png', '.svg'):
+        plot.savefig(name + ext, *args, **kwargs)
 
 ##### helper functions ####
 def _group_by(list_, attr_):
