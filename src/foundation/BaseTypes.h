@@ -4,7 +4,6 @@
 #include<vector>
 #include<iostream>
 #include<omnetpp.h>
-#include<boost/foreach.hpp>
 
 namespace routingsim {
 
@@ -14,7 +13,6 @@ namespace routingsim {
     #define foreach(a, b) BOOST_FOREACH(a, b)
 #endif
 
-using namespace std;
 
 /// identifier type
 typedef unsigned long long id_t;

@@ -96,7 +96,7 @@ protected:
 private:
 	/// dynamically disabled links, used to check whether we have to
 	/// send a packet in sendToNode (which is also used by sendToNeighbors)
-	vector<cGate *> disabledLinks;
+	std::vector<cGate *> disabledLinks;
 
 	/// add a gate to disabledLinks
 	void disableGate(cGate *);

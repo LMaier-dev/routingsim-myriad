@@ -62,7 +62,7 @@ void NetworkDynamics::scheduleNodeFailure(nodeid_t node, simtime_t occurrence,
 	di->occurrence = occurrence;
 	di->duration = duration;
 	if (cSimulation::getActiveEnvir()->isGUI()) {
-		stringstream fls;
+		std::stringstream fls;
 		fls << "Fail Node " << di->source;
 		string failLabel(fls.str());
 		dim = new cMessage(failLabel.c_str());
@@ -78,7 +78,7 @@ void NetworkDynamics::scheduleNodeFailure(nodeid_t node, simtime_t occurrence,
 	di->type = DynamicsInfo::nodeRecovery;
 	di->occurrence += duration;
 	if (cSimulation::getActiveEnvir()->isGUI()) {
-		stringstream rls;
+		std::stringstream rls;
 		rls << "Recovery Node " << di->source;
 		string recoverLabel(rls.str());
 		dim = new cMessage(recoverLabel.c_str());
@@ -101,7 +101,7 @@ void NetworkDynamics::scheduleLinkFailure(nodeid_t from, nodeid_t to, simtime_t 
 	di->duration = duration;
 	di->bidirectionalLinkFailure = bidir;
 	if (cSimulation::getActiveEnvir()->isGUI()) {
-		stringstream fls;
+		std::stringstream fls;
 		fls << "Fail Link [" << from << "," << to << "]";
 		string failLabel(fls.str());
 		dim = new cMessage(failLabel.c_str());
@@ -117,7 +117,7 @@ void NetworkDynamics::scheduleLinkFailure(nodeid_t from, nodeid_t to, simtime_t 
 	di->type = DynamicsInfo::linkRecovery;
 	di->occurrence += duration;
 	if (cSimulation::getActiveEnvir()->isGUI()) {
-		stringstream rls;
+		std::stringstream rls;
 		rls << "Recovery Link [" << from << "," << to << "]";
 		string recoverLabel(rls.str());
 		dim = new cMessage(recoverLabel.c_str());

@@ -8,8 +8,6 @@
 
 namespace routingsim {
 
-using namespace boost;
-
 /// routing table entry
 class entry_t : public vroute_update_t {
 private:
@@ -20,7 +18,7 @@ public:
 	nodeid_t next_hop;			//< the node the update came from
 
 	/// references
-	typedef unordered_set<nodeid_t> nodeid_set;
+	typedef boost::unordered_set<nodeid_t> nodeid_set;
 	nodeid_set used_by; 		//< neighbors that adapted this entry
 	uint8_t    unused;			//< number of rounds entry was not used
 

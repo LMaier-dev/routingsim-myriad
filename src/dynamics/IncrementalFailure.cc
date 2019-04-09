@@ -49,12 +49,12 @@ simtime_t IncrementalFailure::scheduleDynamics() {
 	size_t nodesToFailPerPeriod = NodeFailure ? (size_t) numNodes*NodeFraction : 0;
 	size_t linksToFailPerPeriod = LinkFailure ? (size_t) numLinks*LinkFraction : 0;
 
-	vector<nodeid_t> activeNodes;
+	std::vector<nodeid_t> activeNodes;
 	topology.getNodeIDs( activeNodes );
 
 	// determine actual nodes to fail
 	if ( NodeFailure ) {
-		vector<nodeid_t> failNodes;
+		std::vector<nodeid_t> failNodes;
 
 		if (activeNodes.size() < nodesToFailPerPeriod) {
 		    // no more nodes available
@@ -83,7 +83,7 @@ simtime_t IncrementalFailure::scheduleDynamics() {
 	// determine actual links to fail; in case of both---link and node failures---
 	// link failures happen after node failures
 	if ( LinkFailure ) {
-		vector< pair<nodeid_t, nodeid_t> > failEdges;
+		std::vector< std::pair<nodeid_t, nodeid_t> > failEdges;
 		// update number of active links, might have changed
 		activeNumLinks = topology.getActiveNumberLinks();
 
@@ -95,7 +95,7 @@ simtime_t IncrementalFailure::scheduleDynamics() {
 		}
 
 		while ( failEdges.size() < linksToFailPerPeriod ) {
-			pair<nodeid_t, nodeid_t> failEdge = topology.getRandomEdge( intuniform(0,activeNumLinks-1) );
+			std::pair<nodeid_t, nodeid_t> failEdge = topology.getRandomEdge( intuniform(0,activeNumLinks-1) );
 			if ( find(failEdges.begin(), failEdges.end(), failEdge) != failEdges.end() ) {
 				continue;
 			} else {

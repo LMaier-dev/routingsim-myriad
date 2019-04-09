@@ -45,8 +45,9 @@ class NetworkTopology;
 
 namespace routingsim {
 
-using namespace std;
 using namespace boost;
+using std::string;
+using std::vector;
 
 /**
  * NetworkTopology provides a data structure to represent network topologies
@@ -154,14 +155,14 @@ public:
 	/**
 	 * Read our own
 	 */
-	void readSelfDefinedTopology(ifstream &topologyFile, set<nodeid_t> &nodeset, vector< pair<long long, long long> > &edges, boost::unordered_map < nodeid_t, properties_t > &nodeproperties);
+	void readSelfDefinedTopology(std::ifstream &topologyFile, std::set<nodeid_t> &nodeset, vector< std::pair<long long, long long> > &edges, boost::unordered_map < nodeid_t, properties_t > &nodeproperties);
 
 	/**
 	 * Read a dimes as edges topology; by default, bidirectional edges are
 	 * assumed. If this is not the intended behaviour, set makeBidirectional
 	 * to false.
 	 */
-	void readDimesTopology(ifstream &topologyFile, set<nodeid_t> &nodeset, vector< pair<long long, long long> > &edges, boost::unordered_map < nodeid_t, properties_t > &nodeproperties, bool makeBidirectional=true);
+	void readDimesTopology(std::ifstream &topologyFile, std::set<nodeid_t> &nodeset, vector< std::pair<long long, long long> > &edges, boost::unordered_map < nodeid_t, properties_t > &nodeproperties, bool makeBidirectional=true);
 
 	/**
 	 * Read shortest paths from file with shortest-path pre-calculations.
@@ -195,10 +196,10 @@ public:
 
 	/// Return k random distinct pairs of active nodes in a vector (-> Sampling)
 	/// Random Edge Sampling ("Sampling from Large Graphs", Jure Leskovec and Christos Faloutsos, 2006)
-	vector<pair<nodeid_t, nodeid_t> > getRandomNodePairs( cRNG *rng, size_t k ) const;
+	vector<std::pair<nodeid_t, nodeid_t> > getRandomNodePairs( cRNG *rng, size_t k ) const;
 
 	/// Return a random edge selected from the set of active edges (activeLinkNumber-th edge)
-	pair<nodeid_t, nodeid_t> getRandomEdge(size_t activeLinkNumber) const;
+	std::pair<nodeid_t, nodeid_t> getRandomEdge(size_t activeLinkNumber) const;
 
 
 	/// Returns the node degree, i.e., number of links to ACTIVE neighbors
@@ -208,7 +209,7 @@ public:
 	/// return in the parameter retDegreeMap the list of active nodes and
 	/// their degree, resp. out-degree in case of a directed graph
 	/// Return value: Size of retDegreeMap
-	size_t getNodeDegrees( map<nodeid_t, unsigned long> &retDegreeMap) const;
+	size_t getNodeDegrees( std::map<nodeid_t, unsigned long> &retDegreeMap) const;
 
 	/// returns the FILTERED set of ACTIVE nodeids contained in the topology
 	/// in the parameter v

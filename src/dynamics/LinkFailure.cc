@@ -14,7 +14,6 @@
 // 
 
 #include "LinkFailure.h"
-#include <boost/unordered_map.hpp>
 #include "NetworkDynamics.h"
 #include <utility>
 #include <list>
@@ -34,7 +33,7 @@ simtime_t LinkFailure::scheduleDynamics() {
 	string linkSelection = par("linkSelection").stdstringValue();
 	unsigned int minDegree = par("minDegree").intValue();
 	unsigned int maxDegree = par("maxDegree").intValue();
-	map<nodeid_t, unsigned long> nodeDegrees;
+	std::map<nodeid_t, unsigned long> nodeDegrees;
 	unsigned int scheduledFailures = 0;
 
 	if (linkSelection == "none") return simTime() + period;
@@ -56,9 +55,9 @@ simtime_t LinkFailure::scheduleDynamics() {
 
 		if (linkSelection == "degreeRange") {
 			// select numLinksFail links connected to a node with degree in the range [minDegree, maxDegree]
-			map<nodeid_t, unsigned long> nodesInDegreeRange;
-			map<nodeid_t, unsigned long>::iterator it;
-			vector<nodeid_t> neighbors;
+			std::map<nodeid_t, unsigned long> nodesInDegreeRange;
+			std::map<nodeid_t, unsigned long>::iterator it;
+			std::vector<nodeid_t> neighbors;
 
 			// select nodes within degree range
 			for (it = nodeDegrees.begin(); it != nodeDegrees.end(); it++) {
@@ -71,7 +70,7 @@ simtime_t LinkFailure::scheduleDynamics() {
 			ntop.getNeighborNodeIDs(source, neighbors);
 			destination = neighbors[intuniform(0, neighbors.size() - 1)];
 		} else if (linkSelection == "random") {
-			vector<nodeid_t> neighbors;
+			std::vector<nodeid_t> neighbors;
 
 			source = getTopology().getRandomNode(getRNG(0));
 			ntop.getNeighborNodeIDs(source, neighbors);
