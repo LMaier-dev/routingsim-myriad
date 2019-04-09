@@ -208,10 +208,16 @@ void Statistics::initialize(int stage) {
 		mulStretch = new cHistogram("stretchMultiplicative");
 		mulStretch->setRange(1.0,64.0);
 		mulStretch->setNumBinsHint(1024);
-		scheduleAt(simTime() + samplingInterval, samplingTimer);
+		simtime_t schedTime;
+		if(simTime() >= getSimulation()->getWarmupPeriod())
+			schedTime = simTime() + samplingInterval;
+		else
+			shedTime = getSimulation()->getWarmupPeriod();
+		scheduleAt(schedTime, samplingTimer);
 	}
 	if (stage==3)
-		sample();
+		if(simTime() >= getSimulation()->getWarmupPeriod())
+			sample();
 }
 
 void Statistics::finish() {
