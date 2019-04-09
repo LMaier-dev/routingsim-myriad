@@ -78,7 +78,7 @@ class R2Kademlia : public RPCProtocol, public KadPolicy, public StatisticSample
 	 * This does not make any routing decision.
 	 */
 	void forwardPacket(KadPacket_p packet, NodePkt_p nodePkt);
-	/// sends a recieved packet again after the source route was manipulated
+	/// sends a received packet again after the source route was manipulated
 	void resendPacket(KadPacket_p packet);
 	/// routes a packet to a neighbor based on the source route in the packet
 	void sendPacket(KadPacket_p packet) override;
@@ -139,7 +139,7 @@ private:
 
 	/** @name private helpers */
 	//@{
-	/// does statistics on recieved packet
+	/// does statistics on received packet
 	void countRecieved(KadPacket& packet);
 	/// does statistics on dropped packet
 	void countDropped(KadPacket& packet, const OverlayKey& target);
@@ -153,14 +153,14 @@ private:
 	 * Tries to cast packet to type T.
 	 * If this succeeds, the method handlePacket(T) is called, the given pointer
 	 * is invalidated and we return true.
-	 * If the cast fails, nothing happends and we return false.
+	 * If the cast fails, nothing happens and we return false.
 	 */
 	template<typename T>
 	bool handleIfFitting(KadPacket_p& packet);
 	kad_path concatViaPath(const kad_path& viaPath, const OverlayKey& viaKey, const kad_path& path);
 	//@}
 
-	/** @name callbacks for rpc calls */
+	/** @name callback functions for RPC calls */
 	//@{
 	bool handleProbeResponse(KadPacket_p answer, RPCState& rpcState);
 	bool handleQueryRouteResponse(KadPacket_p answer, RPCState& rpcState);

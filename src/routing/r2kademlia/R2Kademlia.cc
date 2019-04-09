@@ -101,18 +101,18 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	if (packet->hasRemainingHops()){
 		// we are not the recipient
 		if (pathSnooping) {
-			//TODO optimisation use isPathInteresting
+			//TODO optimization use isPathInteresting
 			routingTable.addPath(packet->getSource(), packet->reversePath(packet->getPath(1, packet->getProgress())));
 			routingTable.addPath(packet->getTarget(), packet->getPath(packet->getProgress()+1, packet->getRouteArraySize()-1));
 		}
-		//TODO learn about failiures from passing packets
+		//TODO learn about failures from passing packets
 		forwardPacket(std::move(packet), std::move(pkt));
 		return;
 	}
-	else { // no hops left, packet is adressed to me
+	else { // no hops left, packet is addressed to me
 		packet->setControlInfo(pkt.release());
 		// learn route from packet
-		//TODO optimisation use isPathInteresting
+		//TODO optimization use isPathInteresting
 		routingTable.addPath(packet->getSource(), packet->reversePath(packet->getIntermediatePath())) ;
 
 		// these types may forward packets, so they count themselves
@@ -153,7 +153,7 @@ void R2Kademlia::reset() {
 }
 
 void R2Kademlia::handlePacket(KadHello_p packet) {
-	EV << "recieved hello packet from " << packet->getSourceId() << endl;
+	EV << "received hello packet from " << packet->getSourceId() << endl;
 	neighborTable.addNeighbor(packet->getSourceId(), packet->getSource());
 	EV_TRACE << "neighbor table: "<< neighborTable << endl;
 	routingTable.addPath(packet->getSource(), kad_path());
@@ -225,7 +225,7 @@ const KadContact& R2Kademlia::chooseNextHop(const KadContactList& contacts, cons
 	}
 }
 
-// -------------------- rpc methods ---------------------------
+// -------------------- RPC methods ---------------------------
 
 
 // PING
@@ -261,7 +261,7 @@ void R2Kademlia::sendGetNeighbors(KadContact_p contact)
 }
 
 void R2Kademlia::handlePacket(std::unique_ptr<KadQueryRouteReq> packet) {
-	EV_TRACE << "recieved KadQueryRouteRsp from " << packet->getSource() << endl;
+	EV_TRACE << "received KadQueryRouteRsp from " << packet->getSource() << endl;
 	ASSERT(packet->getNeighborhood() == 1);
 	ASSERT(!packet->getContactsOnly());
 	auto response = makeAnswer<KadQueryRouteRsp>(*packet);
@@ -277,7 +277,7 @@ bool R2Kademlia::handleQueryRouteResponse(KadPacket_p answer, RPCState& rpcState
 {
 	if (rpcState.status != RPC_SUCCESS) return true;
 	auto response = safe_packet_cast<KadQueryRouteRsp>(answer);
-	EV_TRACE << "recieved " << response->getContactArraySize() << " neighbors from " << response->getSource().toString().substr(0, 6) << endl;
+	EV_TRACE << "received " << response->getContactArraySize() << " neighbors from " << response->getSource().toString().substr(0, 6) << endl;
 	readRTableRsp(std::move(response));
 	return true;
 }
@@ -312,16 +312,17 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 			else
 				contacts.erase(contacts.begin());
 		}
-		//TODO: we should check if any contacts (not just front) are close enough
+		//TODO optimization: we should check if any contacts (not just front) are close enough
 		if ((contacts.front()->getKey() ^ query) < (myOverlayKey ^ query)
 				and packet->getRouteArraySize() + 1 + contacts.front()->getPathLength() < hopLimit) {
 			// we have found a closer contact that is close enough
 			// => forward request
 			const KadContact& contact = chooseNextHop(contacts, query, packet->getSource());
-			EV_TRACE << "KadFindNodeReq revieved query: " << packet->getQuery() << endl << " next hop is " << contact << endl;
+			EV_TRACE << "KadFindNodeReq received query: " << packet->getQuery() << endl << " next hop is " << contact << endl;
 			ASSERT((contact.getKey() ^ query).log_2() <= (myOverlayKey ^ query).log_2());
-			if((contact.getKey() ^ query).log_2() <= (myOverlayKey ^ query).log_2())
+			if((contact.getKey() ^ query).log_2() <= (myOverlayKey ^ query).log_2()) {
 				EV_WARN << "no prefix progress made" << endl;
+			}
 			ASSERT((contact.getKey() ^ query) < (myOverlayKey ^ query));
 			packet->appendRoute(contact);
 			ASSERT(packet->getRouteArraySize() <= hopLimit);
@@ -338,7 +339,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 	auto answer = makeAnswer<KadFindNodeRsp>(*packet);
 	fillRTableRsp(*answer, contacts);
 	countRecieved(*packet);
-	EV_TRACE << "KadFindNodeReq revieved query: " << packet->getQuery() << " answering with list size" << contacts.size() << endl;
+	EV_TRACE << "KadFindNodeReq received query: " << packet->getQuery() << " answering with list size" << contacts.size() << endl;
 	sendPacket(std::move(answer));
 }
 
@@ -346,7 +347,7 @@ bool R2Kademlia::handleFindNodeResponse(KadPacket_p answer_, RPCState& rpcState)
 	if (rpcState.status != RPC_SUCCESS) return true;
 	auto answer = safe_packet_cast<KadFindNodeRsp>(answer_);
 	ASSERT(answer->getContactArraySize() == answer->getPathArraySize());
-	EV_TRACE << "recieved FindNodeRsp for " << check_and_cast<KadFindNodeReq *>(rpcState.original_packet.get())->getQuery();
+	EV_TRACE << "received FindNodeRsp for " << check_and_cast<KadFindNodeReq *>(rpcState.original_packet.get())->getQuery();
 	EV_TRACE << " from " << answer->getSource() << " with " << answer->getContactArraySize() << " contacts"<< endl;
 	readRTableRsp(std::move(answer));
 	return true;
@@ -477,7 +478,7 @@ void R2Kademlia::addTimer(simtime_t duration, std::function<void()> callback) {
 	timerMsg.push_back(msg);
 	simtime_t initialOffset = uniform(0, duration);
 	scheduleAt(simTime() + duration + initialOffset, msg);
-	EV_TRACE << "sheduled timer msg " << msg << " with duration " << duration <<  endl;
+	EV_TRACE << "scheduled timer message " << msg << " with duration " << duration <<  endl;
 }
 
 void R2Kademlia::doProbe() {
