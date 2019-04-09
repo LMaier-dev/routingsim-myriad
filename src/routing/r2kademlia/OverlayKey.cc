@@ -26,8 +26,6 @@
 #include <omnetpp.h>
 #include "OverlayKey.h"
 
-using namespace std;
-
 uint32_t OverlayKey::keyLength = MAX_KEYLENGTH;
 
 // TODO: replace both commands below with simpler macros without conditionals
@@ -79,7 +77,7 @@ OverlayKey::OverlayKey(const unsigned char* buf, uint32_t size)
 {
 	int trimSize, offset;
 	clear();
-	trimSize = (int)min((uint32_t) (aSize * sizeof(mp_limb_t)), size);
+	trimSize = (int)std::min((uint32_t) (aSize * sizeof(mp_limb_t)), size);
 	offset = aSize * sizeof(mp_limb_t) - trimSize;
 	memcpy( ((char*)key) + offset, buf, trimSize);
 	trim();
@@ -92,7 +90,7 @@ OverlayKey::OverlayKey(const std::string& str, uint32_t base)
 		throw cRuntimeError("OverlayKey::OverlayKey(): Invalid base!");
 	}
 
-	string s(str);
+	std::string s(str);
 	clear();
 
 	if(s == "<unspec>") { // for deserializing
@@ -124,7 +122,7 @@ OverlayKey::OverlayKey(const OverlayKey& rhs)
 	(*this) = rhs;
 }
 
-// default destructur
+// default destructor
 OverlayKey::~OverlayKey() { }
 
 //--------------------------------------------------------------------
@@ -162,7 +160,7 @@ bool OverlayKey::isUnspecified() const
 	return isUnspec;
 }
 
-bool OverlayKey::isValid(string str)
+bool OverlayKey::isValid(std::string str)
 {
 	std::string s(str);
 
