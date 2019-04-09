@@ -51,3 +51,6 @@ plots/*
 simulations/topologies/*
 */__pycache__/*
 *.pyc
+.cproject
+.buildconfig
+*.bak
