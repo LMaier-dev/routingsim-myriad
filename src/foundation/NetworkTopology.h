@@ -122,6 +122,7 @@ private:
 
 	/// link between the graph and the omnet network
 	boost::unordered_map<nodeid_t, cModule *> moduleMap;
+	//TODO why dont we use std::map
 
 	/// Bool to keep track of whether the topology was changed since last
 	/// shortest path calculation; needs to be set to true by topology-
@@ -283,6 +284,8 @@ public:
 	void resetNode(nodeid_t n);
 
 	void setShortestPathCalculationMode(string mode);
+
+	inline Node *getNodeModule(nodeid_t nid) { return Node::getNode(moduleMap[nid]); }
 };
 
 } // namespace RoutingSim
