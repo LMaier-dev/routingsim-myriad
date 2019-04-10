@@ -19,6 +19,8 @@
 #include <boost/bimap.hpp>
 #include "foundation.h"
 #include "OverlayKey.h"
+#include "R2Kademlia.h"
+#include "foundation/NetworkManager.h"
 
 namespace routingsim {
 
@@ -32,9 +34,16 @@ protected:
 	virtual void initialize() override;
 	virtual void finish() override;
 	virtual void handleMessage(cMessage *msg) override;
+	void recordStatistics();
 
 private:
 	boost::bimap<OverlayKey, nodeid_t> nodes;
+
+private:
+	R2Kademlia& getR2Kademlia(Node* nodeMod);
+	inline R2Kademlia& getR2Kademlia(nodeid_t nid) { return getR2Kademlia(getNetworkManager()->getTopology().getNodeModule(nid)); }
+	inline R2Kademlia& getR2Kademlia(const OverlayKey& key) { return getR2Kademlia(getNodeId(key)); }
+
 
 public:
 

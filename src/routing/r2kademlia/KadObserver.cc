@@ -32,6 +32,8 @@ void KadObserver::initialize() {
 }
 
 void KadObserver::finish() {
+	recordStatistics();
+
 	nodes.clear();
 	ASSERT(observer == this);
 	observer = NULL;
@@ -39,6 +41,33 @@ void KadObserver::finish() {
 
 void KadObserver::handleMessage(cMessage *msg) {
 	delete msg;
+}
+
+void KadObserver::recordStatistics() {
+	std::set<nodeid_t> nodeSample{};
+	//TODO actually sample
+	for (auto pair : nodes.right)
+		nodeSample.insert(pair.first);
+	cHistogram forwardedPackets{"forwardedPackets"};
+	cHistogram nodeDegrees{"nodeDegrees"};
+	cHistogram contacts{"routingTableContacts"};
+	NetworkTopology& topo = getNetworkManager()->getTopology();
+	for (nodeid_t nid : nodeSample) {
+		R2Kademlia& kad = getR2Kademlia(nid);
+		forwardedPackets.collect(kad.getForwardedPackets());
+		nodeDegrees.collect(topo.getNodeDegree(nid));
+		contacts.collect(kad.getRoutingTable().getNumContacts());
+	}
+	forwardedPackets.record();
+	nodeDegrees.record();
+	contacts.record();
+	recordScalar("simTime", simTime());
+}
+
+R2Kademlia& KadObserver::getR2Kademlia(Node* nodeMod) {
+	cGate* gate = nodeMod->gate("toProtocols$o", 0);
+	ASSERT(gate->isConnected());
+	return *check_and_cast<R2Kademlia *>(gate->getPathEndGate()->getOwnerModule());
 }
 
 void KadObserver::registerUp(const OverlayKey& key, nodeid_t owner) {
