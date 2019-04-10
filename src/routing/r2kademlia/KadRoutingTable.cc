@@ -44,7 +44,7 @@ void KadRoutingTable::init(const OverlayKey& myKey, KadPolicy* policy,
 }
 
 
-size_type KadRoutingTable::getBucketIndex(const OverlayKey& key)
+size_type KadRoutingTable::getBucketIndex(const OverlayKey& key) const
 {
 	// based on OverSim Kademlia.cc
 	// Copyright (C) 2006 Institut fuer Telematik, Universitaet Karlsruhe (TH)
@@ -81,7 +81,7 @@ void KadRoutingTable::addPath(const OverlayKey& key, kad_path path)
 		// find other duplicates
 		simplifyPath(path);
 	}
-	KadContact_p contact = getContact(key);
+	KadContact *contact = getContactInternal(key);
 	if (contact) {
 		// contact is known
 		if (contact->getPathLength() > path.size()) {
@@ -102,7 +102,7 @@ void KadRoutingTable::addPath(const OverlayKey& key, const kad_path& path, const
 		addPath(key, concatViaPath(viaPath, path));
 		return;
 	}
-	KadContact_p contact = getContact(key);
+	KadContact *contact = getContactInternal(key);
 	if (contact) {
 		// contact is known
 		if (contact->getPathLength() > path.size() + viaPath.size()) {
@@ -195,7 +195,7 @@ void KadRoutingTable::splitLastBucket()
 		getBucket(contact.get()).contacts.push_back(std::move(contact));
 }
 
-KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_type n)
+KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_type n) const
 {
 	KadContactList result{};
 	// find correct bucket and copy contents
@@ -237,30 +237,30 @@ KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_t
 	return result;
 }
 
-size_type KadRoutingTable::getNumContacts()
+size_type KadRoutingTable::getNumContacts() const
 {
 	size_type sum = 0;
-	for (KadBucket& b : buckets)
+	for (const KadBucket& b : buckets)
 		sum += b.size();
 	return sum;
 }
 
-double KadRoutingTable::getAveragePathLength()
+double KadRoutingTable::getAveragePathLength() const
 {
 	uint count = 0;
 	double sum = 0;
-	for(KadBucket& b : buckets)
-		for(auto& contact : b.contacts) {
+	for (const KadBucket& b : buckets)
+		for (auto& contact : b.contacts) {
 			sum += contact->getPathLength();
 			count++;
 		}
 	return count == 0 ? 0.0 : sum / count;
 }
-double KadRoutingTable::getAveragePathStretch()
+double KadRoutingTable::getAveragePathStretch() const
 {
 	uint count = 0;
 	double sum = 0;
-	for(KadBucket& b : buckets)
+	for (const KadBucket& b : buckets)
 		for(auto& contact : b.contacts) {
 			sum += (contact->getPathLength()+1) / getKadObserver().getPhysicalDistance(myKey, contact->getKey());
 			count++;
@@ -280,18 +280,13 @@ bool KadRoutingTable::removeContact(const OverlayKey& key)
 	return result;
 }
 
-KadBucket& KadRoutingTable::getBucket(const OverlayKey& key)
-{
-	size_type index = getBucketIndex(key);
-	return buckets.at(index);
-}
 
-KadContact_p KadRoutingTable::getContact(const OverlayKey& key)
+KadContact_p KadRoutingTable::getContact(const OverlayKey& key) const
 {
 	return getBucket(key).getContact(key);
 }
 
-kad_path KadRoutingTable::concatViaPath(const kad_path& viaPath, const kad_path& path)
+kad_path KadRoutingTable::concatViaPath(const kad_path& viaPath, const kad_path& path) const
 {
 	kad_path newPath{};
 	auto left = viaPath.end();
@@ -306,7 +301,7 @@ kad_path KadRoutingTable::concatViaPath(const kad_path& viaPath, const kad_path&
 }
 
 //----------- KadBucket --------------
-KadContact_p KadBucket::getContact(const OverlayKey& key)
+KadContact *KadBucket::getContact(const OverlayKey& key)
 {
 	auto it = findContact(key);
 	if (it != contacts.end())

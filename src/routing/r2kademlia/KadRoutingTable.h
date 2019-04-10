@@ -31,7 +31,7 @@ namespace routingsim {
 class KadRoutingTable;
 
 // contact type definitions
-using KadContact_p = KadContact*;
+using KadContact_p = const KadContact*;
 using KadContactList = std::vector<KadContact_p>;
 
 class KadBucket
@@ -39,13 +39,15 @@ class KadBucket
 	friend KadRoutingTable;
 public:
 	/** returns the contact if found, nullptr otherwise */
-	KadContact_p getContact(const OverlayKey& key);
+	KadContact *getContact(const OverlayKey& key);
+	KadContact_p getContact(const OverlayKey& key) const
+	{ return const_cast<KadBucket*>(this)->getContact(key); }
 	/** tries to remove the contact, returns true if found */
 	inline bool removeContact(const OverlayKey& key);
 	/** returns true if the contact list is empty */
 	inline bool empty() { return contacts.empty(); }
 	/** returns the size of the contact list */
-	inline size_type size() { return contacts.size(); }
+	inline size_type size() const { return contacts.size(); }
 	/// Common stdc++ console output method
 	friend std::ostream& operator<<(std::ostream& os, const KadBucket& b) {
 		return os << b.contacts.size() << " contacts";
@@ -106,31 +108,31 @@ public:
 	 * Returns the contact with the specified key.
 	 * Returns a nullptr if the contact was not found.
 	 */
-	KadContact_p getContact(const OverlayKey& key);
+	KadContact_p getContact(const OverlayKey& key) const;
 	/**
 	 * Returns a list of n contacts that are closest to the given key if possible.
 	 * If there are not enough contacts found, the list is shorter.
 	 */
-	KadContactList getClosestContacts(const OverlayKey& key, size_type n);
+	KadContactList getClosestContacts(const OverlayKey& key, size_type n) const;
 	/// returns the number of contacts in buckets
-	size_type getNumContacts();
+	size_type getNumContacts() const;
 	/// returns the number of buckets currently held
-	inline size_type getNumBuckets() { return buckets.size(); }
+	inline size_type getNumBuckets() const { return buckets.size(); }
 	/// the position of the bit that defines the lowest bucket
-	inline size_type getDepth() { return std::min<size_type>(ceil(getNumBuckets() / getLevelWidth()) * accelerationFactor, myKey.getLength()); }
+	inline size_type getDepth() const { return std::min<size_type>(ceil(getNumBuckets() / getLevelWidth()) * accelerationFactor, myKey.getLength()); }
 	/// calculates the average path length of the known contacts
-	double getAveragePathLength();
+	double getAveragePathLength() const;
 	/// calculates the average stretch of the known contacts
-	double getAveragePathStretch();
+	double getAveragePathStretch() const;
 	/// returns the maximum size of a bucket, i.e. the size after which a bucket is split
 	inline size_type getSplitSize() { return bucketSize; }
 	/// returns true if the key is known, i.e. there is a contact present
 	inline bool isKnown(const OverlayKey& key) { return getContact(key) != nullptr; }
 
 	/// returns the distance between the two keys
-	inline OverlayKey distance(const OverlayKey& a, const OverlayKey& b) { return a ^ b; }
+	inline OverlayKey distance(const OverlayKey& a, const OverlayKey& b) const { return a ^ b; }
 	/// returns the distance of the given key to my key
-	inline OverlayKey distance(const OverlayKey& key) { return key ^ myKey; }
+	inline OverlayKey distance(const OverlayKey& key) const { return key ^ myKey; }
 
 protected:
 	///
@@ -140,28 +142,31 @@ protected:
 	/** @name bucket access */
 	//@{
 	/** returns the index of the bucket corresponding to the given overlay key. */
-	size_type getBucketIndex(const OverlayKey& key);
+	size_type getBucketIndex(const OverlayKey& key) const;
 	/** splits the deepest bucket */
 	void splitLastBucket();
 	/** returns the index of the bucket corresponding to the given contact */
-	inline size_type getBucketIndex(KadContact_p contact) { return getBucketIndex(contact->getKey());}
+	inline size_type getBucketIndex(KadContact_p contact) const { return getBucketIndex(contact->getKey());}
 
 	/** returns the bucket corresponding to the given overlay key */
-	KadBucket& getBucket(const OverlayKey& key);
+	inline KadBucket& getBucket(const OverlayKey& key) { return buckets.at(getBucketIndex(key)); }
+	inline const KadBucket& getBucket(const OverlayKey& key) const { return buckets.at(getBucketIndex(key)); }
 	/** returns the bucket corresponding to the given contact */
 	inline KadBucket& getBucket(KadContact_p contact) { return getBucket(contact->getKey()); }
 	/** returns true if we could split this bucket */
-	inline bool isSplittable(KadBucket& bucket) { return &bucket == &buckets.back() && buckets.size() < getMaxNumBuckets(); }
+	inline bool isSplittable(KadBucket& bucket) const { return &bucket == &buckets.back() && buckets.size() < getMaxNumBuckets(); }
 
 	/** returns the width of a level in the accelerated lookup tree */
-	inline size_type getLevelWidth() { return (1 << accelerationFactor) - 1; }
+	inline size_type getLevelWidth() const { return (1 << accelerationFactor) - 1; }
 
 	/** returns the theoretical number of buckets that we could have */
-	inline size_type getMaxNumBuckets() { return myKey.getLength()/accelerationFactor * getLevelWidth(); }
+	inline size_type getMaxNumBuckets() const { return myKey.getLength()/accelerationFactor * getLevelWidth(); }
 
 	/** returns the index of the bucket that is the first on the level of the given bucket */
-	inline size_type getFirstOnBucketLevel(size_type index) { return index - (index % getLevelWidth()); }
+	inline size_type getFirstOnBucketLevel(size_type index) const { return index - (index % getLevelWidth()); }
 	//@}
+
+	KadContact *getContactInternal(const OverlayKey& key) { return const_cast<KadContact*>(getContact(key)); }
 
 private:
 	/**
@@ -180,13 +185,13 @@ private:
 
 	//------ private helper functions -------
 	/** copies all contacts from one contact list to the end of the other contact list*/
-	void inline copyContacts(std::vector<std::unique_ptr<KadContact>>& source, KadContactList& target) {
+	static inline void copyContacts(const std::vector<std::unique_ptr<KadContact>>& source, KadContactList& target) {
 		target.reserve(target.size() + source.size());
 		for(auto it = source.begin(); it != source.end(); it++)
 			target.push_back(it->get());
 	}
 	/**  */
-	kad_path concatViaPath(const kad_path& viaPath, const kad_path& path);
+	kad_path concatViaPath(const kad_path& viaPath, const kad_path& path) const;
 };
 
 } //namespace
