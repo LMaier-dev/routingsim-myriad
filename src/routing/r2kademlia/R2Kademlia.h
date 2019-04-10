@@ -108,6 +108,18 @@ public:
 	virtual void onBucketRefresh(KadBucket& bucket) override;
 	virtual void onNewContact(KadContact_p contact) override;
 	//@}
+
+	/** @name statistics functions used by statistics module */
+	//@{
+	const KadRoutingTable& getRoutingTable() const { return routingTable; }
+	const OverlayKey& getOverlayKey() const { return myOverlayKey; }
+	uint getForwardedPackets() const { return forwardedPackets; }
+	uint getDroppedPackets() const { return droppedPackets; }
+	uint getSentPackets() const { return sentPackets; }
+	uint getRecievedPackets() const { return recievedPackets; }
+
+	//@}
+
 private:
 	/** @name message generation */
 	//@{
@@ -205,8 +217,6 @@ private:
 	std::vector<std::function<void()>> timerCallback;
 	std::vector<cMessage *> timerMsg;
 	//@}
-private:
-	class PingRPCState;
 };
 
 /**
