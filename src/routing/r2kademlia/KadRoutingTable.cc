@@ -51,27 +51,28 @@ void KadRoutingTable::init(const OverlayKey& myKey, KadPolicy* policy,
 
 size_type KadRoutingTable::getBucketIndex(const OverlayKey& key) const
 {
-	// based on OverSim Kademlia.cc
-	// Copyright (C) 2006 Institut fuer Telematik, Universitaet Karlsruhe (TH)
-	// licenced GPLv2 or later
-	// calculate XOR distance
 	OverlayKey delta = key ^ myKey;
-	// find first subinteger that is not zero...
-	int i = key.getLength() - accelerationFactor;
-	for (; i >= 0 && delta.getBitRange(i, accelerationFactor) == 0;
-		i -= accelerationFactor);
+	uint prefixLen = delta.sharedPrefixLength(0, accelerationFactor);
+
+	// i is now the index of the LSB of the first non zero sub integer in delta
+	int i = delta.getLength() - prefixLen*getLevelWidth() - 1;
 	if (i < 0) // this is my key
 		return buckets.size() - 1;
-	// i is now the index of the LSB of the first non zero subinteger
-	// we reverse the bucket order. bucket 0 is the farthest one from my id.
-	// for accelerationFactor = 1 this is just (key.getLength() - i - 1)
-	// levelId = (keylen - i) / accelerationFactor - 1
+	ASSERT(delta.getBitRange(i, accelerationFactor) != 0);
+	ASSERT(i + accelerationFactor >= delta.getLength() or
+			delta.getBitRange(i + accelerationFactor, accelerationFactor) == 0);
+
+	// bucket 0 is the farthest one from my id.
+	// the prefixLen denotes depth of the level
+	// levelId = prefixLen
 	// levelBaseIndex =  levelId * levelWidth
 	// levelOffset = levelWidth - subint
 	// index = levelBaseIndex + levelOffset
-	// => index = (keylen - i)/accelerationFactor * levelWidth - subint
-	size_type index = (key.getLength() - i)/accelerationFactor * getLevelWidth()- delta.getBitRange(i, accelerationFactor);
+	// => index = (prefixLen+1) * levelWidth - subint
+	size_type index = (prefixLen+1)*getLevelWidth() - delta.getBitRange(i, accelerationFactor);
 	ASSERT(index <= getMaxNumBuckets());
+	// old calculation formula, just for checking...
+	ASSERT(index == (key.getLength() - i)/accelerationFactor * getLevelWidth()- delta.getBitRange(i, accelerationFactor));
 	return std::min(buckets.size()-1, index);
 }
 
