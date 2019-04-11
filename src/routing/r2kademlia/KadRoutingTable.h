@@ -154,13 +154,13 @@ protected:
 	/** returns the bucket corresponding to the given contact */
 	inline KadBucket& getBucket(KadContact_p contact) { return getBucket(contact->getKey()); }
 	/** returns true if we could split this bucket */
-	inline bool isSplittable(KadBucket& bucket) const { return &bucket == &buckets.back() && buckets.size() < getMaxNumBuckets(); }
+	inline bool isSplittable(KadBucket& bucket) const { return bucket.size() >= bucketSize and &bucket == &buckets.back() and buckets.size() < getMaxNumBuckets(); }
 
 	/** returns the width of a level in the accelerated lookup tree */
 	inline size_type getLevelWidth() const { return (1 << accelerationFactor) - 1; }
 
 	/** returns the theoretical number of buckets that we could have */
-	inline size_type getMaxNumBuckets() const { return myKey.getLength()/accelerationFactor * getLevelWidth(); }
+	inline size_type getMaxNumBuckets() const { return maxNumBuckets; }
 
 	/** returns the index of the bucket that is the first on the level of the given bucket */
 	inline size_type getFirstOnBucketLevel(size_type index) const { return index - (index % getLevelWidth()); }
@@ -174,6 +174,7 @@ private:
 	 * called "b" in research papers.
 	 */
 	size_type accelerationFactor;
+	size_type maxNumBuckets;
 	/** the key of this overlay node */
 	OverlayKey myKey = OverlayKey::UNSPECIFIED_KEY;
 	/** max size of the buckets, called "k" in research papers (k-Buckets) */

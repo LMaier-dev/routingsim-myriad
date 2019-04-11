@@ -40,6 +40,11 @@ void KadRoutingTable::init(const OverlayKey& myKey, KadPolicy* policy,
 	//TODO optimization: implement adaptively
 	buckets.reserve(5);
 	buckets.emplace_back();
+	maxNumBuckets = myKey.getLength()/accelerationFactor * getLevelWidth();
+	// if the length is not divisible by the acceleration factor,
+	// we add a possible bucket for the remainder on the end
+	if ((myKey.getLength() % accelerationFactor) != 0)
+			maxNumBuckets++;
 	WATCH_VECTOR(buckets);
 }
 
@@ -132,18 +137,18 @@ void KadRoutingTable::simplifyPath(kad_path& path)
 void KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path)
 {
 	ASSERT(key != myKey);
-	auto contact = std::make_unique<KadContact>(key, std::move(path));
 	KadBucket& bucket = getBucket(key);
 	ASSERT(!bucket.getContact(key));
-	if(bucket.size() < bucketSize) {
-		bucket.contacts.push_back(std::move(contact));
+	if (isSplittable(bucket)) {
+		splitLastBucket();
+		// we recurse to get the new bucket after the split
+		handleNewContact(key, std::move(path));
 		return;
 	}
+	auto contact = std::make_unique<KadContact>(key, std::move(path));
+	if (bucket.size() < bucketSize)
+		bucket.contacts.push_back(std::move(contact));
 	else {
-		if (&bucket == &buckets.back()) {
-			splitLastBucket();
-			return;
-		}
 		if (not proximityNeighborSelection) {
 			EV_INFO << "dropping new contact " << *contact << endl;
 			return;
@@ -159,39 +164,32 @@ void KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path)
 			}
 		}
 		if (result != contacts.end()) {
-			EV_INFO << "replacing contact, new: " << *contact << " old: " << **result << endl;
+			EV_DEBUG << "replacing contact, new: " << *contact << " old: " << **result << endl;
 			*result = std::move(contact);
 			policy->onNewContact(result->get());
 		}
 		else {
-			// drop contact
-			EV_INFO << "dropping new contact " << *contact << endl;
+			EV_TRACE << "dropping new contact " << *contact << endl;
 		}
 	}
 }
 
 void KadRoutingTable::splitLastBucket()
 {
-	EV << "splitting bucket" << endl;
+	EV_DEBUG << "splitting bucket" << endl;
+	ASSERT(isSplittable(buckets.back()));
 	ASSERT(buckets.size() < getMaxNumBuckets());
 	KadBucket oldBucket{};
 	std::swap(oldBucket, buckets.back());
 	ASSERT(oldBucket.size() >= bucketSize);
 	// create new buckets
-	size_type newSize = buckets.size() + getLevelWidth();
-	if (newSize > getMaxNumBuckets()) {
-		ASSERT(newSize == getMaxNumBuckets()-1);
-		newSize--;
-		// this happens when we create the last level
-		// then we do not need a to create a last bucket to catch contacts that
-		// need to be resorted later
-		EV << "reached full routing table depth" << endl;
+	size_type newSize = std::min(buckets.size() + getLevelWidth(), getMaxNumBuckets());
+	if (newSize == getMaxNumBuckets()) {
+		EV_INFO << "reached full routing table depth" << endl;
 	}
-	buckets.reserve(newSize);
-	while(buckets.size() < newSize)
-		buckets.emplace_back();
+	buckets.resize(newSize);
 	// sort contacts into new buckets
-	for(std::unique_ptr<KadContact>& contact : oldBucket.contacts)
+	for (auto& contact : oldBucket.contacts)
 		getBucket(contact.get()).contacts.push_back(std::move(contact));
 }
 
