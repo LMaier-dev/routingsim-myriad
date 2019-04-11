@@ -185,12 +185,6 @@ private:
 	bool pathSimplification;
 
 	//------ private helper functions -------
-	/** copies all contacts from one contact list to the end of the other contact list*/
-	static inline void copyContacts(const std::vector<std::unique_ptr<KadContact>>& source, KadContactList& target) {
-		target.reserve(target.size() + source.size());
-		for(auto it = source.begin(); it != source.end(); it++)
-			target.push_back(it->get());
-	}
 	/**  */
 	kad_path concatViaPath(const kad_path& viaPath, const kad_path& path) const;
 };

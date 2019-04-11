@@ -193,32 +193,43 @@ void KadRoutingTable::splitLastBucket()
 		getBucket(contact.get()).contacts.push_back(std::move(contact));
 }
 
+/** copies all contacts from one contact list to the end of the other contact list*/
+inline void copyContacts(const std::vector<std::unique_ptr<KadContact>>& source, KadContactList& target) {
+	target.reserve(target.size() + source.size());
+	for(auto it = source.begin(); it != source.end(); it++)
+		target.push_back(it->get());
+}
+
 KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_type n) const
 {
 	KadContactList result{};
-	// find correct bucket and copy contents
+	result.reserve(n);
 	size_type index = getBucketIndex(key);
 	auto bucket = buckets.begin() + index;
-	copyContacts(bucket->contacts, result);
-	if(result.size() < n){
+	if (bucket->size() >= n)
+		copyContacts(bucket->contacts, result);
+	else {
 		// not enough contacts in first bucket
 		// now we scan the level of the accelerated lookup
 		// and then we go down the tree
 		size_type firstOnLevelIndex = getFirstOnBucketLevel(index);
-		auto otherBucket = buckets.begin() + firstOnLevelIndex;
-		while(result.size() < n && otherBucket != buckets.end()) {
-			if (otherBucket != bucket)
-				copyContacts(otherBucket->contacts, result);
-			otherBucket++;
+		uint width = getLevelWidth();
+		auto level = buckets.begin() + firstOnLevelIndex;
+		for (; level < buckets.end() and result.size() < n; level+=width) {
+			if (level == buckets.end()-1)
+				copyContacts(level->contacts, result);
+			else // always insert the whole level
+				for (uint i = 0; i < width and level+i < buckets.end(); i++)
+					copyContacts(level[i].contacts, result);
 		}
-		otherBucket = buckets.begin() + firstOnLevelIndex;
 		// if we still do not have enough contacts, we go up the tree
+		auto otherBucket = buckets.begin() + firstOnLevelIndex;
 		while(result.size() < n && otherBucket != buckets.begin()) {
 			otherBucket--;
 			copyContacts(otherBucket->contacts, result);
 		}
 	}
-	// now we sort the keys
+	// now we sort the contacts
 	struct KadContactCompare{
 		const OverlayKey& key;
 		KadContactCompare(const OverlayKey& key) : key(key) {}
