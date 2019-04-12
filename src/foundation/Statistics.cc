@@ -17,22 +17,16 @@
 #include "StatisticSample.h"
 #include "NetworkManager.h"
 
-#include<boost/unordered_map.hpp>
-#include<boost/foreach.hpp>
 #include<boost/lexical_cast.hpp>
 #include<algorithm>
 #include<string>
 #include<omnetpp.h>
 
 namespace routingsim {
-
-using namespace std;
-using namespace boost;
-
 Define_Module(Statistics);
 
 static Statistics* stats = NULL;
-static boost::unordered_map<const char*, Statistics*> statsMap;
+static std::unordered_map<const char*, Statistics*> statsMap;
 
 // convenience method, used in Statistics::Value()
 cHistogram* getDensityHistogram(const char* name1, const char* name2, size_t size) {
@@ -218,13 +212,13 @@ void Statistics::initialize(int stage) {
 		else
 			scheduleAt(getSimulation()->getWarmupPeriod(), samplingTimer);
 	}
-	if (stage==3)
+	if (stage == 3)
 		if (simTime() >= getSimulation()->getWarmupPeriod())
 			sample();
 }
 
 void Statistics::finish() {
-	foreach( Values::value_type& value, values ) {
+	for (auto& value : values) {
 		value.second->finish(this);
 		delete value.second;
 	}
@@ -239,7 +233,6 @@ void Statistics::finish() {
 }
 
 Statistics::~Statistics() {
-	boost::unordered_map<const char*, Statistics*>::iterator it;
 	delete deliveryRatio;
 	delete messagesDeliveredVector;
 	delete messagesDroppedVector;
@@ -252,7 +245,7 @@ Statistics::~Statistics() {
 	delete mulStretch;
 
 	//delete all statistics and set to NULL
-	for (it=statsMap.begin(); it!= statsMap.end(); it++) {
+	for (auto it = statsMap.begin(); it != statsMap.end(); it++) {
 		if (it->second == this)
 			statsMap.erase(it);
 	}
@@ -280,8 +273,8 @@ void Statistics::sample() {
 	shortestPathMessagesDelivered = 0;
 	shortestPathMessagesDropped = 0;
 
-	foreach( StatisticSample* sample, samples )	sample->sampleStatistics(*this);
-	foreach( Values::value_type& value, values ) value.second->record(this);
+	for (StatisticSample* sample : samples)	sample->sampleStatistics(*this);
+	for (Values::value_type& value : values) value.second->record(this);
 }
 
 void Statistics::handleMessage(cMessage *msg) {
@@ -293,7 +286,7 @@ void Statistics::value(const char* name, double value, bool average) {
 	ASSERT(not std::isnan(value));
 	ASSERT(not std::isnan(average));
 	if (values.count(name) == 0)
-		values.insert(make_pair(name, new Value(name, samples.size())));
+		values.insert(std::make_pair(name, new Value(name, samples.size())));
 	values[name]->add(value, average);
 }
 
@@ -377,7 +370,7 @@ inline Statistics *createStats( const char* name = STATS_MAIN ) {
 Statistics& getStatistics( const char* name ) {
 	if (name != NULL) {
 		if (statsMap.count(name)==0)
-			statsMap.insert(make_pair(name, createStats(name)));
+			statsMap.insert(std::make_pair(name, createStats(name)));
 		return *statsMap[name];
 	}
 	if (name == NULL && stats == NULL) {

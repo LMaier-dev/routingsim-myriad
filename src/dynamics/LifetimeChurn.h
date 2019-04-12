@@ -42,7 +42,7 @@ private:
 		nodeid_t id;
 		simtime_t upagain;
 	};
-	typedef vector<node_state_t> state_t;
+	typedef std::vector<node_state_t> state_t;
 	state_t state;
 
 	double distributionFunction();

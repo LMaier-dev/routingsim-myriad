@@ -50,9 +50,9 @@ simtime_t CatastrophicFailure::scheduleDynamics() {
 	size_t numNodesFail = ((double) getTopology().getActiveNumberNodes() * fraction);
 	EV << "Scheduling " << numNodesFail << " nodes for catastrophic failure" << endl;
 
-	map<nodeid_t, unsigned long> nodeDegreeMap;
+	std::map<nodeid_t, unsigned long> nodeDegreeMap;
 	size_t nodeDegreeMapSize;
-	map<nodeid_t, unsigned long>::iterator ndit;
+	std::map<nodeid_t, unsigned long>::iterator ndit;
 
 	getTopology().getNodeDegrees(nodeDegreeMap);
 	for (ndit=nodeDegreeMap.begin(); ndit!=nodeDegreeMap.end();) {
@@ -72,7 +72,7 @@ simtime_t CatastrophicFailure::scheduleDynamics() {
 		EV << "Scheduling " << numNodesFail << " nodes for catastrophic failure" << endl;
 	}
 
-	for (size_t i = 0; i < min(numNodesFail, nodeDegreeMapSize); i++) {
+	for (size_t i = 0; i < std::min(numNodesFail, nodeDegreeMapSize); i++) {
 		size_t rnd = getRNG(0)->intRand(nodeDegreeMap.size());
 		std::advance(ndit=nodeDegreeMap.begin(), rnd);
 		nodeid_t rndnode = ndit->first;

@@ -53,7 +53,7 @@ private:
 	// rescheduling variables
 	double nodeFailureDue;
 	double linkFailureDue;
-	ofstream linkFailOut;
+	std::ofstream linkFailOut;
 
 protected:
 	virtual void initialize();

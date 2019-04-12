@@ -25,6 +25,7 @@ simple NetworkManager {
 	parameters:
 	    @display("i=block/network2;is=l");
 
+		//TODO this is not used!
         /// names of the modules inside a node
         string protocols;
 	    

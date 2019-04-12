@@ -28,7 +28,7 @@ void TemplateProtocol::onConnect( nodeid_t nid ) {
 }
 
 void TemplateProtocol::onDisconnect( nodeid_t nid ) {
-	cout << "Now I am disconnected from " << nid << endl;
+	EV << "Now I am disconnected from " << nid << endl;
 }
 
 void TemplateProtocol::onMessage( NodePkt_p pkt ) {
