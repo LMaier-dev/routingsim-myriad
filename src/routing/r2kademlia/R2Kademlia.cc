@@ -400,6 +400,17 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 		sendGetNeighbors(contact);
 }
 
+void R2Kademlia::recordScalars() {
+	recordScalar("forwardedPackets", forwardedPackets);
+	recordScalar("droppedPackets", droppedPackets);
+	recordScalar("sentPackets", sentPackets);
+	recordScalar("recievedPackets", recievedPackets);
+	recordScalar("routingTableContacts", routingTable.getNumContacts());
+	recordScalar("routingTableBuckets", routingTable.getNumBuckets());
+	recordScalar("routingTablePathLength", routingTable.getAveragePathLength());
+	recordScalar("routingTablePathStretch", routingTable.getAveragePathStretch());
+}
+
 // -------------------- private helper methods --------------------
 NodePkt_p R2Kademlia::makeHelloPacket()
 {

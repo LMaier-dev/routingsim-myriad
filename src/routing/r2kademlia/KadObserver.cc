@@ -57,6 +57,7 @@ void KadObserver::recordStatistics() {
 		forwardedPackets.collect(kad.getForwardedPackets());
 		nodeDegrees.collect(topo.getNodeDegree(nid));
 		contacts.collect(kad.getRoutingTable().getNumContacts());
+		kad.recordScalars();
 	}
 	forwardedPackets.record();
 	nodeDegrees.record();

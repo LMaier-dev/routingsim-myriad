@@ -117,6 +117,7 @@ public:
 	uint getDroppedPackets() const { return droppedPackets; }
 	uint getSentPackets() const { return sentPackets; }
 	uint getRecievedPackets() const { return recievedPackets; }
+	void recordScalars();
 
 	//@}
 
