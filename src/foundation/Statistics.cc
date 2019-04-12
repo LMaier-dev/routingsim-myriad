@@ -213,10 +213,14 @@ void Statistics::initialize(int stage) {
 		mulStretch = new cHistogram("stretchMultiplicative");
 		mulStretch->setRange(1.0,64.0);
 		mulStretch->setNumBinsHint(1024);
-		scheduleAt(simTime() + samplingInterval, samplingTimer);
+		if (simTime() >= getSimulation()->getWarmupPeriod())
+			scheduleAt(simTime() + samplingInterval, samplingTimer);
+		else
+			scheduleAt(getSimulation()->getWarmupPeriod(), samplingTimer);
 	}
 	if (stage==3)
-		sample();
+		if (simTime() >= getSimulation()->getWarmupPeriod())
+			sample();
 }
 
 void Statistics::finish() {
@@ -302,6 +306,7 @@ void Statistics::addSample(StatisticSample* sample ) {
 }
 
 void Statistics::registerMessage( cMessage* msg ) {
+	if (simTime() < getSimulation()->getWarmupPeriod()) return;
 	msgs.insert(msg);
 	// save current context module for getting the source node later
 	msg->setContextPointer(getSimulation()->getContextModule());
@@ -313,13 +318,11 @@ void Statistics::dropMessage( cMessage* msg, nodeid_t dstNode ) {
 	// the context pointer is set in registerMessage
 	nodeid_t srcNode = Node::getNode(static_cast<cModule*>(msg->getContextPointer()))->getNodeId();
 
-	if (recordShortestPathDeliveryRatio) {
-		if (getNetworkManager()!=NULL) {
-			if (getNetworkManager()->getTopology().fullTopologyPathFailed(srcNode, dstNode)) {
-				shortestPathMessagesDropped++;
-			} else {
-				shortestPathMessagesDelivered++;
-			}
+	if (recordShortestPathDeliveryRatio and getNetworkManager() != NULL) {
+		if (getNetworkManager()->getTopology().fullTopologyPathFailed(srcNode, dstNode)) {
+			shortestPathMessagesDropped++;
+		} else {
+			shortestPathMessagesDelivered++;
 		}
 	}
 	messagesDropped++;
@@ -329,10 +332,7 @@ void Statistics::dropMessage( cMessage* msg, nodeid_t dstNode ) {
 const char* stretchStr="stretch";
 
 void Statistics::deliveredMessage( cMessage* msg, int hop_count ) {
-	if (msgs.count(msg)==0) {
-		EV_ERROR << "unregistered message delivered: " << msg << " - " <<  msg->getId() << endl;
-		return;
-	}
+	if (msgs.count(msg) == 0) return;
 	hopCount->collect(hop_count);
 	// the context pointer is set in registerMessage
 	nodeid_t srcNode = Node::getNode(static_cast<cModule*>(msg->getContextPointer()))->getNodeId();
