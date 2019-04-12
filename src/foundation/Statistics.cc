@@ -17,7 +17,6 @@
 #include "StatisticSample.h"
 #include "NetworkManager.h"
 
-#include<boost/foreach.hpp>
 #include<boost/lexical_cast.hpp>
 #include<algorithm>
 #include<string>
@@ -221,7 +220,7 @@ void Statistics::initialize(int stage) {
 }
 
 void Statistics::finish() {
-	foreach( Values::value_type& value, values ) {
+	for (auto& value : values) {
 		value.second->finish(this);
 		delete value.second;
 	}
@@ -276,8 +275,8 @@ void Statistics::sample() {
 	shortestPathMessagesDelivered = 0;
 	shortestPathMessagesDropped = 0;
 
-	foreach( StatisticSample* sample, samples )	sample->sampleStatistics(*this);
-	foreach( Values::value_type& value, values ) value.second->record(this);
+	for (StatisticSample* sample : samples)	sample->sampleStatistics(*this);
+	for (Values::value_type& value : values) value.second->record(this);
 }
 
 void Statistics::handleMessage(cMessage *msg) {
