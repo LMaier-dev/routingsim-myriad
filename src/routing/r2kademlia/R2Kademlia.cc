@@ -409,6 +409,10 @@ void R2Kademlia::recordScalars() {
 	recordScalar("routingTableBuckets", routingTable.getNumBuckets());
 	recordScalar("routingTablePathLength", routingTable.getAveragePathLength());
 	recordScalar("routingTablePathStretch", routingTable.getAveragePathStretch());
+	nodeid_t nid =  Node::getNode(this)->getNodeId();
+	recordScalar("nodeId", nid);
+	recordScalar("degree", getNetworkManager()->getTopology().getNodeDegree(nid));
+	recordScalar("popularity", getKadObserver().getPopularity(myOverlayKey));
 }
 
 // -------------------- private helper methods --------------------

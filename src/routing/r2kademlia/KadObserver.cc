@@ -109,6 +109,15 @@ uint KadObserver::getPhysicalDistance(const OverlayKey& from, const OverlayKey& 
 	return (uint) getNetworkManager()->getDistance(getNodeId(from), getNodeId(to));
 }
 
+
+uint KadObserver::getPopularity(const OverlayKey& key) {
+	uint pop = 0;
+	for (auto pair : nodes.right)
+		if (getR2Kademlia(pair.first).getRoutingTable().getContact(key) != nullptr)
+			pop++;
+	return pop;
+}
+
 KadObserver& getKadObserver() {
 	if (observer == NULL) {
 		cModuleType* type = cModuleType::get(
