@@ -19,6 +19,7 @@ import itertools
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 
 # utility
 labels = namedtuple('labels', dict(var='{run.measurement}'))
@@ -34,7 +35,13 @@ def load_result_file(path):
     p = subprocess.run(['scavetool', 'x', '-o', '-', '-F', 'JSON', str(path)],
                        stdout=subprocess.PIPE)
     p.check_returncode()
-    json_data.update(json.loads(p.stdout))
+    data = json.loads(p.stdout)
+    ## merge scalar and vector files
+    for key, val in data.items():
+        if key in json_data:
+            json_data[key].update(val)
+        else:
+            json_data[key] = val
 
 
 def clear():
@@ -168,6 +175,12 @@ class Run:
         # NOTE: this only works if vector names are unique
         for k, v in _create_map(self.vectors, 'name').items():
             setattr(self, 'v_'+k, v)
+
+        # scalars
+        scalar_dict = dict((scalar['module'], dict()) for scalar in run_json.get('scalars', []))
+        for scalar in run_json.get('scalars', []):
+            scalar_dict[scalar['module']][scalar['name']] = scalar['value']
+        scalars = pd.DataFrame.from_dict(self.scalar_dict, orient='index')
 
     def __repr__(self):
         return "<Run {}/{}/{} ({} Vectors)>".format(
