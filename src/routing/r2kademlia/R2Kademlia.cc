@@ -414,6 +414,19 @@ void R2Kademlia::recordScalars() {
 	recordScalar("nodeId", nid);
 	recordScalar("degree", getNetworkManager()->getTopology().getNodeDegree(nid));
 	recordScalar("popularity", getKadObserver().getPopularity(myOverlayKey));
+
+	// these submodules are a hack to record scalars for the contacts
+	// they are only used for scalar recording
+	cModuleType* modType = cModuleType::get("routingsim.routing.r2kademlia.Dummy");
+	auto allContacts = routingTable.getAllContacts();
+	std::string contactStr{"contact"};
+	for (size_type i; i < allContacts.size(); i++) {
+		KadContact_p contact = allContacts[i];
+		cModule* mod = modType->create((contactStr + std::to_string(i)).c_str(), this);
+		mod->recordScalar("pathLength", contact->getPathLength()+1);
+		mod->recordScalar("distance", getKadObserver().getPhysicalDistance(myOverlayKey, contact->getKey()));
+		mod->recordScalar("commonPrefix", myOverlayKey.sharedPrefixLength(contact->getKey()));
+	}
 }
 
 // -------------------- private helper methods --------------------

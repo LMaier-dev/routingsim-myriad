@@ -247,6 +247,15 @@ KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_t
 	return result;
 }
 
+KadContactList KadRoutingTable::getAllContacts() const
+{
+	KadContactList result{};
+	result.reserve(bucketSize * buckets.size());
+	for (auto& bucket : buckets)
+		copyContacts(bucket.contacts, result);
+	return result;
+}
+
 size_type KadRoutingTable::getNumContacts() const
 {
 	size_type sum = 0;

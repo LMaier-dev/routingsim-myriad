@@ -114,6 +114,8 @@ public:
 	 * If there are not enough contacts found, the list is shorter.
 	 */
 	KadContactList getClosestContacts(const OverlayKey& key, size_type n) const;
+	/// returns a list of all known contacts
+	KadContactList getAllContacts() const;
 	/// returns the number of contacts in buckets
 	size_type getNumContacts() const;
 	/// returns the number of buckets currently held

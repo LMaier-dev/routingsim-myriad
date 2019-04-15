@@ -49,7 +49,7 @@ public:
 
 	/// register a node with a key
 	void registerUp(const OverlayKey& key, nodeid_t owner);
-	/// deregister a node with a key
+	/// unregister a node with a key
 	void registerDown(const OverlayKey& key, nodeid_t owner);
 
 	/// returns the key of a given node id, if it is unknown std::out_of_range is thrown
