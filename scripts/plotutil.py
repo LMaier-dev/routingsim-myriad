@@ -180,7 +180,7 @@ class Run:
         scalar_dict = dict((scalar['module'], dict()) for scalar in run_json.get('scalars', []))
         for scalar in run_json.get('scalars', []):
             scalar_dict[scalar['module']][scalar['name']] = scalar['value']
-        scalars = pd.DataFrame.from_dict(self.scalar_dict, orient='index')
+        self.scalars = pd.DataFrame.from_dict(scalar_dict, orient='index')
 
     def __repr__(self):
         return "<Run {}/{}/{} ({} Vectors)>".format(
