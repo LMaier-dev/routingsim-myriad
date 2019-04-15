@@ -53,8 +53,9 @@ void R2Kademlia::onInitialize() {
 	detailedRoutingTableStats = par("detailedRoutingTableStats").boolValue();
 
 	getStatistics().addSample(this);
-	addTimer((simtime_t) par("probeInterval").doubleValue(), std::bind(&R2Kademlia::doProbe, this));
-	addTimer((simtime_t) par("probeInterval").doubleValue(), std::bind(&R2Kademlia::doReachabilityTest, this));
+	simtime_t probeInterval = (simtime_t) par("probeInterval").doubleValue();
+	addTimer(probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doProbe, this));
+	addTimer(probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doReachabilityTest, this));
 	WATCH(myOverlayKey);
 	WATCH(neighborTable);
 	WATCH_OBJ(routingTable);
@@ -483,7 +484,7 @@ void R2Kademlia::readRTableRsp(std::unique_ptr<KadRTableRsp> packet) {
 }
 
 
-void R2Kademlia::addTimer(simtime_t duration, std::function<void()> callback) {
+void R2Kademlia::addTimer(simtime_t initialOffset, simtime_t duration, std::function<void()> callback) {
 	ASSERT(timerDuration.size() == timerCallback.size());
 	ASSERT(timerDuration.size() < std::numeric_limits<short>::max());
 	ASSERT(duration > 0);
@@ -491,8 +492,8 @@ void R2Kademlia::addTimer(simtime_t duration, std::function<void()> callback) {
 	timerCallback.push_back(callback);
 	cMessage *msg = new cMessage("TimerMsg", timerDuration.size()-1);
 	timerMsg.push_back(msg);
-	simtime_t initialOffset = uniform(0, duration);
-	scheduleAt(simTime() + duration + initialOffset, msg);
+	simtime_t scatter = uniform(0, duration);
+	scheduleAt(simTime() + initialOffset - duration/2 + scatter, msg);
 	EV_TRACE << "scheduled timer message " << msg << " with duration " << duration <<  endl;
 }
 

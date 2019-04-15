@@ -145,7 +145,7 @@ private:
 	/** @name timer functions */
 	//@{
 	/// adds a timer to the timer vectors, sends a timer packet
-	void addTimer(simtime_t duration, std::function<void()> callback);
+	void addTimer(simtime_t initialOffset, simtime_t duration, std::function<void()> callback);
 	void doProbe();
 	void doReachabilityTest();
 	//@}
