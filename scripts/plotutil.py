@@ -171,7 +171,7 @@ class Run:
             self.moduleparams.update(param)
 
         # vectors
-        self.vectors = [Vector(v, self) for v in run_json['vectors']]
+        self.vectors = [Vector(v, self) for v in run_json.get('vectors', [])]
         # NOTE: this only works if vector names are unique
         for k, v in _create_map(self.vectors, 'name').items():
             setattr(self, 'v_'+k, v)
