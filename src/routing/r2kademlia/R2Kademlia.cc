@@ -118,7 +118,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		// these types may forward packets, so they count themselves
 		if (handleIfFitting<KadFindNodeReq>(packet)) return;
 		// these types never forward packets
-		countRecieved(*packet);
+		countReceived(*packet);
 		if (handleIfFitting<KadQueryRouteReq>(packet)) return;
 		if (handleIfFitting<KadAnswer>(packet)) return;
 		if (handleIfFitting<KadProbeReq>(packet)) return;
@@ -338,7 +338,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 	// answer request
 	auto answer = makeAnswer<KadFindNodeRsp>(*packet);
 	fillRTableRsp(*answer, contacts);
-	countRecieved(*packet);
+	countReceived(*packet);
 	EV_TRACE << "KadFindNodeReq received query: " << packet->getQuery() << " answering with list size" << contacts.size() << endl;
 	sendPacket(std::move(answer));
 }
@@ -378,7 +378,7 @@ void R2Kademlia::onErrorPacket(KadError& error) {
 void R2Kademlia::sampleStatistics (Statistics &stats) {
 	stats.value("forwardedPackets", forwardedPackets-sentPackets);
 	stats.value("sentPackets", sentPackets);
-	stats.value("receivedPackets", recievedPackets);
+	stats.value("receivedPackets", receivedPackets);
 	stats.value("routingTableContacts", routingTable.getNumContacts());
 	stats.value("routingTableBuckets", routingTable.getNumBuckets());
 	if(detailedRoutingTableStats) {
@@ -522,8 +522,8 @@ void R2Kademlia::doReachabilityTest() {
 	sendFindNode(getKadObserver().getRandomNodeKey(), true);
 }
 
-void R2Kademlia::countRecieved(KadPacket& packet) {
-	recievedPackets++;
+void R2Kademlia::countReceived(KadPacket& packet) {
+	receivedPackets++;
 	getStatistics().deliveredMessage(
 		check_and_cast<cMessage *>(packet.getControlInfo()),
 		packet.getProgress()

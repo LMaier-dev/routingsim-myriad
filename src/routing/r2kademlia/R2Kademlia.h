@@ -116,7 +116,7 @@ public:
 	uint getForwardedPackets() const { return forwardedPackets; }
 	uint getDroppedPackets() const { return droppedPackets; }
 	uint getSentPackets() const { return sentPackets; }
-	uint getRecievedPackets() const { return recievedPackets; }
+	uint getReceivedPackets() const { return receivedPackets; }
 
 	//@}
 
@@ -152,7 +152,7 @@ private:
 	/** @name private helpers */
 	//@{
 	/// does statistics on received packet
-	void countRecieved(KadPacket& packet);
+	void countReceived(KadPacket& packet);
 	/// does statistics on dropped packet
 	void countDropped(KadPacket& packet, const OverlayKey& target);
 	/**
@@ -208,7 +208,7 @@ private:
 	uint forwardedPackets = 0;
 	uint droppedPackets = 0;
 	uint sentPackets = 0;
-	uint recievedPackets = 0;
+	uint receivedPackets = 0;
 	//@}
 
 	/** @name timer things */
