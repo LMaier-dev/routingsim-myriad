@@ -67,8 +67,9 @@ public:
 	// --- inline utility foo
 	/// returns the index of the next hop
 	inline uint getNextHopIndex() const { return progress + 1;}
-	/// incremets the progress counter, advances it to the next hop
-	inline void advanceProgress() { ASSERT(progress < route_arraysize); progress++; }
+	/// increments the progress counter, advances it to the next hop
+	inline void advanceProgress()
+	{ ASSERT(progress < route_arraysize); progress++; ASSERT(hopLimit > 0); hopLimit--;}
 	/// returns the specified part of the source route
 	inline const OverlayKey& getHop(uint index) const { return getRoute(index); }
 	/// returns the key of the next hop
@@ -86,6 +87,13 @@ public:
 	/// returns the source route as a kad_path (std::vector) only excluding target and source
 	inline kad_path getIntermediatePath() { return getPath(1, route_arraysize - 1); }
 	//@}
+	inline void countOverlayHop() { overlayHops++; }
+	inline uint16_t getOverlayHops() { return overlayHops; }
+	inline void markTracked() { tracked = true; }
+	inline bool isTracked() { return tracked; }
+private:
+	uint16_t overlayHops = 0;
+	bool tracked = false;
 };
 } // namespace
 #endif // __ROUTINGSIM_KadPacket_H_

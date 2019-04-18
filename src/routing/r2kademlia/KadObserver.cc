@@ -29,9 +29,32 @@ static KadObserver* observer = NULL;
 
 void KadObserver::initialize() {
 	ASSERT(observer == NULL || observer == this);
+	getStatistics().addSample(this);
+	hopCount = cHistogramPtr(getIntHistogram("hopCount"));
+	distance = cHistogramPtr(getIntHistogram("distance"));
+	prefixDist = cHistogramPtr(getIntHistogram("prefixDist"));
+	overlayHops = cHistogramPtr(getIntHistogram("overlayHops"));
+	stretchMul = std::make_unique<cHistogram>("stretchMul");
+	stretchAdd = cHistogramPtr(getIntHistogram("stretchAdd"));
+	prefixPerHop = std::make_unique<cHistogram>("prefixPerHop");
+
+	distanceLeft = cHistogramPtr(getIntHistogram("distanceLeft"));
+	prefixDistLeft = cHistogramPtr(getIntHistogram("prefixDistLeft"));
+
 }
 
 void KadObserver::finish() {
+	hopCount->record();
+	distance->record();
+	prefixDist->record();
+	overlayHops->record();
+	stretchMul->record();
+	stretchAdd->record();
+	prefixPerHop->record();
+
+	distanceLeft->record();
+	prefixDistLeft->record();
+
 	recordStatistics();
 
 	nodes.clear();
@@ -117,6 +140,104 @@ uint KadObserver::getPopularity(const OverlayKey& key) {
 			pop++;
 	return pop;
 }
+
+
+void KadObserver::registerPacket(KadPacket& packet) {
+	if (simTime() < getSimulation()->getWarmupPeriod()) return;
+	packet.markTracked();
+	registeredPackets++;
+}
+void KadObserver::registerPacketDropped(KadPacket& packet, const OverlayKey& current, const OverlayKey& target) {
+	if (not packet.isTracked()) return;
+	if (simTime() < getSimulation()->getWarmupPeriod()) return;
+	droppedPackets++;
+	const OverlayKey& fromKey = packet.getSource();
+	const OverlayKey& toKey = target.isUnspecified() ? packet.getTarget() : target;
+	if (not exists(fromKey) or not exists(toKey)) {
+		EV_ERROR << "missing keys on packet" << endl;
+		return;
+	}
+	MessageDroppedInfo info{};
+	info.hops = packet.getProgress();
+	info.overlayHops = packet.getOverlayHops();
+	info.distance = getPhysicalDistance(fromKey, toKey);
+	info.distanceLeft = getPhysicalDistance(current, toKey);
+	info.prefixDist = fromKey.sharedPrefixLength(toKey);
+	info.prefixDistLeft = current.sharedPrefixLength(toKey);
+	info.reason = 0;
+	prefixDistLeft->collect(info.prefixDistLeft);
+	distanceLeft->collect(info.distanceLeft);
+
+}
+void KadObserver::registerPacketDelivered(KadPacket& packet) {
+	if (not packet.isTracked()) return;
+	if (simTime() < getSimulation()->getWarmupPeriod()) return;
+	deliveredPackets++;
+	const OverlayKey fromKey = packet.getSource();
+	const OverlayKey toKey = packet.getTarget();
+	if (not exists(fromKey) or not exists(toKey)) {
+		EV_ERROR << "missing keys on packet" << endl;
+		return;
+	}
+	MessageDeliveryInfo info{};
+	info.hops = packet.getProgress();
+	info.distance = getPhysicalDistance(fromKey, toKey);
+	info.prefixDist = fromKey.getLength() - fromKey.sharedPrefixLength(toKey);
+	info.overlayHops = packet.getOverlayHops();
+	hopCount->collect(info.hops);
+	distance->collect(info.distance);
+	stretchMul->collect(info.hops / (double)info.distance);
+	stretchAdd->collect(info.hops - info.distance);
+	prefixDist->collect(info.prefixDist);
+	overlayHops->collect(info.overlayHops);
+	prefixPerHop->collect(info.prefixDist / (double)info.overlayHops);
+}
+void KadObserver::registerPacketOverlayHop(KadPacket& packet) {
+	if (simTime() < getSimulation()->getWarmupPeriod()) return;
+	packet.countOverlayHop();
+}
+
+void KadObserver::sampleStatistics (Statistics &stats) {
+	if (deliveredPackets > 0) {
+		stats.value("hopCount", hopCount->getMean());
+		stats.value("distance", distance->getMean());
+		stats.value("prefixDist", prefixDist->getMean());
+		stats.value("overlayHops", overlayHops->getMean());
+		stats.value("stretchMul", stretchMul->getMean());
+		stats.value("stretchAdd", stretchAdd->getMean());
+		stats.value("prefixPerHop", prefixPerHop->getMean());
+
+		stats.value("deliveryRatio", deliveredPackets/((double)deliveredPackets + droppedPackets));
+	}
+
+	if (droppedPackets > 0) {
+		stats.value("distanceLeft", distanceLeft->getMean());
+		stats.value("prefixDistLeft", prefixDistLeft->getMean());
+	}
+
+	stats.value("deliveredPackets", deliveredPackets);
+	stats.value("droppedPackets", droppedPackets);
+	stats.value("roamingPackets", registeredPackets - deliveredPackets - droppedPackets);
+
+	if (resetAfterSample) {
+		hopCount->clear();
+		distance->clear();
+		prefixDist->clear();
+		overlayHops->clear();
+		stretchMul->clear();
+		stretchAdd->clear();
+		prefixPerHop->clear();
+
+		distanceLeft->clear();
+		prefixDistLeft->clear();
+
+		deliveredPackets = 0;
+		droppedPackets = 0;
+		registeredPackets = 0;
+		recordScalar("lastReset", simTime());
+	}
+}
+
 
 KadObserver& getKadObserver() {
 	if (observer == NULL) {

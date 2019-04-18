@@ -23,13 +23,29 @@
 #include "foundation/NetworkManager.h"
 
 namespace routingsim {
+using cHistogramPtr = std::unique_ptr<cHistogram>;
 
 class MessageStatistics;
+struct MessageDeliveryInfo {
+	uint hops = 0;
+	uint overlayHops = 0;
+	uint distance = 0;
+	uint prefixDist = 0;
+};
+struct MessageDroppedInfo {
+	uint hops = 0;
+	uint overlayHops = 0;
+	uint distance = 0;
+	uint distanceLeft = 0;
+	uint prefixDist = 0;
+	uint prefixDistLeft = 0;
+	uint reason = 0;
+};
 
 /**
  * The R2/Kademlia Global Observer
  */
-class KadObserver: public cSimpleModule {
+class KadObserver: public cSimpleModule, public StatisticSample {
 protected:
 	virtual void initialize() override;
 	virtual void finish() override;
@@ -39,11 +55,27 @@ protected:
 private:
 	boost::bimap<OverlayKey, nodeid_t> nodes;
 
+	//
+	unsigned int deliveredPackets = 0;
+	unsigned int droppedPackets = 0;
+	unsigned int registeredPackets = 0;
+	bool resetAfterSample = true;
+	// histograms for statistics
+	cHistogramPtr hopCount;
+	cHistogramPtr distance;
+	cHistogramPtr prefixDist;
+	cHistogramPtr overlayHops;
+	cHistogramPtr stretchMul;
+	cHistogramPtr stretchAdd;
+	cHistogramPtr prefixPerHop;
+
+	cHistogramPtr distanceLeft;
+	cHistogramPtr prefixDistLeft;
+
 private:
 	R2Kademlia& getR2Kademlia(Node* nodeMod);
 	inline R2Kademlia& getR2Kademlia(nodeid_t nid) { return getR2Kademlia(getNetworkManager()->getTopology().getNodeModule(nid)); }
 	inline R2Kademlia& getR2Kademlia(const OverlayKey& key) { return getR2Kademlia(getNodeId(key)); }
-
 
 public:
 
@@ -70,6 +102,12 @@ public:
 	uint getPhysicalDistance(const OverlayKey& from, const OverlayKey& to);
 	/// returns the number of other nodes that have this key in their routing table
 	uint getPopularity(const OverlayKey& key);
+
+	void registerPacket(KadPacket&);
+	void registerPacketDropped(KadPacket&, const OverlayKey& current, const OverlayKey& target=OverlayKey::UNSPECIFIED_KEY);
+	void registerPacketDelivered(KadPacket&);
+	void registerPacketOverlayHop(KadPacket&);
+	virtual void sampleStatistics (Statistics &stats) override;
 };
 
 KadObserver& getKadObserver();
