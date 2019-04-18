@@ -96,7 +96,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	if (packet->getCurrentHop() != myOverlayKey) {
 		EV_ERROR << "dropping packet, current hop does not fit!" << endl;
 		//TODO how does this happen?
-		droppedPackets++;
+		countDropped(*packet, packet->getTarget());
 		return;
 	}
 	if (packet->hasRemainingHops()){
@@ -124,7 +124,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		if (handleIfFitting<KadAnswer>(packet)) return;
 		if (handleIfFitting<KadProbeReq>(packet)) return;
 		EV_ERROR << "dropping unhandled packet of type " << (int)packet->getType() << endl;
-		droppedPackets++;
+		countDropped(*packet, packet->getTarget());
 	}
 }
 
@@ -188,6 +188,7 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt) {
 }
 
 void R2Kademlia::resendPacket(KadPacket_p packet) {
+	getKadObserver().registerPacketOverlayHop(*packet);
 	NodePkt_p nodePkt = NodePkt_p(check_and_cast<NodePkt *>(packet->removeControlInfo()));
 	forwardPacket(std::move(packet), std::move(nodePkt));
 }
