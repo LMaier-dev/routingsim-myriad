@@ -108,6 +108,27 @@ def savefig(name, *args, plot=plt, **kwargs):
     for ext in ('.pdf', '.png', '.svg'):
         plot.savefig(name + ext, *args, **kwargs)
 
+def discrete_boxplot(xcol, ycol, *args, plot=plt, continious_scale=True, bridge_means=False, means_style='-', **kwargs):
+    """Makes a boxplot with one box per unique value in xcol."""
+    if continious_scale:
+        keys = np.arange(xcol.min(), xcol.max()+1)
+    else:
+        keys = sorted(xcol[xcol.notna()].unique())
+    plot.boxplot([ycol[xcol==i] for i in keys], labels=list(int(k) for k in keys), *args, **kwargs)
+    means = pd.Series((ycol[xcol==i].mean() for i in keys), np.arange(len(keys))+1)
+    if bridge_means:
+        means = means[means.notna()]
+    plot.plot(means.index, means, means_style)
+    plot.ylabel(ycol.name)
+    plot.xlabel(xcol.name)
+
+def logscale(x=True, y=True, plot=plt):
+    """Turns both axis' in the plot to logscale"""
+    if x:
+        plot.xscale('log')
+    if y:
+        plot.yscale('log')
+
 ##### helper functions ####
 def _group_by(list_, attr_):
     ret = {}
