@@ -31,7 +31,7 @@ void KadObserver::initialize() {
 	ASSERT(observer == NULL || observer == this);
 	getStatistics().addSample(this);
 
-	histograms.resize(9);
+	histograms.resize(13);
 	histograms[hopCount] = cHistogramPtr(getIntHistogram("hopCount"));
 	histograms[distance] = cHistogramPtr(getIntHistogram("distance"));
 	histograms[prefixDist] = cHistogramPtr(getIntHistogram("prefixDist"));
@@ -41,6 +41,10 @@ void KadObserver::initialize() {
 	histograms[prefixPerHop] = std::make_unique<cHistogram>("prefixPerHop");
 	histograms[distanceLeft] = cHistogramPtr(getIntHistogram("distanceLeft"));
 	histograms[prefixDistLeft] = cHistogramPtr(getIntHistogram("prefixDistLeft"));
+	histograms[hopCountDropped] = cHistogramPtr(getIntHistogram("hopCountDropped"));
+	histograms[overlayHopsDropped] = cHistogramPtr(getIntHistogram("overlayHopsDropped"));
+	histograms[prefixDistDropped] = cHistogramPtr(getIntHistogram("prefixDistDropped"));
+	histograms[distanceDropped] = cHistogramPtr(getIntHistogram("distanceDropped"));
 
 	outVectors.resize(histograms.size());
 	outVectors[hopCount] = std::make_unique<cOutVector>("hopCount");
@@ -52,6 +56,10 @@ void KadObserver::initialize() {
 	outVectors[prefixPerHop] = std::make_unique<cOutVector>("prefixPerHop");
 	outVectors[distanceLeft] = std::make_unique<cOutVector>("distanceLeft");
 	outVectors[prefixDistLeft] = std::make_unique<cOutVector>("prefixDistLeft");
+	outVectors[hopCountDropped] = std::make_unique<cOutVector>("hopCountDropped");
+	outVectors[overlayHopsDropped] = std::make_unique<cOutVector>("overlayHopsDropped");
+	outVectors[prefixDistDropped] = std::make_unique<cOutVector>("prefixDistDropped");
+	outVectors[distanceDropped] = std::make_unique<cOutVector>("distanceDropped");
 
 	addOutVectors.resize(4);
 	addOutVectors[deliveryRatioV] = std::make_unique<cOutVector>("deliveryRatio");
@@ -63,7 +71,6 @@ void KadObserver::initialize() {
 void KadObserver::finish() {
 	for (auto& h : histograms)
 		h->record();
-
 	recordStatistics();
 
 	nodes.clear();
@@ -177,8 +184,13 @@ void KadObserver::registerPacketDropped(KadPacket& packet, const OverlayKey& cur
 	info.prefixDist = fromKey.sharedPrefixLength(toKey);
 	info.prefixDistLeft = current.sharedPrefixLength(toKey);
 	info.reason = 0;
-	histograms[prefixDistLeft]->collect(info.prefixDistLeft);
+	histograms[hopCountDropped]->collect(info.hops);
+	histograms[overlayHopsDropped]->collect(info.overlayHops);
+	histograms[distanceDropped]->collect(info.distance);
 	histograms[distanceLeft]->collect(info.distanceLeft);
+	histograms[prefixDistDropped]->collect(info.prefixDist);
+	histograms[prefixDistLeft]->collect(info.prefixDistLeft);
+
 	if (simTime() > messageRecordTime and messageDroppedInfos.size() < numMessageDroppedInfos)
 		messageDroppedInfos.push_back(info);
 

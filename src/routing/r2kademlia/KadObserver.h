@@ -60,7 +60,10 @@ private:
 	unsigned int droppedPackets = 0;
 	unsigned int registeredPackets = 0;
 	bool resetAfterSample = true;
-	enum dataType : uint8_t {hopCount=0, distance=1, prefixDist=2, overlayHops=3, stretchMul=4, stretchAdd=5, prefixPerHop=6, distanceLeft=7, prefixDistLeft=8};
+	enum dataType : uint8_t {hopCount=0, distance=1, prefixDist=2, overlayHops=3,
+		stretchMul=4, stretchAdd=5, prefixPerHop=6, distanceLeft=7,
+		prefixDistLeft=8, hopCountDropped=9, overlayHopsDropped=10,
+		prefixDistDropped=11, distanceDropped=12};
 	enum addDataType : uint8_t {deliveryRatioV=0, deliveredPacketsV=1, droppedPacketsV=2, roamingPacketsV=3};
 	// histograms and vectors for statistics
 	std::vector<cHistogramPtr> histograms;
