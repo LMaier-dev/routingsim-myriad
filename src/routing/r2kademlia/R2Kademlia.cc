@@ -197,8 +197,10 @@ void R2Kademlia::sendPacket(KadPacket_p packet) {
 	ASSERT(packet->getSource() == myOverlayKey);
 	ASSERT(packet->getControlInfo() == nullptr);
 	auto nodePkt = std::make_unique<NodePkt>(packet->getName());
-	if(packet->getType() == KAD_FindNodeReq && check_and_cast<KadFindNodeReq*>(packet.get())->getExact())
+	if(packet->getType() == KAD_FindNodeReq && check_and_cast<KadFindNodeReq*>(packet.get())->getExact()) {
+		getKadObserver().registerPacket(*packet);
 		getStatistics().registerMessage(nodePkt.get());
+	}
 	sentPackets++;
 	forwardPacket(std::move(packet), std::move(nodePkt));
 }
@@ -554,6 +556,7 @@ void R2Kademlia::doReachabilityTest() {
 
 void R2Kademlia::countRecieved(KadPacket& packet) {
 	recievedPackets++;
+	getKadObserver().registerPacketDelivered(packet);
 	getStatistics().deliveredMessage(
 		check_and_cast<cMessage *>(packet.getControlInfo()),
 		packet.getProgress()
@@ -562,6 +565,7 @@ void R2Kademlia::countRecieved(KadPacket& packet) {
 
 void R2Kademlia::countDropped(KadPacket& packet, const OverlayKey& target) {
 	droppedPackets++;
+	getKadObserver().registerPacketDropped(packet, myOverlayKey, target);
 	nodeid_t nid = undefined_node;
 	if (getKadObserver().exists(target))
 		nid = getKadObserver().getNodeId(target);

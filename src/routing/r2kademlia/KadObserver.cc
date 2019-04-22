@@ -30,34 +30,46 @@ static KadObserver* observer = NULL;
 void KadObserver::initialize() {
 	ASSERT(observer == NULL || observer == this);
 	getStatistics().addSample(this);
-	hopCount = cHistogramPtr(getIntHistogram("hopCount"));
-	distance = cHistogramPtr(getIntHistogram("distance"));
-	prefixDist = cHistogramPtr(getIntHistogram("prefixDist"));
-	overlayHops = cHistogramPtr(getIntHistogram("overlayHops"));
-	stretchMul = std::make_unique<cHistogram>("stretchMul");
-	stretchAdd = cHistogramPtr(getIntHistogram("stretchAdd"));
-	prefixPerHop = std::make_unique<cHistogram>("prefixPerHop");
 
-	distanceLeft = cHistogramPtr(getIntHistogram("distanceLeft"));
-	prefixDistLeft = cHistogramPtr(getIntHistogram("prefixDistLeft"));
+	histograms.resize(9);
+	histograms[hopCount] = cHistogramPtr(getIntHistogram("hopCount"));
+	histograms[distance] = cHistogramPtr(getIntHistogram("distance"));
+	histograms[prefixDist] = cHistogramPtr(getIntHistogram("prefixDist"));
+	histograms[overlayHops] = cHistogramPtr(getIntHistogram("overlayHops"));
+	histograms[stretchMul] = std::make_unique<cHistogram>("stretchMul");
+	histograms[stretchAdd] = cHistogramPtr(getIntHistogram("stretchAdd"));
+	histograms[prefixPerHop] = std::make_unique<cHistogram>("prefixPerHop");
+	histograms[distanceLeft] = cHistogramPtr(getIntHistogram("distanceLeft"));
+	histograms[prefixDistLeft] = cHistogramPtr(getIntHistogram("prefixDistLeft"));
 
+	outVectors.resize(histograms.size());
+	outVectors[hopCount] = std::make_unique<cOutVector>("hopCount");
+	outVectors[distance] = std::make_unique<cOutVector>("distance");
+	outVectors[prefixDist] = std::make_unique<cOutVector>("prefixDist");
+	outVectors[overlayHops] = std::make_unique<cOutVector>("overlayHops");
+	outVectors[stretchMul] = std::make_unique<cOutVector>("stretchMul");
+	outVectors[stretchAdd] = std::make_unique<cOutVector>("stretchAdd");
+	outVectors[prefixPerHop] = std::make_unique<cOutVector>("prefixPerHop");
+	outVectors[distanceLeft] = std::make_unique<cOutVector>("distanceLeft");
+	outVectors[prefixDistLeft] = std::make_unique<cOutVector>("prefixDistLeft");
+
+	addOutVectors.resize(4);
+	addOutVectors[deliveryRatioV] = std::make_unique<cOutVector>("deliveryRatio");
+	addOutVectors[deliveredPacketsV] = std::make_unique<cOutVector>("deliveredPackets");
+	addOutVectors[droppedPacketsV] = std::make_unique<cOutVector>("droppedPackets");
+	addOutVectors[roamingPacketsV] = std::make_unique<cOutVector>("roamingPackets");
 }
 
 void KadObserver::finish() {
-	hopCount->record();
-	distance->record();
-	prefixDist->record();
-	overlayHops->record();
-	stretchMul->record();
-	stretchAdd->record();
-	prefixPerHop->record();
-
-	distanceLeft->record();
-	prefixDistLeft->record();
+	for (auto& h : histograms)
+		h->record();
 
 	recordStatistics();
 
 	nodes.clear();
+	histograms.clear();
+	outVectors.clear();
+	addOutVectors.clear();
 	ASSERT(observer == this);
 	observer = NULL;
 }
@@ -165,8 +177,10 @@ void KadObserver::registerPacketDropped(KadPacket& packet, const OverlayKey& cur
 	info.prefixDist = fromKey.sharedPrefixLength(toKey);
 	info.prefixDistLeft = current.sharedPrefixLength(toKey);
 	info.reason = 0;
-	prefixDistLeft->collect(info.prefixDistLeft);
-	distanceLeft->collect(info.distanceLeft);
+	histograms[prefixDistLeft]->collect(info.prefixDistLeft);
+	histograms[distanceLeft]->collect(info.distanceLeft);
+	if (simTime() > messageRecordTime and messageDroppedInfos.size() < numMessageDroppedInfos)
+		messageDroppedInfos.push_back(info);
 
 }
 void KadObserver::registerPacketDelivered(KadPacket& packet) {
@@ -184,13 +198,16 @@ void KadObserver::registerPacketDelivered(KadPacket& packet) {
 	info.distance = getPhysicalDistance(fromKey, toKey);
 	info.prefixDist = fromKey.getLength() - fromKey.sharedPrefixLength(toKey);
 	info.overlayHops = packet.getOverlayHops();
-	hopCount->collect(info.hops);
-	distance->collect(info.distance);
-	stretchMul->collect(info.hops / (double)info.distance);
-	stretchAdd->collect(info.hops - info.distance);
-	prefixDist->collect(info.prefixDist);
-	overlayHops->collect(info.overlayHops);
-	prefixPerHop->collect(info.prefixDist / (double)info.overlayHops);
+	ASSERT(info.overlayHops > 0);
+	histograms[hopCount]->collect(info.hops);
+	histograms[distance]->collect(info.distance);
+	histograms[stretchMul]->collect(info.hops / (double)info.distance);
+	histograms[stretchAdd]->collect(info.hops - info.distance);
+	histograms[prefixDist]->collect(info.prefixDist);
+	histograms[overlayHops]->collect(info.overlayHops);
+	histograms[prefixPerHop]->collect(info.prefixDist / (double)info.overlayHops);
+	if (simTime() > messageRecordTime and messageDeliveryInfos.size() < numMessageDeliveryInfos)
+		messageDeliveryInfos.push_back(info);
 }
 void KadObserver::registerPacketOverlayHop(KadPacket& packet) {
 	if (simTime() < getSimulation()->getWarmupPeriod()) return;
@@ -198,39 +215,19 @@ void KadObserver::registerPacketOverlayHop(KadPacket& packet) {
 }
 
 void KadObserver::sampleStatistics (Statistics &stats) {
-	if (deliveredPackets > 0) {
-		stats.value("hopCount", hopCount->getMean());
-		stats.value("distance", distance->getMean());
-		stats.value("prefixDist", prefixDist->getMean());
-		stats.value("overlayHops", overlayHops->getMean());
-		stats.value("stretchMul", stretchMul->getMean());
-		stats.value("stretchAdd", stretchAdd->getMean());
-		stats.value("prefixPerHop", prefixPerHop->getMean());
+	for (uint i=0; i<histograms.size(); i++)
+		if (histograms[i]->getCount() > 0)
+			outVectors[i]->record(histograms[i]->getMean());
+	if (deliveredPackets > 0)
+		addOutVectors[deliveryRatioV]->record(deliveredPackets/((double)deliveredPackets + droppedPackets));
 
-		stats.value("deliveryRatio", deliveredPackets/((double)deliveredPackets + droppedPackets));
-	}
-
-	if (droppedPackets > 0) {
-		stats.value("distanceLeft", distanceLeft->getMean());
-		stats.value("prefixDistLeft", prefixDistLeft->getMean());
-	}
-
-	stats.value("deliveredPackets", deliveredPackets);
-	stats.value("droppedPackets", droppedPackets);
-	stats.value("roamingPackets", registeredPackets - deliveredPackets - droppedPackets);
+	addOutVectors[deliveredPacketsV]->record(deliveredPackets);
+	addOutVectors[droppedPacketsV]->record(droppedPackets);
+	addOutVectors[roamingPacketsV]->record(registeredPackets - deliveredPackets - droppedPackets);
 
 	if (resetAfterSample) {
-		hopCount->clear();
-		distance->clear();
-		prefixDist->clear();
-		overlayHops->clear();
-		stretchMul->clear();
-		stretchAdd->clear();
-		prefixPerHop->clear();
-
-		distanceLeft->clear();
-		prefixDistLeft->clear();
-
+		for (auto& h : histograms)
+			h->clear();
 		deliveredPackets = 0;
 		droppedPackets = 0;
 		registeredPackets = 0;

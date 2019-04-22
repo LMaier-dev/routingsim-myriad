@@ -92,7 +92,7 @@ public:
 	inline void markTracked() { tracked = true; }
 	inline bool isTracked() { return tracked; }
 private:
-	uint16_t overlayHops = 0;
+	uint16_t overlayHops = 1;
 	bool tracked = false;
 };
 } // namespace
