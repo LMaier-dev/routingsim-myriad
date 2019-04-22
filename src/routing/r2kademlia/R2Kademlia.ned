@@ -27,19 +27,21 @@ simple R2Kademlia extends routingsim.foundation.Protocol
 		int accelerationFactor = default(1);
 		/// max size of the buckets, called "k" in research papers (k-Buckets)
 		int bucketSize = default(20);
-		/// radius of physical neighborhood discovery
-		int discoveryRadius = default(4);
 		/// number of contacts returned by find node response, called "k" in research papers
-		int findNodeNumber = default(20);
+		int findNodeNumber = default(bucketSize);
+		/// radius of physical neighborhood discovery
+		int discoveryRadius = default(2);
 		bool proximityRouting = default(true);
 		bool proximityNeighborSelection = default(true);
-		int hopLimit = default(1000);
+		int hopLimit = default(100);
 		/// if activated the node collects path information from passing packets
 		bool pathSnooping = default(true);
 		bool pathSimplification = default(true);
-		double probeInterval = default(4s) @unit(s);
-		/// if true records avarage path lengths and stretch in routing tables.
-		bool detailedRoutingTableStats = default(false);
+		double probeInterval = default(2s) @unit(s);
 		/// 0=none, 1=random, 2=exiting, 3=bucket_expand, 4=random_suffix
 		int probeStrategy @enum(ProbeStrategy) = default(3);
+
+		// statistics foo
+		/// if true records avarage path lengths and stretch in routing tables.
+		bool detailedRoutingTableStats = default(false);
 }

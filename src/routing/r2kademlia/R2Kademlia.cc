@@ -318,7 +318,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 		}
 		//TODO optimization: we should check if any contacts (not just front) are close enough
 		if ((contacts.front()->getKey() ^ query) < (myOverlayKey ^ query)
-				and packet->getRouteArraySize() + 1 + contacts.front()->getPathLength() < hopLimit) {
+				and contacts.front()->getPathLength() < packet->getHopLimit()) {
 			// we have found a closer contact that is close enough
 			// => forward request
 			const KadContact& contact = chooseNextHop(contacts, query, packet->getSource());
