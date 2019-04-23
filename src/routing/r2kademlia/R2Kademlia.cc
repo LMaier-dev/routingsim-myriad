@@ -53,8 +53,9 @@ void R2Kademlia::onInitialize() {
 	detailedRoutingTableStats = par("detailedRoutingTableStats").boolValue();
 
 	getStatistics().addSample(this);
-	addTimer((simtime_t) par("probeInterval").doubleValue(), std::bind(&R2Kademlia::doProbe, this));
-	addTimer((simtime_t) par("probeInterval").doubleValue(), std::bind(&R2Kademlia::doReachabilityTest, this));
+	simtime_t probeInterval = (simtime_t) par("probeInterval").doubleValue();
+	addTimer(probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doProbe, this));
+	addTimer(probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doReachabilityTest, this));
 	WATCH(myOverlayKey);
 	WATCH(neighborTable);
 	WATCH_OBJ(routingTable);
@@ -95,7 +96,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	if (packet->getCurrentHop() != myOverlayKey) {
 		EV_ERROR << "dropping packet, current hop does not fit!" << endl;
 		//TODO how does this happen?
-		droppedPackets++;
+		countDropped(*packet, packet->getTarget());
 		return;
 	}
 	if (packet->hasRemainingHops()){
@@ -123,7 +124,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		if (handleIfFitting<KadAnswer>(packet)) return;
 		if (handleIfFitting<KadProbeReq>(packet)) return;
 		EV_ERROR << "dropping unhandled packet of type " << (int)packet->getType() << endl;
-		droppedPackets++;
+		countDropped(*packet, packet->getTarget());
 	}
 }
 
@@ -160,7 +161,7 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 }
 
 void R2Kademlia::handlePacket(KadAnswer_p packet) {
-	EV << "received answer packet" << endl;
+	EV_DEBUG << "received answer packet" << endl;
 	if (packet->getType() == KAD_Error)
 		onErrorPacket(*check_and_cast<KadError *>(packet.get()));
 	handleAnswer(std::move(packet));
@@ -187,6 +188,7 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt) {
 }
 
 void R2Kademlia::resendPacket(KadPacket_p packet) {
+	getKadObserver().registerPacketOverlayHop(*packet);
 	NodePkt_p nodePkt = NodePkt_p(check_and_cast<NodePkt *>(packet->removeControlInfo()));
 	forwardPacket(std::move(packet), std::move(nodePkt));
 }
@@ -195,8 +197,10 @@ void R2Kademlia::sendPacket(KadPacket_p packet) {
 	ASSERT(packet->getSource() == myOverlayKey);
 	ASSERT(packet->getControlInfo() == nullptr);
 	auto nodePkt = std::make_unique<NodePkt>(packet->getName());
-	if(packet->getType() == KAD_FindNodeReq && check_and_cast<KadFindNodeReq*>(packet.get())->getExact())
+	if(packet->getType() == KAD_FindNodeReq && check_and_cast<KadFindNodeReq*>(packet.get())->getExact()) {
+		getKadObserver().registerPacket(*packet);
 		getStatistics().registerMessage(nodePkt.get());
+	}
 	sentPackets++;
 	forwardPacket(std::move(packet), std::move(nodePkt));
 }
@@ -305,7 +309,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 		if (contacts.front()->getKey() == packet->getSource()) {
 			if(contacts.size() == 1) {
 				// the only contact we know is the source
-				countDropped(*packet, packet->getQuery());
+				countDropped(*packet, query);
 				returnToSender(KAD_NodeUnreachable, std::move(packet));
 				return;
 			}
@@ -314,7 +318,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 		}
 		//TODO optimization: we should check if any contacts (not just front) are close enough
 		if ((contacts.front()->getKey() ^ query) < (myOverlayKey ^ query)
-				and packet->getRouteArraySize() + 1 + contacts.front()->getPathLength() < hopLimit) {
+				and contacts.front()->getPathLength() < packet->getHopLimit()) {
 			// we have found a closer contact that is close enough
 			// => forward request
 			const KadContact& contact = chooseNextHop(contacts, query, packet->getSource());
@@ -325,12 +329,13 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 			}
 			ASSERT((contact.getKey() ^ query) < (myOverlayKey ^ query));
 			packet->appendRoute(contact);
-			ASSERT(packet->getRouteArraySize() <= hopLimit);
+			ASSERT(packet->getRouteArraySize() <= packet->getHopLimit());
 			resendPacket(std::move(packet));
 			return;
 		}
 		else if (packet->getExact()) {
-			countDropped(*packet, packet->getQuery());
+			countDropped(*packet, query);
+			//TODO: if we find a closer contact too far away, we should send HOP LIMIT EXCEEDED
 			returnToSender(KAD_NodeUnreachable, std::move(packet));
 			return;
 		}
@@ -381,6 +386,8 @@ void R2Kademlia::sampleStatistics (Statistics &stats) {
 	stats.value("receivedPackets", receivedPackets);
 	stats.value("routingTableContacts", routingTable.getNumContacts());
 	stats.value("routingTableBuckets", routingTable.getNumBuckets());
+	stats.value("routingTableUpdates", routingTable.getUpdateCount());
+	stats.value("routingTableReplacements", routingTable.getReplacementCount());
 	if(detailedRoutingTableStats) {
 		stats.value("routingTablePathLength", routingTable.getAveragePathLength());
 		stats.value("routingTablePathStretch", routingTable.getAveragePathStretch());
@@ -398,6 +405,38 @@ void R2Kademlia::onBucketRefresh(KadBucket& bucket) {
 void R2Kademlia::onNewContact(KadContact_p contact) {
 	if (contact->getPathLength() < discoveryRadius)
 		sendGetNeighbors(contact);
+}
+
+void R2Kademlia::recordScalars() {
+	recordScalar("forwardedPackets", forwardedPackets);
+	recordScalar("droppedPackets", droppedPackets);
+	recordScalar("sentPackets", sentPackets);
+	recordScalar("receivedPackets", receivedPackets);
+	recordScalar("routingTableContacts", routingTable.getNumContacts());
+	recordScalar("routingTableBuckets", routingTable.getNumBuckets());
+	recordScalar("routingTablePathLength", routingTable.getAveragePathLength());
+	recordScalar("routingTablePathStretch", routingTable.getAveragePathStretch());
+	recordScalar("routingTableUpdates", routingTable.getUpdateCount());
+	recordScalar("routingTableReplacements", routingTable.getReplacementCount());
+	nodeid_t nid =  Node::getNode(this)->getNodeId();
+	recordScalar("nodeId", nid);
+	recordScalar("degree", getNetworkManager()->getTopology().getNodeDegree(nid));
+	recordScalar("popularity", getKadObserver().getPopularity(myOverlayKey));
+}
+
+void R2Kademlia::recordRoutingTable() {
+	// these submodules are a hack to record scalars for the contacts
+	// they are only used for scalar recording
+	cModuleType* modType = cModuleType::get("routingsim.routing.r2kademlia.Dummy");
+	auto allContacts = routingTable.getAllContacts();
+	std::string contactStr{"contact"};
+	for (size_type i; i < allContacts.size(); i++) {
+		KadContact_p contact = allContacts[i];
+		cModule* mod = modType->create((contactStr + std::to_string(i)).c_str(), this);
+		mod->recordScalar("pathLength", contact->getPathLength()+1);
+		mod->recordScalar("distance", getKadObserver().getPhysicalDistance(myOverlayKey, contact->getKey()));
+		mod->recordScalar("commonPrefix", myOverlayKey.sharedPrefixLength(contact->getKey()));
+	}
 }
 
 // -------------------- private helper methods --------------------
@@ -468,7 +507,7 @@ void R2Kademlia::readRTableRsp(std::unique_ptr<KadRTableRsp> packet) {
 }
 
 
-void R2Kademlia::addTimer(simtime_t duration, std::function<void()> callback) {
+void R2Kademlia::addTimer(simtime_t initialOffset, simtime_t duration, std::function<void()> callback) {
 	ASSERT(timerDuration.size() == timerCallback.size());
 	ASSERT(timerDuration.size() < std::numeric_limits<short>::max());
 	ASSERT(duration > 0);
@@ -476,8 +515,8 @@ void R2Kademlia::addTimer(simtime_t duration, std::function<void()> callback) {
 	timerCallback.push_back(callback);
 	cMessage *msg = new cMessage("TimerMsg", timerDuration.size()-1);
 	timerMsg.push_back(msg);
-	simtime_t initialOffset = uniform(0, duration);
-	scheduleAt(simTime() + duration + initialOffset, msg);
+	simtime_t scatter = uniform(0, duration);
+	scheduleAt(simTime() + initialOffset - duration/2 + scatter, msg);
 	EV_TRACE << "scheduled timer message " << msg << " with duration " << duration <<  endl;
 }
 
@@ -519,11 +558,16 @@ void R2Kademlia::doProbe() {
 
 void R2Kademlia::doReachabilityTest() {
 	if (neighborTable.size() == 0) return; // we are isolated
-	sendFindNode(getKadObserver().getRandomNodeKey(), true);
+	const OverlayKey* key;
+	do {
+		key = &getKadObserver().getRandomNodeKey();
+	} while(*key == myOverlayKey);
+	sendFindNode(*key, true);
 }
 
 void R2Kademlia::countReceived(KadPacket& packet) {
 	receivedPackets++;
+	getKadObserver().registerPacketDelivered(packet);
 	getStatistics().deliveredMessage(
 		check_and_cast<cMessage *>(packet.getControlInfo()),
 		packet.getProgress()
@@ -532,6 +576,7 @@ void R2Kademlia::countReceived(KadPacket& packet) {
 
 void R2Kademlia::countDropped(KadPacket& packet, const OverlayKey& target) {
 	droppedPackets++;
+	getKadObserver().registerPacketDropped(packet, myOverlayKey, target);
 	nodeid_t nid = undefined_node;
 	if (getKadObserver().exists(target))
 		nid = getKadObserver().getNodeId(target);

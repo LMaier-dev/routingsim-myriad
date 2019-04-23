@@ -19,6 +19,7 @@ import itertools
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 
 # utility
 labels = namedtuple('labels', dict(var='{run.measurement}'))
@@ -34,7 +35,13 @@ def load_result_file(path):
     p = subprocess.run(['scavetool', 'x', '-o', '-', '-F', 'JSON', str(path)],
                        stdout=subprocess.PIPE)
     p.check_returncode()
-    json_data.update(json.loads(p.stdout))
+    data = json.loads(p.stdout)
+    ## merge scalar and vector files
+    for key, val in data.items():
+        if key in json_data:
+            json_data[key].update(val)
+        else:
+            json_data[key] = val
 
 
 def clear():
@@ -101,6 +108,27 @@ def savefig(name, *args, plot=plt, **kwargs):
     for ext in ('.pdf', '.png', '.svg'):
         plot.savefig(name + ext, *args, **kwargs)
 
+def discrete_boxplot(xcol, ycol, *args, plot=plt, continious_scale=True, bridge_means=False, means_style='-', **kwargs):
+    """Makes a boxplot with one box per unique value in xcol."""
+    if continious_scale:
+        keys = np.arange(xcol.min(), xcol.max()+1)
+    else:
+        keys = sorted(xcol[xcol.notna()].unique())
+    plot.boxplot([ycol[xcol==i] for i in keys], labels=list(int(k) for k in keys), *args, **kwargs)
+    means = pd.Series((ycol[xcol==i].mean() for i in keys), np.arange(len(keys))+1)
+    if bridge_means:
+        means = means[means.notna()]
+    plot.plot(means.index, means, means_style)
+    plot.ylabel(ycol.name)
+    plot.xlabel(xcol.name)
+
+def logscale(x=True, y=True, plot=plt):
+    """Turns both axis' in the plot to logscale"""
+    if x:
+        plot.xscale('log')
+    if y:
+        plot.yscale('log')
+
 ##### helper functions ####
 def _group_by(list_, attr_):
     ret = {}
@@ -164,10 +192,16 @@ class Run:
             self.moduleparams.update(param)
 
         # vectors
-        self.vectors = [Vector(v, self) for v in run_json['vectors']]
+        self.vectors = [Vector(v, self) for v in run_json.get('vectors', [])]
         # NOTE: this only works if vector names are unique
         for k, v in _create_map(self.vectors, 'name').items():
             setattr(self, 'v_'+k, v)
+
+        # scalars
+        scalar_dict = dict((scalar['module'], dict()) for scalar in run_json.get('scalars', []))
+        for scalar in run_json.get('scalars', []):
+            scalar_dict[scalar['module']][scalar['name']] = scalar['value']
+        self.scalars = pd.DataFrame.from_dict(scalar_dict, orient='index')
 
     def __repr__(self):
         return "<Run {}/{}/{} ({} Vectors)>".format(

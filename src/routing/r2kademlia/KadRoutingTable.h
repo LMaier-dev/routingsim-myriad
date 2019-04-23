@@ -114,6 +114,8 @@ public:
 	 * If there are not enough contacts found, the list is shorter.
 	 */
 	KadContactList getClosestContacts(const OverlayKey& key, size_type n) const;
+	/// returns a list of all known contacts
+	KadContactList getAllContacts() const;
 	/// returns the number of contacts in buckets
 	size_type getNumContacts() const;
 	/// returns the number of buckets currently held
@@ -124,10 +126,13 @@ public:
 	double getAveragePathLength() const;
 	/// calculates the average stretch of the known contacts
 	double getAveragePathStretch() const;
+	inline uint getUpdateCount() const { return updateCount; }
+	inline uint getReplacementCount() const { return replacementCount; }
 	/// returns the maximum size of a bucket, i.e. the size after which a bucket is split
 	inline size_type getSplitSize() { return bucketSize; }
 	/// returns true if the key is known, i.e. there is a contact present
 	inline bool isKnown(const OverlayKey& key) { return getContact(key) != nullptr; }
+
 
 	/// returns the distance between the two keys
 	inline OverlayKey distance(const OverlayKey& a, const OverlayKey& b) const { return a ^ b; }
@@ -183,6 +188,8 @@ private:
 	KadPolicy* policy = nullptr;
 	bool proximityNeighborSelection;
 	bool pathSimplification;
+	uint replacementCount = 0;
+	uint updateCount = 0;
 
 	//------ private helper functions -------
 	/**  */

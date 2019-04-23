@@ -117,6 +117,8 @@ public:
 	uint getDroppedPackets() const { return droppedPackets; }
 	uint getSentPackets() const { return sentPackets; }
 	uint getReceivedPackets() const { return receivedPackets; }
+	void recordScalars();
+	void recordRoutingTable();
 
 	//@}
 
@@ -144,7 +146,7 @@ private:
 	/** @name timer functions */
 	//@{
 	/// adds a timer to the timer vectors, sends a timer packet
-	void addTimer(simtime_t duration, std::function<void()> callback);
+	void addTimer(simtime_t initialOffset, simtime_t duration, std::function<void()> callback);
 	void doProbe();
 	void doReachabilityTest();
 	//@}

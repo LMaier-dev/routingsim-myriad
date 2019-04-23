@@ -47,7 +47,7 @@ void RPCProtocol::handleAnswer(packet_p answer)
 	nonce_t nonce = answer->getNonce();
 	auto it = states.find(nonce);
 	if(it == states.end()) {
-		EV_WARN << "recieved answer packet with unknown nonce" << endl;
+		EV_WARN << "received answer packet with unknown nonce" << endl;
 		return;
 	}
 	bool result;
