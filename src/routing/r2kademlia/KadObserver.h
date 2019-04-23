@@ -74,7 +74,7 @@ private:
 	/// if true, histograms and averages are reset each sampling interval
 	bool resetAfterSample;
 	/// time when message recording should start
-	simtime_t messageRecordTime;
+	simtime_t messageSampleTime;
 	/// sets the max number of message delivery infos to be recorded
 	size_type numMessageDeliveryInfos;
 	/// sets the max number of message dropped infos to be recorded

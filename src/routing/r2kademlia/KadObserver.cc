@@ -32,7 +32,7 @@ void KadObserver::initialize() {
 	getStatistics().addSample(this);
 
 	resetAfterSample = par("resetAfterSample").boolValue();
-	messageRecordTime = (simtime_t) par("messageRecordTime").doubleValue();
+	messageSampleTime = (simtime_t) par("messageSampleTime").doubleValue();
 	numMessageDeliveryInfos = par("messageDeliverySample").intValue();
 	numMessageDroppedInfos = par("messageDroppedSample").intValue();
 
@@ -229,7 +229,7 @@ void KadObserver::registerPacketDropped(KadPacket& packet, const OverlayKey& cur
 	histograms[prefixDistDropped]->collect(info.prefixDist);
 	histograms[prefixDistLeft]->collect(info.prefixDistLeft);
 
-	if (simTime() > messageRecordTime and messageDroppedInfos.size() < numMessageDroppedInfos)
+	if (simTime() > messageSampleTime and messageDroppedInfos.size() < numMessageDroppedInfos)
 		messageDroppedInfos.push_back(info);
 
 }
@@ -256,7 +256,7 @@ void KadObserver::registerPacketDelivered(KadPacket& packet) {
 	histograms[prefixDist]->collect(info.prefixDist);
 	histograms[overlayHops]->collect(info.overlayHops);
 	histograms[prefixPerHop]->collect(info.prefixDist / (double)info.overlayHops);
-	if (simTime() > messageRecordTime and messageDeliveryInfos.size() < numMessageDeliveryInfos)
+	if (simTime() > messageSampleTime and messageDeliveryInfos.size() < numMessageDeliveryInfos)
 		messageDeliveryInfos.push_back(info);
 }
 void KadObserver::registerPacketOverlayHop(KadPacket& packet) {

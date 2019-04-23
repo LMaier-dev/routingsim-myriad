@@ -24,7 +24,7 @@ simple KadObserver
         /// if true, histograms and averages are reset each sampling interval
         bool resetAfterSample = default(true);
         /// sets the time when message recording should start
-        double messageRecordTime = default(200s) @unit(s);
+        double messageSampleTime = default(200s) @unit(s);
         /// sets the max number of message delivery infos to be recorded
         int messageDeliverySample = default(2000);
         /// sets the max number of message dropped infos to be recorded
