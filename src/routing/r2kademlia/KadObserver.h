@@ -51,6 +51,7 @@ protected:
 	virtual void finish() override;
 	virtual void handleMessage(cMessage *msg) override;
 	void recordStatistics();
+	void recordMessageScalars();
 
 private:
 	boost::bimap<OverlayKey, nodeid_t> nodes;

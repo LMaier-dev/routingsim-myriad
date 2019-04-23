@@ -72,6 +72,7 @@ void KadObserver::finish() {
 	for (auto& h : histograms)
 		h->record();
 	recordStatistics();
+	recordMessageScalars();
 
 	nodes.clear();
 	histograms.clear();
@@ -88,7 +89,7 @@ void KadObserver::handleMessage(cMessage *msg) {
 void KadObserver::recordStatistics() {
 	std::set<nodeid_t> nodeSample{};
 	//TODO actually sample
-	for (auto pair : nodes.right)
+	for (auto& pair : nodes.right)
 		nodeSample.insert(pair.first);
 	cHistogram forwardedPackets{"forwardedPackets"};
 	cHistogram nodeDegrees{"nodeDegrees"};
@@ -105,6 +106,32 @@ void KadObserver::recordStatistics() {
 	nodeDegrees.record();
 	contacts.record();
 	recordScalar("simTime", simTime());
+}
+
+
+void KadObserver::recordMessageScalars() {
+	cModuleType* modType = cModuleType::get("routingsim.routing.r2kademlia.Dummy");
+	std::string messageDeliveredStr{"messageDelivered"};
+	uint i = 0;
+	for (auto& info : messageDeliveryInfos){
+		cModule* mod = modType->create((messageDeliveredStr + std::to_string(++i)).c_str(), this);
+		mod->recordScalar("hopCount", info.hops);
+		mod->recordScalar("overlayHops", info.overlayHops);
+		mod->recordScalar("distance", info.distance);
+		mod->recordScalar("prefixDist", info.prefixDist);
+	}
+	i = 0;
+	std::string messageDroppedStr{"messageDropped"};
+	for (auto& info : messageDroppedInfos){
+		cModule* mod = modType->create((messageDroppedStr + std::to_string(++i)).c_str(), this);
+		mod->recordScalar("hopCountDropped", info.hops);
+		mod->recordScalar("overlayHopsDropped", info.overlayHops);
+		mod->recordScalar("distanceDropped", info.distance);
+		mod->recordScalar("distanceLeft", info.distanceLeft);
+		mod->recordScalar("prefixDistDropped", info.prefixDist);
+		mod->recordScalar("prefixDistLeft", info.prefixDistLeft);
+		mod->recordScalar("reasonDropped", info.reason);
+	}
 }
 
 R2Kademlia& KadObserver::getR2Kademlia(Node* nodeMod) {
