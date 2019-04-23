@@ -31,6 +31,11 @@ void KadObserver::initialize() {
 	ASSERT(observer == NULL || observer == this);
 	getStatistics().addSample(this);
 
+	resetAfterSample = par("resetAfterSample").boolValue();
+	messageRecordTime = (simtime_t) par("messageRecordTime").doubleValue();
+	numMessageDeliveryInfos = par("numMessageDeliveryInfos").intValue();
+	numMessageDroppedInfos = par("numMessageDroppedInfos").intValue();
+
 	histograms.resize(13);
 	histograms[hopCount] = cHistogramPtr(getIntHistogram("hopCount"));
 	histograms[distance] = cHistogramPtr(getIntHistogram("distance"));

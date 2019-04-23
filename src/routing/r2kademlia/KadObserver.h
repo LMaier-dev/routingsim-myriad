@@ -60,7 +60,6 @@ private:
 	unsigned int deliveredPackets = 0;
 	unsigned int droppedPackets = 0;
 	unsigned int registeredPackets = 0;
-	bool resetAfterSample = true;
 	enum dataType : uint8_t {hopCount=0, distance=1, prefixDist=2, overlayHops=3,
 		stretchMul=4, stretchAdd=5, prefixPerHop=6, distanceLeft=7,
 		prefixDistLeft=8, hopCountDropped=9, overlayHopsDropped=10,
@@ -72,9 +71,14 @@ private:
 	std::vector<std::unique_ptr<cOutVector>> addOutVectors;
 	std::vector<MessageDeliveryInfo> messageDeliveryInfos;
 	std::vector<MessageDroppedInfo> messageDroppedInfos;
-	simtime_t messageRecordTime = 200;
-	size_type numMessageDeliveryInfos = 2000;
-	size_type numMessageDroppedInfos = 500;
+	/// if true, histograms and averages are reset each sampling interval
+	bool resetAfterSample;
+	/// time when message recording should start
+	simtime_t messageRecordTime;
+	/// sets the max number of message delivery infos to be recorded
+	size_type numMessageDeliveryInfos;
+	/// sets the max number of message dropped infos to be recorded
+	size_type numMessageDroppedInfos;
 
 private:
 	R2Kademlia& getR2Kademlia(Node* nodeMod);

@@ -21,4 +21,12 @@ package routingsim.routing.r2kademlia;
 simple KadObserver
 {
     parameters:
+        /// if true, histograms and averages are reset each sampling interval
+        bool resetAfterSample = default(true);
+        /// sets the time when message recording should start
+        double messageRecordTime = default(200s) @unit(s);
+        /// sets the max number of message delivery infos to be recorded
+        int numMessageDeliveryInfos = default(2000);
+        /// sets the max number of message dropped infos to be recorded
+        int numMessageDroppedInfos = default(500);
 }
