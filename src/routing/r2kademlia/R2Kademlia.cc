@@ -161,7 +161,7 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 }
 
 void R2Kademlia::handlePacket(KadAnswer_p packet) {
-	EV << "received answer packet" << endl;
+	EV_DEBUG << "received answer packet" << endl;
 	if (packet->getType() == KAD_Error)
 		onErrorPacket(*check_and_cast<KadError *>(packet.get()));
 	handleAnswer(std::move(packet));
@@ -309,7 +309,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 		if (contacts.front()->getKey() == packet->getSource()) {
 			if(contacts.size() == 1) {
 				// the only contact we know is the source
-				countDropped(*packet, packet->getQuery());
+				countDropped(*packet, query);
 				returnToSender(KAD_NodeUnreachable, std::move(packet));
 				return;
 			}
@@ -329,12 +329,13 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 			}
 			ASSERT((contact.getKey() ^ query) < (myOverlayKey ^ query));
 			packet->appendRoute(contact);
-			ASSERT(packet->getRouteArraySize() <= hopLimit);
+			ASSERT(packet->getRouteArraySize() <= packet->getHopLimit());
 			resendPacket(std::move(packet));
 			return;
 		}
 		else if (packet->getExact()) {
-			countDropped(*packet, packet->getQuery());
+			countDropped(*packet, query);
+			//TODO: if we find a closer contact too far away, we should send HOP LIMIT EXCEEDED
 			returnToSender(KAD_NodeUnreachable, std::move(packet));
 			return;
 		}
@@ -551,7 +552,11 @@ void R2Kademlia::doProbe() {
 
 void R2Kademlia::doReachabilityTest() {
 	if (neighborTable.size() == 0) return; // we are isolated
-	sendFindNode(getKadObserver().getRandomNodeKey(), true);
+	const OverlayKey* key;
+	do {
+		key = &getKadObserver().getRandomNodeKey();
+	} while(*key == myOverlayKey);
+	sendFindNode(*key, true);
 }
 
 void R2Kademlia::countRecieved(KadPacket& packet) {
