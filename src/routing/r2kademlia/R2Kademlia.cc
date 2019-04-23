@@ -386,6 +386,8 @@ void R2Kademlia::sampleStatistics (Statistics &stats) {
 	stats.value("receivedPackets", recievedPackets);
 	stats.value("routingTableContacts", routingTable.getNumContacts());
 	stats.value("routingTableBuckets", routingTable.getNumBuckets());
+	stats.value("routingTableUpdates", routingTable.getUpdateCount());
+	stats.value("routingTableReplacements", routingTable.getReplacementCount());
 	if(detailedRoutingTableStats) {
 		stats.value("routingTablePathLength", routingTable.getAveragePathLength());
 		stats.value("routingTablePathStretch", routingTable.getAveragePathStretch());
@@ -414,6 +416,8 @@ void R2Kademlia::recordScalars() {
 	recordScalar("routingTableBuckets", routingTable.getNumBuckets());
 	recordScalar("routingTablePathLength", routingTable.getAveragePathLength());
 	recordScalar("routingTablePathStretch", routingTable.getAveragePathStretch());
+	recordScalar("routingTableUpdates", routingTable.getUpdateCount());
+	recordScalar("routingTableReplacements", routingTable.getReplacementCount());
 	nodeid_t nid =  Node::getNode(this)->getNodeId();
 	recordScalar("nodeId", nid);
 	recordScalar("degree", getNetworkManager()->getTopology().getNodeDegree(nid));

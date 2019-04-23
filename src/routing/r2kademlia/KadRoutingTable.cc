@@ -92,6 +92,7 @@ void KadRoutingTable::addPath(const OverlayKey& key, kad_path path)
 		// contact is known
 		if (contact->getPathLength() > path.size()) {
 			contact->setPath(std::move(path));
+			updateCount++;
 			//TODO onImprovement?
 			return;
 		}
@@ -112,6 +113,7 @@ void KadRoutingTable::addPath(const OverlayKey& key, const kad_path& path, const
 	if (contact) {
 		// contact is known
 		if (contact->getPathLength() > path.size() + viaPath.size()) {
+			updateCount++;
 			contact->setPath(concatViaPath(viaPath, path));
 			//TODO onImprovement?
 			return;
@@ -165,6 +167,7 @@ void KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path)
 			}
 		}
 		if (result != contacts.end()) {
+			replacementCount++;
 			EV_DEBUG << "replacing contact, new: " << *contact << " old: " << **result << endl;
 			*result = std::move(contact);
 			policy->onNewContact(result->get());
