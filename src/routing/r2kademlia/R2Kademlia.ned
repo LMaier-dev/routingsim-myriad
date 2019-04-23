@@ -43,5 +43,5 @@ simple R2Kademlia extends routingsim.foundation.Protocol
 
 		// statistics foo
 		/// if true records avarage path lengths and stretch in routing tables.
-		bool detailedRoutingTableStats = default(false);
+		bool detailedRoutingTableStats = default(true);
 }
