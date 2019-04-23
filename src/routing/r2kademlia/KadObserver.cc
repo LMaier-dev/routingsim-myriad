@@ -33,8 +33,8 @@ void KadObserver::initialize() {
 
 	resetAfterSample = par("resetAfterSample").boolValue();
 	messageRecordTime = (simtime_t) par("messageRecordTime").doubleValue();
-	numMessageDeliveryInfos = par("numMessageDeliveryInfos").intValue();
-	numMessageDroppedInfos = par("numMessageDroppedInfos").intValue();
+	numMessageDeliveryInfos = par("messageDeliverySample").intValue();
+	numMessageDroppedInfos = par("messageDroppedSample").intValue();
 
 	histograms.resize(13);
 	histograms[hopCount] = cHistogramPtr(getIntHistogram("hopCount"));
@@ -91,25 +91,31 @@ void KadObserver::handleMessage(cMessage *msg) {
 	delete msg;
 }
 
-void KadObserver::recordStatistics() {
-	std::set<nodeid_t> nodeSample{};
-	//TODO actually sample
-	for (auto& pair : nodes.right)
-		nodeSample.insert(pair.first);
-	cHistogram forwardedPackets{"forwardedPackets"};
-	cHistogram nodeDegrees{"nodeDegrees"};
-	cHistogram contacts{"routingTableContacts"};
+std::set<nodeid_t> KadObserver::sampleNodes(int n) {
+	if (n < 0 or (size_type) n > nodes.size())
+		n = nodes.size();
+	std::set<nodeid_t> sample{};
 	NetworkTopology& topo = getNetworkManager()->getTopology();
-	for (nodeid_t nid : nodeSample) {
-		R2Kademlia& kad = getR2Kademlia(nid);
-		forwardedPackets.collect(kad.getForwardedPackets());
-		nodeDegrees.collect(topo.getNodeDegree(nid));
-		contacts.collect(kad.getRoutingTable().getNumContacts());
-		kad.recordScalars();
+	if (n > nodes.size() * 0.8) {
+		for (auto& pair : nodes.right)
+			sample.insert(pair.first);
 	}
-	forwardedPackets.record();
-	nodeDegrees.record();
-	contacts.record();
+	while (sample.size() < (size_type) n) {
+		nodeid_t nid = topo.getRandomNode(getRNG(0));
+		ASSERT(nodes.right.count(nid) == 1);
+		sample.insert(nid);
+	}
+	while (sample.size() > (size_type) n)
+		sample.erase(topo.getRandomNode(getRNG(0)));
+
+	return sample;
+}
+
+void KadObserver::recordStatistics() {
+	for (nodeid_t nid : sampleNodes(par("nodeSample").intValue()))
+		getR2Kademlia(nid).recordScalars();
+	for (nodeid_t nid : sampleNodes(par("routingTableSample").intValue()))
+		getR2Kademlia(nid).recordRoutingTable();
 	recordScalar("simTime", simTime());
 }
 

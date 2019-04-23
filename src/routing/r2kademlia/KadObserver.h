@@ -84,6 +84,7 @@ private:
 	R2Kademlia& getR2Kademlia(Node* nodeMod);
 	inline R2Kademlia& getR2Kademlia(nodeid_t nid) { return getR2Kademlia(getNetworkManager()->getTopology().getNodeModule(nid)); }
 	inline R2Kademlia& getR2Kademlia(const OverlayKey& key) { return getR2Kademlia(getNodeId(key)); }
+	std::set<nodeid_t> sampleNodes(int n);
 
 public:
 

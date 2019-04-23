@@ -118,6 +118,7 @@ public:
 	uint getSentPackets() const { return sentPackets; }
 	uint getRecievedPackets() const { return recievedPackets; }
 	void recordScalars();
+	void recordRoutingTable();
 
 	//@}
 

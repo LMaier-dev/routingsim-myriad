@@ -26,7 +26,11 @@ simple KadObserver
         /// sets the time when message recording should start
         double messageRecordTime = default(200s) @unit(s);
         /// sets the max number of message delivery infos to be recorded
-        int numMessageDeliveryInfos = default(2000);
+        int messageDeliverySample = default(2000);
         /// sets the max number of message dropped infos to be recorded
-        int numMessageDroppedInfos = default(500);
+        int messageDroppedSample = default(500);
+        /// number of nodes for node scalar sampling
+        int nodeSample = default(-1);
+        /// number of nodes for routing table scalar sampling
+        int routingTableSample = default(-1);
 }

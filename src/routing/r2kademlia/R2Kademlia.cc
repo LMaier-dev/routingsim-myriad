@@ -418,7 +418,9 @@ void R2Kademlia::recordScalars() {
 	recordScalar("nodeId", nid);
 	recordScalar("degree", getNetworkManager()->getTopology().getNodeDegree(nid));
 	recordScalar("popularity", getKadObserver().getPopularity(myOverlayKey));
+}
 
+void R2Kademlia::recordRoutingTable() {
 	// these submodules are a hack to record scalars for the contacts
 	// they are only used for scalar recording
 	cModuleType* modType = cModuleType::get("routingsim.routing.r2kademlia.Dummy");
