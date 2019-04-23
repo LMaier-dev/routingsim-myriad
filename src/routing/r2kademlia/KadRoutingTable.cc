@@ -55,7 +55,7 @@ size_type KadRoutingTable::getBucketIndex(const OverlayKey& key) const
 	uint prefixLen = delta.sharedPrefixLength(0, accelerationFactor);
 
 	// i is now the index of the LSB of the first non zero sub integer in delta
-	int i = delta.getLength() - prefixLen*getLevelWidth() - 1;
+	int i = delta.getLength() - (prefixLen+1)*accelerationFactor;
 	if (i < 0) // this is my key
 		return buckets.size() - 1;
 	ASSERT(delta.getBitRange(i, accelerationFactor) != 0);

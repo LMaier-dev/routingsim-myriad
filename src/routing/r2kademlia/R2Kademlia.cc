@@ -329,7 +329,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 			}
 			ASSERT((contact.getKey() ^ query) < (myOverlayKey ^ query));
 			packet->appendRoute(contact);
-			ASSERT(packet->getRouteArraySize() <= packet->getHopLimit());
+			ASSERT(packet->getRouteArraySize() - packet->getProgress() <= packet->getHopLimit());
 			resendPacket(std::move(packet));
 			return;
 		}
