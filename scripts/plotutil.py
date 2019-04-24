@@ -13,13 +13,18 @@ Author: Jakob Thomas
 """
 import subprocess
 import json
+import os
 import pathlib
 from collections import namedtuple
 import itertools
+import logging
+import multiprocessing
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+
+logger = logging.getLogger()
 
 # utility
 labels = namedtuple('labels', dict(var='{run.measurement}'))
@@ -65,7 +70,7 @@ def load_results_from_dir(dir_=None, glob='*.vec'):
 def get_runs(data=None):
     if data is None:
         data = json_data
-    runs_ = [Run(r) for r in data.values()]
+    runs_ = [Run(name, run) for name, run in data.items()]
     if data is json_data:
         global runs
         runs = runs_
@@ -91,9 +96,40 @@ def get_configs(data=None):
     return configs_
 
 def parse():
-    """Parses the global json data to set the configs object"""
     get_configs()
 
+def parse_fast(globs, directoy=None, processes=None, **kwargs):
+    if processes is None:
+        processes = max(os.cpu_count()-1, 1)
+    directoy = pathlib.Path(load_dir if directoy is None else directoy)
+    if isinstance(globs, str):
+        globs = [globs]
+
+    load_paths = map(str, itertools.chain.from_iterable(
+        directoy.glob(glob) for glob in globs))
+    runs = {}
+    with multiprocessing.Pool(processes=processes, **kwargs) as pool:
+        #for run in map(_get_run_from_file, load_paths):
+        for run in pool.imap_unordered(_get_run_from_file, load_paths):
+            if run.name in runs:
+                runs[run.name].merge(run)
+            else:
+                runs[run.name] = run
+
+    # todo multiple runs per measurement
+    configs_dict = dict(
+        (configname,  Config(configruns))
+        for configname, configruns in _group_by(runs.values(), 'configname').items())
+
+    # create object
+    global configs
+    configs = namedtuple('configs', [])
+    for k,v in configs_dict.items():
+        setattr(configs, k, v)
+    return configs
+
+
+##### functions for plotting ####
 def plot_points(points, *args, plot=plt, **kwargs):
     x = numpy.array()
     y = numpy.array()
@@ -143,6 +179,59 @@ def _create_map(list_, attr_):
     return dict((getattr(item, attr_), item) for item in list_)
 
 
+def _json_filename(path):
+    return str(path)+".json"
+
+def _get_json(path, force_new=False):
+    """Returns the contets of a omnet++ result file as json"""
+    jsonpath = _json_filename(path)
+    if not force_new and _is_newer(path, jsonpath):
+        logger.info("using existing json file %s", str(jsonpath))
+        try:
+            return _get_json_contents(jsonpath)
+        except Exception as e:
+            logger.warning("loading existing json file %s failed", jsonpath)
+            logger.warning(e)
+    logger.info("using scavetool to generate json file %s", jsonpath)
+    p = subprocess.run(
+        ['scavetool', 'x', '-o', str(jsonpath), '-F', 'JSON', str(path)])
+    p.check_returncode()
+    assert _is_newer(path, jsonpath)
+    return _get_json_contents(jsonpath)
+
+def _is_newer(path1, path2):
+    assert os.path.isfile(path1)
+    return os.path.isfile(path2) and \
+        os.stat(path1).st_mtime < os.stat(path2).st_mtime
+
+def _get_json_contents(jsonpath):
+    """Returns the contets of a json file"""
+    with open(jsonpath) as f:
+        return json.load(f)
+
+def _get_run_from_file(path):
+    if path.endswith(".sca"):
+        csvpath = path + ".csv"
+        if _is_newer(path, csvpath) and _is_newer(path, csvpath+".info"):
+            try:
+                logger.info("reading pandas csv from file %s", csvpath)
+                run = _get_run_from_json(_get_json_contents(csvpath+".info"))
+                run.scalars = pd.read_csv(csvpath)
+                return run
+            except Exception as e:
+                logger.error(e)
+    run = _get_run_from_json(_get_json(path))
+    if path.endswith(".sca"):
+        run.write_scalars(csvpath)
+    return run
+
+def _get_run_from_json(jsondata):
+    assert isinstance(jsondata, dict)
+    assert len(jsondata) == 1
+    ((run_name, run_json),) = jsondata.items()
+    return Run(run_name, run_json)
+
+
 ########## Class definitions #########
 
 class Vector:
@@ -173,12 +262,17 @@ class Vector:
         return label.format(run=self.run,
                             name=self.name,
                             module=self.module)
+    def timeslice(self, tmin, tmax):
+        imin = np.searchsorted(self.time, tmin, side='left')
+        imax = np.searchsorted(self.time, tmax, side='right')
+        return (self.time[imin:imax], self.value[imin:imax])
 
 
 class Run:
     """Models an omnet++ simulation run"""
-    def __init__(self, run_json):
+    def __init__(self, name, run_json):
         # attributes
+        self.name = name
         self.attributes = run_json['attributes']
         for k,v in self.attributes.items():
             setattr(self, k, v)
@@ -190,18 +284,47 @@ class Run:
         self.moduleparams = {}
         for param in run_json['moduleparams']:
             self.moduleparams.update(param)
+        self.moduleparams_orig = run_json['moduleparams']
 
         # vectors
         self.vectors = [Vector(v, self) for v in run_json.get('vectors', [])]
-        # NOTE: this only works if vector names are unique
-        for k, v in _create_map(self.vectors, 'name').items():
-            setattr(self, 'v_'+k, v)
+        self._create_vector_attr()
 
+        if 'scalars' in run_json:
+            self.add_scalars(run_json['scalars'])
+        else:
+            self.scalars = pd.DataFrame()
+
+    def add_scalars(self, scalar_list):
         # scalars
-        scalar_dict = dict((scalar['module'], dict()) for scalar in run_json.get('scalars', []))
-        for scalar in run_json.get('scalars', []):
+        scalar_dict = dict((scalar['module'], dict()) for scalar in scalar_list)
+        for scalar in scalar_list:
             scalar_dict[scalar['module']][scalar['name']] = scalar['value']
         self.scalars = pd.DataFrame.from_dict(scalar_dict, orient='index')
+
+    def write_scalars(self, path):
+        if self.scalars.empty:
+            return
+        self.scalars.to_csv(path)
+        with open(path+'.info', 'w') as f:
+            json.dump({str(self.name): dict(
+                            moduleparams=self.moduleparams_orig,
+                            itervars=self.itervars,
+                            attributes=self.attributes)}, f)
+
+    def merge(self, other):
+        assert not self.vectors or self.scalars.empty
+        assert not self.vectors or not other.vectors
+        assert self.scalars.empty or other.scalars.empty
+        assert self.attributes == other.attributes
+        assert self.itervars == other.itervars
+        assert self.moduleparams == other.moduleparams
+        if not self.vectors:
+            self.vectors = other.vectors
+            self._create_vector_attr()
+        if self.scalars.empty:
+            self.scalars = other.scalars
+        return self
 
     def __repr__(self):
         return "<Run {}/{}/{} ({} Vectors)>".format(
@@ -210,6 +333,11 @@ class Run:
     def path(self):
         return "{}/{}/{}".format(
             self.configname, self.measurement, self.runnumber)
+
+    def _create_vector_attr(self):
+        # NOTE: this only works if vector names are unique
+        for k, v in _create_map(self.vectors, 'name').items():
+            setattr(self, 'v_'+k, v)
 
 
 def ret_collection(f):
