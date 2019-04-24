@@ -165,6 +165,20 @@ def logscale(x=True, y=True, plot=plt):
     if y:
         plot.yscale('log')
 
+def multibar(data, labels, xlabels, ax=None):
+    """Draws a bar diagram with multiple bars per x tick."""
+    ax = ax if ax is not None else plt.axes()
+    assert len(data[0]) == len(xlabels)
+    assert len(data) == len(labels)
+    ind = np.arange(len(xlabels))
+    width = 1 / len(labels) * 0.9
+    offset = width/2.0*len(labels)
+    for i, (series, label) in enumerate(zip(data, labels)):
+        ax.bar(ind+i*width-offset, series, width, label=label, align='edge')
+    ax.set_xticks(ind)
+    ax.set_xticklabels(xlabels)
+
+
 ##### helper functions ####
 def _group_by(list_, attr_):
     ret = {}
