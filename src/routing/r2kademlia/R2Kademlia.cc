@@ -525,7 +525,7 @@ void R2Kademlia::doProbe() {
 	OverlayKey probeKey;
 	bool exact = false;
 	uint32_t index = 0;
-	switch(probeStrategy) {
+	switch (probeStrategy) {
 		case 0:
 			return;
 		case 1:
@@ -549,10 +549,14 @@ void R2Kademlia::doProbe() {
 					myOverlayKey.getLength());
 			probeKey = myOverlayKey.randomSuffix(myOverlayKey.getLength() - index, getRNG(0));
 			break;
+		case 6:
+			index = intuniform(1, 1 + routingTable.getDepth());
+			probeKey = myOverlayKey.randomSuffix(myOverlayKey.getLength() - index, getRNG(0));
+			break;
 		default:
-			throw cRuntimeError("unknown probe strategy %i, values from 0 to 5 are allowed");
+			throw cRuntimeError("unknown probe strategy %i, values from 0 to 6 are allowed");
 	}
-	if(probeKey == myOverlayKey) probeKey[0] ^= 1;
+	if (probeKey == myOverlayKey) probeKey[0] ^= 1;
 	sendFindNode(probeKey, exact);
 }
 
