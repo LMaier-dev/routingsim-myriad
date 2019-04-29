@@ -85,8 +85,12 @@ $(TOPODIR)/clos_fat_tree_%_with_hosts.txt:
 
 
 realTopo: $(TOPODIR)/KentuckyDataLink.graphml.txt
-$(TOPODIR)/KentuckyDataLink.graphml:
-    wget http://topology-zoo.org/files/Kdl.graphml -O  $(TOPODIR)/KentuckyDataLink.graphml
 
-$(TOPODIR)/%.graphml.txt:
-    /scripts/graphgen.py -d $(TOPODIR) graphml  $(TOPODIR)/$*.graphml
+$(TOPODIR)/KentuckyDataLink.graphml:
+	wget http://topology-zoo.org/files/Kdl.graphml -O  '$(TOPODIR)/KentuckyDataLink.graphml'
+
+$(TOPODIR)/%.graphml.txt: $(TOPODIR)/$*.graphml
+	./scripts/graphgen.py -d $(TOPODIR) graphml $(TOPODIR)/$*.graphml
+
+$(TOPODIR)/KentuckyDataLink.graphml.txt: $(TOPODIR)/KentuckyDataLink.graphml
+	./scripts/graphgen.py -d $(TOPODIR) graphml $(TOPODIR)/KentuckyDataLink.graphml
