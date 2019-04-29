@@ -51,7 +51,7 @@ def main():
             ["", f"\tmakes {(opt.K//2)**2 + opt.K**2} nodes and up to {opt.K**3 // 4} hosts"],
             ["time", datetime.now()]]
 
-        G.graph['filename'] = f"clos_fat_tree_{opt.K}{'_with_hosts' if opt.hosts else ''}.txt"
+        G.graph['filename'] = f"clos_fat_tree_{opt.K}_with{'out' if not opt.hosts else ''}_hosts.txt"
     elif(opt.type == 'tree'):
         G = networkx.balanced_tree(opt.R, opt.H)
         G.graph['info'] = [

@@ -63,13 +63,24 @@ plcTopoCluster:$(TOPODIR)/powerlaw_cluster_graph_n1000_m3_p0.0_seed0.txt\
 $(TOPODIR)/powerlaw_cluster_graph_%.txt:
 	echo $*	| sed -E "s#n([0-9]+)_m([0-9]+)_p([0-9]+\.?[0-9]*)_seed([0-9]+)#./scripts/graphgen.py --seed \4 -d $(TOPODIR) plc \1 \2 \3#" | bash
 
-fatTreeTopo: $(TOPODIR)/clos_fat_tree_24.txt \
- $(TOPODIR)/clos_fat_tree_26.txt \
- $(TOPODIR)/clos_fat_tree_28.txt \
- $(TOPODIR)/clos_fat_tree_30.txt \
- $(TOPODIR)/clos_fat_tree_48.txt \
+fatTreeTopo: fatTreeTopoHosts fatTreeTopoNoHosts
 
-$(TOPODIR)/clos_fat_tree_%.txt:
+fatTreeTopoNoHosts: $(TOPODIR)/clos_fat_tree_24_without_hosts.txt \
+ $(TOPODIR)/clos_fat_tree_26_without_hosts.txt \
+ $(TOPODIR)/clos_fat_tree_28_without_hosts.txt \
+ $(TOPODIR)/clos_fat_tree_30_without_hosts.txt \
+ $(TOPODIR)/clos_fat_tree_48_without_hosts.txt \
+
+fatTreeTopoHosts: $(TOPODIR)/clos_fat_tree_24_with_hosts.txt \
+ $(TOPODIR)/clos_fat_tree_26_with_hosts.txt \
+ $(TOPODIR)/clos_fat_tree_28_with_hosts.txt \
+ $(TOPODIR)/clos_fat_tree_30_with_hosts.txt \
+ $(TOPODIR)/clos_fat_tree_48_with_hosts.txt \
+
+$(TOPODIR)/clos_fat_tree_%_without_hosts.txt:
 	./scripts/graphgen.py -d $(TOPODIR) cft $*
+
+$(TOPODIR)/clos_fat_tree_%_with_hosts.txt:
+	./scripts/graphgen.py -d $(TOPODIR) cft $* --hosts
 
 	
