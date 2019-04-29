@@ -83,14 +83,28 @@ $(TOPODIR)/clos_fat_tree_%_without_hosts.txt:
 $(TOPODIR)/clos_fat_tree_%_with_hosts.txt:
 	./scripts/graphgen.py -d $(TOPODIR) cft $* --hosts
 
+plcFatTreeCompare: \
+ $(TOPODIR)/powerlaw_cluster_graph_n2880_m19_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n4176_m2_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n4176_m3_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n7875_m2_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n7875_m3_p0.5_seed0.txt\
 
-realTopo: $(TOPODIR)/KentuckyDataLink.graphml.txt
+realTopo: $(TOPODIR)/KentuckyDataLink.graphml.txt \
+ $(TOPODIR)/powerlaw_cluster_graph_n754_m1_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n754_m2_p0.5_seed0.txt\
+ $(TOPODIR)/ASEdges4_2016.csv \
+ $(TOPODIR)/powerlaw_cluster_graph_n26303_m1_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n26303_m2_p0.5_seed0.txt
+ 
 
 $(TOPODIR)/KentuckyDataLink.graphml:
 	wget http://topology-zoo.org/files/Kdl.graphml -O  '$(TOPODIR)/KentuckyDataLink.graphml'
 
-$(TOPODIR)/%.graphml.txt: $(TOPODIR)/$*.graphml
-	./scripts/graphgen.py -d $(TOPODIR) graphml $(TOPODIR)/$*.graphml
 
 $(TOPODIR)/KentuckyDataLink.graphml.txt: $(TOPODIR)/KentuckyDataLink.graphml
 	./scripts/graphgen.py -d $(TOPODIR) graphml $(TOPODIR)/KentuckyDataLink.graphml
+
+$(TOPODIR)/ASEdges4_2016.csv:
+	wget 'https://web.archive.org/web/20170915082716/http://www.netdimes.org/PublicData/csv/ASEdges4_2012.csv.gz' -O $(TOPODIR)/ASEdges4_2016.csv.gz
+	gunzip $(TOPODIR)/ASEdges4_2016.csv.gz
