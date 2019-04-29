@@ -7,6 +7,8 @@ import sys
 from datetime import datetime
 import itertools
 import concurrent.futures
+import os
+import pathlib
 
 import networkx
 
@@ -32,6 +34,21 @@ def main():
     parser_plc.add_argument('R', type=int, help='tree degree')
     parser_plc.add_argument('H', type=int, help='tree height')
 
+    parser_plc = subparsers.add_parser('gnp', help='Erdos Reni Model G(n,p)')
+    parser_plc.add_argument('N', type=int, help='number or nodes')
+    parser_plc.add_argument('P', type=int, help='edge probability')
+
+    parser_plc = subparsers.add_parser('gnm', help='G(n,m) model: n nodes, m edges')
+    parser_plc.add_argument('N', type=int, help='number or nodes')
+    parser_plc.add_argument('M', type=int, help='number of edges')
+
+    parser_plc = subparsers.add_parser('gnd', help='G(n,m) model: n nodes, d*n/2 edges')
+    parser_plc.add_argument('N', type=int, help='number or nodes')
+    parser_plc.add_argument('D', type=int, help='average degree')
+
+    parser_plc = subparsers.add_parser('graphml', help='read graphml file')
+    parser_plc.add_argument('PATH', help='path to graphml file')
+
     opt = parser.parse_args()
 
     print("generating graph...")
@@ -55,12 +72,42 @@ def main():
     elif(opt.type == 'tree'):
         G = networkx.balanced_tree(opt.R, opt.H)
         G.graph['info'] = [
-            ["", f"generated with NetworkX {networkx.__version__}, networkx.balanced tree"],
+            ["", f"generated with NetworkX {networkx.__version__}, networkx.balanced_tree"],
             ["", f"r = {opt.R}; h = {opt.H}"],
             ["time", datetime.now()]]
-
         G.graph['filename'] = f"tree_r{opt.R}_h{opt.H}.txt"
+
+    elif(opt.type == 'gnp'):
+        G = networkx.fast_gnp_random_graph(opt.N, opt.P, seed=opt.seed)
+        G.graph['info'] = [
+            ["", f"generated with NetworkX {networkx.__version__}, networkx.fast_gnp_random_graph"],
+            ["", f"n = {opt.N}; p = {opt.P}; seed = {opt.seed}"],
+            ["time", datetime.now()]]
+        G.graph['filename'] = f"gnp_n{opt.N}_m{opt.P}_seed{opt.seed}.txt"
+    elif(opt.type == 'gnm'):
+        G = networkx.gnm_random_graph(opt.N, opt.M, seed=opt.seed)
+        G.graph['info'] = [
+            ["", f"generated with NetworkX {networkx.__version__}, networkx.gnm_random_graph"],
+            ["", f"n = {opt.N}; m = {opt.M}; seed = {opt.seed}"],
+            ["time", datetime.now()]]
+        G.graph['filename'] = f"gnm_n{opt.N}_m{opt.M}_seed{opt.seed}.txt"
+    elif(opt.type == 'gnd'):
+        G = networkx.gnm_random_graph(opt.N, opt.D * opt.N/2, seed=opt.seed)
+        G.graph['info'] = [
+            ["", f"generated with NetworkX {networkx.__version__}, networkx.gnm_random_graph"],
+            ["", f"n = {opt.N}; m = {opt.D * opt.N/2}; seed = {opt.seed}"],
+            ["time", datetime.now()]]
+        G.graph['filename'] = f"gnd_n{opt.N}_d{opt.D}_seed{opt.seed}.txt"
+    elif(opt.type == 'graphml'):
+        G = networkx.Graph(networkx.read_graphml(opt.PATH, node_type=int))
+        p = pathlib.Path(opt.PATH)
+        G.graph['info'] = [
+            ["", f"converted with NetworkX {networkx.__version__}, networkx.read_graphml"],
+            ["", f"imput file: {p}"],
+            ["time", datetime.now()]]
+        G.graph['filename'] = f"{p.name}.txt"
     else:
+        print("unkonw generator")
         exit()
     if not opt.nostats:
         print("generating stats...")
@@ -93,7 +140,7 @@ def print_info(G, stream):
 
 def add_stats(G, seed=0):
     assert(networkx.is_connected(G))
-    exe = concurrent.futures.ProcessPoolExecutor()
+    exe = concurrent.futures.ProcessPoolExecutor(max_workers=min(os.cpu_count(), 5))
     ecc = exe.submit(networkx.eccentricity, G)
     ac = lambda g: networkx.average_clustering(g)
     f1 = [['radius', exe.submit(networkx.radius, G, ecc.result())],
