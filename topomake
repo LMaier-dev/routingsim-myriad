@@ -89,6 +89,8 @@ plcFatTreeCompare: \
  $(TOPODIR)/powerlaw_cluster_graph_n4176_m3_p0.5_seed0.txt\
  $(TOPODIR)/powerlaw_cluster_graph_n7875_m2_p0.5_seed0.txt\
  $(TOPODIR)/powerlaw_cluster_graph_n7875_m3_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n30528_m2_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n30528_m3_p0.5_seed0.txt\
 
 realTopo: $(TOPODIR)/KentuckyDataLink.graphml.txt \
  $(TOPODIR)/powerlaw_cluster_graph_n754_m1_p0.5_seed0.txt\
