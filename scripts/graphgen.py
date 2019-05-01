@@ -9,6 +9,7 @@ import itertools
 import concurrent.futures
 import os
 import pathlib
+import json
 
 import networkx
 
@@ -25,6 +26,11 @@ def main():
     parser_plc.add_argument('N', type=int, help='network size')
     parser_plc.add_argument('M', type=int, help='added edges per node')
     parser_plc.add_argument('C', type=float, help='clustering parameter')
+
+    parser_plc = subparsers.add_parser('ws', help='connected watts strogatz graph')
+    parser_plc.add_argument('N', type=int, help='network size')
+    parser_plc.add_argument('K', type=int, help='each node is joined with its k nearest neighbors in a ring topology.')
+    parser_plc.add_argument('P', type=float, help='The probability of rewiring each edge')
 
     parser_cft = subparsers.add_parser('cft', help='clos network fat tree')
     parser_cft.add_argument('K', type=int, help='node degree')
@@ -46,12 +52,16 @@ def main():
     parser_plc.add_argument('N', type=int, help='number or nodes')
     parser_plc.add_argument('D', type=int, help='average degree')
 
+    parser_plc = subparsers.add_parser('grid', help='grid graph with given dimensions')
+    parser_plc.add_argument('dim', help='dimensions, e.g. 1,2 or 4,8,9')
+
     parser_plc = subparsers.add_parser('graphml', help='read graphml file')
     parser_plc.add_argument('PATH', help='path to graphml file')
 
     opt = parser.parse_args()
 
     print("generating graph...")
+    # RANDOM MODELS
     if(opt.type == 'plc'):
         G = networkx.powerlaw_cluster_graph(opt.N, opt.M, opt.C, seed=opt.seed)
         G.graph['info'] = [
@@ -59,24 +69,13 @@ def main():
             ["", f"n = {opt.N}; m = {opt.M}; clustering param = {opt.C}; seed = {opt.seed}"],
             ["time", datetime.now()]]
         G.graph['filename'] = f"powerlaw_cluster_graph_n{opt.N}_m{opt.M}_p{opt.C}_seed{opt.seed}.txt"
-    elif(opt.type == 'cft'):
-        G = clos_fat_tree(opt.K, opt.hosts)
+    elif(opt.type == 'ws'):
+        G = networkx.connected_watts_strogatz_graph(opt.N, opt.K, opt.P, seed=opt.seed)
         G.graph['info'] = [
-            ["", f"generated with NetworkX {networkx.__version__}"],
-            ["", f"fat tree clos network, k = {opt.K}, with{'out' if not opt.hosts else ''} hosts"],
-            ["", f"\t{(opt.K//2) **2} core nodes, {opt.K} pods with {opt.K} nodes each"],
-            ["", f"\tmakes {(opt.K//2)**2 + opt.K**2} nodes and up to {opt.K**3 // 4} hosts"],
+            ["", f"generated with NetworkX {networkx.__version__}, networkx.connected_watts_strogatz_graph"],
+            ["", f"n = {opt.N}; k = {opt.K}; p = {opt.P}; seed = {opt.seed}"],
             ["time", datetime.now()]]
-
-        G.graph['filename'] = f"clos_fat_tree_{opt.K}_with{'out' if not opt.hosts else ''}_hosts.txt"
-    elif(opt.type == 'tree'):
-        G = networkx.balanced_tree(opt.R, opt.H)
-        G.graph['info'] = [
-            ["", f"generated with NetworkX {networkx.__version__}, networkx.balanced_tree"],
-            ["", f"r = {opt.R}; h = {opt.H}"],
-            ["time", datetime.now()]]
-        G.graph['filename'] = f"tree_r{opt.R}_h{opt.H}.txt"
-
+        G.graph['filename'] = f"watts_strogatz_graph_m{opt.N}_k{opt.K}_p{opt.P}_seed{opt.seed}.txt"
     elif(opt.type == 'gnp'):
         G = networkx.fast_gnp_random_graph(opt.N, opt.P, seed=opt.seed)
         G.graph['info'] = [
@@ -98,6 +97,33 @@ def main():
             ["", f"n = {opt.N}; m = {opt.D * opt.N/2}; seed = {opt.seed}"],
             ["time", datetime.now()]]
         G.graph['filename'] = f"gnd_n{opt.N}_d{opt.D}_seed{opt.seed}.txt"
+
+    # NON RANDOM MODELS
+    elif(opt.type == 'cft'):
+        G = clos_fat_tree(opt.K, opt.hosts)
+        G.graph['info'] = [
+            ["", f"generated with NetworkX {networkx.__version__}"],
+            ["", f"fat tree clos network, k = {opt.K}, with{'out' if not opt.hosts else ''} hosts"],
+            ["", f"\t{(opt.K//2) **2} core nodes, {opt.K} pods with {opt.K} nodes each"],
+            ["", f"\tmakes {(opt.K//2)**2 + opt.K**2} nodes and up to {opt.K**3 // 4} hosts"],
+            ["time", datetime.now()]]
+        G.graph['filename'] = f"clos_fat_tree_{opt.K}_with{'out' if not opt.hosts else ''}_hosts.txt"
+    elif(opt.type == 'tree'):
+        G = networkx.balanced_tree(opt.R, opt.H)
+        G.graph['info'] = [
+            ["", f"generated with NetworkX {networkx.__version__}, networkx.balanced_tree"],
+            ["", f"r = {opt.R}; h = {opt.H}"],
+            ["time", datetime.now()]]
+        G.graph['filename'] = f"tree_r{opt.R}_h{opt.H}.txt"
+    elif(opt.type == 'grid'):
+        dim = json.loads(f"[{opt.dim}]")
+        G = networkx.grid_graph(dim)
+        G.graph['info'] = [
+            ["", f"generated with NetworkX {networkx.__version__}, networkx.grid_graph"],
+            ["", f"dimensions = {dim}"],
+            ["time", datetime.now()]]
+        G.graph['filename'] = f"grid_{','.join(str(x) for x in dim)}.txt"
+    # CONVERSION
     elif(opt.type == 'graphml'):
         G = networkx.Graph(networkx.read_graphml(opt.PATH, node_type=int))
         p = pathlib.Path(opt.PATH)

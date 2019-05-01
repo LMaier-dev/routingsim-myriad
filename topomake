@@ -61,7 +61,7 @@ plcTopoCluster:$(TOPODIR)/powerlaw_cluster_graph_n1000_m3_p0.0_seed0.txt\
 
 
 $(TOPODIR)/powerlaw_cluster_graph_%.txt:
-	echo $*	| sed -E "s#n([0-9]+)_m([0-9]+)_p([0-9]+\.?[0-9]*)_seed([0-9]+)#./scripts/graphgen.py --seed \4 -d $(TOPODIR) plc \1 \2 \3#" | bash
+	echo $*	| sed -E "s#n([0-9]+)_m([0-9]+)_p([0-1]+\.?[0-9]*)_seed([0-9]+)#./scripts/graphgen.py --seed \4 -d $(TOPODIR) plc \1 \2 \3#" | bash
 
 fatTreeTopo: fatTreeTopoHosts fatTreeTopoNoHosts
 
@@ -110,3 +110,36 @@ $(TOPODIR)/KentuckyDataLink.graphml.txt: $(TOPODIR)/KentuckyDataLink.graphml
 $(TOPODIR)/ASEdges4_2016.csv:
 	wget 'https://web.archive.org/web/20170915082716/http://www.netdimes.org/PublicData/csv/ASEdges4_2012.csv.gz' -O $(TOPODIR)/ASEdges4_2016.csv.gz
 	gunzip $(TOPODIR)/ASEdges4_2016.csv.gz
+
+
+$(TOPODIR)/grid_%.txt:
+	./scripts/graphgen.py -d $(TOPODIR) grid $*
+
+grids: \
+ $(TOPODIR)/grid_10,10.txt\
+ $(TOPODIR)/grid_30,30.txt\
+ $(TOPODIR)/grid_70,70.txt\
+ $(TOPODIR)/grid_100,100.txt
+
+$(TOPODIR)/watts_strogatz_graph_%.txt:
+	echo $* | sed -E "s#n([0-9]+)_k([0-9]+)_p([0-1]+\.?[0-9]*)_seed([0-9]+)#./scripts/graphgen.py --seed \4 -d $(TOPODIR) ws \1 \2 \3#" | bash
+
+wattsStrogatz: wattsStrogatz1000 wattsStrogatz5000
+
+wattsStrogatz1000: \
+ $(TOPODIR)/watts_strogatz_graph_m1000_k6_p0.001_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_m1000_k6_p0.003_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_m1000_k6_p0.01_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_m1000_k6_p0.03_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_m1000_k6_p0.1_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_m1000_k6_p0.3_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_m1000_k6_p1.0_seed0.txt
+
+wattsStrogatz5000: \
+ $(TOPODIR)/watts_strogatz_graph_m5000_k6_p0.001_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_m5000_k6_p0.003_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_m5000_k6_p0.01_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_m5000_k6_p0.03_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_m5000_k6_p0.1_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_m5000_k6_p0.3_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_m5000_k6_p1.0_seed0.txt
