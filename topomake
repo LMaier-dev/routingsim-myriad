@@ -124,7 +124,7 @@ grids: \
 $(TOPODIR)/watts_strogatz_graph_%.txt:
 	echo $* | sed -E "s#n([0-9]+)_k([0-9]+)_p([0-1]+\.?[0-9]*)_seed([0-9]+)#./scripts/graphgen.py --seed \4 -d $(TOPODIR) ws \1 \2 \3#" | bash
 
-wattsStrogatz: wattsStrogatz1000 wattsStrogatz5000
+wattsStrogatz: wattsStrogatz1000 wattsStrogatz5000 wattsStrogatz10000
 
 wattsStrogatz1000: \
  $(TOPODIR)/watts_strogatz_graph_n1000_k6_p0.001_seed0.txt\
@@ -132,6 +132,7 @@ wattsStrogatz1000: \
  $(TOPODIR)/watts_strogatz_graph_n1000_k6_p0.01_seed0.txt\
  $(TOPODIR)/watts_strogatz_graph_n1000_k6_p0.03_seed0.txt\
  $(TOPODIR)/watts_strogatz_graph_n1000_k6_p0.1_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_n1000_k6_p0.2_seed0.txt\
  $(TOPODIR)/watts_strogatz_graph_n1000_k6_p0.3_seed0.txt\
  $(TOPODIR)/watts_strogatz_graph_n1000_k6_p1.0_seed0.txt
 
@@ -141,5 +142,16 @@ wattsStrogatz5000: \
  $(TOPODIR)/watts_strogatz_graph_n5000_k6_p0.01_seed0.txt\
  $(TOPODIR)/watts_strogatz_graph_n5000_k6_p0.03_seed0.txt\
  $(TOPODIR)/watts_strogatz_graph_n5000_k6_p0.1_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_n5000_k6_p0.2_seed0.txt\
  $(TOPODIR)/watts_strogatz_graph_n5000_k6_p0.3_seed0.txt\
  $(TOPODIR)/watts_strogatz_graph_n5000_k6_p1.0_seed0.txt
+
+wattsStrogatz10000: \
+ $(TOPODIR)/watts_strogatz_graph_n10000_k6_p0.001_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_n10000_k6_p0.003_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_n10000_k6_p0.01_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_n10000_k6_p0.03_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_n10000_k6_p0.1_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_n10000_k6_p0.2_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_n10000_k6_p0.3_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_n10000_k6_p1.0_seed0.txt

@@ -75,7 +75,7 @@ def main():
             ["", f"generated with NetworkX {networkx.__version__}, networkx.connected_watts_strogatz_graph"],
             ["", f"n = {opt.N}; k = {opt.K}; p = {opt.P}; seed = {opt.seed}"],
             ["time", datetime.now()]]
-        G.graph['filename'] = f"watts_strogatz_graph_m{opt.N}_k{opt.K}_p{opt.P}_seed{opt.seed}.txt"
+        G.graph['filename'] = f"watts_strogatz_graph_n{opt.N}_k{opt.K}_p{opt.P}_seed{opt.seed}.txt"
     elif(opt.type == 'gnp'):
         G = networkx.fast_gnp_random_graph(opt.N, opt.P, seed=opt.seed)
         G.graph['info'] = [
