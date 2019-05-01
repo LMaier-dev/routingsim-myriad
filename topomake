@@ -127,19 +127,19 @@ $(TOPODIR)/watts_strogatz_graph_%.txt:
 wattsStrogatz: wattsStrogatz1000 wattsStrogatz5000
 
 wattsStrogatz1000: \
- $(TOPODIR)/watts_strogatz_graph_m1000_k6_p0.001_seed0.txt\
- $(TOPODIR)/watts_strogatz_graph_m1000_k6_p0.003_seed0.txt\
- $(TOPODIR)/watts_strogatz_graph_m1000_k6_p0.01_seed0.txt\
- $(TOPODIR)/watts_strogatz_graph_m1000_k6_p0.03_seed0.txt\
- $(TOPODIR)/watts_strogatz_graph_m1000_k6_p0.1_seed0.txt\
- $(TOPODIR)/watts_strogatz_graph_m1000_k6_p0.3_seed0.txt\
- $(TOPODIR)/watts_strogatz_graph_m1000_k6_p1.0_seed0.txt
+ $(TOPODIR)/watts_strogatz_graph_n1000_k6_p0.001_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_n1000_k6_p0.003_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_n1000_k6_p0.01_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_n1000_k6_p0.03_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_n1000_k6_p0.1_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_n1000_k6_p0.3_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_n1000_k6_p1.0_seed0.txt
 
 wattsStrogatz5000: \
- $(TOPODIR)/watts_strogatz_graph_m5000_k6_p0.001_seed0.txt\
- $(TOPODIR)/watts_strogatz_graph_m5000_k6_p0.003_seed0.txt\
- $(TOPODIR)/watts_strogatz_graph_m5000_k6_p0.01_seed0.txt\
- $(TOPODIR)/watts_strogatz_graph_m5000_k6_p0.03_seed0.txt\
- $(TOPODIR)/watts_strogatz_graph_m5000_k6_p0.1_seed0.txt\
- $(TOPODIR)/watts_strogatz_graph_m5000_k6_p0.3_seed0.txt\
- $(TOPODIR)/watts_strogatz_graph_m5000_k6_p1.0_seed0.txt
+ $(TOPODIR)/watts_strogatz_graph_n5000_k6_p0.001_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_n5000_k6_p0.003_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_n5000_k6_p0.01_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_n5000_k6_p0.03_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_n5000_k6_p0.1_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_n5000_k6_p0.3_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_n5000_k6_p1.0_seed0.txt
