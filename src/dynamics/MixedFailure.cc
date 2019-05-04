@@ -65,12 +65,12 @@ simtime_t MixedFailure::scheduleDynamics() {
 	size_t nodesToFailPerPeriod = nodeFailure ? (size_t) numNodes*nodeFraction : 0;
 	size_t linksToFailPerPeriod = linkFailure ? (size_t) numLinks*linkFraction : 0;
 
-	vector<nodeid_t> activeNodes;
+	std::vector<nodeid_t> activeNodes;
 	topology.getNodeIDs( activeNodes );
 
 	// determine actual nodes to fail
 	if ( nodeFailure && simTime()==nodeFailureDue ) {
-		vector<nodeid_t> failNodes;
+		std::vector<nodeid_t> failNodes;
 		failNodes.reserve(nodesToFailPerPeriod);
 
 		// no more nodes available
@@ -102,7 +102,7 @@ simtime_t MixedFailure::scheduleDynamics() {
 	// determine actual links to fail; in case of both---link and node failures---
 	// link failures happen after node failures
 	if ( linkFailure && simTime()==linkFailureDue ) {
-		vector< pair<nodeid_t, nodeid_t> > failEdges;
+		std::vector< std::pair<nodeid_t, nodeid_t> > failEdges;
 		failEdges.reserve(linksToFailPerPeriod);
 		// update active number of links; might have changed due to node failures by now
 		activeNumLinks = topology.getActiveNumberLinks();
@@ -115,7 +115,7 @@ simtime_t MixedFailure::scheduleDynamics() {
 		}
 
 		while ( failEdges.size() < linksToFailPerPeriod ) {
-			pair<nodeid_t, nodeid_t> failEdge = topology.getRandomEdge( intuniform(0,activeNumLinks-1) );
+			std::pair<nodeid_t, nodeid_t> failEdge = topology.getRandomEdge( intuniform(0,activeNumLinks-1) );
 			if ( find(failEdges.begin(), failEdges.end(), failEdge) != failEdges.end() ) {
 				continue;
 			} else {
@@ -147,7 +147,7 @@ simtime_t MixedFailure::scheduleDynamics() {
 	}
 
 	/// the catastrophic failure is repeated each occurrence seconds
-	return min( nodeFailure?nodeFailureDue:SIMTIME_MAX, linkFailure?linkFailureDue:SIMTIME_MAX);
+	return std::min( nodeFailure?nodeFailureDue:SIMTIME_MAX, linkFailure?linkFailureDue:SIMTIME_MAX);
 }
 
 } //namespace

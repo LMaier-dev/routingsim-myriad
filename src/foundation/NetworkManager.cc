@@ -16,8 +16,6 @@
 #include "NetworkManager.h"
 #include "NetworkDynamics.h"
 
-#include <boost/foreach.hpp>
-
 namespace routingsim {
 
 Define_Module(NetworkManager);
@@ -68,7 +66,7 @@ void NetworkManager::initialize() {
 	}
 
 	topology->setShortestPathCalculationMode(par("shortestPathCalculationMode").stdstringValue());
-	cout << "shortestPathCalculationMode: " << par("shortestPathCalculationMode").stdstringValue() << endl;
+	std::cout << "shortestPathCalculationMode: " << par("shortestPathCalculationMode").stdstringValue() << endl;
 
 	// dynamics module connected? yes-> get dynamics module!
 	cGate* dynamicsGate = gate("dynamics");

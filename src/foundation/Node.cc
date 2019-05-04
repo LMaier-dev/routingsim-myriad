@@ -92,7 +92,7 @@ void Node::bind( int type, cModule* mod ) {
 	cGate* gate = mod->gate("toNode$i")->getPathStartGate();
 	ASSERT( gate->getOwnerModule() == this );
 	ASSERT( strcmp( gate->getName(), "toProtocols$o" ) == 0);
-	bindings.insert( make_pair(type, gate->getIndex()) );
+	bindings.insert( std::make_pair(type, gate->getIndex()) );
 }
 
 /// Unbind the module
@@ -232,7 +232,7 @@ void Node::onHello( NodePkt* pkt ) {
 	// add new neighbor data
 
 	if (neighbor_map.count(nid) == 0) {
-		neighbor_map.insert( make_pair( nid, neighbor_t() ) );
+		neighbor_map.insert( std::make_pair( nid, neighbor_t() ) );
 		neighbor_set.push_back( nid );
 	};
 	neighbor_t& nr = neighbor_map[nid];

@@ -18,15 +18,13 @@
 
 #include <omnetpp.h>
 #include <vector>
-#include <boost/unordered_map.hpp>
-#include <boost/unordered_set.hpp>
+#include <unordered_map>
+#include <unordered_set>
 #include <chistogram.h>
 
 #include "BaseTypes.h"
 
 namespace routingsim {
-
-using namespace boost;
 
 class StatisticSample;
 
@@ -46,7 +44,7 @@ protected:
 private:
 	//const char* name;
 	class Value;
-	typedef boost::unordered_map<const char*, Value*> Values;
+	typedef std::unordered_map<const char*, Value*> Values;
 	Values values;
 	simtime_t samplingInterval;
 	cMessage* samplingTimer;
@@ -54,7 +52,7 @@ private:
 	bool recordShortestPathDeliveryRatio;
 
 	// message delivery ratio accounting
-	boost::unordered_set<cMessage*> msgs;
+	std::unordered_set<cMessage*> msgs;
 	cOutVector* deliveryRatio;
 	cOutVector* messagesDroppedVector;
 	cOutVector* messagesDeliveredVector;

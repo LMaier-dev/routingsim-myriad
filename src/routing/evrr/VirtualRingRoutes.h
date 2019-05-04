@@ -10,9 +10,6 @@
 
 namespace routingsim {
 
-using namespace std;
-using namespace boost;
-
 /**
  * Implementation of a destination-sequenced routing table with route
  * delegation, route usage records, and automatic route teardowns.
@@ -225,7 +222,7 @@ public://------------------------------------- Physical Neighbor Management ---
 	}
 
 	/// returns the neighbor set
-	unordered_set<nodeid_t> get_neighbors() const {
+	boost::unordered_set<nodeid_t> get_neighbors() const {
 		return neighbors;
 	}
 
@@ -346,8 +343,8 @@ private:
 	update_queue& queue;
 
 	// routing-table
-	typedef unordered_multimap<vid_t, entry_t*> table_t;
-	typedef pair<table_t::iterator, table_t::iterator> equal_pair_t;
+	typedef boost::unordered_multimap<vid_t, entry_t*> table_t;
+	typedef std::pair<table_t::iterator, table_t::iterator> equal_pair_t;
 	table_t table;
 
 	// listeners
@@ -355,7 +352,7 @@ private:
 	listeners_t listeners;
 
 	// physical neighbors
-	typedef unordered_set<nodeid_t> neighbors_t;
+	typedef boost::unordered_set<nodeid_t> neighbors_t;
 	neighbors_t neighbors;
 
 	// change flags

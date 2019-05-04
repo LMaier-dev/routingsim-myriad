@@ -32,7 +32,7 @@ void LifetimeChurn::initialize() {
     int maxDegree	= par("maxDegree");
 
     // extract relevant nodes
-	vector<nodeid_t> ids;
+	std::vector<nodeid_t> ids;
 	getTopology().getNodeIDs( ids );
 
 	foreach(nodeid_t id, ids) {
