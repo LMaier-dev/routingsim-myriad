@@ -95,7 +95,7 @@ plcFatTreeCompare: \
 realTopo: $(TOPODIR)/KentuckyDataLink.graphml.txt \
  $(TOPODIR)/powerlaw_cluster_graph_n754_m1_p0.5_seed0.txt\
  $(TOPODIR)/powerlaw_cluster_graph_n754_m2_p0.5_seed0.txt\
- $(TOPODIR)/ASEdges4_2016.csv \
+ $(TOPODIR)/ASEdges4_2016.txt \
  $(TOPODIR)/powerlaw_cluster_graph_n26303_m1_p0.5_seed0.txt\
  $(TOPODIR)/powerlaw_cluster_graph_n26303_m2_p0.5_seed0.txt
  
@@ -107,9 +107,9 @@ $(TOPODIR)/KentuckyDataLink.graphml:
 $(TOPODIR)/KentuckyDataLink.graphml.txt: $(TOPODIR)/KentuckyDataLink.graphml
 	./scripts/graphgen.py -d $(TOPODIR) graphml $(TOPODIR)/KentuckyDataLink.graphml
 
-$(TOPODIR)/ASEdges4_2016.csv:
-	wget 'https://web.archive.org/web/20170915082716/http://www.netdimes.org/PublicData/csv/ASEdges4_2012.csv.gz' -O $(TOPODIR)/ASEdges4_2016.csv.gz
-	gunzip $(TOPODIR)/ASEdges4_2016.csv.gz
+$(TOPODIR)/ASEdges4_2016.txt:
+	echo "0 0" > $(TOPODIR)/ASEdges4_2016.txt
+	wget 'https://web.archive.org/web/20170915082716/http://www.netdimes.org/PublicData/csv/ASEdges4_2012.csv.gz' -O - | zcat | sed "s;^\([0-9]*\),\([0-9]*\),.*;\1 \2;" >> $(TOPODIR)/ASEdges4_2016.txt
 
 
 $(TOPODIR)/grid_%.txt:
