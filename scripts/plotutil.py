@@ -20,6 +20,7 @@ import itertools
 import logging
 import multiprocessing
 
+import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -109,7 +110,6 @@ def parse_fast(globs, directoy=None, processes=None, **kwargs):
         directoy.glob(glob) for glob in globs))
     runs = {}
     with multiprocessing.Pool(processes=processes, **kwargs) as pool:
-        #for run in map(_get_run_from_file, load_paths):
         for run in pool.imap_unordered(_get_run_from_file, load_paths):
             if run.name in runs:
                 runs[run.name].merge(run)
@@ -140,23 +140,24 @@ def plot_points(points, *args, plot=plt, **kwargs):
 
 
 def savefig(name, *args, plot=plt, **kwargs):
-    """Saves a figure in svg, png and pdf format."""
-    for ext in ('.pdf', '.png', '.svg'):
+    """Saves a figure in svg, png, pgf and pdf format."""
+    for ext in ('.pdf', '.png', '.pgf', '.svg'):
         plot.savefig(name + ext, *args, **kwargs)
 
-def discrete_boxplot(xcol, ycol, *args, plot=plt, continious_scale=True, bridge_means=False, means_style='-', **kwargs):
+def discrete_boxplot(xcol, ycol, *args, ax=None, continious_scale=True, bridge_means=False, means_style='-', **kwargs):
     """Makes a boxplot with one box per unique value in xcol."""
+    ax = ax if ax is not None else plt.axes()
     if continious_scale:
         keys = np.arange(xcol.min(), xcol.max()+1)
     else:
         keys = sorted(xcol[xcol.notna()].unique())
-    plot.boxplot([ycol[xcol==i] for i in keys], labels=list(int(k) for k in keys), *args, **kwargs)
+    ax.boxplot([ycol[xcol==i] for i in keys], labels=list(int(k) for k in keys), *args, **kwargs)
     means = pd.Series((ycol[xcol==i].mean() for i in keys), np.arange(len(keys))+1)
     if bridge_means:
         means = means[means.notna()]
-    plot.plot(means.index, means, means_style)
-    plot.ylabel(ycol.name)
-    plot.xlabel(xcol.name)
+    ax.plot(means.index, means, means_style)
+    ax.set_ylabel(ycol.name)
+    ax.set_xlabel(xcol.name)
 
 def logscale(x=True, y=True, plot=plt):
     """Turns both axis' in the plot to logscale"""
@@ -231,6 +232,7 @@ def _get_run_from_file(path):
                 logger.info("reading pandas csv from file %s", csvpath)
                 run = _get_run_from_json(_get_json_contents(csvpath+".info"))
                 run.scalars = pd.read_csv(csvpath)
+                run.scalars.rename(columns={'Unnamed: 0': 'module'}, inplace=True)
                 return run
             except Exception as e:
                 logger.error(e)
@@ -259,18 +261,19 @@ class Vector:
         vec.module = vector_json['module']
         vec.json = vector_json
         vec.dict = dict(zip(vec.time, vec.value))
-        vec.average = np.average(self.value)
+        vec.average = None if len(self.value)==0 else np.average(self.value)
 
     def __repr__(self):
         return "<Vector {} of {} ({} values)>".format(
             self.name, self.module, len(self.time))
 
-    def plot(self, label=None, *args, plot=plt, **kwargs):
+    def plot(self, label=None, *args, plot=plt, step=None, **kwargs):
         if label is None:
             label = self.name
         else:
             label = self.format_label(label)
-        return plot.plot(self.time, self.value, *args, label=label, **kwargs)
+        return plot.plot(self.time[::step], self.value[::step],
+                         *args, label=label, **kwargs)
 
     def format_label(self, label):
         return label.format(run=self.run,
@@ -280,6 +283,15 @@ class Vector:
         imin = np.searchsorted(self.time, tmin, side='left')
         imax = np.searchsorted(self.time, tmax, side='right')
         return (self.time[imin:imax], self.value[imin:imax])
+
+    def get(self, time, default=np.NaN):
+        return self.dict.get(time, default)
+
+    def first_time(self, key, offset=0):
+        for time, val in zip(self.time[offset:], self.value[offset:]):
+            if key(val):
+                return time
+        return np.NaN
 
 
 class Run:
@@ -315,6 +327,7 @@ class Run:
         for scalar in scalar_list:
             scalar_dict[scalar['module']][scalar['name']] = scalar['value']
         self.scalars = pd.DataFrame.from_dict(scalar_dict, orient='index')
+        self.scalars.rename(columns={'Unnamed: 0': 'module'}, inplace=True)
 
     def write_scalars(self, path):
         if self.scalars.empty:
@@ -341,8 +354,8 @@ class Run:
         return self
 
     def __repr__(self):
-        return "<Run {}/{}/{} ({} Vectors)>".format(
-            self.configname, self.measurement, self.runnumber, len(self.vectors))
+        return f"<Run {self.configname}/{self.measurement}/{self.runnumber} "\
+            + f"({len(self.vectors)} vectors, {len(self.scalars)} scalars)>"
 
     def path(self):
         return "{}/{}/{}".format(
@@ -365,10 +378,16 @@ class Collection:
         return iter(self._generator)
 
     @ret_collection
-    def filter(self, **kwargs):
-        for item in self:
-            if all(getattr(item, k) == v for k,v in kwargs.items()):
-                yield item
+    def filter(self, fun=None, **kwargs):
+        assert fun is None or len(kwargs) == 0
+        if callable(fun):
+            yield from filter(fun, self)
+        elif fun is not None:
+            yield from (a for a, b in zip(self, fun) if b)
+        else:
+            for item in self:
+                if all(getattr(item, k) == v for k,v in kwargs.items()):
+                    yield item
 
     @ret_collection
     def select(self, attr, ignore_missing=False):
@@ -399,6 +418,16 @@ class Collection:
     def __reversed__(self):
         return reversed(list(self))
 
+    def len(self):
+        return len(self._generator)
+
+    def __getitem__(self, key):
+        self.solidify()
+        return self._generator[key]
+
+    def __bool__(self):
+        self.solidify()
+        return bool(self._generator)
 
 class Config(Collection):
     """Models an omnet++ simulation configuration, includes multiple runs."""
@@ -426,3 +455,6 @@ class Config(Collection):
                 attr = 'measurement'
         return Collection.sorted(self, attr, key)
 
+def find_firsts(runs, vect_name, key, offset=0):
+    return ((run, getattr(run, vect_name).first_time(key, offset))
+             for run in runs)
