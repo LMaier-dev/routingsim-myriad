@@ -77,7 +77,7 @@ void R2Kademlia::onDisconnect( nodeid_t nid ) {
 	neighborTable.removeNeighbor(nid);
 	ASSERT(neighborTable.getNodeId(key) == undefined_node);
 	if(!routingTable.getContact(key)) {
-		//TODO why does this happen?????
+		// this should only happen for nodes with very large degree
 		EV_ERROR << "missing contact" << nid << " " << key << " on node " << node().getNodeId() << endl;
 		return;
 	}
@@ -102,11 +102,12 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	if (packet->hasRemainingHops()){
 		// we are not the recipient
 		if (pathSnooping) {
+			// aka PATH OVERHEARING
 			//TODO optimization use isPathInteresting
 			routingTable.addPath(packet->getSource(), packet->reversePath(packet->getPath(1, packet->getProgress())));
 			routingTable.addPath(packet->getTarget(), packet->getPath(packet->getProgress()+1, packet->getRouteArraySize()-1));
 		}
-		//TODO learn about failures from passing packets
+		//TODO ERROR OVERHEARING, more overhearing
 		forwardPacket(std::move(packet), std::move(pkt));
 		return;
 	}
@@ -170,7 +171,6 @@ void R2Kademlia::handlePacket(KadAnswer_p packet) {
 void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt) {
 	// we do not route hello packets!
 	ASSERT(packet->getType() != KAD_PNHello);
-	//TODO do stuff with hop count
 	ASSERT(packet->hasRemainingHops());
 	ASSERT(packet->getControlInfo() == nullptr);
 	//TODO optimization: we could check if the target is a neighbor...
@@ -211,7 +211,8 @@ const KadContact& R2Kademlia::chooseNextHop(const KadContactList& contacts, cons
 		int dprefix = (contact->getKey() ^ target).log_2();
 		size_t dproxMin = contact->getPathLength();
 		if ((myOverlayKey ^ target).log_2() == dprefix) {
-			//TODO find out if we need this
+			// if we have no prefix progress,
+			// we take the closest contact by XOR
 			return *contact;
 		}
 		for (auto it = contacts.begin()+1; it != contacts.end(); it++) {
@@ -224,6 +225,7 @@ const KadContact& R2Kademlia::chooseNextHop(const KadContactList& contacts, cons
 		return *contact;
 	}
 	else {
+		// no proximity routing
 		ASSERT(contacts.front()->getKey() != target);
 		return *(contacts.front());
 	}
@@ -248,7 +250,6 @@ bool R2Kademlia::handleProbeResponse(KadPacket_p answer, RPCState& rpcState) {
 	ASSERT(answer->getSource() == rpcState.original_packet->getTarget());
 	std::unique_ptr<KadProbeRsp> probeRsp = safe_packet_cast<KadProbeRsp>(answer);
 	return true;
-	//TODO is there anything to do here?
 }
 
 // GET NEIGHBOR
@@ -397,10 +398,6 @@ void R2Kademlia::sampleStatistics (Statistics &stats) {
 
 void R2Kademlia::onBucketEmpty(KadBucket& bucket) {
 	EV << "bucket empty" << endl;
-	// TODO probe
-}
-void R2Kademlia::onBucketRefresh(KadBucket& bucket) {
-	// TODO probe?
 }
 void R2Kademlia::onNewContact(KadContact_p contact) {
 	if (contact->getPathLength() < discoveryRadius)

@@ -93,7 +93,7 @@ void KadRoutingTable::addPath(const OverlayKey& key, kad_path path)
 		if (contact->getPathLength() > path.size()) {
 			contact->setPath(std::move(path));
 			updateCount++;
-			//TODO onImprovement?
+			//TODO call onImprovement?
 			return;
 		}
 		// else new path is not interesting
@@ -115,7 +115,7 @@ void KadRoutingTable::addPath(const OverlayKey& key, const kad_path& path, const
 		if (contact->getPathLength() > path.size() + viaPath.size()) {
 			updateCount++;
 			contact->setPath(concatViaPath(viaPath, path));
-			//TODO onImprovement?
+			//TODO call onImprovement?
 			return;
 		}
 		// else new path is not interesting

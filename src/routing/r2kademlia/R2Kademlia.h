@@ -104,8 +104,7 @@ public:
 	//@{
 	/** called when last contact is removed from a bucket*/
 	virtual void onBucketEmpty(KadBucket& bucket) override;
-	/**  called when a bucket needs to be refreshed */
-	virtual void onBucketRefresh(KadBucket& bucket) override;
+	/** called when a new contact is created in the routing table*/
 	virtual void onNewContact(KadContact_p contact) override;
 	//@}
 
