@@ -1,0 +1,70 @@
+
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Lesser General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+// 
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Lesser General Public License for more details.
+// 
+// You should have received a copy of the GNU Lesser General Public License
+// along with this program.  If not, see http://www.gnu.org/licenses/.
+// 
+
+#ifndef __ROUTINGSIM_KadContact_H_
+#define __ROUTINGSIM_KadContact_H_
+
+#include <omnetpp.h>
+#include <memory>
+#include <vector>
+#include "OverlayKey.h"
+
+/**
+ * @file KadContact.h
+ * @author Jakob Thomas
+ */
+
+namespace routingsim {
+
+// type definitions
+using kad_path = std::vector<OverlayKey>;
+using size_type = std::size_t;
+
+class KadContact
+{
+public:
+	KadContact(const KadContact&) = delete;
+	KadContact(const OverlayKey& key): key(key), path(){};
+	KadContact(const OverlayKey& key, kad_path path): key(key), path(std::move(path)) {};
+	/// returns the key of this contact
+	inline const OverlayKey& getKey() const { return key; }
+	/// compares the given overlay key to the contacts overlay key
+	inline bool hasKey(const OverlayKey& other) const { return other == key; }
+	/// marks the contact as stale (or not)
+	inline void setStale(bool stale=true) { this->stale=stale; }
+	/// returns if this contact was marked as stale
+	inline bool isStale() const { return stale; }
+	/// sets the last seen time to now
+	inline void seen() { lastSeen = simTime(); }
+	inline simtime_t getLastSeen() const { return lastSeen; }
+	/// returns the length of the path
+	/// i.e. the intermediate hops between me and this contact
+	inline size_t getPathLength() const { return path.size(); }
+	/// sets the path to reach this contact
+	inline void setPath(kad_path path) { this->path = std::move(path); }
+	inline const kad_path& getPath() const { return path; }
+
+	/// Common stdc++ console output method
+	friend std::ostream& operator<<(std::ostream& os, const KadContact& c);
+private:
+	const OverlayKey key;	/// the OverlayKey of this contact
+	simtime_t lastSeen;		/// the last time this contact was seen
+	kad_path path;			/// the best known source routing path to reach this contact
+	bool stale;				/// true if the contact is not answering
+};
+
+}; // namespace
+#endif // __ROUTINGSIM_KadContact_H_

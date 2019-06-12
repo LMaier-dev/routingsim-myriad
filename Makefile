@@ -1,7 +1,7 @@
 # OMNET executables need to be in the PATH opp_makemake
 include $(shell opp_configfilepath)
 
-BUILD_OPTIONS = -f --deep -o RoutingSim -I. -Ifoundation -I$(OMNETPP_INCL_DIR)/omnetpp -I$(OMNETPP_INCL_DIR) -DAUTOIMPORT_OMNETPP_NAMESPACE
+BUILD_OPTIONS = -f --deep -o RoutingSim -I. -Ifoundation -I$(OMNETPP_INCL_DIR)/omnetpp -I$(OMNETPP_INCL_DIR) -DAUTOIMPORT_OMNETPP_NAMESPACE -lgmp
 
 all: checkmakefiles
 	cd src && $(MAKE)
@@ -30,6 +30,10 @@ checkmakefiles:
 
 doxy:
 	doxygen doxy.cfg
+
+topologies: plcTopo fatTreeTopo
+
+-include topomake
 
 .PHONY: checkmakefiles makefiles clean cleanall doxy
 

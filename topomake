@@ -1,0 +1,157 @@
+TOPODIR = simulations/topologies
+SIZES = 101 102 103 104
+
+plcTopo: plcTopoM3 plcTopoN1000
+
+plcTopoFullSize: plcTopoM1 plcTopoM2 plcTopoM3
+
+plcTopoM3: $(TOPODIR)/powerlaw_cluster_graph_n100_m3_p0.5_seed0.txt \
+ $(TOPODIR)/powerlaw_cluster_graph_n200_m3_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n500_m3_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n1000_m3_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n2000_m3_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n5000_m3_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n10000_m3_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n20000_m3_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n50000_m3_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n100000_m3_p0.5_seed0.txt
+
+plcTopoM2: $(TOPODIR)/powerlaw_cluster_graph_n100_m2_p0.5_seed0.txt \
+ $(TOPODIR)/powerlaw_cluster_graph_n200_m2_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n500_m2_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n1000_m2_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n2000_m2_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n5000_m2_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n10000_m2_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n20000_m2_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n50000_m2_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n100000_m2_p0.5_seed0.txt
+
+plcTopoM1: $(TOPODIR)/powerlaw_cluster_graph_n100_m2_p0.5_seed0.txt \
+ $(TOPODIR)/powerlaw_cluster_graph_n200_m1_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n500_m1_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n1000_m1_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n2000_m1_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n5000_m1_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n10000_m1_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n20000_m1_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n50000_m1_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n100000_m1_p0.5_seed0.txt
+
+plcTopoN1000: $(TOPODIR)/powerlaw_cluster_graph_n1000_m1_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n1000_m2_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n1000_m3_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n1000_m4_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n1000_m5_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n1000_m6_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n1000_m7_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n1000_m8_p0.5_seed0.txt
+
+plcTopoCluster:$(TOPODIR)/powerlaw_cluster_graph_n1000_m3_p0.0_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n1000_m3_p0.1_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n1000_m3_p0.2_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n1000_m3_p0.3_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n1000_m3_p0.4_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n1000_m3_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n1000_m3_p0.6_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n1000_m3_p0.7_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n1000_m3_p0.8_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n1000_m3_p0.9_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n1000_m3_p1.0_seed0.txt
+
+
+$(TOPODIR)/powerlaw_cluster_graph_%.txt:
+	echo $*	| sed -E "s#n([0-9]+)_m([0-9]+)_p([0-1]+\.?[0-9]*)_seed([0-9]+)#./scripts/graphgen.py --seed \4 -d $(TOPODIR) plc \1 \2 \3#" | bash
+
+fatTreeTopo: fatTreeTopoHosts fatTreeTopoNoHosts
+
+fatTreeTopoNoHosts: $(TOPODIR)/clos_fat_tree_24_without_hosts.txt \
+ $(TOPODIR)/clos_fat_tree_26_without_hosts.txt \
+ $(TOPODIR)/clos_fat_tree_28_without_hosts.txt \
+ $(TOPODIR)/clos_fat_tree_30_without_hosts.txt \
+ $(TOPODIR)/clos_fat_tree_48_without_hosts.txt \
+
+fatTreeTopoHosts: $(TOPODIR)/clos_fat_tree_24_with_hosts.txt \
+ $(TOPODIR)/clos_fat_tree_26_with_hosts.txt \
+ $(TOPODIR)/clos_fat_tree_28_with_hosts.txt \
+ $(TOPODIR)/clos_fat_tree_30_with_hosts.txt \
+ $(TOPODIR)/clos_fat_tree_48_with_hosts.txt \
+
+$(TOPODIR)/clos_fat_tree_%_without_hosts.txt:
+	./scripts/graphgen.py -d $(TOPODIR) cft $*
+
+$(TOPODIR)/clos_fat_tree_%_with_hosts.txt:
+	./scripts/graphgen.py -d $(TOPODIR) cft $* --hosts
+
+plcFatTreeCompare: \
+ $(TOPODIR)/powerlaw_cluster_graph_n2880_m19_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n4176_m2_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n4176_m3_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n7875_m2_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n7875_m3_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n30528_m2_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n30528_m3_p0.5_seed0.txt\
+
+realTopo: $(TOPODIR)/KentuckyDataLink.graphml.txt \
+ $(TOPODIR)/powerlaw_cluster_graph_n754_m1_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n754_m2_p0.5_seed0.txt\
+ $(TOPODIR)/ASEdges4_2016.csv \
+ $(TOPODIR)/powerlaw_cluster_graph_n26303_m1_p0.5_seed0.txt\
+ $(TOPODIR)/powerlaw_cluster_graph_n26303_m2_p0.5_seed0.txt
+ 
+
+$(TOPODIR)/KentuckyDataLink.graphml:
+	wget http://topology-zoo.org/files/Kdl.graphml -O  '$(TOPODIR)/KentuckyDataLink.graphml'
+
+
+$(TOPODIR)/KentuckyDataLink.graphml.txt: $(TOPODIR)/KentuckyDataLink.graphml
+	./scripts/graphgen.py -d $(TOPODIR) graphml $(TOPODIR)/KentuckyDataLink.graphml
+
+$(TOPODIR)/ASEdges4_2016.csv:
+	wget 'https://web.archive.org/web/20170915082716/http://www.netdimes.org/PublicData/csv/ASEdges4_2012.csv.gz' -O $(TOPODIR)/ASEdges4_2016.csv.gz
+	gunzip $(TOPODIR)/ASEdges4_2016.csv.gz
+
+
+$(TOPODIR)/grid_%.txt:
+	./scripts/graphgen.py -d $(TOPODIR) grid $*
+
+grids: \
+ $(TOPODIR)/grid_10,10.txt\
+ $(TOPODIR)/grid_30,30.txt\
+ $(TOPODIR)/grid_70,70.txt\
+ $(TOPODIR)/grid_100,100.txt
+
+$(TOPODIR)/watts_strogatz_graph_%.txt:
+	echo $* | sed -E "s#n([0-9]+)_k([0-9]+)_p([0-1]+\.?[0-9]*)_seed([0-9]+)#./scripts/graphgen.py --seed \4 -d $(TOPODIR) ws \1 \2 \3#" | bash
+
+wattsStrogatz: wattsStrogatz1000 wattsStrogatz5000 wattsStrogatz10000
+
+wattsStrogatz1000: \
+ $(TOPODIR)/watts_strogatz_graph_n1000_k6_p0.001_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_n1000_k6_p0.003_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_n1000_k6_p0.01_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_n1000_k6_p0.03_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_n1000_k6_p0.1_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_n1000_k6_p0.2_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_n1000_k6_p0.3_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_n1000_k6_p1.0_seed0.txt
+
+wattsStrogatz5000: \
+ $(TOPODIR)/watts_strogatz_graph_n5000_k6_p0.001_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_n5000_k6_p0.003_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_n5000_k6_p0.01_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_n5000_k6_p0.03_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_n5000_k6_p0.1_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_n5000_k6_p0.2_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_n5000_k6_p0.3_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_n5000_k6_p1.0_seed0.txt
+
+wattsStrogatz10000: \
+ $(TOPODIR)/watts_strogatz_graph_n10000_k6_p0.001_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_n10000_k6_p0.003_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_n10000_k6_p0.01_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_n10000_k6_p0.03_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_n10000_k6_p0.1_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_n10000_k6_p0.2_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_n10000_k6_p0.3_seed0.txt\
+ $(TOPODIR)/watts_strogatz_graph_n10000_k6_p1.0_seed0.txt

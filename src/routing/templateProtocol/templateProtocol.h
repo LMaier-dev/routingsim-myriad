@@ -40,7 +40,7 @@ class TemplateProtocol : public Protocol
   	/// called when a node is disconnected
   	void onDisconnect( nodeid_t nid );
   	/// on message
-  	void onMessage( NodePkt* pkt );
+  	void onMessage( NodePkt_p pkt );
 	/// reset state of Protocol to initial state (Node Failure)
 	void reset();
 };

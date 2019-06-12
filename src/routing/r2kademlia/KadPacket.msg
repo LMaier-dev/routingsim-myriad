@@ -1,0 +1,54 @@
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Lesser General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+// 
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Lesser General Public License for more details.
+// 
+// You should have received a copy of the GNU Lesser General Public License
+// along with this program.  If not, see http://www.gnu.org/licenses/.
+// 
+cplusplus {{
+#include "BaseTypes.h"
+#include "OverlayKey.h"
+#include "RPC.h"
+#include <memory>
+}}
+
+namespace routingsim;
+
+enum KadPDUType {
+	KAD_PNHello = 			0x01;
+	KAD_PNDiscReq = 		0x03;
+	KAD_PNDiscRsp = 		0x04;
+
+	KAD_FindNodeReq = 		0x09;
+	KAD_FindNodeRsp = 		0x0a;
+	KAD_QueryRouteReq = 	0x0b;
+	KAD_QueryRouteRsp = 	0x0c;
+	KAD_UpdateRouteReq = 	0x0d;
+
+	KAD_Error =				0x71;
+	KAD_ProbeReq = 			0x81;
+	KAD_ProbeRsp = 			0x82;
+
+	KAD_Data = 				0x10;
+}
+
+class noncobject OverlayKey;
+class noncobject nodeid_t;
+class noncobject nonce_t;
+
+packet KadPacket {
+	@customize(true);
+	OverlayKey route[];
+	bool active[];
+	uint16_t progress = 0;
+	nonce_t nonce;
+	uint8_t type enum(KadPDUType);
+	uint16_t hopLimit = 100;
+}

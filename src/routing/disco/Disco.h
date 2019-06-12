@@ -99,7 +99,7 @@ public:
 
 class DiscoObserver;
 
-class Disco : public Protocol, public StatisticSample
+class Disco : public LegacyProtocol, public StatisticSample
 {
 	friend class DiscoObserver;
 protected:

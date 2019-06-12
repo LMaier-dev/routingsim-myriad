@@ -27,7 +27,7 @@ void Protocol::initialize() {
 
 void Protocol::handleMessage(cMessage *msg) {
 	if (msg->isSelfMessage()) {
-		onSelfMessage(msg);
+		onSelfMessage(std::unique_ptr<cMessage>(msg));
 		return;
 	}
 
@@ -48,7 +48,7 @@ void Protocol::handleMessage(cMessage *msg) {
 	default:
 		break;
 	}
-	this->onMessage(np);
+	this->onMessage(std::unique_ptr<NodePkt>(np));
 }
 
 /// Bind module to node to receive messages of the given type
