@@ -118,6 +118,7 @@ def main():
     elif(opt.type == 'grid'):
         dim = json.loads(f"[{opt.dim}]")
         G = networkx.grid_graph(dim)
+        G = networkx.convert_node_labels_to_integers(G)
         G.graph['info'] = [
             ["", f"generated with NetworkX {networkx.__version__}, networkx.grid_graph"],
             ["", f"dimensions = {dim}"],
