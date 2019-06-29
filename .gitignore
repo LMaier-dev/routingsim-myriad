@@ -54,3 +54,4 @@ simulations/topologies/*
 .cproject
 .buildconfig
 *.bak
+TAGS

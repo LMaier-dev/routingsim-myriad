@@ -31,6 +31,10 @@ checkmakefiles:
 doxy:
 	doxygen doxy.cfg
 
+TAGS:
+	find . -name "*.h" | etags -o TAGS -
+	find . -name "*.cc" | etags -o TAGS -a -
+
 topologies: plcTopo fatTreeTopo
 
 -include topomake
