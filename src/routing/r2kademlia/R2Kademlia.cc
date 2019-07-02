@@ -444,6 +444,7 @@ NodePkt_p R2Kademlia::makeHelloPacket()
 	hello->setName("KadHello");
 	hello->appendHop(k);
 	hello->setSource(myOverlayKey);
+	hello->setHopLimit(hopLimit);
 	hello->setSourceId(node().getNodeId());
 	hello->setNonce(0);
 	NodePkt_p nodePkt = std::make_unique<NodePkt>(hello->getName());
@@ -458,6 +459,7 @@ std::unique_ptr<T> R2Kademlia::makePacket(const KadContact* contact, const char 
 	packet->setName(name);
 	// TODO optimization: do this in one go
 	packet->setSource(myOverlayKey);
+	packet->setHopLimit(hopLimit);
 	packet->appendRoute(contact);
 	return packet;
 }
