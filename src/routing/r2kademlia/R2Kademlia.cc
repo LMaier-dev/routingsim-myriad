@@ -300,11 +300,13 @@ void R2Kademlia::sendFindNode(const OverlayKey& key, bool exact) {
 		std::bind(&R2Kademlia::handleFindNodeResponse, this, ph::_1, ph::_2)
 	);
 }
+
 void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 	OverlayKey& query = packet->getQuery();
 	size_t contactsLen = std::max((size_t)findNodeNumber, routingTable.getSplitSize());
 	KadContactList contacts = routingTable.getClosestContacts(packet->getQuery(), contactsLen);
 	ASSERT(contacts.size() > 0); // routing table has at least one entry
+	
 	if (query != myOverlayKey) {
 		if (contacts.front()->getKey() == packet->getSource()) {
 			if(contacts.size() == 1) {

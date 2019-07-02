@@ -197,12 +197,25 @@ void KadRoutingTable::splitLastBucket()
 		getBucket(contact.get()).contacts.push_back(std::move(contact));
 }
 
-/** copies all contacts from one contact list to the end of the other contact list*/
+
+/** copies all contacts from one contact list to the end of the other contact list */
 inline void copyContacts(const std::vector<std::unique_ptr<KadContact>>& source, KadContactList& target) {
 	target.reserve(target.size() + source.size());
-	for(auto it = source.begin(); it != source.end(); it++)
+	for (auto it = source.begin(); it != source.end(); it++)
 		target.push_back(it->get());
 }
+
+
+/** copies all valid contacts from one contact list to the end of the other contact list */
+inline void copyValidContacts(const std::vector<std::unique_ptr<KadContact>>& source, KadContactList& target) {
+	target.reserve(target.size() + source.size());
+	for (auto it = source.begin(); it != source.end(); it++)
+	{
+		if (it->get()->isValid())
+			target.push_back(it->get());
+	}
+}
+
 
 KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_type n) const
 {
@@ -234,7 +247,7 @@ KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_t
 		}
 	}
 	// now we sort the contacts
-	struct KadContactCompare{
+	struct KadContactCompare {
 		const OverlayKey& key;
 		KadContactCompare(const OverlayKey& key) : key(key) {}
 		bool operator()(KadContact_p& a, KadContact_p& b) const {

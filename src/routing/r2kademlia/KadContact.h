@@ -36,9 +36,23 @@ using size_type = std::size_t;
 class KadContact
 {
 public:
+	enum State {
+		undefined = 0,
+		valid     = 1,
+		invalid   = 2
+	};
+
 	KadContact(const KadContact&) = delete;
-	KadContact(const OverlayKey& key): key(key), path(){};
-	KadContact(const OverlayKey& key, kad_path path): key(key), path(std::move(path)) {};
+        KadContact(const OverlayKey& key): key(key), path(), state(undefined) {};
+        KadContact(const OverlayKey& key, kad_path path): key(key), path(std::move(path)), state(valid) {};
+	/// returns the current state of the contact
+	inline State getState() const { return state; }
+	inline bool isInvalid() const { return (state != valid); }
+	inline bool isValid() const { return (state == valid) ; }
+
+	inline void setInvalid() { state= invalid; }
+	inline void setValid() { state= valid; }
+	
 	/// returns the key of this contact
 	inline const OverlayKey& getKey() const { return key; }
 	/// compares the given overlay key to the contacts overlay key
@@ -54,7 +68,8 @@ public:
 	friend std::ostream& operator<<(std::ostream& os, const KadContact& c);
 private:
 	const OverlayKey key;	/// the OverlayKey of this contact
-	kad_path path;			/// the best known source routing path to reach this contact
+	kad_path path;		/// the best known source routing path to reach this contact
+	State state;            /// the state of the contact
 };
 
 }; // namespace

@@ -35,6 +35,13 @@ enum KadErrorType {
 	KAD_SegmentFailure = 0x05;
 }
 
+enum KadRouteUpdateAction {
+     KAD_Announce = 0;
+     KAD_Withdraw = 1;
+     KAD_Change   = 2;
+     KAD_Unreachable = 3;
+}
+
 packet KadAnswer extends KadPacket {}
 
 /// compare RTableRequestType from Spec
@@ -53,7 +60,15 @@ packet KadRTableRsp extends KadAnswer {
 	// bool unknownFlag[];
 	// bool intermediateFlag[];
 }
-//TODO: KadUpdateRouteReq
+
+packet KadUpdateRouteReq extends KadPacket {
+       type = KAD_UpdateRouteReq;
+
+	OverlayKey contact[];
+	key_vector_t path[];
+        uint8_t action[] enum(KadRouteUpdateAction);
+}
+
 //TODO: KadDataMsg
 
 // ------------
@@ -95,6 +110,9 @@ packet KadFindNodeReq extends KadRTableReq {
 	//TODO use destId for this
 	OverlayKey query;
 	bool exact = false;
+	bool not_via = false;
+	OverlayKey DetectingNode;
+	OverlayKey UnreachableNode;
 }
 packet KadFindNodeRsp extends KadRTableRsp {
 	type = KAD_FindNodeRsp;
