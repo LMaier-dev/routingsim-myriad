@@ -60,8 +60,8 @@ public:
 	/// returns the length of the path
 	/// i.e. the intermediate hops between me and this contact
 	inline size_t getPathLength() const { return path.size(); }
-	/// sets the path to reach this contact
-	inline void setPath(kad_path path) { this->path = std::move(path); }
+	/// sets the path to reach this contact (will implicitly set status to valid)
+	inline void setPath(kad_path path) { this->path = std::move(path); setValid(); }
 	inline const kad_path& getPath() const { return path; }
 
 	/// Common stdc++ console output method

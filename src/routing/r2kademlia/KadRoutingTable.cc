@@ -24,6 +24,10 @@
 #include "BaseTypes.h"
 
 namespace routingsim {
+
+bool containsUndirectedLink(const kad_path& path, const OverlayKey& firstNodeKey, const OverlayKey& secondNodeKey);
+
+	
 void KadRoutingTable::init(const OverlayKey& myKey, KadPolicy* policy,
 		size_type accelerationFactor, size_type bucketSize,
 		bool proximityNeighborSelection, bool pathSimplification)
@@ -76,6 +80,7 @@ size_type KadRoutingTable::getBucketIndex(const OverlayKey& key) const
 	return std::min(buckets.size()-1, index);
 }
 
+	
 void KadRoutingTable::addPath(const OverlayKey& key, kad_path path)
 {
 	if (key == myKey) return;
@@ -92,6 +97,7 @@ void KadRoutingTable::addPath(const OverlayKey& key, kad_path path)
 		// contact is known
 		if (contact->getPathLength() > path.size()) {
 			contact->setPath(std::move(path));
+			contact->setValid();
 			updateCount++;
 			//TODO call onImprovement?
 			return;
@@ -102,6 +108,7 @@ void KadRoutingTable::addPath(const OverlayKey& key, kad_path path)
 		handleNewContact(key, std::move(path));
 }
 
+	
 void KadRoutingTable::addPath(const OverlayKey& key, const kad_path& path, const kad_path& viaPath)
 {
 	if (key == myKey) return;
@@ -124,6 +131,7 @@ void KadRoutingTable::addPath(const OverlayKey& key, const kad_path& path, const
 		handleNewContact(key, concatViaPath(viaPath, path));
 }
 
+	
 void KadRoutingTable::simplifyPath(kad_path& path)
 {
 	if (path.size() < 2) return;
@@ -137,6 +145,7 @@ void KadRoutingTable::simplifyPath(kad_path& path)
 	}
 }
 
+	
 void KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path)
 {
 	ASSERT(key != myKey);
@@ -224,7 +233,7 @@ KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_t
 	size_type index = getBucketIndex(key);
 	auto bucket = buckets.begin() + index;
 	if (bucket->size() >= n)
-		copyContacts(bucket->contacts, result);
+		copyValidContacts(bucket->contacts, result);
 	else {
 		// not enough contacts in first bucket
 		// now we scan the level of the accelerated lookup
@@ -234,16 +243,16 @@ KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_t
 		auto level = buckets.begin() + firstOnLevelIndex;
 		for (; level < buckets.end() and result.size() < n; level+=width) {
 			if (level == buckets.end()-1)
-				copyContacts(level->contacts, result);
+				copyValidContacts(level->contacts, result);
 			else // always insert the whole level
 				for (uint i = 0; i < width and level+i < buckets.end(); i++)
-					copyContacts(level[i].contacts, result);
+					copyValidContacts(level[i].contacts, result);
 		}
 		// if we still do not have enough contacts, we go up the tree
 		auto otherBucket = buckets.begin() + firstOnLevelIndex;
 		while(result.size() < n && otherBucket != buckets.begin()) {
 			otherBucket--;
-			copyContacts(otherBucket->contacts, result);
+			copyValidContacts(otherBucket->contacts, result);
 		}
 	}
 	// now we sort the contacts
@@ -263,6 +272,7 @@ KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_t
 	return result;
 }
 
+
 KadContactList KadRoutingTable::getAllContacts() const
 {
 	KadContactList result{};
@@ -272,6 +282,17 @@ KadContactList KadRoutingTable::getAllContacts() const
 	return result;
 }
 
+
+KadContactList KadRoutingTable::getAllValidContacts() const
+{
+	KadContactList result{};
+	result.reserve(bucketSize * buckets.size());
+	for (auto& bucket : buckets)
+		copyValidContacts(bucket.contacts, result);
+	return result;
+}
+
+
 size_type KadRoutingTable::getNumContacts() const
 {
 	size_type sum = 0;
@@ -279,6 +300,20 @@ size_type KadRoutingTable::getNumContacts() const
 		sum += b.size();
 	return sum;
 }
+
+
+/** invalidate all contacts with paths that contain a failed link otherNodeKey <-> failedNodeKey */
+void KadRoutingTable::invalidateContacts(const OverlayKey& failedNodeKey, const OverlayKey& otherNodeKey)
+{
+	// iterate over all buckets and contacts
+	for (KadBucket& b : buckets)
+		for (auto& contact : b.contacts) {
+			// we found a failed link in the path, mark contact invalid
+			if (containsUndirectedLink(contact->getPath(), failedNodeKey, otherNodeKey))
+				contact->setInvalid();
+		} // end for inner loop over all contacts
+}
+
 
 double KadRoutingTable::getAveragePathLength() const
 {
@@ -296,7 +331,7 @@ double KadRoutingTable::getAveragePathStretch() const
 	uint count = 0;
 	double sum = 0;
 	for (const KadBucket& b : buckets)
-		for(auto& contact : b.contacts) {
+		for (auto& contact : b.contacts) {
 			sum += (contact->getPathLength()+1) / getKadObserver().getPhysicalDistance(myKey, contact->getKey());
 			count++;
 		}
@@ -360,6 +395,48 @@ std::vector<std::unique_ptr<KadContact>>::iterator KadBucket::findContact(const 
 	auto it = contacts.begin();
 	for (; it !=  contacts.end() && !(*it)->hasKey(key); it++);
 	return it;
+}
+
+// ---------------- other class independent methods ----------------
+
+/// searches for undirected link in given path, returns true if found, false if not found
+bool containsUndirectedLink(const kad_path& path, const OverlayKey& firstNodeKey, const OverlayKey& secondNodeKey)
+{
+	if (path.size() >= 2) // only for path that contain links
+	{
+		const OverlayKey* prev_node= &path[0];
+		// now loop over all nodes contained in the path
+		for (int i= 0; i != path.size(); i++)
+		{
+			if (path[i] == firstNodeKey) 
+			{ // one end of the link detected
+				if (*prev_node == secondNodeKey)
+				{ // previous node is the other end of the link
+					return true;
+				}
+				else
+				{ // check if next hop is other end of the link
+					if ((i+1) < path.size())
+					{ // next hop available
+						if (path[i+1] == secondNodeKey) // next hop is second node
+							return true;
+					}
+					else
+					{ // current node is last hop -> no link found
+						return false;
+					}
+				}
+			}
+			// current node will be prev_node in next iteration
+			prev_node= &path[i];
+		} // end for
+		// if here: for loop is finished, but not found so far
+		return false;
+	}
+	else
+	{
+		return false;
+	}
 }
 
 } // namespace

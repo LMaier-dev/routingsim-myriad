@@ -109,14 +109,18 @@ public:
 	 */
 	KadContact_p getContact(const OverlayKey& key) const;
 	/**
-	 * Returns a list of n contacts that are closest to the given key if possible.
+	 * Returns a list of n (valid) contacts that are closest to the given key if possible.
 	 * If there are not enough contacts found, the list is shorter.
 	 */
 	KadContactList getClosestContacts(const OverlayKey& key, size_type n) const;
 	/// returns a list of all known contacts
 	KadContactList getAllContacts() const;
+	/// returns a list of all known valid contacts
+	KadContactList getAllValidContacts() const;
 	/// returns the number of contacts in buckets
 	size_type getNumContacts() const;
+	/// invalidate all contacts with paths that contain a failed link otherNodeKey <-> failedNodeKey
+	void invalidateContacts(const OverlayKey& failedNodeKey, const OverlayKey& otherNodeKey);
 	/// returns the number of buckets currently held
 	inline size_type getNumBuckets() const { return buckets.size(); }
 	/// the position of the bit that defines the lowest bucket
