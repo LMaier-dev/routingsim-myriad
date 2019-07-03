@@ -69,8 +69,7 @@ class KadPolicy {
 public:
 	/** called when last contact is removed from a bucket*/
 	virtual void onBucketEmpty(KadBucket& bucket) = 0;
-	/**  called when a bucket needs to be refreshed */
-	virtual void onBucketRefresh(KadBucket& bucket) = 0;
+	/** called when a new contact is created in the routing table*/
 	virtual void onNewContact(KadContact_p contact) = 0;
 };
 
@@ -126,7 +125,9 @@ public:
 	double getAveragePathLength() const;
 	/// calculates the average stretch of the known contacts
 	double getAveragePathStretch() const;
+	/// returns how many times paths have been updated
 	inline uint getUpdateCount() const { return updateCount; }
+	/// returns how many times contacts have been replaced
 	inline uint getReplacementCount() const { return replacementCount; }
 	/// returns the maximum size of a bucket, i.e. the size after which a bucket is split
 	inline size_type getSplitSize() { return bucketSize; }
@@ -140,9 +141,9 @@ public:
 	inline OverlayKey distance(const OverlayKey& key) const { return key ^ myKey; }
 
 protected:
-	///
+	/// removes duplicates and loops from a path
 	void simplifyPath(kad_path& path);
-	///
+	/// adds a new contact, called by addPath
 	virtual void handleNewContact(const OverlayKey& key, kad_path path);
 	/** @name bucket access */
 	//@{
@@ -186,13 +187,16 @@ private:
 	size_type bucketSize;
 	std::vector<KadBucket> buckets;
 	KadPolicy* policy = nullptr;
+	/// turns on Proximity Neighbor Selection
 	bool proximityNeighborSelection;
+	/// if false new paths are not checked for loops or duplicates
 	bool pathSimplification;
+	/// counts the number of contact replacements
 	uint replacementCount = 0;
+	/// counts the number of improvements made to contact paths
 	uint updateCount = 0;
 
-	//------ private helper functions -------
-	/**  */
+	/// concatenates the two paths
 	kad_path concatViaPath(const kad_path& viaPath, const kad_path& path) const;
 };
 
