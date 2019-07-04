@@ -80,6 +80,7 @@ void NetworkManager::initialize() {
 	if (dynamics == NULL) {
 		// create dynamics modules
 		string dynamicsModel = par("dynamicsModel");
+		EV << "Creating dynamic model: " << dynamicsModel;
 		if (dynamicsModel != string("None") ) {
 			string modelName = string("routingsim.dynamics.")+dynamicsModel;
 			cModuleType* type = cModuleType::get(modelName.c_str());

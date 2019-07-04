@@ -159,11 +159,11 @@ void Node::sendToNode( nodeid_t nid, NodePkt* np ) {
 	// node not a neighbor ->
 	if (neighbor_map.count(nid)==0) {
 		EV << "Node "<<getNodeId()<<": Node " << nid << " unknown" << endl;
-		EV << "Neighbors are: " << endl;
-		boost::unordered_map<nodeid_t, neighbor_t>::iterator it;
-		for(it=neighbor_map.begin(); it!= neighbor_map.end(); it++) {
-			EV << (int)it->second.id << endl;
+		EV << "Neighbors are: {";
+		for(const auto& it : neighbor_map) {
+			EV << ' ' << (int)it.second.id;
 		}
+		EV << " }" << endl;
 		delete np;
 		return;
 	}

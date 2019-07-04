@@ -25,7 +25,8 @@ std::ostream& operator<<(std::ostream& os, const KadContact& c) {
 	os << c.getKey();
 	// state is next V = valid, I = invalid, U = undefined
 	os << " (" << (c.getState() == KadContact::State::valid ? 'V' :
-		       ((c.getState() == KadContact::State::invalid) ? 'I' : 'U')) << ")";
+		       ((c.getState() == KadContact::State::invalid) ? 'I' :
+			((c.getState() == KadContact::State::rediscovering) ? 'R' : 'U'))) << ")";
 	if (c.getPath().size() == 0)
 		return os << " (no path)";
 	else {

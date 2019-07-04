@@ -70,6 +70,7 @@ void R2Kademlia::onConnect( nodeid_t nid ) {
 
 
 void R2Kademlia::onDisconnect( nodeid_t nid ) {
+	EV_TRACE << "onDisconnect " << nid << endl;
 	// if this node is taken down, the packets arrive after the reset
 	if(neighborTable.size() == 0) return;
 	OverlayKey key = neighborTable.getOverlayKey(nid);
@@ -93,7 +94,7 @@ void R2Kademlia::onDisconnect( nodeid_t nid ) {
 	KadContactList closeContacts(routingTable.getClosestContacts(key, contactsLen));
 	for (auto notifyContact : closeContacts)
 	{
-		
+		// TODO send UpdateRouteReq w/ failed link
 	}
 }
 
