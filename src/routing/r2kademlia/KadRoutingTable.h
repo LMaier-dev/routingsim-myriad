@@ -108,6 +108,19 @@ public:
 	 * Returns a nullptr if the contact was not found.
 	 */
 	KadContact_p getContact(const OverlayKey& key) const;
+
+	// set contact invalid, returns true on success, false if contact not found
+	bool setContactInvalid(const OverlayKey& key) {
+		if (auto contactp= getContactInternal(key))
+		{
+			contactp->setInvalid();
+			return true;
+		}
+		else
+			return false;
+	}
+	
+		
 	/**
 	 * Returns a list of n (valid) contacts that are closest to the given key if possible.
 	 * If there are not enough contacts found, the list is shorter.
