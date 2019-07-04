@@ -61,6 +61,7 @@ packet KadRTableRsp extends KadAnswer {
 	// bool intermediateFlag[];
 }
 
+/// UpdateRouteReq (w/o response)
 packet KadUpdateRouteReq extends KadPacket {
        type = KAD_UpdateRouteReq;
 

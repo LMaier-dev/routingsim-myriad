@@ -37,9 +37,10 @@ class KadContact
 {
 public:
 	enum State {
-		undefined = 0,
-		valid     = 1,
-		invalid   = 2
+		undefined     = 0,
+		valid         = 1,
+		rediscovering = 2,
+		invalid       = 3
 	};
 
 	KadContact(const KadContact&) = delete;

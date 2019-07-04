@@ -63,9 +63,11 @@ void R2Kademlia::onInitialize() {
 	sendToNeighbors(makeHelloPacket());
 }
 
+
 void R2Kademlia::onConnect( nodeid_t nid ) {
 	sendToNode(nid, makeHelloPacket());
 }
+
 
 void R2Kademlia::onDisconnect( nodeid_t nid ) {
 	// if this node is taken down, the packets arrive after the reset
@@ -82,8 +84,17 @@ void R2Kademlia::onDisconnect( nodeid_t nid ) {
 		EV_ERROR << "missing contact" << nid << " " << key << " on node " << node().getNodeId() << endl;
 		return;
 	}
-	// remove contacts from routing table with this neighbor as next hop
+	// contacts from routing table with this neighbor as next hop are not usable until rediscovered
 	routingTable.invalidateContactsPN(key);
+	
+	// send RUpdateReq to ID-wise closest Nodes
+	size_t contactsLen = std::max((size_t)findNodeNumber, routingTable.getSplitSize());
+
+	KadContactList closeContacts(routingTable.getClosestContacts(key, contactsLen));
+	for (auto notifyContact : closeContacts)
+	{
+		
+	}
 }
 
 
@@ -280,6 +291,14 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadQueryRouteReq> packet) {
 	sendPacket(std::move(response));
 }
 
+
+void R2Kademlia::handlePacket(std::unique_ptr<KadUpdateRouteReq> packet) {
+	EV_TRACE << "received KadUpdateRouteReq from " << packet->getSource() << endl;
+
+	
+}
+
+	
 bool R2Kademlia::handleQueryRouteResponse(KadPacket_p answer, RPCState& rpcState)
 {
 	if (rpcState.status != RPC_SUCCESS) return true;
@@ -304,15 +323,25 @@ void R2Kademlia::sendFindNode(const OverlayKey& key, bool exact) {
 	);
 }
 
+
 void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
-	OverlayKey& query = packet->getQuery();
+	OverlayKey& query = packet->getQuery(); // query is the destination ID
+
+	// check for presence of "not via" setting
+	if (packet->getNot_via())
+	{
+		EV_TRACE << "FindNodeReq contains not via (" << packet->getUnreachableNode() << " , " << packet->getDetectingNode() << endl;
+		// we should invalidate all contacts with that link in the path to them before answering
+		routingTable.invalidateContacts(packet->getUnreachableNode(), packet->getDetectingNode());
+	}
+	
 	size_t contactsLen = std::max((size_t)findNodeNumber, routingTable.getSplitSize());
 	KadContactList contacts = routingTable.getClosestContacts(packet->getQuery(), contactsLen);
 	ASSERT(contacts.size() > 0); // routing table has at least one entry
 	
 	if (query != myOverlayKey) {
 		if (contacts.front()->getKey() == packet->getSource()) {
-			if(contacts.size() == 1) {
+			if (contacts.size() == 1) {
 				// the only contact we know is the source
 				countDropped(*packet, query);
 				returnToSender(KAD_NodeUnreachable, std::move(packet));
@@ -349,7 +378,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 	auto answer = makeAnswer<KadFindNodeRsp>(*packet);
 	fillRTableRsp(*answer, contacts);
 	countReceived(*packet);
-	EV_TRACE << "KadFindNodeReq received query: " << packet->getQuery() << " answering with list size" << contacts.size() << endl;
+	EV_TRACE << "KadFindNodeReq received query: " << packet->getQuery() << " answering with list size " << contacts.size() << endl;
 	sendPacket(std::move(answer));
 }
 

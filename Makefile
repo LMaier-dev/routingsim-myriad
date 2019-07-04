@@ -32,12 +32,12 @@ doxy:
 	doxygen doxy.cfg
 
 TAGS:
-	find . -name "*.h" | etags -o TAGS -
-	find . -name "*.cc" | etags -o TAGS -a -
+	find . -name "*.h" | etags -o TAGS --language=c++ -
+	find . -name "*.cc" | etags -o TAGS --language=c++ -a -
 
 topologies: plcTopo fatTreeTopo
 
 -include topomake
 
-.PHONY: checkmakefiles makefiles clean cleanall doxy
+.PHONY: checkmakefiles makefiles clean cleanall doxy TAGS
 

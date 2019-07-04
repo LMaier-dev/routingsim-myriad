@@ -255,7 +255,7 @@ KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_t
 			copyValidContacts(otherBucket->contacts, result);
 		}
 	}
-	// now we sort the contacts
+	// now we sort the contacts by their XOR metric
 	struct KadContactCompare {
 		const OverlayKey& key;
 		KadContactCompare(const OverlayKey& key) : key(key) {}
