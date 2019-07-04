@@ -76,14 +76,16 @@ void R2Kademlia::onDisconnect( nodeid_t nid ) {
 
 	neighborTable.removeNeighbor(nid);
 	ASSERT(neighborTable.getNodeId(key) == undefined_node);
-	if(!routingTable.getContact(key)) {
+	// set contact invalid (was routingTable.removeContact(key))
+	if (!routingTable.setContactInvalid(key)) {
 		// this should only happen for nodes with very large degree
 		EV_ERROR << "missing contact" << nid << " " << key << " on node " << node().getNodeId() << endl;
 		return;
 	}
-	routingTable.removeContact(key);
-	//TODO remove contacts from routing table with this neighbor as next hop
+	// remove contacts from routing table with this neighbor as next hop
+	routingTable.invalidateContactsPN(key);
 }
+
 
 void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	ASSERT(pkt->getType() == PAYLOAD_TYPE);

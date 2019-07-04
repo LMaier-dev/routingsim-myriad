@@ -134,6 +134,8 @@ public:
 	size_type getNumContacts() const;
 	/// invalidate all contacts with paths that contain a failed link otherNodeKey <-> failedNodeKey
 	void invalidateContacts(const OverlayKey& failedNodeKey, const OverlayKey& otherNodeKey);
+	/// invalidate all contacts with paths that contain the physical neighbor failedNodeKey as next hop 
+	void invalidateContactsPN(const OverlayKey& failedNodeKey);
 	/// returns the number of buckets currently held
 	inline size_type getNumBuckets() const { return buckets.size(); }
 	/// the position of the bit that defines the lowest bucket

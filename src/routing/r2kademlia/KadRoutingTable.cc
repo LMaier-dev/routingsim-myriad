@@ -310,7 +310,29 @@ void KadRoutingTable::invalidateContacts(const OverlayKey& failedNodeKey, const 
 		for (auto& contact : b.contacts) {
 			// we found a failed link in the path, mark contact invalid
 			if (containsUndirectedLink(contact->getPath(), failedNodeKey, otherNodeKey))
+			{
 				contact->setInvalid();
+				EV_TRACE << "Set Contact to invalid due to failed link ("
+					 << failedNodeKey << ", " << otherNodeKey << "):"  << *contact << endl;
+			}
+		} // end for inner loop over all contacts
+}
+
+
+/** invalidate all contacts with paths that contain the physical neighbor failedNodeKey as next hop */
+void KadRoutingTable::invalidateContactsPN(const OverlayKey& failedNodeKey)
+{
+	// iterate over all buckets and contacts
+	for (KadBucket& b : buckets)
+		for (auto& contact : b.contacts) {
+			// we found a failed link in the path, mark contact invalid
+			const auto& path= contact->getPath();
+			if (path.size() > 1)
+			{
+				if (path[0] == failedNodeKey) // failed node is first hop
+					contact->setInvalid();
+				EV_TRACE << "Set Contact to invalid due to PN first hop failure: "  << *contact << endl;
+			}
 		} // end for inner loop over all contacts
 }
 
