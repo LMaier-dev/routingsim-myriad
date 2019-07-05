@@ -345,7 +345,7 @@ void KadRoutingTable::invalidateContactsPN(const OverlayKey& failedNodeKey)
 		for (auto& contact : b.contacts) {
 			// we found a failed link in the path, mark contact invalid
 			const auto& path= contact->getPath();
-			if (path.size() > 1)
+			if (path.size() >= 1)
 			{
 				if (path[0] == failedNodeKey) // failed node is first hop
 				{
@@ -379,7 +379,8 @@ double KadRoutingTable::getAveragePathStretch() const
 			if (getKadObserver().getPhysicalDistance(myKey, contact->getKey()) > 0)
 			    sum += (contact->getPathLength()+1) / getKadObserver().getPhysicalDistance(myKey, contact->getKey());
 			else
-				EV_WARN << "Physical Distance = 0: " << myKey << " to " << contact->getKey();
+				EV_WARN << "Physical Distance = " << getKadObserver().getPhysicalDistance(myKey, contact->getKey())
+					<< ": " << myKey << " to " << contact->getKey().toString().substr(0, 6) << endl;
 			count++;
 		}
 	return count == 0 ? 0.0 : sum / count;

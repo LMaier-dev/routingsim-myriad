@@ -43,6 +43,51 @@ simtime_t LinkFailure::scheduleDynamics() {
 	// get the mapping from active nodes to active their degree
 	ntop.getNodeDegrees(nodeDegrees);
 
+	// select random node, remove all links but one if possible
+	// neighboring nodes must not be isolated by choice of links (stay connected)
+	if (linkSelection == "randomAllButOne") {
+
+		unsigned int max_retries= ntop.getActiveNumberNodes();
+		nodeid_t source = undefined_node;
+		nodeid_t destination = undefined_node;
+		
+		// it can be the case that the graph ist connect, but
+		// we cannot remove a single link without partitioning it
+		// therefore we have a maximum number of tries
+		while (max_retries > 0 && scheduledFailures == 0)
+		{
+			max_retries--;
+			
+			// no more edges available
+			if (ntop.getActiveNumberLinks() == 0) {
+				EV_WARN << "Premature termination of Dynamics Module LinkFailure (not enough active edges!)" << endl;
+				break;
+			}
+
+			// choose source node
+			source = getTopology().getRandomNode(getRNG(0));
+
+			std::vector<nodeid_t> neighbors;
+			ntop.getNeighborNodeIDs(source, neighbors);
+
+			// single link only nodes are not eligible
+			if (neighbors.size() <= 1)
+				continue;
+		
+			for (unsigned int i= 0; i < neighbors.size()-1; i++)
+			{
+				if ( nodeDegrees[neighbors[i]] > 1 )
+				{
+					destination = neighbors[i];
+					scheduleLinkFailure(source, destination, period, duration);
+					scheduledFailures++;
+				}
+			}
+		} // end while
+		return simTime() + period;
+	}
+
+	// other modes
 	while (scheduledFailures < numLinksFail) {
 		nodeid_t source = undefined_node;
 		nodeid_t destination = undefined_node;

@@ -38,7 +38,8 @@ parameters:
     /// highestDegree: selects the numLinksFail nodes with the highest Degree
     /// degreeRange: selects numLinksFail links connected to a node with degree in the range [minDegree, maxDegree]
     /// random: random selection of nodes
-    string linkSelection @enum("none", "highestDegree", "degreeRange", "random") = default("none");
+    /// randomAllButOne: random selection of node, removes all links but one if possible, but only if graph stays connected
+    string linkSelection @enum("none", "highestDegree", "degreeRange", "random", "randomAllButOne") = default("none");
     
     int minDegree = 4;
     int maxDegree = 10;

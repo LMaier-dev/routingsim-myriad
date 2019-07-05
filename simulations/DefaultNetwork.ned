@@ -22,9 +22,7 @@ network DefaultNetwork
 {
 	submodules:
 		manager: NetworkManager;
-		dynamics: MixedFailure;
-		//dynamics: LinkFailure;
-		//dynamics: LifetimeChurn;
+		dynamics: LinkFailure; // MixedFailure; LinkFailure; LifetimeChurn;
 	connections:
 		dynamics.toManager --> manager.dynamics;
 }
