@@ -62,8 +62,8 @@ simple NetworkManager {
         string shortestPathCalculationMode @enum(fullDistanceMatrix, onDemand) = default("fullDistanceMatrix");
         
         /// when dynamics gate is not connected, create a dynamics model by name
-        string dynamicsModel @enum(None, CatastrophicFailure, LifetimeChurn, LinkFailure, IncrementalFailure) = 
-        	default("CatastrophicFailure");
+	string dynamicsModel @enum("None", "CatastrophicFailure", "LifetimeChurn",
+	       		     	   "LinkFailure", "IncrementalFailure") = default("LinkFailure");
         	
         string topologyStatistics @enum(None, Light, Heavy) = default("Light");
     gates:

@@ -74,13 +74,14 @@ void NetworkManager::initialize() {
 		cModule* dynamicsModule =
 				dynamicsGate->getPathStartGate()->getOwnerModule();
 		dynamics = dynamic_cast<NetworkDynamics*>(dynamicsModule);
+		EV << "Dynamics Module provided: " << dynamics->getModuleType()->getName() << endl;
 	}
 
 	// no-> create using given name
 	if (dynamics == NULL) {
 		// create dynamics modules
 		string dynamicsModel = par("dynamicsModel");
-		EV << "Creating dynamic model: " << dynamicsModel;
+		EV << "Creating dynamic model: " << dynamicsModel << endl;
 		if (dynamicsModel != string("None") ) {
 			string modelName = string("routingsim.dynamics.")+dynamicsModel;
 			cModuleType* type = cModuleType::get(modelName.c_str());

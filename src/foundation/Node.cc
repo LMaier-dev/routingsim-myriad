@@ -28,6 +28,9 @@ Define_Module(Node);
 static nodeid_t gnodeid=0;
 
 Node* Node::getNode(cModule *mod) {
+	if (!mod)
+		return nullptr;
+	
 	cModule *submod = mod->getSubmodule("node");
 	if (submod) {
 		// we have a node submodule
@@ -160,7 +163,7 @@ void Node::sendToNode( nodeid_t nid, NodePkt* np ) {
 	if (neighbor_map.count(nid)==0) {
 		EV << "Node "<<getNodeId()<<": Node " << nid << " unknown" << endl;
 		EV << "Neighbors are: {";
-		for(const auto& it : neighbor_map) {
+		for (const auto& it : neighbor_map) {
 			EV << ' ' << (int)it.second.id;
 		}
 		EV << " }" << endl;

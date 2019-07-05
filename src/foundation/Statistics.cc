@@ -308,6 +308,11 @@ void Statistics::registerMessage( cMessage* msg ) {
 void Statistics::dropMessage( cMessage* msg, nodeid_t dstNode ) {
 	if (msgs.count(msg)==0) return;
 
+	if (!msg->getContextPointer())
+	{
+		EV_ERROR << "Message not registered: " << msg->getName() << " Id:" << msg->getId() << endl;
+		return;
+	}
 	// the context pointer is set in registerMessage
 	nodeid_t srcNode = Node::getNode(static_cast<cModule*>(msg->getContextPointer()))->getNodeId();
 
@@ -328,6 +333,11 @@ void Statistics::deliveredMessage( cMessage* msg, int hop_count ) {
 	if (msgs.count(msg) == 0) return;
 	hopCount->collect(hop_count);
 	// the context pointer is set in registerMessage
+	if (!msg->getContextPointer())
+	{
+		EV_ERROR << "Message not registered: " << msg->getName() << " Id:" << msg->getId() << endl;
+		return;
+	}
 	nodeid_t srcNode = Node::getNode(static_cast<cModule*>(msg->getContextPointer()))->getNodeId();
 	nodeid_t dstNode = Node::getNode(getSimulation()->getContextModule())->getNodeId();
 	if (getNetworkManager()!=NULL) {

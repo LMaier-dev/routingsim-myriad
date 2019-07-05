@@ -350,13 +350,18 @@ double KadRoutingTable::getAveragePathLength() const
 		}
 	return count == 0 ? 0.0 : sum / count;
 }
+
+
 double KadRoutingTable::getAveragePathStretch() const
 {
 	uint count = 0;
 	double sum = 0;
 	for (const KadBucket& b : buckets)
 		for (auto& contact : b.contacts) {
-			sum += (contact->getPathLength()+1) / getKadObserver().getPhysicalDistance(myKey, contact->getKey());
+			if (getKadObserver().getPhysicalDistance(myKey, contact->getKey()) > 0)
+			    sum += (contact->getPathLength()+1) / getKadObserver().getPhysicalDistance(myKey, contact->getKey());
+			else
+				EV_WARN << "Physical Distance = 0: " << myKey << " to " << contact->getKey();
 			count++;
 		}
 	return count == 0 ? 0.0 : sum / count;

@@ -240,7 +240,14 @@ const KadContact& R2Kademlia::chooseNextHop(const KadContactList& contacts, cons
 	}
 	else {
 		// no proximity routing
-		ASSERT(contacts.front()->getKey() != target);
+		//ASSERT(contacts.front()->getKey() != target); // this assertion seems to be wrong
+
+		if (contacts.front()->getKey() == target)
+		{
+			EV_WARN << "Next hop is the target, number of contacts: " << contacts.size()
+				 << "contact: " << *(contacts.front()) << endl;
+		}
+
 		return *(contacts.front());
 	}
 }
@@ -314,14 +321,22 @@ void R2Kademlia::sendFindNode(const OverlayKey& key, bool exact) {
 	EV_TRACE << "sendFindNode w/ " << key << endl;
 	auto contacts = routingTable.getClosestContacts(key, findNodeNumber);
 	ASSERT(contacts.size() > 0);
-	const KadContact& contact = chooseNextHop(contacts, key, myOverlayKey);
-	auto packet = makePacket<KadFindNodeReq>(contact, "FindNode");
-	packet->setQuery(key);
-	packet->setExact(exact);
-	sendRpcCall(
-		std::move(packet),
-		std::bind(&R2Kademlia::handleFindNodeResponse, this, ph::_1, ph::_2)
-	);
+	if (contacts.size() > 0)
+	{
+		const KadContact& contact = chooseNextHop(contacts, key, myOverlayKey);
+		auto packet = makePacket<KadFindNodeReq>(contact, "FindNode");
+		packet->setQuery(key);
+		packet->setExact(exact);
+		sendRpcCall(
+			std::move(packet),
+			std::bind(&R2Kademlia::handleFindNodeResponse, this, ph::_1, ph::_2)
+			);
+	}
+	else
+	{ // no contacts to choose from
+		//TODO send back unreachable
+		
+	}
 }
 
 
