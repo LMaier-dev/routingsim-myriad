@@ -76,7 +76,7 @@ size_type KadRoutingTable::getBucketIndex(const OverlayKey& key) const
 	size_type index = (prefixLen+1)*getLevelWidth() - delta.getBitRange(i, accelerationFactor);
 	ASSERT(index <= getMaxNumBuckets());
 	// old calculation formula, just for checking...
-	ASSERT(index == (key.getLength() - i)/accelerationFactor * getLevelWidth()- delta.getBitRange(i, accelerationFactor));
+	// ASSERT(index == (key.getLength() - i)/accelerationFactor * getLevelWidth()- delta.getBitRange(i, accelerationFactor));
 	return std::min(buckets.size()-1, index);
 }
 
@@ -95,11 +95,19 @@ void KadRoutingTable::addPath(const OverlayKey& key, kad_path path)
 	KadContact *contact = getContactInternal(key);
 	if (contact) {
 		// contact is known
-		if (contact->getPathLength() > path.size()) {
-			contact->setPath(std::move(path));
-			contact->setValid();
+
+		// if contact was marked invalid, update path and status:
+		// since this information is hopefully more current, path should be valid (again)
+		// it does not make sense to check for equalness of the paths: it may be the same,
+		// but re-enabled
+		// or: we learn a shorter path -> update anyways
+		if (contact->isInvalid() || contact->getPathLength() > path.size()) {
+			contact->setPath(std::move(path)); // will set contact automatically to valid
 			updateCount++;
-			//TODO call onImprovement?
+			
+			// do something on improved path according to policy
+			policy->onImprovement(*contact);
+
 			return;
 		}
 		// else new path is not interesting
@@ -108,7 +116,7 @@ void KadRoutingTable::addPath(const OverlayKey& key, kad_path path)
 		handleNewContact(key, std::move(path));
 }
 
-	
+
 void KadRoutingTable::addPath(const OverlayKey& key, const kad_path& path, const kad_path& viaPath)
 {
 	if (key == myKey) return;
@@ -117,12 +125,20 @@ void KadRoutingTable::addPath(const OverlayKey& key, const kad_path& path, const
 		return;
 	}
 	KadContact *contact = getContactInternal(key);
-	if (contact) {
-		// contact is known
-		if (contact->getPathLength() > path.size() + viaPath.size()) {
+	if (contact) { // contact is known
+		
+		// if contact was marked invalid, update path and status:
+		// since this information is hopefully more current, path should be valid (again)
+		// it does not make sense to check for equalness of the paths: it may be the same,
+		// but re-enabled
+		// or: we learn a shorter path -> update anyways
+		if (contact->isInvalid() || contact->getPathLength() > path.size() + viaPath.size()) {
 			updateCount++;
-			contact->setPath(concatViaPath(viaPath, path));
-			//TODO call onImprovement?
+			contact->setPath(concatViaPath(viaPath, path)); // will set contact automatically to valid
+			
+			// do something on improved path according to policy
+			policy->onImprovement(*contact);
+			
 			return;
 		}
 		// else new path is not interesting
@@ -305,7 +321,7 @@ size_type KadRoutingTable::getNumContacts() const
 /** invalidate all contacts with paths that contain a failed link otherNodeKey <-> failedNodeKey */
 void KadRoutingTable::invalidateContacts(const OverlayKey& failedNodeKey, const OverlayKey& otherNodeKey)
 {
-	EV_TRACE << "invalidateContacts()" << endl;
+	EV_TRACE << "invalidateContacts(" << failedNodeKey << ")" << endl;
 	// iterate over all buckets and contacts
 	for (KadBucket& b : buckets)
 		for (auto& contact : b.contacts) {
@@ -314,7 +330,7 @@ void KadRoutingTable::invalidateContacts(const OverlayKey& failedNodeKey, const 
 			{
 				contact->setInvalid();
 				EV_TRACE << "Set Contact to invalid due to failed link ("
-					 << failedNodeKey << ", " << otherNodeKey << "):"  << *contact << endl;
+					 << failedNodeKey.toString().substr(0, 6) << ", " << otherNodeKey.toString().substr(0, 6) << "):"  << *contact << endl;
 			}
 		} // end for inner loop over all contacts
 }
@@ -323,7 +339,7 @@ void KadRoutingTable::invalidateContacts(const OverlayKey& failedNodeKey, const 
 /** invalidate all contacts with paths that contain the physical neighbor failedNodeKey as next hop */
 void KadRoutingTable::invalidateContactsPN(const OverlayKey& failedNodeKey)
 {
-	EV_TRACE << "invalidateContactsPN()" << endl;
+	EV_TRACE << "invalidateContactsPN(" << failedNodeKey << ")" << endl;
 	// iterate over all buckets and contacts
 	for (KadBucket& b : buckets)
 		for (auto& contact : b.contacts) {
@@ -332,8 +348,10 @@ void KadRoutingTable::invalidateContactsPN(const OverlayKey& failedNodeKey)
 			if (path.size() > 1)
 			{
 				if (path[0] == failedNodeKey) // failed node is first hop
+				{
 					contact->setInvalid();
-				EV_TRACE << "Set Contact to invalid due to PN first hop failure: "  << *contact << endl;
+					EV_TRACE << "Set Contact to invalid due to PN first hop failure: "  << *contact << endl;
+				}
 			}
 		} // end for inner loop over all contacts
 }
@@ -435,7 +453,7 @@ bool containsUndirectedLink(const kad_path& path, const OverlayKey& firstNodeKey
 	{
 		const OverlayKey* prev_node= &path[0];
 		// now loop over all nodes contained in the path
-		for (int i= 0; i != path.size(); i++)
+		for (unsigned int i= 0; i != path.size(); i++)
 		{
 			if (path[i] == firstNodeKey) 
 			{ // one end of the link detected

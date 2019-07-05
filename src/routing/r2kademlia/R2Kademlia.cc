@@ -82,7 +82,7 @@ void R2Kademlia::onDisconnect( nodeid_t nid ) {
 	// set contact invalid (was routingTable.removeContact(key))
 	if (!routingTable.setContactInvalid(key)) {
 		// this should only happen for nodes with very large degree
-		EV_ERROR << "missing contact" << nid << " " << key << " on node " << node().getNodeId() << endl;
+		EV_ERROR << "missing contact " << nid << " " << key << " on node " << node().getNodeId() << endl;
 		return;
 	}
 	// contacts from routing table with this neighbor as next hop are not usable until rediscovered
@@ -95,6 +95,9 @@ void R2Kademlia::onDisconnect( nodeid_t nid ) {
 	for (auto notifyContact : closeContacts)
 	{
 		// TODO send UpdateRouteReq w/ failed link
+		//auto packet = makePacket<KadUpdateRouteReq>(contact, "UpdateRoute");
+		//packet->
+		//	sendPacket(std::move(packet));
 	}
 }
 
@@ -175,12 +178,14 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 	routingTable.addPath(packet->getSource(), kad_path());
 }
 
+
 void R2Kademlia::handlePacket(KadAnswer_p packet) {
 	EV_DEBUG << "received answer packet" << endl;
 	if (packet->getType() == KAD_Error)
 		onErrorPacket(*check_and_cast<KadError *>(packet.get()));
 	handleAnswer(std::move(packet));
 }
+
 
 void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt) {
 	// we do not route hello packets!
@@ -201,11 +206,13 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt) {
 	}
 }
 
+
 void R2Kademlia::resendPacket(KadPacket_p packet) {
 	getKadObserver().registerPacketOverlayHop(*packet);
 	NodePkt_p nodePkt = NodePkt_p(check_and_cast<NodePkt *>(packet->removeControlInfo()));
 	forwardPacket(std::move(packet), std::move(nodePkt));
 }
+
 
 void R2Kademlia::sendPacket(KadPacket_p packet) {
 	ASSERT(packet->getSource() == myOverlayKey);
@@ -218,6 +225,7 @@ void R2Kademlia::sendPacket(KadPacket_p packet) {
 	sentPackets++;
 	forwardPacket(std::move(packet), std::move(nodePkt));
 }
+
 
 const KadContact& R2Kademlia::chooseNextHop(const KadContactList& contacts, const OverlayKey& target, const OverlayKey& source) {
 	if (proximityRouting && contacts.size() > 1) {
@@ -239,7 +247,7 @@ const KadContact& R2Kademlia::chooseNextHop(const KadContactList& contacts, cons
 		return *contact;
 	}
 	else {
-		// no proximity routing
+		// no proximity routing or only single contact
 		//ASSERT(contacts.front()->getKey() != target); // this assertion seems to be wrong
 
 		if (contacts.front()->getKey() == target)
@@ -320,7 +328,7 @@ bool R2Kademlia::handleQueryRouteResponse(KadPacket_p answer, RPCState& rpcState
 void R2Kademlia::sendFindNode(const OverlayKey& key, bool exact) {
 	EV_TRACE << "sendFindNode w/ " << key << endl;
 	auto contacts = routingTable.getClosestContacts(key, findNodeNumber);
-	ASSERT(contacts.size() > 0);
+	//ASSERT(contacts.size() > 0);
 	if (contacts.size() > 0)
 	{
 		const KadContact& contact = chooseNextHop(contacts, key, myOverlayKey);
@@ -333,9 +341,8 @@ void R2Kademlia::sendFindNode(const OverlayKey& key, bool exact) {
 			);
 	}
 	else
-	{ // no contacts to choose from
-		//TODO send back unreachable
-		
+	{ // no contacts to choose from (usually only possible for isolated nodes)
+		EV_TRACE << "no contacts found, cannot send FindNodeReq" << endl;
 	}
 }
 
@@ -353,8 +360,18 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 	
 	size_t contactsLen = std::max((size_t)findNodeNumber, routingTable.getSplitSize());
 	KadContactList contacts = routingTable.getClosestContacts(packet->getQuery(), contactsLen);
-	ASSERT(contacts.size() > 0); // routing table has at least one entry
-	
+
+	if (contacts.size() == 0)
+	{
+		// send back Route Failure: no route toward destination known
+		// the only contact we know is the source
+		countDropped(*packet, query);
+		returnToSender(KAD_RouteFailureDeadEnd, std::move(packet));
+
+		return;
+	}
+
+	// routing table has at least one entry
 	if (query != myOverlayKey) {
 		if (contacts.front()->getKey() == packet->getSource()) {
 			if (contacts.size() == 1) {
@@ -398,6 +415,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 	sendPacket(std::move(answer));
 }
 
+
 bool R2Kademlia::handleFindNodeResponse(KadPacket_p answer_, RPCState& rpcState) {
 	if (rpcState.status != RPC_SUCCESS) return true;
 	auto answer = safe_packet_cast<KadFindNodeRsp>(answer_);
@@ -419,6 +437,7 @@ void R2Kademlia::onMissingNeighbor(KadPacket_p packet, NodePkt_p pkt) {
 		returnToSender(KAD_SegmentFailure, std::move(packet));
 }
 
+
 void R2Kademlia::onErrorPacket(KadError& error) {
 	if (error.getErrorType() == KAD_SegmentFailure) {
 		KadPacket* original = check_and_cast<KadPacket *>(error.getEncapsulatedPacket());
@@ -429,6 +448,7 @@ void R2Kademlia::onErrorPacket(KadError& error) {
 	}
 	// currently there are no more error types
 }
+
 
 void R2Kademlia::sampleStatistics (Statistics &stats) {
 	stats.value("forwardedPackets", forwardedPackets-sentPackets);
@@ -448,10 +468,19 @@ void R2Kademlia::sampleStatistics (Statistics &stats) {
 void R2Kademlia::onBucketEmpty(KadBucket& bucket) {
 	EV << "bucket empty" << endl;
 }
+
+
 void R2Kademlia::onNewContact(KadContact_p contact) {
 	if (contact->getPathLength() < discoveryRadius)
 		sendGetNeighbors(contact);
 }
+
+
+void R2Kademlia::onImprovement(const KadContact& contact) {
+	// path got improved for this contact -> potentially send UpdateRouteReq
+	//TODO
+}
+
 
 void R2Kademlia::recordScalars() {
 	recordScalar("forwardedPackets", forwardedPackets);

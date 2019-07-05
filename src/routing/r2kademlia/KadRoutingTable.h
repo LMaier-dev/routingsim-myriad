@@ -62,15 +62,17 @@ protected:
 };
 
 /**
- * A class with callback functions that are called then the routing table
+ * A class with callback functions that are called when the routing table
  * encounters things.
  */
 class KadPolicy {
 public:
-	/** called when last contact is removed from a bucket*/
+	/** called when last contact is removed from a bucket */
 	virtual void onBucketEmpty(KadBucket& bucket) = 0;
-	/** called when a new contact is created in the routing table*/
+	/** called when a new contact is created in the routing table */
 	virtual void onNewContact(KadContact_p contact) = 0;
+	/** called when a better path has been learned for a contact */
+	virtual void onImprovement(const KadContact& contact) = 0;
 };
 
 /**

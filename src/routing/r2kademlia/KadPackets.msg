@@ -32,7 +32,12 @@ class noncobject key_vector_t;
 enum KadErrorType {
 	KAD_NoError = 0;
 	KAD_NodeUnreachable = 0x01;
+	// Malformed message 0x02 // not necessary in simulation
+	// Parameter problem 0x03 // not necessary in simulation
+	KAD_HopLimitExceeded = 0x04;
 	KAD_SegmentFailure = 0x05;
+	KAD_PathIDUnknown = 0x06;
+	KAD_RouteFailureDeadEnd = 0x0a;
 }
 
 enum KadRouteUpdateAction {

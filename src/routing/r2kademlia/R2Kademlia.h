@@ -107,6 +107,8 @@ public:
 	virtual void onBucketEmpty(KadBucket& bucket) override;
 	/** called when a new contact is created in the routing table*/
 	virtual void onNewContact(KadContact_p contact) override;
+	/** Called when a route got improved */
+	virtual void onImprovement(const KadContact& contact) override;
 	//@}
 
 	/** @name statistics functions used by statistics module */
