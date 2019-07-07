@@ -351,6 +351,8 @@ void KadRoutingTable::invalidateContactsPN(const OverlayKey& failedNodeKey)
 				{
 					contact->setInvalid();
 					EV_TRACE << "Set Contact to invalid due to PN first hop failure: "  << *contact << endl;
+					// will schedule this for rediscovery later
+					policy->scheduleRediscovery(contact->getKey(), failedNodeKey, myKey);
 				}
 			}
 		} // end for inner loop over all contacts

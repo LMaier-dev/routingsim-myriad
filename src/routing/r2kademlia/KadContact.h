@@ -50,9 +50,11 @@ public:
 	inline State getState() const { return state; }
 	inline bool isInvalid() const { return (state != valid); }
 	inline bool isValid() const { return (state == valid) ; }
+	inline bool isRediscovering() const { return (state == rediscovering) ; }
 
 	inline void setInvalid() { state= invalid; }
 	inline void setValid() { state= valid; }
+	inline void setRediscovering() { state= valid; }
 	
 	/// returns the key of this contact
 	inline const OverlayKey& getKey() const { return key; }

@@ -51,6 +51,7 @@ void R2Kademlia::onInitialize() {
 	pathSnooping = par("pathSnooping").boolValue();
 	probeStrategy = (uint) par("probeStrategy").intValue();
 	detailedRoutingTableStats = par("detailedRoutingTableStats").boolValue();
+	rediscoveryWaitTime = (simtime_t) par("rediscoveryWaitTime").doubleValue();
 
 	getStatistics().addSample(this);
 	simtime_t probeInterval = (simtime_t) par("probeInterval").doubleValue();
@@ -87,15 +88,19 @@ void R2Kademlia::onDisconnect( nodeid_t nid ) {
 	}
 	// contacts from routing table with this neighbor as next hop are not usable until rediscovered
 	routingTable.invalidateContactsPN(key);
+
+	// Try to rediscover that contact
+	//TODO insert grace period
+	sendFindNode(key, true, &key, &myOverlayKey);
 	
-	// send RUpdateReq to ID-wise closest Nodes
+	// send UpdateRouteReq to ID-wise closest Nodes
 	size_t contactsLen = std::max((size_t)findNodeNumber, routingTable.getSplitSize());
 	KadContactList closeContacts(routingTable.getClosestContacts(key, contactsLen));
 
 	if (closeContacts.size() > 0)
 	{ // if there are contacts left to notify
 		for (auto notifyContact : closeContacts)
-		{ // each ID-wise close contact gets a UpdateRoutReq
+		{ // each ID-wise close contact gets a UpdateRouteReq from us
 			auto packet = makePacket<KadUpdateRouteReq>(notifyContact, "UpdateRoute");
 			packet->setContactArraySize(1);
 			packet->setContact(0, key);
@@ -104,7 +109,7 @@ void R2Kademlia::onDisconnect( nodeid_t nid ) {
 			packet->setPath(0, { key, myOverlayKey });
 			packet->setActionArraySize(1);
 			packet->setAction(0, KAD_Unreachable);
-			// TODO send UpdateRouteReq w/ failed link
+			// send UpdateRouteReq w/ failed link
 			sendPacket(std::move(packet));
 		}
 	} // endif
@@ -156,6 +161,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	}
 }
 
+
 void R2Kademlia::onSelfMessage(cMessage_p msg) {
 	// handle timer
 	short timerId = msg->getKind();
@@ -163,9 +169,12 @@ void R2Kademlia::onSelfMessage(cMessage_p msg) {
 	ASSERT((size_t)timerId < timerDuration.size());
 	ASSERT(timerMsg[timerId] == msg.get());
 	timerCallback[timerId]();
-	// reschedule timer
-	simtime_t time = uniform(timerDuration[timerId]/2, timerDuration[timerId]/2*3);
-	scheduleAt(simTime() + time, msg.release());
+	// reschedule timer if duration > 0, otherwise it was a one shot timer
+	if (timerDuration[timerId] > 0)
+	{
+		simtime_t time = uniform(timerDuration[timerId]/2, timerDuration[timerId]/2*3);
+		scheduleAt(simTime() + time, msg.release());
+	}
 }
 
 void R2Kademlia::reset() {
@@ -331,31 +340,31 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadUpdateRouteReq> packet) {
 	for (unsigned int i= 0; i < numContacts; i++)
 	{
 		// get contact and corresponding path info
-		const auto& key= packet->getContact(i);
+		const auto& contactkey= packet->getContact(i);
 		const auto& path= packet->getPath(i);
 		auto action= packet->getAction(i);
 
 		switch (action) {
 			case KAD_Announce:
-				EV_TRACE << "UpdateReq Announce "  << endl;
-				//TODO implement this
+				EV_TRACE << "UpdateReq Announce for contact " << contactkey.toString().substr(0, 6) << endl;
+			        routingTable.addPath(contactkey, path);
 				break;
 
 			case KAD_Withdraw:
-				EV_TRACE << "UpdateReq Withdraw "  << endl;
+				EV_TRACE << "UpdateReq Withdraw for contact " << contactkey.toString().substr(0, 6) << endl;
 				//TODO implement this
 				break;
 
 			case KAD_Change:
-				EV_TRACE << "UpdateReq Change "  << endl;
-				//TODO implement this
+				EV_TRACE << "UpdateReq Change for contact " << contactkey.toString().substr(0, 6) << endl;
+				routingTable.addPath(contactkey, path);
 				break;
 
 			case KAD_Unreachable:
 				// unreachable node should be first
 				ASSERT(path.size() > 1);
 
-				EV_TRACE << "Unreachable contact: " << key.toString().substr(0, 6) << ", link: "
+				EV_TRACE << "Unreachable contact: " << contactkey.toString().substr(0, 6) << ", link: "
 					 << path[0].toString().substr(0, 6) << " to " << path[1].toString().substr(0, 6) << endl;
 				// now invalidate all contacts with this link
 				routingTable.invalidateContacts(path[0], path[1]);
@@ -380,7 +389,7 @@ bool R2Kademlia::handleQueryRouteResponse(KadPacket_p answer, RPCState& rpcState
 }
 
 // FIND NODE
-void R2Kademlia::sendFindNode(const OverlayKey& key, bool exact) {
+void R2Kademlia::sendFindNode(const OverlayKey& key, bool exact, const OverlayKey* notvia_unreachable_node, const OverlayKey* notvia_failednode_neighbor) {
 	EV_TRACE << "sendFindNode w/ " << key << endl;
 	auto contacts = routingTable.getClosestContacts(key, findNodeNumber);
 	//ASSERT(contacts.size() > 0);
@@ -390,6 +399,12 @@ void R2Kademlia::sendFindNode(const OverlayKey& key, bool exact) {
 		auto packet = makePacket<KadFindNodeReq>(contact, "FindNode");
 		packet->setQuery(key);
 		packet->setExact(exact);
+		if (notvia_unreachable_node &&  notvia_failednode_neighbor)
+		{ // this is an immediate rediscovery packet
+			ASSERT(exact);
+			packet->setUnreachableNode(*notvia_unreachable_node);
+			packet->setDetectingNode(*notvia_failednode_neighbor);
+		}
 		sendRpcCall(
 			std::move(packet),
 			std::bind(&R2Kademlia::handleFindNodeResponse, this, ph::_1, ph::_2)
@@ -587,6 +602,24 @@ NodePkt_p R2Kademlia::makeHelloPacket()
 	return nodePkt;
 }
 
+
+// send a find node request excluding paths that include the failed link
+void R2Kademlia::scheduleRediscovery(const OverlayKey& contact, const OverlayKey& notvia_unreachable_node, const OverlayKey& notvia_failednode_neighbor)
+{
+	/*
+	std::unique_ptr<const KadContact> rediscoverContact=
+		std::make_unique<const KadContact>(contact, vector<OverlayKey>{notvia_unreachable_node,
+								          notvia_failednode_neighbor});
+	rediscoverQueue.push_back(std::move(rediscoverContact));
+	if (!rediscoveryScheduled)
+	{
+		addTimer(rediscoveryWaitTime, 0, std::bind(&R2Kademlia::rediscoverContacts, this));
+		rediscoveryScheduled= true;
+	}
+	*/
+}
+
+
 template<typename T>
 std::unique_ptr<T> R2Kademlia::makePacket(const KadContact* contact, const char *name) {
 	auto packet = std::make_unique<T>();
@@ -639,19 +672,48 @@ void R2Kademlia::readRTableRsp(std::unique_ptr<KadRTableRsp> packet) {
 	}
 }
 
-
+/* if duration is 0, this is a one shot timer */
 void R2Kademlia::addTimer(simtime_t initialOffset, simtime_t duration, std::function<void()> callback) {
 	ASSERT(timerDuration.size() == timerCallback.size());
 	ASSERT(timerDuration.size() < std::numeric_limits<short>::max());
-	ASSERT(duration > 0);
+	ASSERT(duration >= 0);
 	timerDuration.push_back(duration);
 	timerCallback.push_back(callback);
 	cMessage *msg = new cMessage("TimerMsg", timerDuration.size()-1);
 	timerMsg.push_back(msg);
 	simtime_t scatter = uniform(0, duration);
 	scheduleAt(simTime() + initialOffset - duration/2 + scatter, msg);
-	EV_TRACE << "scheduled timer message " << msg << " with duration " << duration <<  endl;
+	EV_TRACE << "scheduled timer message " << msg << ( (duration != 0) ? " with duration " : " after ")
+		 <<   ((duration != 0) ? duration : initialOffset) <<  endl;
 }
+
+
+void R2Kademlia::rediscoverContacts() {
+	// traverse list of scheduled contacts for rediscovery
+	// recheck status and set to rediscover
+	while (!rediscoverQueue.empty())
+	{
+		auto& contact= rediscoverQueue.front();
+		// check for current status of scheduled contact
+		auto rt_contact= routingTable.getContact(contact->getKey());
+		if (rt_contact) { // so contact still exists
+			// contact may have been recovered meanwhile
+			if (rt_contact->isInvalid())
+			{
+				// set contact state to rediscovering
+				const_cast<KadContact*>(rt_contact)->setRediscovering();
+			        const kad_path& link(rt_contact->getPath());
+				ASSERT(link.size() == 2);
+				sendFindNode(rt_contact->getKey(), true, &link[0], &link[1]);
+			}
+		}
+		rediscoverQueue.pop_front();
+	}
+	
+	// next call of this procedure will be scheduled on demand
+	rediscoveryScheduled= false;
+}
+
 
 void R2Kademlia::doProbe() {
 	if (neighborTable.size() == 0) return; // we are isolated

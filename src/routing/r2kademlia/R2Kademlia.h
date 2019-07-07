@@ -89,8 +89,8 @@ class R2Kademlia : public RPCProtocol, public KadPolicy, public StatisticSample
 	void sendProbe(KadContact_p contact);
 	/// sends a "get neighbors" call to the contact
 	void sendGetNeighbors(KadContact_p contact);
-	/// sends a find node call to find this node
-	void sendFindNode(const OverlayKey& key, bool exact=false);
+	/// sends a find node call to find this node (rediscovery may use a not via failed link)
+	void sendFindNode(const OverlayKey& key, bool exact=false, const OverlayKey* notvia_unreachable_node= nullptr, const OverlayKey* notvia_failednode_neighbor= nullptr);
 	//@}
 
 	/** @name policy foo */
@@ -174,6 +174,10 @@ private:
 	template<typename T>
 	bool handleIfFitting(KadPacket_p& packet);
 	kad_path concatViaPath(const kad_path& viaPath, const OverlayKey& viaKey, const kad_path& path);
+	/// adds contact and not via link for rediscovery queue
+	void scheduleRediscovery(const OverlayKey& contactkey, const OverlayKey& notvia_unreachable_node, const OverlayKey& notvia_failednode_neighbor);
+	void rediscoverContacts();
+
 	//@}
 
 	/** @name callback functions for RPC calls */
@@ -204,9 +208,15 @@ private:
 	/// if activated the node collects path information from passing packets
 	bool pathSnooping;
 	uint8_t probeStrategy;
+	simtime_t rediscoveryWaitTime;
 	bool detailedRoutingTableStats;
 	//@}
 
+	// a list that is used to send rediscover messages
+	std::list<KadContact_p> rediscoverQueue;
+	// selfMessage
+	bool rediscoveryScheduled= false;
+	
 	/** @name statistics */
 	//@{
 	uint forwardedPackets = 0;

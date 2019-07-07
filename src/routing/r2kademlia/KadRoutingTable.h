@@ -73,6 +73,8 @@ public:
 	virtual void onNewContact(KadContact_p contact) = 0;
 	/** called when a better path has been learned for a contact */
 	virtual void onImprovement(const KadContact& contact) = 0;
+	/** called when a rediscovery needs to be performed for a contact */
+	virtual void scheduleRediscovery(const OverlayKey& contact, const OverlayKey& notvia_unreachable_node, const OverlayKey& notvia_failednode_neighbor) = 0;
 };
 
 /**
