@@ -90,15 +90,24 @@ void R2Kademlia::onDisconnect( nodeid_t nid ) {
 	
 	// send RUpdateReq to ID-wise closest Nodes
 	size_t contactsLen = std::max((size_t)findNodeNumber, routingTable.getSplitSize());
-
 	KadContactList closeContacts(routingTable.getClosestContacts(key, contactsLen));
-	for (auto notifyContact : closeContacts)
-	{
-		// TODO send UpdateRouteReq w/ failed link
-		//auto packet = makePacket<KadUpdateRouteReq>(contact, "UpdateRoute");
-		//packet->
-		//	sendPacket(std::move(packet));
-	}
+
+	if (closeContacts.size() > 0)
+	{ // if there are contacts left to notify
+		for (auto notifyContact : closeContacts)
+		{ // each ID-wise close contact gets a UpdateRoutReq
+			auto packet = makePacket<KadUpdateRouteReq>(notifyContact, "UpdateRoute");
+			packet->setContactArraySize(1);
+			packet->setContact(0, key);
+			packet->setPathArraySize(1);
+
+			packet->setPath(0, { key, myOverlayKey });
+			packet->setActionArraySize(1);
+			packet->setAction(0, KAD_Unreachable);
+			// TODO send UpdateRouteReq w/ failed link
+			sendPacket(std::move(packet));
+		}
+	} // endif
 }
 
 
@@ -139,6 +148,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		// these types never forward packets
 		countReceived(*packet);
 		if (handleIfFitting<KadQueryRouteReq>(packet)) return;
+		if (handleIfFitting<KadUpdateRouteReq>(packet)) return;
 		if (handleIfFitting<KadAnswer>(packet)) return;
 		if (handleIfFitting<KadProbeReq>(packet)) return;
 		EV_ERROR << "dropping unhandled packet of type " << (int)packet->getType() << endl;
@@ -308,10 +318,55 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadQueryRouteReq> packet) {
 }
 
 
+// UPDATEROUTEREQ
 void R2Kademlia::handlePacket(std::unique_ptr<KadUpdateRouteReq> packet) {
 	EV_TRACE << "received KadUpdateRouteReq from " << packet->getSource() << endl;
 
+	// check for malformed packet
+	ASSERT(packet->getContactArraySize() == packet->getPathArraySize());
+	ASSERT(packet->getContactArraySize() == packet->getActionArraySize());
 	
+	// this is route update information only, no answer required
+	unsigned int numContacts= packet->getContactArraySize();
+	for (unsigned int i= 0; i < numContacts; i++)
+	{
+		// get contact and corresponding path info
+		const auto& key= packet->getContact(i);
+		const auto& path= packet->getPath(i);
+		auto action= packet->getAction(i);
+
+		switch (action) {
+			case KAD_Announce:
+				EV_TRACE << "UpdateReq Announce "  << endl;
+				//TODO implement this
+				break;
+
+			case KAD_Withdraw:
+				EV_TRACE << "UpdateReq Withdraw "  << endl;
+				//TODO implement this
+				break;
+
+			case KAD_Change:
+				EV_TRACE << "UpdateReq Change "  << endl;
+				//TODO implement this
+				break;
+
+			case KAD_Unreachable:
+				// unreachable node should be first
+				ASSERT(path.size() > 1);
+
+				EV_TRACE << "Unreachable contact: " << key.toString().substr(0, 6) << ", link: "
+					 << path[0].toString().substr(0, 6) << " to " << path[1].toString().substr(0, 6) << endl;
+				// now invalidate all contacts with this link
+				routingTable.invalidateContacts(path[0], path[1]);
+				break;
+
+			default:
+				EV_ERROR << "unknown action type: " << action << endl;
+				break;
+		}
+	}
+
 }
 
 	
@@ -342,7 +397,7 @@ void R2Kademlia::sendFindNode(const OverlayKey& key, bool exact) {
 	}
 	else
 	{ // no contacts to choose from (usually only possible for isolated nodes)
-		EV_TRACE << "no contacts found, cannot send FindNodeReq" << endl;
+		EV_WARN << "no contacts found, cannot send FindNodeReq" << endl;
 	}
 }
 
@@ -479,6 +534,7 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 void R2Kademlia::onImprovement(const KadContact& contact) {
 	// path got improved for this contact -> potentially send UpdateRouteReq
 	//TODO
+	EV_TRACE << "onImprovement(" << contact.getKey().toString().substr(0, 6) << ") called" << endl;
 }
 
 
