@@ -89,10 +89,6 @@ void R2Kademlia::onDisconnect( nodeid_t nid ) {
 	// contacts from routing table with this neighbor as next hop are not usable until rediscovered
 	routingTable.invalidateContactsPN(key);
 
-	// Try to rediscover that contact
-	//TODO insert grace period
-	sendFindNode(key, true, &key, &myOverlayKey);
-	
 	// send UpdateRouteReq to ID-wise closest Nodes
 	size_t contactsLen = std::max((size_t)findNodeNumber, routingTable.getSplitSize());
 	KadContactList closeContacts(routingTable.getClosestContacts(key, contactsLen));
@@ -113,6 +109,10 @@ void R2Kademlia::onDisconnect( nodeid_t nid ) {
 			sendPacket(std::move(packet));
 		}
 	} // endif
+
+	// Try to rediscover that contact
+	//TODO insert grace period
+	sendFindNode(key, true, &key, &myOverlayKey);
 }
 
 
@@ -398,12 +398,19 @@ void R2Kademlia::sendFindNode(const OverlayKey& key, bool exact, const OverlayKe
 	{
 		const KadContact& contact = chooseNextHop(contacts, key, myOverlayKey);
 		ASSERT(contact.isValid());
+		ASSERT(!contact.getKey().isUnspecified());
+		if (contact.getKey() == myOverlayKey)
+		{
+			EV_ERROR << "I'm the next hop for the destination. Will not send anything." << endl;
+			return;
+		}
 		auto packet = makePacket<KadFindNodeReq>(contact, "FindNode");
 		packet->setQuery(key);
 		packet->setExact(exact);
 		if (notvia_unreachable_node &&  notvia_failednode_neighbor)
 		{ // this is an immediate rediscovery packet
 			ASSERT(exact);
+			packet->setNot_via(true);
 			packet->setUnreachableNode(*notvia_unreachable_node);
 			packet->setDetectingNode(*notvia_failednode_neighbor);
 			sentRediscovery++;
@@ -428,7 +435,9 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 	// check for presence of "not via" setting
 	if (packet->getNot_via())
 	{
-		EV_TRACE << "FindNodeReq contains not via (" << packet->getUnreachableNode() << " , " << packet->getDetectingNode() << endl;
+		EV_TRACE << "FindNodeReq contains not via <"
+			 << packet->getUnreachableNode().toString().substr(0,6) << ' '
+			 << packet->getDetectingNode().toString().substr(0,6) << '>' << endl;
 		// we should invalidate all contacts with that link in the path to them before answering
 		routingTable.invalidateContacts(packet->getUnreachableNode(), packet->getDetectingNode());
 		is_rediscovery= true;
@@ -456,9 +465,17 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 				returnToSender(KAD_NodeUnreachable, std::move(packet));
 				return;
 			}
-			else
+			else // remove source from answer
 				contacts.erase(contacts.begin());
 		}
+
+		EV_TRACE << "Found contacts:";
+		for (const auto& thiscontact : contacts)
+		{
+			EV_TRACE << *thiscontact;
+		}
+		EV_TRACE << endl;
+		
 		//TODO optimization: we should check if any contacts (not just front) are close enough
 		if ((contacts.front()->getKey() ^ query) < (myOverlayKey ^ query)
 				and contacts.front()->getPathLength() < packet->getHopLimit()) {
@@ -476,12 +493,34 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 			resendPacket(std::move(packet));
 			return;
 		}
-		else if (packet->getExact()) {
-			countDropped(*packet, query);
-			//TODO: if we find a closer contact too far away, we should send HOP LIMIT EXCEEDED
-			returnToSender(KAD_NodeUnreachable, std::move(packet));
-			return;
-		}
+		else
+		{
+			if (packet->getExact()) {
+				if (is_rediscovery) { // try to rediscover query
+					const auto& target= routingTable.getContact(query);
+					// probably we need to rediscover that contact ourselves
+					if (target->isInvalid())
+					{ // failed contact was known, but needs rediscover, too
+						const KadContact& contact = chooseNextHop(contacts, query, packet->getSource());
+						EV_WARN << "Failed contact known, best neighbor now:" << contact << endl;
+						if((contact.getKey() ^ query).log_2() <= (myOverlayKey ^ query).log_2()) {
+							EV_WARN << "no prefix progress made" << endl;
+						}
+						packet->appendRoute(contact);
+						ASSERT(packet->getRouteArraySize() - packet->getProgress() <= packet->getHopLimit());
+						resendPacket(std::move(packet));
+						return;
+					} // this contact is currently invalid, too
+				}
+
+				// since we need an exact match and cannot make any progress, we are lost here
+				// TODO check condition
+				countDropped(*packet, query);
+				//TODO: if we find a closer contact too far away, we should send HOP LIMIT EXCEEDED
+				returnToSender(KAD_NodeUnreachable, std::move(packet));
+				return;
+			}
+		} // end else
 	}
 	// answer request
 	auto answer = makeAnswer<KadFindNodeRsp>(*packet);

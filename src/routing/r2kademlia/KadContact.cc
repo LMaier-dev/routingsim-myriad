@@ -22,17 +22,18 @@
 
 namespace routingsim {
 std::ostream& operator<<(std::ostream& os, const KadContact& c) {
-	os << c.getKey();
+	os << c.getKey().toString().substr(0, 8);
 	// state is next V = valid, I = invalid, U = undefined
-	os << " (" << (c.getState() == KadContact::State::valid ? 'V' :
+	os << ":(" << (c.getState() == KadContact::State::valid ? 'V' :
 		       ((c.getState() == KadContact::State::invalid) ? 'I' :
 			((c.getState() == KadContact::State::rediscovering) ? 'R' : 'U'))) << ")";
 	if (c.getPath().size() == 0)
-		return os << " (no path)";
+		return os << "<->";
 	else {
-		os << " via";
+		os << "< ";
 		for (auto key : c.getPath())
-			os << " " << key.toString().substr(0, 6);
+			os << key.toString().substr(0, 6) << ' ';
+		os << '>';
 	}
 	return os;
 }

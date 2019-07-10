@@ -53,6 +53,25 @@ void KadRoutingTable::init(const OverlayKey& myKey, KadPolicy* policy,
 }
 
 
+std::string KadRoutingTable::str() const
+{
+	std::ostringstream out;
+
+	unsigned int i= 0;
+	for (auto& b : buckets)
+	{
+		out << "B[" << i << "]:{";
+		for (const auto& contact : b.contacts) {
+			out << ' ' << *contact;
+		}
+		out << "} ";
+		i++;
+	}
+	
+	return out.str();
+}
+
+	
 size_type KadRoutingTable::getBucketIndex(const OverlayKey& key) const
 {
 	OverlayKey delta = key ^ myKey;
@@ -326,8 +345,13 @@ void KadRoutingTable::invalidateContacts(const OverlayKey& failedNodeKey, const 
 	for (KadBucket& b : buckets)
 		for (auto& contact : b.contacts) {
 			// we found a failed link in the path, mark contact invalid
-			if (containsUndirectedLink(contact->getPath(), failedNodeKey, otherNodeKey))
-			{
+			if ((contact->getKey() == failedNodeKey
+			     && contact->getPath().size() == 1
+			     && contact->getPath()[0] == otherNodeKey
+			    ) // next hop is neighbor node of failed contact
+			    ||
+			    containsUndirectedLink(contact->getPath(), failedNodeKey, otherNodeKey))
+			{ // link somewhere in the path
 				contact->setInvalid();
 				EV_TRACE << "Set Contact to invalid due to failed link ("
 					 << failedNodeKey.toString().substr(0, 6) << ", " << otherNodeKey.toString().substr(0, 6) << "):"  << *contact << endl;

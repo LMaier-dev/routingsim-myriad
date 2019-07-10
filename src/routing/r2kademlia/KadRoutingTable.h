@@ -89,6 +89,10 @@ public:
 	void init(const OverlayKey& myKey, KadPolicy* policy,
 			size_type accelerationFactor, size_type bucketSize,
 			bool proximityNeighborSelection, bool pathSimplification=true);
+
+	// from cObject()
+	virtual std::string str() const;
+
 	/**
 	 * add a potentially new path, adds a contacts or updates an existing one
 	 */
