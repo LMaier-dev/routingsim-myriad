@@ -27,7 +27,7 @@ using inner_table = std::vector<std::pair<OverlayKey, nodeid_t>>;
 /**
  * A table for mapping overlay keys of neigbors to node ids an back.
  * Compare to arp table.
- * @author Jakob Thomas
+e * @author Jakob Thomas
  */
 class NeighborTable
 {

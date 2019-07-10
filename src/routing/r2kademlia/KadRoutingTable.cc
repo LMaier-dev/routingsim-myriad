@@ -278,7 +278,7 @@ KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_t
 		bool operator()(KadContact_p& a, KadContact_p& b) const {
 			return (a->getKey() ^ key) < (b->getKey() ^ key);
 		}
-    };
+	};
 	std::sort(result.begin(), result.end(), KadContactCompare(key));
 	// if we have found move than n contacts, we need to remove some
 	if (result.size() > n) {

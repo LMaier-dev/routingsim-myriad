@@ -388,14 +388,16 @@ bool R2Kademlia::handleQueryRouteResponse(KadPacket_p answer, RPCState& rpcState
 	return true;
 }
 
+
 // FIND NODE
 void R2Kademlia::sendFindNode(const OverlayKey& key, bool exact, const OverlayKey* notvia_unreachable_node, const OverlayKey* notvia_failednode_neighbor) {
-	EV_TRACE << "sendFindNode w/ " << key << endl;
+	EV_TRACE << "sendFindNode w/ " << key << (notvia_unreachable_node ? " (Rediscovery)" : "") << endl;
 	auto contacts = routingTable.getClosestContacts(key, findNodeNumber);
 	//ASSERT(contacts.size() > 0);
 	if (contacts.size() > 0)
 	{
 		const KadContact& contact = chooseNextHop(contacts, key, myOverlayKey);
+		ASSERT(contact.isValid());
 		auto packet = makePacket<KadFindNodeReq>(contact, "FindNode");
 		packet->setQuery(key);
 		packet->setExact(exact);
@@ -404,6 +406,8 @@ void R2Kademlia::sendFindNode(const OverlayKey& key, bool exact, const OverlayKe
 			ASSERT(exact);
 			packet->setUnreachableNode(*notvia_unreachable_node);
 			packet->setDetectingNode(*notvia_failednode_neighbor);
+			sentRediscovery++;
+			EV_TRACE << "Rediscovery sending ... msg id=" << packet->getId() << endl;
 		}
 		sendRpcCall(
 			std::move(packet),
@@ -420,12 +424,14 @@ void R2Kademlia::sendFindNode(const OverlayKey& key, bool exact, const OverlayKe
 void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 	OverlayKey& query = packet->getQuery(); // query is the destination ID
 
+	bool is_rediscovery=false;
 	// check for presence of "not via" setting
 	if (packet->getNot_via())
 	{
 		EV_TRACE << "FindNodeReq contains not via (" << packet->getUnreachableNode() << " , " << packet->getDetectingNode() << endl;
 		// we should invalidate all contacts with that link in the path to them before answering
 		routingTable.invalidateContacts(packet->getUnreachableNode(), packet->getDetectingNode());
+		is_rediscovery= true;
 	}
 	
 	size_t contactsLen = std::max((size_t)findNodeNumber, routingTable.getSplitSize());
@@ -481,6 +487,9 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 	auto answer = makeAnswer<KadFindNodeRsp>(*packet);
 	fillRTableRsp(*answer, contacts);
 	countReceived(*packet);
+	if (is_rediscovery)
+		succeededRediscovery++;
+	
 	EV_TRACE << "KadFindNodeReq received query: " << packet->getQuery() << " answering with list size " << contacts.size() << endl;
 	sendPacket(std::move(answer));
 }
@@ -558,6 +567,8 @@ void R2Kademlia::recordScalars() {
 	recordScalar("droppedPackets", droppedPackets);
 	recordScalar("sentPackets", sentPackets);
 	recordScalar("receivedPackets", receivedPackets);
+	recordScalar("rediscoverySent", sentRediscovery);
+	recordScalar("rediscoverySuccess", succeededRediscovery);
 	recordScalar("routingTableContacts", routingTable.getNumContacts());
 	recordScalar("routingTableBuckets", routingTable.getNumBuckets());
 	recordScalar("routingTablePathLength", routingTable.getAveragePathLength());

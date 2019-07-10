@@ -223,6 +223,8 @@ private:
 	uint droppedPackets = 0;
 	uint sentPackets = 0;
 	uint receivedPackets = 0;
+	uint sentRediscovery = 0;
+	uint succeededRediscovery = 0;
 	//@}
 
 	/** @name timer things */

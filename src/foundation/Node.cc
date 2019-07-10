@@ -161,7 +161,7 @@ void Node::handleMessage(cMessage *msg) {
 void Node::sendToNode( nodeid_t nid, NodePkt* np ) {
 	// node not a neighbor ->
 	if (neighbor_map.count(nid)==0) {
-		EV << "Node "<<getNodeId()<<": Node " << nid << " unknown" << endl;
+		EV << "Node "<<getNodeId()<<": Node " << nid << " unknown @msg id=" << np->getId() << endl;
 		EV << "Neighbors are: {";
 		for (const auto& it : neighbor_map) {
 			EV << ' ' << (int)it.second.id;
