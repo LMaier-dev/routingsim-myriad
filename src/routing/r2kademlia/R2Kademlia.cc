@@ -431,6 +431,7 @@ void R2Kademlia::sendFindNode(const OverlayKey& key, bool exact, const OverlayKe
 void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 	OverlayKey& query = packet->getQuery(); // query is the destination ID
 
+	EV_TRACE << "KadFindNodeReq received query for: " << query.toString().substr(0,8) << endl;
 	bool is_rediscovery=false;
 	// check for presence of "not via" setting
 	if (packet->getNot_via())
@@ -483,8 +484,9 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 			// => forward request
 			const KadContact& contact = chooseNextHop(contacts, query, packet->getSource());
 			EV_TRACE << "KadFindNodeReq received query: " << packet->getQuery() << endl << " next hop is " << contact << endl;
+			// note: the log_2 will be smaller for a longer common prefix
 			ASSERT((contact.getKey() ^ query).log_2() <= (myOverlayKey ^ query).log_2());
-			if((contact.getKey() ^ query).log_2() <= (myOverlayKey ^ query).log_2()) {
+			if((contact.getKey() ^ query).log_2() > (myOverlayKey ^ query).log_2()) {
 				EV_WARN << "no prefix progress made" << endl;
 			}
 			ASSERT((contact.getKey() ^ query) < (myOverlayKey ^ query));
@@ -502,8 +504,10 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 					if (target->isInvalid())
 					{ // failed contact was known, but needs rediscover, too
 						const KadContact& contact = chooseNextHop(contacts, query, packet->getSource());
-						EV_WARN << "Failed contact known, best neighbor now:" << contact << endl;
-						if((contact.getKey() ^ query).log_2() <= (myOverlayKey ^ query).log_2()) {
+						EV_WARN << "Failed contact known, best neighbor now: " << contact << endl;
+						EV_TRACE << "distance for contact=" << (contact.getKey() ^ query).log_2()
+							 << " own distance=" << (myOverlayKey ^ query).log_2() << endl;
+						if((contact.getKey() ^ query).log_2() > (myOverlayKey ^ query).log_2()) {
 							EV_WARN << "no prefix progress made" << endl;
 						}
 						packet->appendRoute(contact);
@@ -529,7 +533,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 	if (is_rediscovery)
 		succeededRediscovery++;
 	
-	EV_TRACE << "KadFindNodeReq received query: " << packet->getQuery() << " answering with list size " << contacts.size() << endl;
+	EV_TRACE << "KadFindNodeReq query for " << query.toString().substr(0,8) << " answering with list size " << contacts.size() << endl;
 	sendPacket(std::move(answer));
 }
 

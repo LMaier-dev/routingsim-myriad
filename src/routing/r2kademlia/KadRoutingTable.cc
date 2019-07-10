@@ -344,17 +344,18 @@ void KadRoutingTable::invalidateContacts(const OverlayKey& failedNodeKey, const 
 	// iterate over all buckets and contacts
 	for (KadBucket& b : buckets)
 		for (auto& contact : b.contacts) {
-			// we found a failed link in the path, mark contact invalid
+			// if we find a failed link in the path, mark contact invalid
+			const auto& path= contact->getPath();
 			if ((contact->getKey() == failedNodeKey
-			     && contact->getPath().size() == 1
-			     && contact->getPath()[0] == otherNodeKey
-			    ) // next hop is neighbor node of failed contact
+			     && path.size() > 0
+			     && path[path.size()-1] == otherNodeKey
+			    ) // last hop is neighbor node of failed contact => this link failed
 			    ||
 			    containsUndirectedLink(contact->getPath(), failedNodeKey, otherNodeKey))
 			{ // link somewhere in the path
 				contact->setInvalid();
-				EV_TRACE << "Set Contact to invalid due to failed link ("
-					 << failedNodeKey.toString().substr(0, 6) << ", " << otherNodeKey.toString().substr(0, 6) << "):"  << *contact << endl;
+				EV_TRACE << "Set Contact to invalid due to failed link <"
+					 << failedNodeKey.toString().substr(0, 6) << "," << otherNodeKey.toString().substr(0, 6) << ">:"  << *contact << endl;
 			}
 		} // end for inner loop over all contacts
 }
