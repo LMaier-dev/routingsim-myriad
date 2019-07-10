@@ -349,8 +349,13 @@ void KadRoutingTable::invalidateContacts(const OverlayKey& failedNodeKey, const 
 			if ((contact->getKey() == failedNodeKey
 			     && path.size() > 0
 			     && path[path.size()-1] == otherNodeKey
-			    ) // last hop is neighbor node of failed contact => this link failed
+			    ) // pen-ultimate hop is neighbor node of failed contact => this link failed
 			    ||
+			    (contact->getKey() == otherNodeKey
+			     && path.size() > 0
+			     && path[path.size()-1] == failedNodeKey
+			    )
+			    || // pen-ultimate hop is the failed node leading to the neighboring node => this link failed
 			    containsUndirectedLink(contact->getPath(), failedNodeKey, otherNodeKey))
 			{ // link somewhere in the path
 				contact->setInvalid();
