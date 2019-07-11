@@ -432,7 +432,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 	OverlayKey& query = packet->getQuery(); // query is the destination ID
 
 	EV_TRACE << "KadFindNodeReq received query for: " << query.toString().substr(0,8) << endl;
-	bool is_rediscovery=false;
+	bool is_rediscovery= false;
 	// check for presence of "not via" setting
 	if (packet->getNot_via())
 	{
@@ -463,19 +463,21 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 			if (contacts.size() == 1) {
 				// the only contact we know is the source
 				countDropped(*packet, query);
-				returnToSender(KAD_NodeUnreachable, std::move(packet));
+				returnToSender(KAD_RouteFailureDeadEnd, std::move(packet));
 				return;
 			}
 			else // remove source from answer
 				contacts.erase(contacts.begin());
 		}
 
+		/*
 		EV_TRACE << "Found contacts:";
 		for (const auto& thiscontact : contacts)
 		{
 			EV_TRACE << *thiscontact;
 		}
 		EV_TRACE << endl;
+		*/
 		
 		//TODO optimization: we should check if any contacts (not just front) are close enough
 		if ((contacts.front()->getKey() ^ query) < (myOverlayKey ^ query)
@@ -497,23 +499,27 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 		}
 		else
 		{
+			// we must find the node exactly, however, if there is no progress
 			if (packet->getExact()) {
 				if (is_rediscovery) { // try to rediscover query
 					const auto& target= routingTable.getContact(query);
 					// probably we need to rediscover that contact ourselves
-					if (target->isInvalid())
+					if (target && target->isInvalid())
 					{ // failed contact was known, but needs rediscover, too
 						const KadContact& contact = chooseNextHop(contacts, query, packet->getSource());
 						EV_WARN << "Failed contact known, best neighbor now: " << contact << endl;
 						EV_TRACE << "distance for contact=" << (contact.getKey() ^ query).log_2()
 							 << " own distance=" << (myOverlayKey ^ query).log_2() << endl;
-						if((contact.getKey() ^ query).log_2() > (myOverlayKey ^ query).log_2()) {
-							EV_WARN << "no prefix progress made" << endl;
+						if ((contact.getKey() ^ query).log_2() > (myOverlayKey ^ query).log_2()) {
+							EV_WARN << "no prefix progress made - dropping request" << endl;
 						}
-						packet->appendRoute(contact);
-						ASSERT(packet->getRouteArraySize() - packet->getProgress() <= packet->getHopLimit());
-						resendPacket(std::move(packet));
-						return;
+						else
+						{
+							packet->appendRoute(contact);
+							ASSERT(packet->getRouteArraySize() - packet->getProgress() <= packet->getHopLimit());
+							resendPacket(std::move(packet));
+							return;
+						}
 					} // this contact is currently invalid, too
 				}
 
@@ -523,7 +529,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 				//TODO: if we find a closer contact too far away, we should send HOP LIMIT EXCEEDED
 				returnToSender(KAD_NodeUnreachable, std::move(packet));
 				return;
-			}
+			} // if exact flag is set
 		} // end else
 	}
 	// answer request
