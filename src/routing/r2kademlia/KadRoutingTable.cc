@@ -261,6 +261,12 @@ inline void copyValidContacts(const std::vector<std::unique_ptr<KadContact>>& so
 }
 
 
+/** 
+ * returns at most n contacts closes to key
+ * ContactList is sorted according to XOR metric with respect to key, i.e., the first returned contact
+ * is the closest to key
+ */
+
 KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_type n) const
 {
 	KadContactList result{};
