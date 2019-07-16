@@ -51,7 +51,7 @@ void R2Kademlia::onInitialize() {
 	pathSnooping = par("pathSnooping").boolValue();
 	probeStrategy = (uint) par("probeStrategy").intValue();
 	detailedRoutingTableStats = par("detailedRoutingTableStats").boolValue();
-	rediscoveryWaitTime = (simtime_t) par("rediscoveryWaitTime").doubleValue();
+	rediscoveryWaitTime = (simtime_t) (par("rediscoveryWaitTime").doubleValue() * 0.001);
 
 	getStatistics().addSample(this);
 	simtime_t probeInterval = (simtime_t) par("probeInterval").doubleValue();
@@ -86,6 +86,11 @@ void R2Kademlia::onDisconnect( nodeid_t nid ) {
 		EV_ERROR << "missing contact " << nid << " " << key << " on node " << node().getNodeId() << endl;
 		return;
 	}
+	
+	// Try to rediscover that contact
+	// after grace period (otherwise more links may fail immediately after this)
+	scheduleRediscovery(key, key, myOverlayKey);
+
 	// contacts from routing table with this neighbor as next hop are not usable until rediscovered
 	routingTable.invalidateContactsPN(key);
 
@@ -110,14 +115,17 @@ void R2Kademlia::onDisconnect( nodeid_t nid ) {
 		}
 	} // endif
 
-	// Try to rediscover that contact
-	//TODO insert grace period
-	scheduleRediscovery(key, key, myOverlayKey);
 }
 
 
 void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	ASSERT(pkt->getType() == PAYLOAD_TYPE);
+
+	// TODO we should check whether the link via this message travelled is
+	// still active, otherwise we should drop this message as it was affected
+	// by the link failure (getDuration(), getArrivalTime())
+	//int from_node= pkt->getSenderModuleId();
+	
 	KadPacket_p packet = \
 		std::unique_ptr<KadPacket>(check_and_cast<KadPacket*>(pkt->decapsulate()));
 	// hello packets do not include my key
@@ -676,7 +684,7 @@ NodePkt_p R2Kademlia::makeHelloPacket()
 // send a find node request excluding paths that include the failed link
 void R2Kademlia::scheduleRediscovery(const OverlayKey& contact, const OverlayKey& notvia_unreachable_node, const OverlayKey& notvia_failednode_neighbor)
 {
-	EV_TRACE << "Rediscovery scheduled for contact " << contact.toString().substr(0,6)
+	EV_TRACE << "Rediscovery scheduled for contact " << contact.toString().substr(0,6) << " <"
 		<< notvia_unreachable_node.toString().substr(0,6) << ' '
 		<< notvia_failednode_neighbor.toString().substr(0,6) << '>' << endl;
 
@@ -765,7 +773,7 @@ void R2Kademlia::addTimer(simtime_t initialOffset, simtime_t duration, std::func
 void R2Kademlia::rediscoverContacts() {
 	// traverse list of scheduled contacts for rediscovery
 	// recheck status and set to rediscover
-	EV_TRACE << "rediscoverContacts called" << endl;
+	EV_TRACE << "rediscoverContacts called, Queued: " << rediscoverQueue.size() << endl;
 	
 	while (!rediscoverQueue.empty())
 	{
@@ -778,9 +786,9 @@ void R2Kademlia::rediscoverContacts() {
 			{
 				// set contact state to rediscovering
 				const_cast<KadContact*>(rt_contact)->setRediscovering();
-			        const kad_path& link(rt_contact->getPath());
-				ASSERT(link.size() == 2);
-				sendFindNode(rt_contact->getKey(), true, &link[0], &link[1]);
+			        const kad_path& failedLink(contact->getPath());
+				ASSERT(failedLink.size() == 2);
+				sendFindNode(rt_contact->getKey(), true, &failedLink[0], &failedLink[1]);
 			}
 		}
 		rediscoverQueue.pop_front();
