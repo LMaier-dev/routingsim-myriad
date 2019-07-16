@@ -112,7 +112,7 @@ void R2Kademlia::onDisconnect( nodeid_t nid ) {
 
 	// Try to rediscover that contact
 	//TODO insert grace period
-	sendFindNode(key, true, &key, &myOverlayKey);
+	scheduleRediscovery(key, key, myOverlayKey);
 }
 
 
@@ -456,6 +456,9 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 		countDropped(*packet, query);
 		returnToSender(KAD_RouteFailureDeadEnd, std::move(packet));
 
+		if (is_rediscovery)
+			droppedRediscovery++;
+
 		return;
 	}
 
@@ -469,6 +472,10 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 				// the only contact we know is the source
 				countDropped(*packet, query);
 				returnToSender(KAD_RouteFailureDeadEnd, std::move(packet));
+
+				if (is_rediscovery)
+					droppedRediscovery++;
+
 				return;
 			}
 			else // remove source from answer
@@ -500,6 +507,8 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 			packet->appendRoute(contact);
 			ASSERT(packet->getRouteArraySize() - packet->getProgress() <= packet->getHopLimit());
 			resendPacket(std::move(packet));
+			if (is_rediscovery)
+				forwardedRediscovery++;
 			return;
 		}
 		else
@@ -517,10 +526,12 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 					EV_WARN << "no prefix progress made - dropping request" << endl;
 				}
 				// since we need an exact match and cannot make any progress, we are lost here
-				// TODO check condition
 				countDropped(*packet, query);
 				//TODO: if we find a closer contact too far away, we should send HOP LIMIT EXCEEDED
 				returnToSender(KAD_RouteFailureDeadEnd, std::move(packet));
+
+				if (is_rediscovery)
+					droppedRediscovery++;
 				return;
 
 			} // if exact flag is set
@@ -615,6 +626,8 @@ void R2Kademlia::recordScalars() {
 	recordScalar("receivedPackets", receivedPackets);
 	recordScalar("rediscoverySent", sentRediscovery);
 	recordScalar("rediscoverySuccess", succeededRediscovery);
+	recordScalar("rediscoveryFailed", droppedRediscovery);
+	recordScalar("rediscoveryForwarded", forwardedRediscovery);
 	recordScalar("routingTableContacts", routingTable.getNumContacts());
 	recordScalar("routingTableBuckets", routingTable.getNumBuckets());
 	recordScalar("routingTablePathLength", routingTable.getAveragePathLength());
@@ -663,17 +676,21 @@ NodePkt_p R2Kademlia::makeHelloPacket()
 // send a find node request excluding paths that include the failed link
 void R2Kademlia::scheduleRediscovery(const OverlayKey& contact, const OverlayKey& notvia_unreachable_node, const OverlayKey& notvia_failednode_neighbor)
 {
-	/*
-	std::unique_ptr<const KadContact> rediscoverContact=
-		std::make_unique<const KadContact>(contact, vector<OverlayKey>{notvia_unreachable_node,
-								          notvia_failednode_neighbor});
+	EV_TRACE << "Rediscovery scheduled for contact " << contact.toString().substr(0,6)
+		<< notvia_unreachable_node.toString().substr(0,6) << ' '
+		<< notvia_failednode_neighbor.toString().substr(0,6) << '>' << endl;
+
+	auto rediscoverContact=
+		std::make_unique<const KadContact>(contact, vector<OverlayKey>{notvia_unreachable_node, notvia_failednode_neighbor});
+	
 	rediscoverQueue.push_back(std::move(rediscoverContact));
+
 	if (!rediscoveryScheduled)
 	{
 		addTimer(rediscoveryWaitTime, 0, std::bind(&R2Kademlia::rediscoverContacts, this));
 		rediscoveryScheduled= true;
 	}
-	*/
+	
 }
 
 
@@ -748,6 +765,8 @@ void R2Kademlia::addTimer(simtime_t initialOffset, simtime_t duration, std::func
 void R2Kademlia::rediscoverContacts() {
 	// traverse list of scheduled contacts for rediscovery
 	// recheck status and set to rediscover
+	EV_TRACE << "rediscoverContacts called" << endl;
+	
 	while (!rediscoverQueue.empty())
 	{
 		auto& contact= rediscoverQueue.front();

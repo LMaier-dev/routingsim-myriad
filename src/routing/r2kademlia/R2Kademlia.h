@@ -213,7 +213,7 @@ private:
 	//@}
 
 	// a list that is used to send rediscover messages
-	std::list<KadContact_p> rediscoverQueue;
+	std::list<std::unique_ptr<const KadContact>> rediscoverQueue;
 	// selfMessage
 	bool rediscoveryScheduled= false;
 	
@@ -225,6 +225,8 @@ private:
 	uint receivedPackets = 0;
 	uint sentRediscovery = 0;
 	uint succeededRediscovery = 0;
+	uint droppedRediscovery = 0;
+	uint forwardedRediscovery = 0;
 	//@}
 
 	/** @name timer things */
