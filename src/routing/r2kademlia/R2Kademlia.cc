@@ -121,10 +121,23 @@ void R2Kademlia::onDisconnect( nodeid_t nid ) {
 void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	ASSERT(pkt->getType() == PAYLOAD_TYPE);
 
-	// TODO we should check whether the link via this message travelled is
+	// we should check whether the link via this message travelled is
 	// still active, otherwise we should drop this message as it was affected
-	// by the link failure (getDuration(), getArrivalTime())
-	//int from_node= pkt->getSenderModuleId();
+	// by the link failure, e.g., more precisely using (getDuration(), getArrivalTime())
+	const hop_t taken_hop= pkt->getHop();
+	//ASSERT(Node::getNode(this)->getNodeId() == taken_hop.to);
+
+	if (!getNetworkManager()->getTopology().isConnected(taken_hop.from,taken_hop.to))
+	{
+		KadPacket_p packet = std::unique_ptr<KadPacket>(check_and_cast<KadPacket*>(pkt->decapsulate()));
+		EV_WARN << "received packet (msg id: " << packet->getId() << ") via an inactive link, thus will discard" << endl;
+		if (!packet->getControlInfo())
+			packet->setControlInfo(pkt.release());
+
+		countDropped(*packet, packet->getTarget());
+		return;
+	}
+		
 	
 	KadPacket_p packet = \
 		std::unique_ptr<KadPacket>(check_and_cast<KadPacket*>(pkt->decapsulate()));
