@@ -30,7 +30,7 @@ public:
 	//@{
 	KadPacket(const char *name=nullptr, short kind=0) : KadPacket_Base(name, kind) {}
 	KadPacket(const KadPacket& other) : KadPacket_Base(other) {}
-	~KadPacket() {};
+	~KadPacket() { };
 	KadPacket& operator=(const KadPacket& other)
 		{KadPacket_Base::operator=(other); return *this;}
 	virtual KadPacket *dup() const override {return new KadPacket(*this);}

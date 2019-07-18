@@ -54,7 +54,7 @@ public:
 
 	inline void setInvalid() { state= invalid; }
 	inline void setValid() { state= valid; }
-	inline void setRediscovering() { state= valid; }
+	inline void setRediscovering() { state= rediscovering; }
 	
 	/// returns the key of this contact
 	inline const OverlayKey& getKey() const { return key; }

@@ -228,6 +228,7 @@ void R2Kademlia::handlePacket(KadAnswer_p packet) {
 
 
 void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt) {
+
 	// we do not route hello packets!
 	ASSERT(packet->getType() != KAD_PNHello);
 	ASSERT(packet->hasRemainingHops());
@@ -242,8 +243,11 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt) {
 		forwardedPackets++;
 	}
 	else {
+		// Trying to send to a next hop that is not a physical next hop
+		// That will not fly...
 		onMissingNeighbor(std::move(packet), std::move(nodePkt));
 	}
+
 }
 
 
@@ -437,7 +441,8 @@ void R2Kademlia::sendFindNode(const OverlayKey& key, bool exact, const OverlayKe
 			packet->setUnreachableNode(*notvia_unreachable_node);
 			packet->setDetectingNode(*notvia_failednode_neighbor);
 			sentRediscovery++;
-			EV_TRACE << "Rediscovery sending ... msg id=" << packet->getId() << endl;
+			EV_TRACE << "Rediscovery sending ... msg id=" << packet->getId()
+				 << " via " << contact << endl;
 		}
 		sendRpcCall(
 			std::move(packet),
@@ -586,6 +591,7 @@ bool R2Kademlia::handleFindNodeResponse(KadPacket_p answer_, RPCState& rpcState)
 
 void R2Kademlia::onMissingNeighbor(KadPacket_p packet, NodePkt_p pkt) {
 //  	getStatistics().dropMessage(pkt, undefined_node);
+	EV_WARN << "onMissingNeighbor called - packet to " << packet->getNextHop().toString().substr(0,6) << endl;
 	droppedPackets++;
 	if(packet->getType() == KAD_Error) {
 		EV << "dropping error packet" << endl;
@@ -695,14 +701,23 @@ NodePkt_p R2Kademlia::makeHelloPacket()
 
 
 // send a find node request excluding paths that include the failed link
-void R2Kademlia::scheduleRediscovery(const OverlayKey& contact, const OverlayKey& notvia_unreachable_node, const OverlayKey& notvia_failednode_neighbor)
+void R2Kademlia::scheduleRediscovery(const OverlayKey& contactkey, const OverlayKey& notvia_unreachable_node, const OverlayKey& notvia_failednode_neighbor)
 {
-	EV_TRACE << "Rediscovery scheduled for contact " << contact.toString().substr(0,6) << " <"
+	KadContact_p rt_contact= routingTable.getContact(contactkey);
+	if (rt_contact && rt_contact->isRediscovering())
+	{
+		// do not schedule for rediscovery if there is something still in progress
+		EV_WARN << "Rediscovery not scheduled for contact " << contactkey.toString().substr(0,6)
+			<< " because it is already in rediscovering state" << endl;
+		return;
+	}
+	
+	EV_TRACE << "Rediscovery scheduled for contact " << contactkey.toString().substr(0,6) << " <"
 		<< notvia_unreachable_node.toString().substr(0,6) << ' '
 		<< notvia_failednode_neighbor.toString().substr(0,6) << '>' << endl;
 
 	auto rediscoverContact=
-		std::make_unique<const KadContact>(contact, vector<OverlayKey>{notvia_unreachable_node, notvia_failednode_neighbor});
+		std::make_unique<const KadContact>(contactkey, vector<OverlayKey>{notvia_unreachable_node, notvia_failednode_neighbor});
 	
 	rediscoverQueue.push_back(std::move(rediscoverContact));
 
@@ -795,7 +810,8 @@ void R2Kademlia::rediscoverContacts() {
 		auto rt_contact= routingTable.getContact(contact->getKey());
 		if (rt_contact) { // so contact still exists
 			// contact may have been recovered meanwhile
-			if (rt_contact->isInvalid())
+			// do not rediscover contact which is already Rediscovering
+			if (rt_contact->isInvalid() && !rt_contact->isRediscovering())
 			{
 				// set contact state to rediscovering
 				const_cast<KadContact*>(rt_contact)->setRediscovering();
@@ -806,7 +822,7 @@ void R2Kademlia::rediscoverContacts() {
 		}
 		rediscoverQueue.pop_front();
 	}
-	
+
 	// next call of this procedure will be scheduled on demand
 	rediscoveryScheduled= false;
 }
