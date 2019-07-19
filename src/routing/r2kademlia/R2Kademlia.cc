@@ -138,8 +138,8 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		if (pathSnooping) {
 			// aka PATH OVERHEARING
 			//TODO optimization use isPathInteresting
-			routingTable.addPath(packet->getSource(), packet->reversePath(packet->getPath(1, packet->getProgress())));
-			routingTable.addPath(packet->getTarget(), packet->getPath(packet->getProgress()+1, packet->getRouteArraySize()-1));
+			routingTable.addPath(packet->getSource(), packet->reversePath(packet->getSrcPath(1, packet->getProgress())));
+			routingTable.addPath(packet->getTarget(), packet->getSrcPath(packet->getProgress()+1, packet->getRouteArraySize()-1));
 		}
 		//TODO ERROR OVERHEARING, more overhearing
 		forwardPacket(std::move(packet), std::move(pkt));
@@ -343,6 +343,12 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadUpdateRouteReq> packet) {
 	// check for malformed packet
 	ASSERT(packet->getContactArraySize() == packet->getPathArraySize());
 	ASSERT(packet->getContactArraySize() == packet->getActionArraySize());
+
+	kad_path source_path= packet->getSrcPath();
+	EV_TRACE << "source path: <";
+	for (const OverlayKey& k : source_path)
+		EV_TRACE << k.shortStr() << ' ';
+	EV_TRACE << '>' << endl;
 	
 	// this is route update information only, no answer required
 	unsigned int numContacts= packet->getContactArraySize();
@@ -353,19 +359,25 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadUpdateRouteReq> packet) {
 		const auto& path= packet->getPath(i);
 		auto action= packet->getAction(i);
 
+		EV_TRACE << "reported path to contact " << contactkey.shortStr() << " <";
+		for (const auto& k : source_path)
+			EV_TRACE << k.shortStr() << ' ';
+		EV_TRACE << '>' << endl;
+		
+		
 		switch (action) {
 			case KAD_Announce:
-				EV_TRACE << "UpdateReq Announce for contact " << contactkey.toString().substr(0, 6) << endl;
-			        routingTable.addPath(contactkey, path);
+				EV_TRACE << "UpdateReq Announce for contact " << contactkey.shortStr() << endl;
+			        //routingTable.addPath(contactkey, path);
 				break;
 
 			case KAD_Withdraw:
-				EV_TRACE << "UpdateReq Withdraw for contact " << contactkey.toString().substr(0, 6) << endl;
+				EV_TRACE << "UpdateReq Withdraw for contact " << contactkey.shortStr() << endl;
 				//TODO implement this
 				break;
 
 			case KAD_Change:
-				EV_TRACE << "UpdateReq Change for contact " << contactkey.toString().substr(0, 6) << endl;
+				EV_TRACE << "UpdateReq Change for contact " << contactkey.shortStr() << endl;
 				routingTable.addPath(contactkey, path);
 				break;
 
@@ -373,8 +385,8 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadUpdateRouteReq> packet) {
 				// unreachable node should be first
 				ASSERT(path.size() > 1);
 
-				EV_TRACE << "Unreachable contact: " << contactkey.toString().substr(0, 6) << ", link: < "
-					 << path[0].toString().substr(0, 6) << ',' << path[1].toString().substr(0, 6) << " >" << endl;
+				EV_TRACE << "Unreachable contact: " << contactkey.shortStr() << ", link: < "
+					 << path[0].shortStr() << ',' << path[1].shortStr() << " >" << endl;
 				// now invalidate all contacts with this link
 				routingTable.invalidateContacts(path[0], path[1]);
 				break;
@@ -392,7 +404,7 @@ bool R2Kademlia::handleQueryRouteResponse(KadPacket_p answer, RPCState& rpcState
 {
 	if (rpcState.status != RPC_SUCCESS) return true;
 	auto response = safe_packet_cast<KadQueryRouteRsp>(answer);
-	EV_TRACE << "received " << response->getContactArraySize() << " neighbors from " << response->getSource().toString().substr(0, 6) << endl;
+	EV_TRACE << "received " << response->getContactArraySize() << " neighbors from " << response->getSource().shortStr() << endl;
 	readRTableRsp(std::move(response));
 	return true;
 }
@@ -441,14 +453,14 @@ void R2Kademlia::sendFindNode(const OverlayKey& key, bool exact, const OverlayKe
 void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 	OverlayKey& query = packet->getQuery(); // query is the destination ID
 
-	EV_TRACE << "KadFindNodeReq received query for: " << query.toString().substr(0,8) << endl;
+	EV_TRACE << "KadFindNodeReq received query for: " << query.shortStr() << endl;
 	bool is_rediscovery= false;
 	// check for presence of "not via" setting
 	if (packet->getNot_via())
 	{
 		EV_TRACE << "FindNodeReq contains not via <"
-			 << packet->getUnreachableNode().toString().substr(0,6) << ' '
-			 << packet->getDetectingNode().toString().substr(0,6) << '>' << endl;
+			 << packet->getUnreachableNode().shortStr() << ' '
+			 << packet->getDetectingNode().shortStr() << '>' << endl;
 		// we should invalidate all contacts with that link in the path to them before answering
 		routingTable.invalidateContacts(packet->getUnreachableNode(), packet->getDetectingNode());
 		is_rediscovery= true;
@@ -555,7 +567,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 	if (is_rediscovery)
 		succeededRediscovery++;
 	
-	EV_TRACE << "KadFindNodeReq query for " << query.toString().substr(0,8) << " answering with list size " << contacts.size() << endl;
+	EV_TRACE << "KadFindNodeReq query for " << query.shortStr() << " answering with list size " << contacts.size() << endl;
 	sendPacket(std::move(answer));
 }
 
@@ -573,7 +585,7 @@ bool R2Kademlia::handleFindNodeResponse(KadPacket_p answer_, RPCState& rpcState)
 
 void R2Kademlia::onMissingNeighbor(KadPacket_p packet, NodePkt_p pkt) {
 //  	getStatistics().dropMessage(pkt, undefined_node);
-	EV_WARN << "onMissingNeighbor called - packet to " << packet->getNextHop().toString().substr(0,6) << endl;
+	EV_WARN << "onMissingNeighbor called - packet to " << packet->getNextHop().shortStr() << endl;
 	droppedPackets++;
 	if(packet->getType() == KAD_Error) {
 		EV << "dropping error packet" << endl;
@@ -623,7 +635,7 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 
 void R2Kademlia::onImprovement(const KadContact& contact) {
 	// path got improved for this contact -> potentially send UpdateRouteReq
-	EV_TRACE << "onImprovement(" << contact.getKey().toString().substr(0, 6) << ") called" << endl;
+	EV_TRACE << "onImprovement(" << contact.getKey().shortStr() << ") called" << endl;
 
 	// TODO: wait grace period
 	/*
@@ -725,14 +737,14 @@ void R2Kademlia::scheduleRediscovery(const OverlayKey& contactkey, const Overlay
 	if (rt_contact && rt_contact->isRediscovering())
 	{
 		// do not schedule for rediscovery if there is something still in progress
-		EV_WARN << "Rediscovery not scheduled for contact " << contactkey.toString().substr(0,6)
+		EV_WARN << "Rediscovery not scheduled for contact " << contactkey.shortStr()
 			<< " because it is already in rediscovering state" << endl;
 		return;
 	}
 	
-	EV_TRACE << "Rediscovery scheduled for contact " << contactkey.toString().substr(0,6) << " <"
-		<< notvia_unreachable_node.toString().substr(0,6) << ' '
-		<< notvia_failednode_neighbor.toString().substr(0,6) << '>' << endl;
+	EV_TRACE << "Rediscovery scheduled for contact " << contactkey.shortStr() << " <"
+		<< notvia_unreachable_node.shortStr() << ' '
+		<< notvia_failednode_neighbor.shortStr() << '>' << endl;
 
 	auto rediscoverContact=
 		std::make_unique<const KadContact>(contactkey, vector<OverlayKey>{notvia_unreachable_node, notvia_failednode_neighbor});

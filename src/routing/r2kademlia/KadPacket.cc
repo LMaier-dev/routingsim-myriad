@@ -55,7 +55,7 @@ void KadPacket::appendRoute(const KadContact& contact) {
 	setActive(getRouteArraySize() - 1, true);
 }
 
-kad_path KadPacket::getPath(uint from, uint to) {
+kad_path KadPacket::getSrcPath(uint from, uint to) {
 	// index bounds are checked in getHop 
 	if(from > to)
 		throw cRuntimeError("from > to"); // TODO

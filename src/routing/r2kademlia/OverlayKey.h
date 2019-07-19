@@ -118,6 +118,13 @@ public:
 	std::string toString( uint32_t base = 16 ) const;
 
 	/**
+	 * Returns a short string representation of this key
+	 *
+	 * @return Short string representation of this key
+	 */
+	std::string shortStr() const { return toString().substr(0,6); }
+
+	/**
 	 * Common stdc++ console output method
 	 */
 	friend std::ostream& operator<<(std::ostream& os, const OverlayKey& c);

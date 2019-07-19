@@ -32,7 +32,7 @@ std::ostream& operator<<(std::ostream& os, const KadContact& c) {
 	else {
 		os << "< ";
 		for (auto key : c.getPath())
-			os << key.toString().substr(0, 6) << ' ';
+			os << key.shortStr() << ' ';
 		os << '>';
 	}
 	return os;
