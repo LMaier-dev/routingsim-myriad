@@ -344,12 +344,13 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadUpdateRouteReq> packet) {
 	ASSERT(packet->getContactArraySize() == packet->getPathArraySize());
 	ASSERT(packet->getContactArraySize() == packet->getActionArraySize());
 
-	kad_path source_path= packet->getSrcPath();
-	EV_TRACE << "source path: <";
+	// path to origin of this KadUpdateRouteReq
+	kad_path source_path= packet->reversePath(packet->getSrcPath());
+	EV_TRACE << "path to origin: <";
 	for (const OverlayKey& k : source_path)
 		EV_TRACE << k.shortStr() << ' ';
 	EV_TRACE << '>' << endl;
-	
+
 	// this is route update information only, no answer required
 	unsigned int numContacts= packet->getContactArraySize();
 	for (unsigned int i= 0; i < numContacts; i++)
@@ -360,15 +361,14 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadUpdateRouteReq> packet) {
 		auto action= packet->getAction(i);
 
 		EV_TRACE << "reported path to contact " << contactkey.shortStr() << " <";
-		for (const auto& k : source_path)
+		for (const auto& k : path)
 			EV_TRACE << k.shortStr() << ' ';
 		EV_TRACE << '>' << endl;
-		
-		
+
 		switch (action) {
 			case KAD_Announce:
 				EV_TRACE << "UpdateReq Announce for contact " << contactkey.shortStr() << endl;
-			        //routingTable.addPath(contactkey, path);
+			        routingTable.addPath(contactkey, path, source_path);
 				break;
 
 			case KAD_Withdraw:
@@ -378,7 +378,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadUpdateRouteReq> packet) {
 
 			case KAD_Change:
 				EV_TRACE << "UpdateReq Change for contact " << contactkey.shortStr() << endl;
-				routingTable.addPath(contactkey, path);
+			        routingTable.addPath(contactkey, path, source_path);
 				break;
 
 			case KAD_Unreachable:
