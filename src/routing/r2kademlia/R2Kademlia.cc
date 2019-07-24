@@ -382,13 +382,13 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadUpdateRouteReq> packet) {
 				break;
 
 			case KAD_Unreachable:
-				// unreachable node should be first
-				ASSERT(path.size() > 1);
+				// unreachable node
+				ASSERT(path.size() == 1);
 
 				EV_TRACE << "Unreachable contact: " << contactkey.shortStr() << ", link: < "
-					 << path[0].shortStr() << ',' << path[1].shortStr() << " >" << endl;
+					 << packet->getSource().shortStr() << ',' << path[0].shortStr() << " >" << endl;
 				// now invalidate all contacts with this link
-				routingTable.invalidateContacts(path[0], path[1]);
+				routingTable.invalidateContacts(path[0], packet->getSource());
 				break;
 
 			default:
@@ -719,7 +719,7 @@ void R2Kademlia::sendUpdateRouteLink(const OverlayKey& contactKeyLink, KadRouteU
 			packet->setContact(0, contactKeyLink);
 			packet->setPathArraySize(1);
 			
-			packet->setPath(0, { contactKeyLink, myOverlayKey });
+			packet->setPath(0, { contactKeyLink });
 			packet->setActionArraySize(1);
 			packet->setAction(0, action);
 			// send UpdateRouteReq w/ failed link
