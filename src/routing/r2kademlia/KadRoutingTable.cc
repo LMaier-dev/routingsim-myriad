@@ -111,10 +111,11 @@ void KadRoutingTable::addPath(const OverlayKey& key, kad_path path)
 		// find other duplicates
 		simplifyPath(path);
 	}
+	
 	KadContact *contact = getContactInternal(key);
 	if (contact) {
 		// contact is known
-
+		
 		// if contact was marked invalid, update path and status:
 		// since this information is hopefully more current, path should be valid (again)
 		// it does not make sense to check for equalness of the paths: it may be the same,

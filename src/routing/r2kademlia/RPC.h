@@ -23,16 +23,19 @@
 #include "Protocol.h"
 
 namespace routingsim {
+
+
 typedef unsigned int nonce_t;
-class KadPacket;
-using packet_t = KadPacket;
+//KadPacket;
+using packet_t = class KadPacket;
 using packet_p = std::unique_ptr<KadPacket>;
 
 /**
  * A basic implementation of a component that sets up rpc calls.
- * TODO retransmittions and timeouts
+ * TODO retransmissions and timeouts
  */
 class RPCProtocol : public Protocol {
+
 protected:
 	enum RPC_STATUS { RPC_WAITING, RPC_TIMEOUT, RPC_ERROR, RPC_SUCCESS};
 	/// represents the state of an rpc call, gets called
@@ -43,14 +46,14 @@ protected:
 	public:
 		nonce_t nonce;
 		packet_p original_packet;
-		uint8_t retransmittions = 0;
+		uint8_t retransmissions = 0;
 		RPC_STATUS status = RPC_WAITING;
 		rpc_callback_t success_callback;
 		rpc_callback_t error_callback;
 		rpc_callback_t timeout_callback;
 	};
 protected:
-	/** @name fucntions called by the subclass */
+	/** @name functions called by the subclass */
 	//@{
 	/// dispatches the answer to the correct RPCState
 	void handleAnswer(packet_p answer);
@@ -77,6 +80,9 @@ protected:
 	/// used for sending packets
 	virtual void sendPacket(packet_p packet) = 0;
 	//@}
+public:	
+        void finish();
+
 private:
 	/// maps nonces to rpc states, used to dispatch answers
 	std::map<nonce_t, RPCState> states;

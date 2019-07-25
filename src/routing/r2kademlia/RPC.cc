@@ -66,4 +66,13 @@ void RPCProtocol::handleAnswer(packet_p answer)
 		states.erase(it);
 }
 
+
+void RPCProtocol::finish() {
+	EV_TRACE << "# states left: " << states.size() << endl;
+	for (const auto& state : states)
+	{
+		EV_TRACE << "Nonce: " << state.first << " RPCState " << state.second.status << " Packet: " << (state.second.original_packet ? state.second.original_packet->getName() : "NULL") << endl;
+	}
+}
+	
 } // namespace

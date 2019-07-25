@@ -91,8 +91,8 @@ class R2Kademlia : public RPCProtocol, public KadPolicy, public StatisticSample
 	void sendGetNeighbors(KadContact_p contact);
 	/// sends a find node call to find this node (rediscovery may use a not via failed link)
 	void sendFindNode(const OverlayKey& key, bool exact=false, const OverlayKey* notvia_unreachable_node= nullptr, const OverlayKey* notvia_failednode_neighbor= nullptr);
-	/// send a RouteUpdateReq for failed neighbor (usually up/down)
-	void sendUpdateRouteLink(const OverlayKey& contactKeyLink, KadRouteUpdateAction action);
+	/// send a RouteUpdateReq for changed neighbor
+	void sendUpdateRouteForContact(const OverlayKey& affectedContactKey, KadRouteUpdateAction action);
 	//@}
 
 	/** @name policy foo */

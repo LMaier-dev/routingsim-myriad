@@ -161,12 +161,12 @@ void Node::handleMessage(cMessage *msg) {
 void Node::sendToNode( nodeid_t nid, NodePkt* np ) {
 	// node not a neighbor ->
 	if (neighbor_map.count(nid)==0) {
-		EV << "Node "<<getNodeId()<<": Node " << nid << " unknown @msg id=" << np->getId() << endl;
-		EV << "Neighbors are: {";
+		EV_WARN << "sendToNode() @Node "<<getNodeId()<<": Destination node " << nid << " unknown, @msg id=" << np->getId() << endl;
+		EV_TRACE << "Neighbors are: {";
 		for (const auto& it : neighbor_map) {
-			EV << ' ' << (int)it.second.id;
+			EV_TRACE << ' ' << (int)it.second.id;
 		}
-		EV << " }" << endl;
+		EV_TRACE << " }" << endl;
 		delete np;
 		return;
 	}
