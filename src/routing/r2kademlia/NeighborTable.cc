@@ -78,7 +78,7 @@ void NeighborTable::clear()
 std::ostream& operator<<(std::ostream& os, const NeighborTable& c) {
 	os << "(" << c.table.size() << ") ";
 	for (auto pair : c.table)
-		os << pair.first.toString().substr(0,5) << "->" << pair.second << "  ";
+		os << pair.first.shortStr() << "->" << pair.second << "  ";
 	return os;
 }
 

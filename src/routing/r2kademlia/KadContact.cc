@@ -22,11 +22,16 @@
 
 namespace routingsim {
 std::ostream& operator<<(std::ostream& os, const KadContact& c) {
-	os << c.getKey().toString().substr(0, 8);
+	os << c.getKey().shortStr();
 	// state is next V = valid, I = invalid, U = undefined
 	os << ":(" << (c.getState() == KadContact::State::valid ? 'V' :
 		       ((c.getState() == KadContact::State::invalid) ? 'I' :
-			((c.getState() == KadContact::State::rediscovering) ? 'R' : 'U'))) << ")";
+			((c.getState() == KadContact::State::rediscovering) ? 'R' : 'U')));
+	
+	if ( c.isPhysicalNeighbor() ) {
+		os << "/P";
+	}
+	os << ")";
 	if (c.getPath().size() == 0)
 		return os << "<->";
 	else {

@@ -138,8 +138,15 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		if (pathSnooping) {
 			// aka PATH OVERHEARING
 			//TODO optimization use isPathInteresting
-			routingTable.addPath(packet->getSource(), packet->reversePath(packet->getSrcPath(1, packet->getProgress())));
-			routingTable.addPath(packet->getTarget(), packet->getSrcPath(packet->getProgress()+1, packet->getRouteArraySize()-1));
+
+			// avoid learning about supposed physical Neighbors
+			kad_path path_of_interest(packet->reversePath(packet->getSrcPath(1, packet->getProgress())));
+			if (path_of_interest.size() > 0)
+				routingTable.addPath(packet->getSource(), path_of_interest);
+			
+			path_of_interest= packet->getSrcPath(packet->getProgress()+1, packet->getRouteArraySize()-1);
+			if (path_of_interest.size() > 0)
+				routingTable.addPath(packet->getTarget(), path_of_interest);
 		}
 		//TODO ERROR OVERHEARING, more overhearing
 		forwardPacket(std::move(packet), std::move(pkt));
@@ -194,7 +201,7 @@ void R2Kademlia::reset() {
 }
 
 void R2Kademlia::handlePacket(KadHello_p packet) {
-	EV << "received hello packet from " << packet->getSourceId() << endl;
+	EV << "received hello packet from " << packet->getSource().shortStr() << endl;
 	neighborTable.addNeighbor(packet->getSourceId(), packet->getSource());
 	EV_TRACE << "neighbor table: "<< neighborTable << endl;
 	routingTable.addPath(packet->getSource(), kad_path());
@@ -202,7 +209,7 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 
 
 void R2Kademlia::handlePacket(KadAnswer_p packet) {
-	EV_DEBUG << "received answer packet" << endl;
+	EV_DEBUG << "received answer packet from " << packet->getSource().shortStr() << endl;
 	if (packet->getType() == KAD_Error)
 		onErrorPacket(*check_and_cast<KadError *>(packet.get()));
 	handleAnswer(std::move(packet));
@@ -591,9 +598,10 @@ bool R2Kademlia::handleFindNodeResponse(KadPacket_p answer_, RPCState& rpcState)
 
 void R2Kademlia::onMissingNeighbor(KadPacket_p packet, NodePkt_p pkt) {
 //  	getStatistics().dropMessage(pkt, undefined_node);
-	EV_WARN << "onMissingNeighbor called - packet to " << packet->getNextHop().shortStr() << endl;
+	EV_WARN << "onMissingNeighbor called - packet next hop should be " << packet->getNextHop().shortStr() << endl;
 	droppedPackets++;
-	if(packet->getType() == KAD_Error) {
+	// do not generate Error packets for Error packets
+	if (packet->getType() == KAD_Error) {
 		EV << "dropping error packet" << endl;
 	}
 	else
@@ -942,6 +950,11 @@ void R2Kademlia::countDropped(KadPacket& packet, const OverlayKey& target) {
 void R2Kademlia::returnToSender(uint8_t errorType, KadPacket_p packet) {
 	KadError_p answer = makeAnswer<KadError>(*packet);
 	answer->setErrorType(errorType);
+	
+	EV_TRACE << "returnToSender() - return path:";
+	for (const auto& c : answer->getSrcPath())
+		EV_TRACE << ' ' << c.shortStr();
+	EV_TRACE << endl;		
 	answer->encapsulate(packet.release());
 	if (answer->hasRemainingHops())
 		sendPacket(std::move(answer));

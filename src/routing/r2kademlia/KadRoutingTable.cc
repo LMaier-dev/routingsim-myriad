@@ -103,18 +103,41 @@ size_type KadRoutingTable::getBucketIndex(const OverlayKey& key) const
 void KadRoutingTable::addPath(const OverlayKey& key, kad_path path)
 {
 	if (key == myKey) return;
+	
+	// we must be careful: some neighbor may tell me paths that lead via me to my neighbors
+	// we simply discard this information as it cannot be more current than mine
+
+	const bool pathWasNotEmpty(path.size() > 0);
+	// find my key
+	path.erase(path.begin(), std::find(path.rbegin(), path.rend(), myKey).base());
+	// find target key
+	path.erase(std::find(path.begin(), path.end(), key), path.end());
+	
+	if (pathWasNotEmpty && path.empty()==true) {
+		// path is now empty -> someone sends path information for a PN that I should know
+		EV_TRACE << "Path about my PN " << key.shortStr() << " (leading via me) ignored" << endl;
+		return;
+	}
+	
+
 	if (pathSimplification) {
-		// find my key
-		path.erase(path.begin(), std::find(path.rbegin(), path.rend(), myKey).base());
-		// find target key
-		path.erase(std::find(path.begin(), path.end(), key), path.end());
-		// find other duplicates
+		// find other cycles/duplicates
 		simplifyPath(path);
 	}
+	
+	ASSERT(pathWasNotEmpty==false || (pathWasNotEmpty && path.empty()==false));
 	
 	KadContact *contact = getContactInternal(key);
 	if (contact) {
 		// contact is known
+
+		// there may be the rare case when we learned the new contact from someone else
+		// before we heard the Hello
+		if (!contact->isPhysicalNeighbor() && path.empty()==true)
+		{
+			contact->setPhysicalNeighbor();
+			EV_TRACE << "Contact existed already, but seems to be a PN now: " << *contact << endl;
+		}
 		
 		// if contact was marked invalid, update path and status:
 		// since this information is hopefully more current, path should be valid (again)
@@ -144,8 +167,17 @@ void KadRoutingTable::addPath(const OverlayKey& key, const kad_path& path, const
 		addPath(key, concatViaPath(viaPath, path));
 		return;
 	}
+
 	KadContact *contact = getContactInternal(key);
 	if (contact) { // contact is known
+
+		// there may be the rare case when we learned the new contact from someone else
+		// before we heard the Hello
+		if (!contact->isPhysicalNeighbor() && concatViaPath(viaPath, path).empty())
+		{
+			contact->setPhysicalNeighbor();
+			EV_TRACE << "Contact existed already, but seems to be a PN now: " << *contact << endl;
+		}
 		
 		// if contact was marked invalid, update path and status:
 		// since this information is hopefully more current, path should be valid (again)

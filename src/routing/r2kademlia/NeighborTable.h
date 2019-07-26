@@ -25,7 +25,7 @@
 namespace routingsim {
 using inner_table = std::vector<std::pair<OverlayKey, nodeid_t>>;
 /**
- * A table for mapping overlay keys of neigbors to node ids an back.
+ * A table for mapping overlay keys of neigbors to nodeIDs and back.
  * Compare to arp table.
 e * @author Jakob Thomas
  */
@@ -36,7 +36,7 @@ public:
 	void addNeighbor(nodeid_t nodeId, const OverlayKey& key);
 	/// removes the entry with the given node id if present
 	void removeNeighbor(nodeid_t nodeId);
-	/// returns a vector of all known neigbors
+	/// returns a vector of all known neighbors
 	std::vector<OverlayKey> getNeighbors();
 	/// returns the node id of the neighbor with the given key.
 	/// @returns unspecified_node if the key is not found

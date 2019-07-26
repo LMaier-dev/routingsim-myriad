@@ -45,16 +45,25 @@ public:
 
 	KadContact(const KadContact&) = delete;
         KadContact(const OverlayKey& key): key(key), path(), state(undefined) {};
-        KadContact(const OverlayKey& key, kad_path path): key(key), path(std::move(path)), state(valid) {};
+        KadContact(const OverlayKey& key, kad_path opath) :
+	                  key(key), path(std::move(opath)),
+			  state(valid), physicalNeighbor(path.empty() == true) // simply path.empty() doesn't work correctly!
+			  {};
 	/// returns the current state of the contact
 	inline State getState() const { return state; }
 	inline bool isInvalid() const { return (state != valid); }
 	inline bool isValid() const { return (state == valid) ; }
 	inline bool isRediscovering() const { return (state == rediscovering) ; }
 
+	/// this will be kept being true, even if the link goes down
+	inline bool isPhysicalNeighbor() const { return physicalNeighbor; }
+
+	/// set contact state
 	inline void setInvalid() { state= invalid; }
 	inline void setValid() { state= valid; }
 	inline void setRediscovering() { state= rediscovering; }
+
+	inline void setPhysicalNeighbor() { physicalNeighbor= true; }
 	
 	/// returns the key of this contact
 	inline const OverlayKey& getKey() const { return key; }
@@ -73,6 +82,7 @@ private:
 	const OverlayKey key;	/// the OverlayKey of this contact
 	kad_path path;		/// the best known source routing path to reach this contact
 	State state;            /// the state of the contact
+	bool physicalNeighbor= false; /// true if we have a direct physical link to this neighbor
 };
 
 }; // namespace
