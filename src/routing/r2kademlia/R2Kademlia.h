@@ -17,6 +17,7 @@
 #define __ROUTINGSIM_R2Kademlia_H_
 
 #include <omnetpp.h>
+#include <unordered_map>
 
 #include "foundation.h"
 #include "Protocol.h"
@@ -34,6 +35,7 @@ using KadAnswer_p = std::unique_ptr<KadAnswer>;
 using KadHello_p = std::unique_ptr<KadHello>;
 using KadError_p = std::unique_ptr<KadError>;
 
+using UpdateList_t = std::list< std::pair<OverlayKey, KadRouteUpdateAction> >;
 /**
  * Implementation of R2Kademlia.
  * Routing with R/Kademlia...
@@ -91,8 +93,6 @@ class R2Kademlia : public RPCProtocol, public KadPolicy, public StatisticSample
 	void sendGetNeighbors(KadContact_p contact);
 	/// sends a find node call to find this node (rediscovery may use a not via failed link)
 	void sendFindNode(const OverlayKey& key, bool exact=false, const OverlayKey* notvia_unreachable_node= nullptr, const OverlayKey* notvia_failednode_neighbor= nullptr);
-	/// send a RouteUpdateReq for changed neighbor
-	void sendUpdateRouteForContact(const OverlayKey& affectedContactKey, KadRouteUpdateAction action);
 	//@}
 
 	/** @name policy foo */
@@ -179,6 +179,11 @@ private:
 	/// adds contact and not via link for rediscovery queue
 	void scheduleRediscovery(const OverlayKey& contactkey, const OverlayKey& notvia_unreachable_node, const OverlayKey& notvia_failednode_neighbor);
 	void rediscoverContacts();
+	/// adds routing table updates for contacts to an update queue
+	void scheduleUpdate(const OverlayKey& affectedcontactkey, KadRouteUpdateAction action);
+	/// sends all queued updates
+	void sendUpdates();
+
 
 	//@}
 
@@ -211,8 +216,14 @@ private:
 	bool pathSnooping;
 	uint8_t probeStrategy;
 	simtime_t rediscoveryWaitTime;
+	simtime_t updateWaitTime;
 	bool detailedRoutingTableStats;
 	//@}
+
+	// a list that is used to send rediscover messages
+	std::unordered_map< OverlayKey, UpdateList_t > updateQueue;
+	// selfMessage
+	bool updateScheduled= false;
 
 	// a list that is used to send rediscover messages
 	std::list<std::unique_ptr<const KadContact>> rediscoverQueue;

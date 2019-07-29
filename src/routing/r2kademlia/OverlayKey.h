@@ -363,7 +363,7 @@ public:
 	 *
 	 * @return size_t The hash value
 	 */
-	uint32_t hash() const;
+	std::size_t hash() const noexcept;
 
 	/**
 	 * Returns the position of the msb in this key, which represents
@@ -578,4 +578,11 @@ private:
 	OverlayKey* key;
 };
 
+namespace std {
+	template<> class hash<OverlayKey>
+	{
+	public:
+		size_t operator()(const OverlayKey& k) const;
+	};
+}
 #endif
