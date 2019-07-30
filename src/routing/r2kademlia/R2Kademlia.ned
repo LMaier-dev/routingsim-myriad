@@ -41,7 +41,9 @@ simple R2Kademlia extends routingsim.foundation.Protocol
 		/// 0=none, 1=random, 2=exiting, 3=bucket_expand, 4=random_suffix, 5=suffix_expand, 6=random_bucket
 		int probeStrategy @enum(ProbeStrategy) = default(3);
 		/// waiting time until rediscovery is scheduled
-		double rediscoveryWaitTime = default(100ms) @unit(ms);
+		double rediscoveryWaitTime = default(200ms) @unit(ms);
+		/// waiting time until routing updates are scheduled
+		double updateWaitTime = default(100ms) @unit(ms);
 
 		// statistics foo
 		/// if true records avarage path lengths and stretch in routing tables.

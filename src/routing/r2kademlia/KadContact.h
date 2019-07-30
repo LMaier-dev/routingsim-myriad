@@ -36,32 +36,35 @@ using size_type = std::size_t;
 class KadContact
 {
 public:
-	enum State {
+	enum class State {
 		undefined     = 0,
 		valid         = 1,
 		rediscovering = 2,
 		invalid       = 3
 	};
 
-	KadContact(const KadContact&) = delete;
-        KadContact(const OverlayKey& key): key(key), path(), state(undefined) {};
+	KadContact(const KadContact&) = default;
+        KadContact(KadContact&& k) : key(std::move(k.key)), path(std::move(k.path)), state(k.state), physicalNeighbor(k.physicalNeighbor) {};
+        KadContact(const OverlayKey& key): key(key), path(), state(State::undefined) {};
         KadContact(const OverlayKey& key, kad_path opath) :
 	                  key(key), path(std::move(opath)),
-			  state(valid), physicalNeighbor(path.empty() == true) // simply path.empty() doesn't work correctly!
+			  state(State::valid), physicalNeighbor(path.empty() == true) // simply path.empty() doesn't work correctly!
 			  {};
+        KadContact& operator=(const KadContact &other); // copy assignment
+	KadContact& operator=(KadContact &&other); // move assignement
 	/// returns the current state of the contact
 	inline State getState() const { return state; }
-	inline bool isInvalid() const { return (state != valid); }
-	inline bool isValid() const { return (state == valid) ; }
-	inline bool isRediscovering() const { return (state == rediscovering) ; }
+	inline bool isInvalid() const { return (state != State::valid); }
+	inline bool isValid() const { return (state == State::valid) ; }
+	inline bool isRediscovering() const { return (state == State::rediscovering) ; }
 
 	/// this will be kept being true, even if the link goes down
 	inline bool isPhysicalNeighbor() const { return physicalNeighbor; }
 
 	/// set contact state
-	inline void setInvalid() { state= invalid; }
-	inline void setValid() { state= valid; }
-	inline void setRediscovering() { state= rediscovering; }
+	inline void setInvalid() { state= State::invalid; }
+	inline void setValid() { state= State::valid; }
+	inline void setRediscovering() { state= State::rediscovering; }
 
 	inline void setPhysicalNeighbor() { physicalNeighbor= true; }
 	
@@ -79,11 +82,38 @@ public:
 	/// Common stdc++ console output method
 	friend std::ostream& operator<<(std::ostream& os, const KadContact& c);
 private:
-	const OverlayKey key;	/// the OverlayKey of this contact
+	OverlayKey key;	/// the OverlayKey of this contact
 	kad_path path;		/// the best known source routing path to reach this contact
-	State state;            /// the state of the contact
+	State state= State::undefined; /// the state of the contact
 	bool physicalNeighbor= false; /// true if we have a direct physical link to this neighbor
 };
+
+
+inline KadContact& KadContact::operator=(const KadContact& other)
+{
+	if (this != &other) {
+		key= other.key;
+		path= other.path;
+		state= other.state;
+		physicalNeighbor= other.physicalNeighbor;
+	}
+	return *this;
+}
+
+
+inline KadContact& KadContact::operator=(KadContact&& other)
+{
+	if (this != &other) {
+		key= other.key;
+		path= other.path;
+		state= other.state;
+		physicalNeighbor= other.physicalNeighbor;
+		other.path.clear();
+		other.state= State::undefined;
+	}
+	return *this;
+}
+
 
 }; // namespace
 #endif // __ROUTINGSIM_KadContact_H_

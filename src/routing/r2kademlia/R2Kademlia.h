@@ -35,7 +35,7 @@ using KadAnswer_p = std::unique_ptr<KadAnswer>;
 using KadHello_p = std::unique_ptr<KadHello>;
 using KadError_p = std::unique_ptr<KadError>;
 
-using UpdateList_t = std::list< std::pair<OverlayKey, KadRouteUpdateAction> >;
+using UpdateList_t = std::list< std::pair<KadContact, KadRouteUpdateAction> >;
 /**
  * Implementation of R2Kademlia.
  * Routing with R/Kademlia...
@@ -180,7 +180,7 @@ private:
 	void scheduleRediscovery(const OverlayKey& contactkey, const OverlayKey& notvia_unreachable_node, const OverlayKey& notvia_failednode_neighbor);
 	void rediscoverContacts();
 	/// adds routing table updates for contacts to an update queue
-	void scheduleUpdate(const OverlayKey& affectedcontactkey, KadRouteUpdateAction action);
+	void scheduleUpdate(const KadContact& affectedcontact, KadRouteUpdateAction action);
 	/// sends all queued updates
 	void sendUpdates();
 
