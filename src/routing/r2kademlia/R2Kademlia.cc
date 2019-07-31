@@ -806,18 +806,20 @@ void R2Kademlia::scheduleUpdate(const KadContact& affectedContact, KadRouteUpdat
 	if (closeContacts.size() > 0)
 	{ // if there are contacts left to notify
 		for (const auto& notifyContact : closeContacts)
-		{ // each ID-wise close contact gets a UpdateRouteReq from us
+		{ // each ID-wise close contact gets an UpdateRouteReq from us
 
 			// except when it is the contact itself
-			if (affectedContact.getKey() == notifyContact->getKey())
+			if ( affectedContact.getKey() == notifyContact->getKey() )
+				continue;
+			// or it is a physical neighbor of the affected node (here the last hop in the path)
+			if ( affectedContact.getPathLength() > 0
+			     &&
+			     affectedContact.getPath()[affectedContact.getPathLength()-1] == notifyContact->getKey() )
 				continue;
 
 			auto entry= updateQueue.find(affectedContact.getKey());
 			if ( entry == updateQueue.end() ) {
-				// need to create new entry (note: KadContact has no copy constructor due to move of Kad_Path)
-				//auto path_p= std::make_unique<kad_path>(affectedContact.getPath());
-				//KadContact k(affectedContact.getKey(),*path_p);
-				//std::pair<KadContact,KadRouteUpdateAction> pairelem(std::move(k), action);
+				// need to create new entry
 				updateQueue[notifyContact->getKey()]= { std::make_pair(affectedContact, action) };
 			}
 			else

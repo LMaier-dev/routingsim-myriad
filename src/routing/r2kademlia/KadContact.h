@@ -45,7 +45,7 @@ public:
 
 	KadContact(const KadContact&) = default;
         KadContact(KadContact&& k) : key(std::move(k.key)), path(std::move(k.path)), state(k.state), physicalNeighbor(k.physicalNeighbor) {};
-        KadContact(const OverlayKey& key): key(key), path(), state(State::undefined) {};
+        explicit KadContact(const OverlayKey& key): key(key), path(), state(State::undefined) {};
         KadContact(const OverlayKey& key, kad_path opath) :
 	                  key(key), path(std::move(opath)),
 			  state(State::valid), physicalNeighbor(path.empty() == true) // simply path.empty() doesn't work correctly!
