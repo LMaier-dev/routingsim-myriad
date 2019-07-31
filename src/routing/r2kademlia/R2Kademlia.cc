@@ -606,7 +606,15 @@ void R2Kademlia::onMissingNeighbor(KadPacket_p packet, NodePkt_p pkt) {
 		EV << "dropping error packet" << endl;
 	}
 	else
-		returnToSender(KAD_SegmentFailure, std::move(packet));
+	{
+		if (packet->getSource() == myOverlayKey)
+		{
+			EV_DEBUG << "I'm the source, so not returning any message" << endl;
+			return;
+		}
+		else
+			returnToSender(KAD_SegmentFailure, std::move(packet));
+	}
 }
 
 
