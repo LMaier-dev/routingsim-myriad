@@ -18,7 +18,7 @@
 
 #include <omnetpp.h>
 #include <memory>
-#include <map>
+#include <unordered_map>
 #include <functional>
 #include "Protocol.h"
 
@@ -85,7 +85,7 @@ public:
 
 private:
 	/// maps nonces to rpc states, used to dispatch answers
-	std::map<nonce_t, RPCState> states;
+	std::unordered_map<nonce_t, RPCState> states;
 };
 
 } // namespace

@@ -601,20 +601,25 @@ void R2Kademlia::onMissingNeighbor(KadPacket_p packet, NodePkt_p pkt) {
 //  	getStatistics().dropMessage(pkt, undefined_node);
 	EV_WARN << "onMissingNeighbor called - packet next hop should be " << packet->getNextHop().shortStr() << endl;
 	droppedPackets++;
-	// do not generate Error packets for Error packets
-	if (packet->getType() == KAD_Error) {
-		EV << "dropping error packet" << endl;
-	}
-	else
-	{
-		if (packet->getSource() == myOverlayKey)
+	// do not generate Error packets for Error or UpdateRoute packets
+	switch (packet->getType()) {
+		case KAD_Error:
+		case KAD_UpdateRouteReq:
+		case KAD_QueryRouteRsp:
+		case KAD_FindNodeRsp:	
+			EV << "not generating error packet for packet type " << packet->getName() << "(" << packet->getType() << ")" << endl;
+			break;
+		default:
 		{
-			EV_DEBUG << "I'm the source, so not returning any message" << endl;
-			return;
+			if (packet->getSource() == myOverlayKey)
+			{
+				EV_DEBUG << "I'm the source, so not returning any message" << endl;
+				return;
+			}
+			else
+				returnToSender(KAD_SegmentFailure, std::move(packet));
 		}
-		else
-			returnToSender(KAD_SegmentFailure, std::move(packet));
-	}
+	} // end switch
 }
 
 
