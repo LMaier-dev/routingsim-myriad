@@ -178,6 +178,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 
 
 void R2Kademlia::onSelfMessage(cMessage_p msg) {
+	//if (msg->getName() "RPCTimerMsg")
 	// handle timer
 	short timerId = msg->getKind();
 	ASSERT(timerId >= 0);
@@ -631,14 +632,63 @@ void R2Kademlia::onMissingNeighbor(KadPacket_p packet, NodePkt_p pkt) {
 
 
 void R2Kademlia::onErrorPacket(KadError& error) {
-	if (error.getErrorType() == KAD_SegmentFailure) {
-		KadPacket* original = check_and_cast<KadPacket *>(error.getEncapsulatedPacket());
-		ASSERT(original->getNonce() == error.getNonce());
-		ASSERT(original->getSource() == myOverlayKey);
-		EV_INFO << "Removing contact " << original->getTarget().shortStr() << " because of error packet" << endl;
-		routingTable.removeContact(original->getTarget());
-	}
-	// currently there are no more error types
+
+	EV_INFO << "received ERROR packet" << endl;
+	switch (error.getErrorType()) {
+		// the following errors indicate a problem with the route to the contact
+		case KAD_SegmentFailure:
+		case KAD_NodeUnreachable:
+		case KAD_PathIDUnknown:
+		{ // trigger rediscovery
+		
+			KadPacket* original = check_and_cast<KadPacket *>(error.getEncapsulatedPacket());
+			ASSERT(original->getNonce() == error.getNonce());
+			ASSERT(original->getSource() == myOverlayKey);
+
+			auto affectedContact= routingTable.getContact(original->getTarget());
+			if (affectedContact)
+			{
+				if (affectedContact->isValid())
+				{
+					EV_INFO << "Invalidating contact " << affectedContact->getKey().shortStr() << " because of error packet" << endl;
+					routingTable.setContactInvalid(affectedContact->getKey());
+					// find out the failed link
+					auto reportingNode = error.getSource();
+					const auto originalPath= original->getSrcPath();
+					// find reporting node in the source path
+					auto it= find(originalPath.begin(),originalPath.end(),reportingNode);
+					// the following should be true, otherwise we are getting 
+					// an error from some off path node
+					ASSERT(it != originalPath.end());
+					// the next hop is the one that failed
+					auto failedNextHop = (++it != originalPath.end()) ? *it : reportingNode ; 
+					
+					scheduleRediscovery(affectedContact->getKey(), reportingNode, failedNextHop);
+				}
+				else
+				{ // may be already invalid or rediscovering
+					if (affectedContact->isRediscovering())
+					{ // must check whether this is an error message for the rediscovery attempt
+						auto findnodereq= dynamic_cast<const KadFindNodeReq*>(original);
+						if (findnodereq->getNot_via() == false) 
+						{
+							// original packet was not a rediscovery packet
+							break;
+						}
+					}
+					EV_INFO << "Removing invalid contact " << affectedContact->getKey().shortStr() << " because of error packet" << endl;
+					routingTable.removeContact(affectedContact->getKey());
+				}
+			}
+			// else contact may have been removed meanwhile (e.g., by contact replacement)
+		}
+		break;
+		
+		default:
+			// currently there are no more error types to handle
+			break;
+	} // end switch
+
 }
 
 

@@ -43,15 +43,21 @@ protected:
 	/// a function that handles some rpc state change, returns true if rpc is done
 	using rpc_callback_t = std::function<bool(packet_p, RPCState&)>;
 	struct RPCState {
-	public:
+	public:	
 		nonce_t nonce;
 		packet_p original_packet;
 		uint8_t retransmissions = 0;
+		uint8_t maxRetransmissions = 0;
+		unsigned int timeout_ms = 500; // timeout in ms
 		RPC_STATUS status = RPC_WAITING;
 		rpc_callback_t success_callback;
 		rpc_callback_t error_callback;
 		rpc_callback_t timeout_callback;
+		cMessage* timeoutMsg = nullptr;
 	};
+
+	
+	
 protected:
 	/** @name functions called by the subclass */
 	//@{

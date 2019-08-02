@@ -36,22 +36,33 @@ void RPCProtocol::sendRpcCall(packet_p rpcCall, rpc_callback_t success_callback,
 	rpcState.error_callback = error_callback;
 	rpcState.timeout_callback = timeout_callback;
 	rpcState.original_packet = std::unique_ptr<packet_t>(rpcCall->dup());
+	cMessage* rpc_timeout_msg = new cMessage("RPCTimerMsg");
+	rpcState.timeoutMsg= rpc_timeout_msg; // just a reference for cancelling
+	// start timer for RPC timeout
+	scheduleAt(simTime() + SimTime(rpcState.timeout_ms,SIMTIME_MS), rpc_timeout_msg);
+	
 	// register
 	states[nonce] = std::move(rpcState);
 	// send out
 	sendPacket(std::move(rpcCall));
 }
 
+
 void RPCProtocol::handleAnswer(packet_p answer)
 {
 	nonce_t nonce = answer->getNonce();
 	auto it = states.find(nonce);
-	if(it == states.end()) {
+	if (it == states.end()) {
 		EV_WARN << "received answer packet with unknown nonce" << endl;
 		return;
 	}
+	
 	bool result;
 	RPCState& rpcState = it->second;
+
+	// cancel RPC timeout timer
+	cancelAndDelete(rpcState.timeoutMsg);
+	
 	if (answer->getType() == KAD_Error) {
 		rpcState.status = RPC_ERROR;
 		result = rpcState.error_callback(std::move(answer), rpcState);
@@ -61,7 +72,8 @@ void RPCProtocol::handleAnswer(packet_p answer)
 		rpcState.status = RPC_SUCCESS;
 		result = rpcState.success_callback(std::move(answer), rpcState);
 	}
-	// erase at last, because we give around references to it!
+	// if result returns true, the RPC is finally done
+	// erase the RPC state (should also destroy the original packet)
 	if (result)
 		states.erase(it);
 }
