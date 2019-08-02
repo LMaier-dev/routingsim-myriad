@@ -133,13 +133,11 @@ void Node::handleMessage(cMessage *msg) {
 	// hello
 	case PAYLOAD_HELLO:
 		onHello( np );
-		delete np;
 		return;
 
 		// goodbye
 	case PAYLOAD_GOODBYE:
 		onGoodbye( np );
-		delete np;
 		return;
 
 		// invalid
@@ -246,7 +244,7 @@ void Node::onHello( NodePkt* pkt ) {
 	nr.out = gate("toNeighbors$o", pkt->getArrivalGate()->getIndex() );
 
 	// announce at modules
-	sendToModules(pkt->dup());
+	sendToModules(pkt);
 }
 
 void Node::onGoodbye( NodePkt* pkt ) {
@@ -258,7 +256,7 @@ void Node::onGoodbye( NodePkt* pkt ) {
 	neighbor_set.erase(nid);
 
 	// announce at neighbors
-	sendToModules(pkt->dup());
+	sendToModules(pkt);
 }
 
 bool Node::disableLink(Node *mod, const char *gatename) {

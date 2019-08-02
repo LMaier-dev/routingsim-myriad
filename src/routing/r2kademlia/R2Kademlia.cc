@@ -124,6 +124,10 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	
 	KadPacket_p packet = \
 		std::unique_ptr<KadPacket>(check_and_cast<KadPacket*>(pkt->decapsulate()));
+	/*EV_TRACE << "onMessage msgid:" << packet->getId() << " treeId:" << packet->getTreeId()
+	      << " <" << packet->getName() << "> this="
+		 << static_cast<void*>(packet.get()) << " c:" << packet->getCreationTime() << endl;
+	*/
 	// hello packets do not include my key
 	if (handleIfFitting<KadHello>(packet)) return;
 	// other packets should do so
@@ -201,11 +205,13 @@ void R2Kademlia::reset() {
 	//TODO clear rpc states
 }
 
+
 void R2Kademlia::handlePacket(KadHello_p packet) {
 	EV << "received hello packet from " << packet->getSource().shortStr() << endl;
 	neighborTable.addNeighbor(packet->getSourceId(), packet->getSource());
 	EV_TRACE << "neighbor table: "<< neighborTable << endl;
 	routingTable.addPath(packet->getSource(), kad_path());
+	//EV_TRACE << "handlePacket: "<< static_cast<void*>(packet.get()) << endl;
 }
 
 
@@ -452,6 +458,7 @@ void R2Kademlia::sendFindNode(const OverlayKey& key, bool exact, const OverlayKe
 			EV_TRACE << "Rediscovery sending ... msg id=" << packet->getId()
 				 << " via " << contact << endl;
 		}
+		EV_TRACE << "sending KadFindNodeReq id=" << packet->getId() << endl;
 		sendRpcCall(
 			std::move(packet),
 			std::bind(&R2Kademlia::handleFindNodeResponse, this, ph::_1, ph::_2)
@@ -467,7 +474,7 @@ void R2Kademlia::sendFindNode(const OverlayKey& key, bool exact, const OverlayKe
 void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 	OverlayKey& query = packet->getQuery(); // query is the destination ID
 
-	EV_TRACE << "KadFindNodeReq received query for: " << query.shortStr() << endl;
+	EV_TRACE << "KadFindNodeReq (id=" << packet->getId() << ", nonce=" << packet->getNonce() << ") received query for: " << query.shortStr() << endl;
 	bool is_rediscovery= false;
 	// check for presence of "not via" setting
 	if (packet->getNot_via())
@@ -1030,11 +1037,13 @@ void R2Kademlia::returnToSender(uint8_t errorType, KadPacket_p packet) {
 template<typename T> bool R2Kademlia::handleIfFitting(KadPacket_p& packet) {
 	ASSERT(packet); // no nullptr here!
 	KadPacket *raw_ptr = packet.get();
+	//EV_TRACE << "handleIfFitting raw_ptr " << static_cast<void*>(raw_ptr) << endl;
 	std::unique_ptr<T> tPacket(dynamic_cast<T*>(raw_ptr));
 	// if cast failed we get nullptr -> skip the rest, return false
-	if(not tPacket) return false;
+	if (not tPacket) return false;
 	// invalidate the original unique_ptr
 	packet.release();
+	//EV_TRACE << "handleIfFitting tPacket " << static_cast<void*>(tPacket.get()) << endl;
 	// delegate responsibility to handlePacket method
 	handlePacket(std::move(tPacket));
 	return true;
