@@ -43,7 +43,7 @@ protected:
 	/// a function that handles some rpc state change, returns true if rpc is done
 	using rpc_callback_t = std::function<bool(packet_p, RPCState&)>;
 	struct RPCState {
-	public:	
+	   public:	
 		nonce_t nonce;
 		packet_p original_packet;
 		uint8_t retransmissions = 0;
@@ -57,12 +57,22 @@ protected:
 	};
 
 	
+	class RPCtimeoutMsg : public cMessage
+	{
+	  public:
+	        RPCtimeoutMsg(nonce_t nonce) : cMessage("RPCTimerMsg"), nonce(nonce) {};
+		nonce_t nonce;
+
+	};
 	
 protected:
 	/** @name functions called by the subclass */
 	//@{
 	/// dispatches the answer to the correct RPCState
 	void handleAnswer(packet_p answer);
+
+	/// uses a timeout callback function for the corresponding RPC
+	void handleTimeOut(nonce_t nonce);
 	
 	/**
 	 * registers the given packet, assigns a nonce and sends it out.

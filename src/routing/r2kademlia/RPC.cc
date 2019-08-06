@@ -36,7 +36,7 @@ void RPCProtocol::sendRpcCall(packet_p rpcCall, rpc_callback_t success_callback,
 	rpcState.error_callback = error_callback;
 	rpcState.timeout_callback = timeout_callback;
 	rpcState.original_packet = std::unique_ptr<packet_t>(rpcCall->dup());
-	cMessage* rpc_timeout_msg = new cMessage("RPCTimerMsg");
+	RPCtimeoutMsg* rpc_timeout_msg= new RPCtimeoutMsg(nonce);
 	rpcState.timeoutMsg= rpc_timeout_msg; // just a reference for cancelling
 	// start timer for RPC timeout
 	scheduleAt(simTime() + SimTime(rpcState.timeout_ms,SIMTIME_MS), rpc_timeout_msg);
@@ -76,6 +76,29 @@ void RPCProtocol::handleAnswer(packet_p answer)
 	// erase the RPC state (should also destroy the original packet)
 	if (result)
 		states.erase(it);
+}
+
+
+void RPCProtocol::handleTimeOut(nonce_t nonce)
+{
+	auto it= states.find(nonce);
+	if (it == states.end())
+	{
+		EV_ERROR << "Timeout RPC for " << nonce << " not found" << endl;
+		return;
+	}
+
+	RPCState& rpcstate(it->second);
+	// it depends on the retransmission policy whether we still need this state
+	if (rpcstate.timeout_callback)
+	{
+		rpcstate.timeout_callback(nullptr,rpcstate);
+	}
+	else
+	{
+		EV_ERROR << "no timeout callback defined." << endl;
+		
+	}
 }
 
 

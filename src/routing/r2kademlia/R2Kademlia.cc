@@ -178,7 +178,16 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 
 
 void R2Kademlia::onSelfMessage(cMessage_p msg) {
-	//if (msg->getName() "RPCTimerMsg")
+	std::unique_ptr<RPCtimeoutMsg> rpctimeout(dynamic_cast<RPCtimeoutMsg *>(msg.get()));
+	if (rpctimeout)
+	{
+		EV_TRACE << "RPC Timeout Message for nonce " << rpctimeout->nonce << endl;
+
+		handleTimeOut(rpctimeout->nonce);
+		
+		return;
+	}
+
 	// handle timer
 	short timerId = msg->getKind();
 	ASSERT(timerId >= 0);
