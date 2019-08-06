@@ -192,6 +192,7 @@ private:
 	bool handleProbeResponse(KadPacket_p answer, RPCState& rpcState);
 	bool handleQueryRouteResponse(KadPacket_p answer, RPCState& rpcState);
 	bool handleFindNodeResponse(KadPacket_p answer, RPCState& rpcState);
+	bool handleRPCTimeOut(KadPacket_p answer, RPCState& rpcState);
 	//@}
 private:
 	/// the overlay key of this node

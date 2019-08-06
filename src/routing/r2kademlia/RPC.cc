@@ -23,6 +23,7 @@ void RPCProtocol::sendRpcCall(packet_p rpcCall, rpc_callback_t callback)
 	sendRpcCall(std::move(rpcCall), callback, callback, callback);
 }
 
+
 void RPCProtocol::sendRpcCall(packet_p rpcCall, rpc_callback_t success_callback,
 	rpc_callback_t error_callback,  rpc_callback_t timeout_callback)
 {
@@ -89,15 +90,19 @@ void RPCProtocol::handleTimeOut(nonce_t nonce)
 	}
 
 	RPCState& rpcstate(it->second);
+	// set state to TIMEOUT
+	rpcstate.status= RPC_TIMEOUT;
 	// it depends on the retransmission policy whether we still need this state
-	if (rpcstate.timeout_callback)
-	{
-		rpcstate.timeout_callback(nullptr,rpcstate);
+	if (rpcstate.timeout_callback) {
+		if (rpcstate.timeout_callback(nullptr,rpcstate))
+		{
+			// RPC now done, so delete its state
+			states.erase(it);
+		}
 	}
-	else
-	{
-		EV_ERROR << "no timeout callback defined." << endl;
-		
+	else { // no callback to use, nevertheless delete pending RPC state
+		EV_ERROR << "no timeout callback defined - deleting RPC state" << endl;
+		states.erase(it);
 	}
 }
 

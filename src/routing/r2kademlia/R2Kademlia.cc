@@ -181,12 +181,16 @@ void R2Kademlia::onSelfMessage(cMessage_p msg) {
 	std::unique_ptr<RPCtimeoutMsg> rpctimeout(dynamic_cast<RPCtimeoutMsg *>(msg.get()));
 	if (rpctimeout)
 	{
+		msg.release(); 		// no double deletion
+		
 		EV_TRACE << "RPC Timeout Message for nonce " << rpctimeout->nonce << endl;
 
 		handleTimeOut(rpctimeout->nonce);
-		
+
+		// timeout message will be dismissed
 		return;
 	}
+
 
 	// handle timer
 	short timerId = msg->getKind();
@@ -319,7 +323,9 @@ const KadContact& R2Kademlia::chooseNextHop(const KadContactList& contacts, cons
 void R2Kademlia::sendProbe(KadContact_p contact) {
 	sendRpcCall(
 		makePacket<KadProbeReq>(contact, "KadProbeReq"),
-		std::bind(&R2Kademlia::handleProbeResponse, this, ph::_1, ph::_2));
+		std::bind(&R2Kademlia::handleProbeResponse, this, ph::_1, ph::_2),
+		std::bind(&R2Kademlia::handleProbeResponse, this, ph::_1, ph::_2),
+		std::bind(&R2Kademlia::handleRPCTimeOut, this, ph::_1, ph::_2));
 }
 
 void R2Kademlia::handlePacket(std::unique_ptr<KadProbeReq> packet) {
@@ -342,7 +348,9 @@ void R2Kademlia::sendGetNeighbors(KadContact_p contact)
 	req->setContactsOnly(false);
 	sendRpcCall(
 		std::move(req),
-		std::bind(&R2Kademlia::handleQueryRouteResponse, this, ph::_1, ph::_2)
+		std::bind(&R2Kademlia::handleQueryRouteResponse, this, ph::_1, ph::_2),
+		std::bind(&R2Kademlia::handleQueryRouteResponse, this, ph::_1, ph::_2),
+		std::bind(&R2Kademlia::handleRPCTimeOut, this, ph::_1, ph::_2)
 	);
 }
 
@@ -461,7 +469,7 @@ void R2Kademlia::sendFindNode(const OverlayKey& key, bool exact, const OverlayKe
 		if (notvia_unreachable_node &&  notvia_failednode_neighbor)
 		{ // this is an immediate rediscovery packet
 			ASSERT(exact);
-			packet->setNot_via(true);
+			packet->setNotVia(true);
 			packet->setUnreachableNode(*notvia_unreachable_node);
 			packet->setDetectingNode(*notvia_failednode_neighbor);
 			sentRediscovery++;
@@ -471,7 +479,9 @@ void R2Kademlia::sendFindNode(const OverlayKey& key, bool exact, const OverlayKe
 		EV_TRACE << "sending KadFindNodeReq id=" << packet->getId() << endl;
 		sendRpcCall(
 			std::move(packet),
-			std::bind(&R2Kademlia::handleFindNodeResponse, this, ph::_1, ph::_2)
+			std::bind(&R2Kademlia::handleFindNodeResponse, this, ph::_1, ph::_2),
+			std::bind(&R2Kademlia::handleFindNodeResponse, this, ph::_1, ph::_2),
+			std::bind(&R2Kademlia::handleRPCTimeOut, this, ph::_1, ph::_2)
 			);
 	}
 	else
@@ -487,7 +497,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 	EV_TRACE << "KadFindNodeReq (id=" << packet->getId() << ", nonce=" << packet->getNonce() << ") received query for: " << query.shortStr() << endl;
 	bool is_rediscovery= false;
 	// check for presence of "not via" setting
-	if (packet->getNot_via())
+	if (packet->getNotVia())
 	{
 		EV_TRACE << "FindNodeReq contains not via <"
 			 << packet->getUnreachableNode().shortStr() << ' '
@@ -612,6 +622,40 @@ bool R2Kademlia::handleFindNodeResponse(KadPacket_p answer_, RPCState& rpcState)
 	readRTableRsp(std::move(answer));
 	return true;
 }
+
+
+
+bool R2Kademlia::handleRPCTimeOut(KadPacket_p answer_, RPCState& rpcState) {
+
+	if (rpcState.status != RPC_TIMEOUT) return true;
+	// answer_ will be nullptr and can be ignored
+
+	// check for retransmissions to perform
+	if (rpcState.retransmissions < rpcState.maxRetransmissions) {
+
+		rpcState.status= RPC_WAITING;
+		rpcState.retransmissions++;
+
+		EV_TRACE << "performing retransmission of RPC: " << rpcState.retransmissions
+			 << " of " << rpcState.maxRetransmissions << endl;
+
+		// need original message again
+		packet_p rpcCall= std::unique_ptr<packet_t>(rpcState.original_packet->dup());
+		RPCtimeoutMsg* rpc_timeout_msg= new RPCtimeoutMsg(rpcState.nonce);
+		rpcState.timeoutMsg= rpc_timeout_msg; // just a reference for cancelling
+		// start timer for RPC timeout
+		scheduleAt(simTime() + SimTime(rpcState.timeout_ms,SIMTIME_MS), rpc_timeout_msg);
+		// send out
+		sendPacket(std::move(rpcCall));
+
+		return false;
+	}
+	// else: no retransmissions
+	// nothing to do, RPC state will be deleted
+	
+	return true;
+}
+
 // ------------------------- policy foo --------------------------------------
 
 void R2Kademlia::onMissingNeighbor(KadPacket_p packet, NodePkt_p pkt) {
@@ -679,7 +723,7 @@ void R2Kademlia::onErrorPacket(KadError& error) {
 					if (affectedContact->isRediscovering())
 					{ // must check whether this is an error message for the rediscovery attempt
 						auto findnodereq= dynamic_cast<const KadFindNodeReq*>(original);
-						if (findnodereq->getNot_via() == false) 
+						if (findnodereq->getNotVia() == false) 
 						{
 							// original packet was not a rediscovery packet
 							break;
@@ -805,6 +849,7 @@ void R2Kademlia::sendUpdates()
 		KadContact_p notify_target= routingTable.getContact(notifyContact->first);
 		if (notify_target)
 		{
+			// UpdateRouteReqs are not expecting an answer, so no RPC call
 			auto packet = makePacket<KadUpdateRouteReq>(notify_target, "UpdateRoute");
 			EV_TRACE << "UpdateRoute packet to " << notifyContact->first.shortStr() << " w/ ";
 			const auto& updatelist(notifyContact->second);
@@ -869,6 +914,7 @@ void R2Kademlia::scheduleRediscovery(const OverlayKey& contactkey, const Overlay
 
 void R2Kademlia::scheduleUpdate(const KadContact& affectedContact, KadRouteUpdateAction action)
 {
+
 	// we collect all update information for neighbors
 	// send UpdateRouteReq to ID-wise closest Nodes
 	size_t contactsLen = std::max((size_t)findNodeNumber, routingTable.getSplitSize());
@@ -878,29 +924,46 @@ void R2Kademlia::scheduleUpdate(const KadContact& affectedContact, KadRouteUpdat
 	{ // if there are contacts left to notify
 		for (const auto& notifyContact : closeContacts)
 		{ // each ID-wise close contact gets an UpdateRouteReq from us
-
+			//EV_TRACE << "scheduleUpdate for " << affectedContact.getKey().shortStr() << " (" << action
+			//	 << ") notify:" << notifyContact->getKey().shortStr() ;
 			// except when it is the contact itself
-			if ( affectedContact.getKey() == notifyContact->getKey() )
+			if ( affectedContact.getKey() == notifyContact->getKey() ) {
+				//EV_TRACE << " is the same - skipped." << endl;
 				continue;
+			}
 			// or it is a physical neighbor of the affected node (here the last hop in the path)
 			if ( affectedContact.getPathLength() > 0
 			     &&
-			     affectedContact.getPath()[affectedContact.getPathLength()-1] == notifyContact->getKey() )
+			     affectedContact.getPath()[affectedContact.getPathLength()-1] == notifyContact->getKey() ) {
+				//EV_TRACE << " is the last hop - skipped." << endl;
+				
 				continue;
+			}
 
-			auto entry= updateQueue.find(affectedContact.getKey());
+			auto entry= updateQueue.find(notifyContact->getKey());
 			if ( entry == updateQueue.end() ) {
 				// need to create new entry
 				updateQueue[notifyContact->getKey()]= { std::make_pair(affectedContact, action) };
 			}
 			else
 			{
+				auto newelem= std::make_pair(affectedContact, action);
 				// entry exists, so we need to append this update to the list
-				entry->second.emplace_back(std::make_pair(affectedContact, action));
+				auto existelem= std::find_if(entry->second.rbegin(), entry->second.rend(),
+							     [&](const auto& p1) { return p1.first.getKey() == newelem.first.getKey(); });
+				if (existelem != entry->second.rend()) { // if exists: replace with newer info
+					*existelem= newelem;
+				}
+				else { // not found, append
+					entry->second.emplace_back(newelem);
+				}
 			}
+			//EV_TRACE << " done." << endl;
+
 		} // end for each contact
 			
 	} // endif
+
 	
 	if (!updateScheduled)
 	{

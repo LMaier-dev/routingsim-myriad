@@ -116,7 +116,7 @@ packet KadFindNodeReq extends KadRTableReq {
 	//TODO use destId for this
 	OverlayKey query;
 	bool exact = false;
-	bool not_via = false;
+	bool notVia = false;
 	OverlayKey DetectingNode;
 	OverlayKey UnreachableNode;
 }
