@@ -108,7 +108,17 @@ void KadRoutingTable::addPath(const OverlayKey& key, kad_path path)
 	// we simply discard this information as it cannot be more current than mine
 
 	const bool pathWasNotEmpty(path.size() > 0);
-	// find my key
+	// find my key -> this is a poisonous path via me, simply ignore this
+	if (std::find(path.begin(), path.end(), myKey) != path.end())
+	{
+		EV_TRACE << "not adding poisonous path to " << key.shortStr() << " leading via me (" << myKey.shortStr() << "): ";
+		for (const auto& node : path)
+			EV_TRACE << node.shortStr() << ' ';
+		EV_TRACE << endl;
+		return;
+	}
+
+	/*
 	path.erase(path.begin(), std::find(path.rbegin(), path.rend(), myKey).base());
 	// find target key
 	path.erase(std::find(path.begin(), path.end(), key), path.end());
@@ -118,7 +128,7 @@ void KadRoutingTable::addPath(const OverlayKey& key, kad_path path)
 		EV_TRACE << "Path about my PN " << key.shortStr() << " (leading via me) ignored" << endl;
 		return;
 	}
-	
+	*/
 
 	if (pathSimplification) {
 		// find other cycles/duplicates
@@ -163,6 +173,7 @@ void KadRoutingTable::addPath(const OverlayKey& key, kad_path path)
 void KadRoutingTable::addPath(const OverlayKey& key, const kad_path& path, const kad_path& viaPath)
 {
 	if (key == myKey) return;
+
 	if (pathSimplification) {
 		addPath(key, concatViaPath(viaPath, path));
 		return;
