@@ -653,6 +653,9 @@ bool R2Kademlia::handleRPCTimeOut(KadPacket_p answer_, RPCState& rpcState) {
 	// else: no retransmissions
 	// nothing to do, RPC state will be deleted
 	
+	EV_TRACE << "RPC Timeout for msg: " << rpcState.original_packet->getId()
+		 << " nonce:" << rpcState.nonce << endl;
+	
 	return true;
 }
 
