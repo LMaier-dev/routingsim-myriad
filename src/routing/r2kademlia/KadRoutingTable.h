@@ -29,6 +29,7 @@
 
 namespace routingsim {
 class KadRoutingTable;
+class NeighborTable;
 
 // contact type definitions
 using KadContact_p = const KadContact*;
@@ -85,11 +86,14 @@ class KadRoutingTable : public cObject
 {
 	friend KadBucket;
 public:
-	KadRoutingTable() {};
-	void init(const OverlayKey& myKey, KadPolicy* policy,
-			size_type accelerationFactor, size_type bucketSize,
-			bool proximityNeighborSelection, bool pathSimplification=true);
+        KadRoutingTable(const NeighborTable& ro_neighbortable) : neighbortable(ro_neighbortable) {};
+	void init(const OverlayKey& myKey,
+		  KadPolicy* policy,
+		  size_type accelerationFactor, size_type bucketSize,
+		  bool proximityNeighborSelection, bool pathSimplification=true);
 
+	void clear() { buckets.clear(); myKey= OverlayKey::UNSPECIFIED_KEY; };
+	
 	// from cObject()
 	virtual std::string str() const;
 
@@ -202,6 +206,7 @@ protected:
 	KadContact *getContactInternal(const OverlayKey& key) { return const_cast<KadContact*>(getContact(key)); }
 
 private:
+	const NeighborTable& neighbortable; // only for read-only access
 	/**
 	 * number of bits used for accelerated lookup
 	 * called "b" in research papers.

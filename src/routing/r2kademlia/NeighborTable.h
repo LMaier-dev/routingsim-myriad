@@ -37,20 +37,20 @@ public:
 	/// removes the entry with the given node id if present
 	void removeNeighbor(nodeid_t nodeId);
 	/// returns a vector of all known neighbors
-	std::vector<OverlayKey> getNeighbors();
+	std::vector<OverlayKey> getNeighbors() const;
 	/// returns the node id of the neighbor with the given key.
 	/// @returns unspecified_node if the key is not found
-	nodeid_t getNodeId(const OverlayKey& key);
-	/// returns the overlay key of the given neigbor node id if known, else unspecified
-	const OverlayKey& getOverlayKey(nodeid_t nodeId);
-	/// returns true if the key belongs to a known neigbor
-	inline bool isNeighbor(const OverlayKey& key) { return getNodeId(key) != undefined_node; }
-	/// returns true if the node id belongs to a known neigbor
-	inline bool isNeighbor(nodeid_t nodeId) { return !getOverlayKey(nodeId).isUnspecified(); }
+	nodeid_t getNodeId(const OverlayKey& key) const;
+	/// returns the overlay key of the given neighbor node id if known, else unspecified
+	const OverlayKey& getOverlayKey(nodeid_t nodeId) const;
+	/// returns true if the key belongs to a known neighbor
+	inline bool isNeighbor(const OverlayKey& key) const { return getNodeId(key) != undefined_node; }
+	/// returns true if the node id belongs to a known neighbor
+	inline bool isNeighbor(nodeid_t nodeId) const{ return !getOverlayKey(nodeId).isUnspecified(); }
 	/// clears the table
 	void clear();
 	/// returns the number of saved neighbors
-	size_t size() { return table.size(); }
+	size_t size() const { return table.size(); }
 
 	/// Common stdc++ console output method
 	friend std::ostream& operator<<(std::ostream& os, const NeighborTable& c);
@@ -59,10 +59,42 @@ private:
 	inner_table::iterator getIter(nodeid_t nodeId);
 	/// returns an iterator pointing to the entry with the given overlay key
 	inner_table::iterator getIter(const OverlayKey& key);
+	/// returns an iterator pointing to the entry with the given node id
+	inner_table::const_iterator getIter(nodeid_t nodeId) const;
+	/// returns an iterator pointing to the entry with the given overlay key
+	inner_table::const_iterator getIter(const OverlayKey& key) const;
 private:
 	/// storage for the overlay key, node id pairs
 	inner_table table;
 };
+
+inline
+inner_table::iterator NeighborTable::getIter(nodeid_t nodeId) {
+	return std::find_if(table.begin(),table.end(),
+			    [=](const auto& elem){ return std::get<nodeid_t>(elem) == nodeId; });
+}
+
+
+inline
+inner_table::iterator NeighborTable::getIter(const OverlayKey& key) {
+	return std::find_if(table.begin(),table.end(),
+			    [&](const auto& elem){ return std::get<OverlayKey>(elem) == key; });
+}
+
+
+inline
+inner_table::const_iterator NeighborTable::getIter(nodeid_t nodeId) const {
+	return std::find_if(table.begin(),table.end(),
+			    [=](const auto& elem){ return std::get<nodeid_t>(elem) == nodeId; });
+}
+
+
+inline
+inner_table::const_iterator NeighborTable::getIter(const OverlayKey& key) const {
+	return std::find_if(table.begin(),table.end(),
+			    [&](const auto& elem){ return std::get<OverlayKey>(elem) == key; });
+}
+
 
 } //namespace
 

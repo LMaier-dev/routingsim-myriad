@@ -42,7 +42,7 @@ void NeighborTable::removeNeighbor(nodeid_t nodeId){
 		table.erase(it);
 }
 
-std::vector<OverlayKey> NeighborTable::getNeighbors()
+std::vector<OverlayKey> NeighborTable::getNeighbors() const
 {
 	std::vector<OverlayKey> result{};
 	result.reserve(table.size());
@@ -53,7 +53,7 @@ std::vector<OverlayKey> NeighborTable::getNeighbors()
 }
 
 
-nodeid_t NeighborTable::getNodeId(const OverlayKey& key) {
+nodeid_t NeighborTable::getNodeId(const OverlayKey& key) const {
 	auto it = getIter(key);
 	if (it != table.end())
 		return std::get<nodeid_t>(*it);
@@ -61,7 +61,7 @@ nodeid_t NeighborTable::getNodeId(const OverlayKey& key) {
 		return undefined_node;
 }
 
-const OverlayKey& NeighborTable::getOverlayKey(nodeid_t nodeId) {
+const OverlayKey& NeighborTable::getOverlayKey(nodeid_t nodeId) const {
 	auto it = getIter(nodeId);
 	if (it != table.end())
 		return std::get<OverlayKey>(*it);
@@ -82,19 +82,6 @@ std::ostream& operator<<(std::ostream& os, const NeighborTable& c) {
 	return os;
 }
 
-inner_table::iterator NeighborTable::getIter(nodeid_t nodeId){
-	for(auto it=table.begin(); it != table.end(); it++){
-		if(std::get<nodeid_t>(*it) == nodeId)
-			return it;
-	}
-	return table.end();
-}
-inner_table::iterator NeighborTable::getIter(const OverlayKey& key){
-	for(auto it=table.begin(); it != table.end(); it++){
-		if(std::get<OverlayKey>(*it) == key)
-			return it;
-	}
-	return table.end();
-}
+
 
 } //namespace

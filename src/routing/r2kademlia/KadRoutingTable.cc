@@ -148,6 +148,16 @@ void KadRoutingTable::addPath(const OverlayKey& key, kad_path path)
 			contact->setPhysicalNeighbor();
 			EV_TRACE << "Contact existed already, but seems to be a PN now: " << *contact << endl;
 		}
+
+		// sanity check: do not use paths that lead via a valid neighbor as first hop
+		if (path.size() > 0) {
+			// first hop must be found in neighbortable
+			if (not neighbortable.isNeighbor(path[0])) {
+				EV_ERROR << "Tried to use add path with non physical neighbor "
+					 << path[0] << " as next hop - ignoring";
+				return;
+			}
+		}
 		
 		// if contact was marked invalid, update path and status:
 		// since this information is hopefully more current, path should be valid (again)

@@ -103,6 +103,7 @@ class R2Kademlia : public RPCProtocol, public KadPolicy, public StatisticSample
 	//@}
 	virtual void sampleStatistics (Statistics &stats) override;
 public:
+        R2Kademlia() : routingTable(neighborTable) {};
 	/** @name policy functions called by routing table */
 	//@{
 	/** called when last contact is removed from a bucket*/

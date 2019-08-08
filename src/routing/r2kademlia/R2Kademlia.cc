@@ -211,7 +211,7 @@ void R2Kademlia::reset() {
 	EV << "resetting state of R2Kademlia" << endl;
 	getKadObserver().registerDown(myOverlayKey, node().getNodeId());
 	neighborTable.clear();
-	routingTable = KadRoutingTable();
+	routingTable.clear();
 	unbind(PAYLOAD_TYPE);
 	onInitialize();
 	//TODO optimization: implement clear function in routing table
@@ -722,7 +722,7 @@ void R2Kademlia::onErrorPacket(KadError& error) {
 					scheduleRediscovery(affectedContact->getKey(), reportingNode, failedNextHop);
 				}
 				else
-				{ // may be already invalid or rediscovering
+				{ // maybe already invalid or rediscovering
 					if (affectedContact->isRediscovering())
 					{ // must check whether this is an error message for the rediscovery attempt
 						auto findnodereq= dynamic_cast<const KadFindNodeReq*>(original);
@@ -850,8 +850,8 @@ void R2Kademlia::sendUpdates()
 	      notifyContact= updateQueue.erase(notifyContact) )
 	{
 		KadContact_p notify_target= routingTable.getContact(notifyContact->first);
-		if (notify_target)
-		{
+		if (notify_target && notify_target->isValid())
+		{ // only notify contacts that we have a path to (i.e., that are valid)
 			// UpdateRouteReqs are not expecting an answer, so no RPC call
 			auto packet = makePacket<KadUpdateRouteReq>(notify_target, "UpdateRoute");
 			EV_TRACE << "UpdateRoute packet to " << notifyContact->first.shortStr() << " w/ ";
