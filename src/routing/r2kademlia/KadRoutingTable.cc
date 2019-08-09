@@ -153,7 +153,7 @@ void KadRoutingTable::addPath(const OverlayKey& key, kad_path path)
 		if (path.size() > 0) {
 			// first hop must be found in neighbortable
 			if (not neighbortable.isNeighbor(path[0])) {
-				EV_ERROR << "Tried to use add path with non physical neighbor "
+				EV_ERROR << "Tried to use add path with invalid physical neighbor "
 					 << path[0] << " as next hop - ignoring";
 				return;
 			}

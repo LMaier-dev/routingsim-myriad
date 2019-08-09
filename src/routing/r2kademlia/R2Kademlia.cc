@@ -726,14 +726,21 @@ void R2Kademlia::onErrorPacket(KadError& error) {
 					if (affectedContact->isRediscovering())
 					{ // must check whether this is an error message for the rediscovery attempt
 						auto findnodereq= dynamic_cast<const KadFindNodeReq*>(original);
-						if (findnodereq->getNotVia() == false) 
-						{
-							// original packet was not a rediscovery packet
+						if (findnodereq->getNotVia() == false) {
+							// failed packet was not a rediscovery packet
 							break;
 						}
+						else {
+							EV_INFO << "Rediscovery failed - removing invalid contact "
+								<< affectedContact->getKey().shortStr()
+								<< " because of error packet" << endl;
+
+							routingTable.removeContact(affectedContact->getKey());
+						}
 					}
-					EV_INFO << "Removing invalid contact " << affectedContact->getKey().shortStr() << " because of error packet" << endl;
-					routingTable.removeContact(affectedContact->getKey());
+
+					// invalid contact should be scheduled for rediscovery
+
 				}
 			}
 			// else contact may have been removed meanwhile (e.g., by contact replacement)
