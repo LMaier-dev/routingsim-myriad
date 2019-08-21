@@ -31,7 +31,7 @@ void R2Kademlia::onInitialize() {
 	EV << "R2Kademlia::onInitialize()" << endl;
 	myOverlayKey = OverlayKey::random(getRNG(0));
 	getKadObserver().registerUp(myOverlayKey, node().getNodeId());
-	bind(PAYLOAD_TYPE);
+	bind(KAD_CTRL_PACKET_TYPE);
 
 	ASSERT(par("accelerationFactor").intValue() > 0);
 	ASSERT(par("bucketSize").intValue() > 1);
@@ -102,7 +102,7 @@ void R2Kademlia::onDisconnect( nodeid_t nid ) {
 
 
 void R2Kademlia::onMessage( NodePkt_p pkt ) {
-	ASSERT(pkt->getType() == PAYLOAD_TYPE);
+	ASSERT(pkt->getType() == KAD_CTRL_PACKET_TYPE);
 
 	// we should check whether the link via this message travelled is
 	// still active, otherwise we should drop this message as it was affected
@@ -212,7 +212,7 @@ void R2Kademlia::reset() {
 	getKadObserver().registerDown(myOverlayKey, node().getNodeId());
 	neighborTable.clear();
 	routingTable.clear();
-	unbind(PAYLOAD_TYPE);
+	unbind(KAD_CTRL_PACKET_TYPE);
 	onInitialize();
 	//TODO optimization: implement clear function in routing table
 	//TODO clear timers
@@ -247,7 +247,7 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt) {
 	const OverlayKey& nextHop = packet->getNextHop();
 	nodeid_t nid = neighborTable.getNodeId(nextHop);
 	if (nid != undefined_node) {
-		nodePkt->setType(PAYLOAD_TYPE);
+		nodePkt->setType(KAD_CTRL_PACKET_TYPE);
 		nodePkt->encapsulate(packet.release());
 		sendToNode(nid, std::move(nodePkt));
 		forwardedPackets++;
@@ -843,7 +843,7 @@ NodePkt_p R2Kademlia::makeHelloPacket()
 	hello->setSourceId(node().getNodeId());
 	hello->setNonce(0);
 	NodePkt_p nodePkt = std::make_unique<NodePkt>(hello->getName());
-	nodePkt->setType(PAYLOAD_TYPE);
+	nodePkt->setType(KAD_CTRL_PACKET_TYPE);
 	nodePkt->encapsulate(hello.release());
 	return nodePkt;
 }

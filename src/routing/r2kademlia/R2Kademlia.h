@@ -198,10 +198,12 @@ private:
 private:
 	/// the overlay key of this node
 	OverlayKey myOverlayKey;
+	/// Table of direct physical neighbors
 	NeighborTable neighborTable;
+	/// Kademlia-like Routing Table containing Paths to contacts
 	KadRoutingTable routingTable;
 	/// packet type used for Node::bind()
-	static const int PAYLOAD_TYPE=5;
+	static const int KAD_CTRL_PACKET_TYPE=5;
 
 	/** @name config, set by parameters*/
 	//@{

@@ -108,8 +108,6 @@ public:
 	// string representations & node key attributes
 	//-------------------------------------------------------------------------
 
-
-
 	/**
 	 * Returns a string representation of this key
 	 *
@@ -443,6 +441,12 @@ public:
 	bool isBetweenLR(const OverlayKey& keyA, const OverlayKey& keyB) const;
 
 	//-------------------------------------------------------------------------
+	// Raw read access, required for crypto hash functions
+	//-------------------------------------------------------------------------
+	
+	const uint8_t* getRawKey() const { return  reinterpret_cast<const uint8_t*>(key); }
+	
+	//-------------------------------------------------------------------------
 	// static methods
 	//-------------------------------------------------------------------------
 
@@ -505,7 +509,7 @@ public:
 private:
 	// private constants
 
-	static const uint32_t MAX_KEYLENGTH = 160; /**< maximum length of the key */
+	static constexpr uint32_t MAX_KEYLENGTH = 160; /**< maximum length of the key */
 	static uint32_t keyLength; /**< actual length of the key */
 	static uint32_t aSize; /**< number of needed machine words to hold the key*/
 	static mp_limb_t GMP_MSB_MASK; /**< bits to fill up if key does not

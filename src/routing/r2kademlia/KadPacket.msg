@@ -15,6 +15,7 @@
 cplusplus {{
 #include "BaseTypes.h"
 #include "OverlayKey.h"
+#include "PathID.h"
 #include "RPC.h"
 #include <memory>
 }}
@@ -43,6 +44,7 @@ class noncobject OverlayKey;
 class noncobject nodeid_t;
 class noncobject nonce_t;
 
+// a KAD control packet
 packet KadPacket {
 	@customize(true);
 	OverlayKey route[];
@@ -51,4 +53,14 @@ packet KadPacket {
 	nonce_t nonce;
 	uint8_t type enum(KadPDUType);
 	uint16_t hopLimit = 100;
+}
+
+class noncobject PathID;
+
+// a fast path packet
+packet KadFPPacket {
+	OverlayKey srcNodeID;
+	PathID destPathID;
+	uint8_t type enum(KadPDUType);
+	uint16_t hopLimit = 255;
 }
