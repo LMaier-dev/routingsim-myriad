@@ -32,6 +32,8 @@ std::ostream& operator<<(std::ostream& os, const PathID& pid);
 
 PathID getPathID(const kad_path& path);
 
+PathID getPathID(const OverlayKey& prependKey, const kad_path& path);
+
 
 } // end namespace
 
