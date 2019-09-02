@@ -7,14 +7,32 @@
 
 #include "foundation.h"
 #include <BaseTypes.h>
-#include <PathID.h>
-
 #include <unordered_map>
+
+#include "PathID.h"
 
 namespace routingsim {
 
-	// outgoing path ID and next hop
-	using std::pair<PathID,nodeid_t> = FwdTableEntry;
+	class FwdTableEntry {
+	public:
+		PathID outgoingPathID;
+		nodeid_t nextHopNode;
+		
+		enum class State {
+			undefined     = 0,
+			valid         = 1,
+			obsolete      = 2,
+			invalid       = 3
+		} fwdState = State::undefined;
+		
+		enum class Action {
+		     undefined     = 0,
+		     fwdNextPathID = 1,
+		     fwdNextKadId  = 2,
+		     fwdlocal      = 3
+		} fwdAction = Action::undefined;
+	};
+	
 
 	class FwdTableNodeID {
 	public:
@@ -22,10 +40,11 @@ namespace routingsim {
 	};
 
 
-	clase FwdTablePathID {
+	class FwdTablePathID {
 	public:
-		std::unordered_map<PathID,FwdTableEntry>;
-	}
+		std::unordered_map<PathID,FwdTableEntry> PIDFwdTable;
+	};
+	
 } // end namespace
 
 #endif // __ROUTINGSIM_FwdTable_H_

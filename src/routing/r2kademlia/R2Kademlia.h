@@ -202,8 +202,16 @@ private:
 	NeighborTable neighborTable;
 	/// Kademlia-like Routing Table containing Paths to contacts
 	KadRoutingTable routingTable;
+
+	/// Forwarding Table according to node IDs
+	FwdTableNodeID fwdTableNodeID;
+
+	/// Forwarding Table according to Path IDs
+	FwdTablePathID fwdTablePathID;
+	
 	/// packet type used for Node::bind()
-	static const int KAD_CTRL_PACKET_TYPE=5;
+	static const int KAD_CTRL_PACKET_TYPE = 5;
+	static const int KAD_DATA_PACKET_TYPE = 6;
 
 	/** @name config, set by parameters*/
 	//@{

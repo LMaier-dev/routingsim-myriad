@@ -768,12 +768,3 @@ inline void omnet_random(mp_limb_t *r1p, mp_size_t r1n, cRNG* rng)
 #endif
 
 
-namespace std {
-
-	std::size_t std::hash<OverlayKey>::operator()(const OverlayKey& k) const {
-			using std::size_t;
-			
-			return k.hash();	
-	}
-
-}

@@ -21,6 +21,8 @@
 #include "KadRoutingTable.h"
 #include "KadObserver.h"
 
+#include "FwdTable.h"
+
 namespace routingsim {
 // for std::bind with callback functions
 namespace ph = std::placeholders;
@@ -32,6 +34,7 @@ void R2Kademlia::onInitialize() {
 	myOverlayKey = OverlayKey::random(getRNG(0));
 	getKadObserver().registerUp(myOverlayKey, node().getNodeId());
 	bind(KAD_CTRL_PACKET_TYPE);
+	bind(KAD_DATA_PACKET_TYPE);
 
 	ASSERT(par("accelerationFactor").intValue() > 0);
 	ASSERT(par("bucketSize").intValue() > 1);
@@ -102,7 +105,8 @@ void R2Kademlia::onDisconnect( nodeid_t nid ) {
 
 
 void R2Kademlia::onMessage( NodePkt_p pkt ) {
-	ASSERT(pkt->getType() == KAD_CTRL_PACKET_TYPE);
+		
+	ASSERT(pkt->getType() == KAD_CTRL_PACKET_TYPE || pkt->getType() == KAD_DATA_PACKET_TYPE);
 
 	// we should check whether the link via this message travelled is
 	// still active, otherwise we should drop this message as it was affected
@@ -213,6 +217,7 @@ void R2Kademlia::reset() {
 	neighborTable.clear();
 	routingTable.clear();
 	unbind(KAD_CTRL_PACKET_TYPE);
+	unbind(KAD_DATA_PACKET_TYPE);
 	onInitialize();
 	//TODO optimization: implement clear function in routing table
 	//TODO clear timers

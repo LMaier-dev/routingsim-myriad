@@ -588,5 +588,14 @@ namespace std {
 	public:
 		size_t operator()(const OverlayKey& k) const;
 	};
+
+
+	inline
+	std::size_t std::hash<OverlayKey>::operator()(const OverlayKey& k) const {
+			using std::size_t;
+			
+			return k.hash();	
+	};
+
 }
 #endif
