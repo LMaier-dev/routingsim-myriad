@@ -33,6 +33,7 @@ namespace routingsim {
 using kad_path = std::vector<OverlayKey>;
 using size_type = std::size_t;
 
+
 class KadContact
 {
 public:
@@ -87,6 +88,13 @@ private:
 	State state= State::undefined; /// the state of the contact
 	bool physicalNeighbor= false; /// true if we have a direct physical link to this neighbor
 };
+
+
+// contact type definitions
+using KadContact_p = const KadContact*;
+using KadContactList = std::vector<KadContact_p>;
+
+/********************* inline methods *********************/
 
 
 inline KadContact& KadContact::operator=(const KadContact& other)

@@ -31,10 +31,6 @@ namespace routingsim {
 class KadRoutingTable;
 class NeighborTable;
 
-// contact type definitions
-using KadContact_p = const KadContact*;
-using KadContactList = std::vector<KadContact_p>;
-
 class KadBucket
 {
 	friend KadRoutingTable;

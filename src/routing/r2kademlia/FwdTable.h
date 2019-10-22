@@ -9,6 +9,7 @@
 #include <BaseTypes.h>
 #include <unordered_map>
 
+#include "KadContact.h"
 #include "PathID.h"
 
 namespace routingsim {
@@ -43,6 +44,8 @@ namespace routingsim {
 	class FwdTablePathID {
 	public:
 		std::unordered_map<PathID,FwdTableEntry> PIDFwdTable;
+
+		void addEntry(KadContact_p contact);
 	};
 	
 } // end namespace
