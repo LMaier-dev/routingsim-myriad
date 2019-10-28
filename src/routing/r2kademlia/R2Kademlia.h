@@ -25,6 +25,7 @@
 #include "KadPackets_m.h"
 #include "NeighborTable.h"
 #include "KadRoutingTable.h"
+#include "FwdTable.h"
 #include "RPC.h"
 
 namespace routingsim {
@@ -204,7 +205,7 @@ private:
 	KadRoutingTable routingTable;
 
 	/// Forwarding Table according to node IDs
-	FwdTableNodeID fwdTableNodeID;
+	/// fwtabwdTableNodeID fwdTableNodeID;
 
 	/// Forwarding Table according to Path IDs
 	FwdTablePathID fwdTablePathID;

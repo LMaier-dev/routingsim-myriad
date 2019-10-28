@@ -9,9 +9,17 @@ void FwdTablePathID::addEntry(KadContact_p contact)
 		return;
 
 	const kad_path& currentpath(contact->getPath());
-	if (currentpath.size()==0)
+	
+	if ( currentpath.size()==0 )
 	{ // next hop is our physical neighbor
+		PathID incomingPathID(getPathID(R2Kademlia::getOverlayKey(), contact->getKey()));
 		
+		FwdTableEntry fwdentry;
+		
+		fwdentry.outgoingPathID= getPathID(currentpath);
+		fwdentry.nextHopNode= contact->getKey();
+		fwdentry.fwdState= State::valid;
+		fwdentry.fwdAction= Action::fwdNextKadId;
 	}
 	else
 	{
@@ -32,6 +40,8 @@ void FwdTablePathID::addEntry(KadContact_p contact)
 			fwdentry.fwdState= State::valid;
 			fwdentry.fwdAction= Action::fwdNextPathID;
 		}
+		
+		PIDFwdTable[incomingPathID]= fwdentry;
 	}
 }
 	

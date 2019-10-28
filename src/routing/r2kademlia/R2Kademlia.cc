@@ -781,13 +781,15 @@ void R2Kademlia::onBucketEmpty(KadBucket& bucket) {
 
 
 void R2Kademlia::onNewContact(KadContact_p contact) {
+	
 	if (contact->getPathLength() < discoveryRadius)
 		sendGetNeighbors(contact);
 	
 	if (contact->isValid())
 	{
-		fwdTablePathID.add(contact);
+		fwdTablePathID.addEntry(contact);
 	}
+	
 }
 
 
