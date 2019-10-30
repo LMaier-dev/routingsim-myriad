@@ -32,6 +32,7 @@ Define_Module(R2Kademlia);
 void R2Kademlia::onInitialize() {
 	EV << "R2Kademlia::onInitialize()" << endl;
 	myOverlayKey = OverlayKey::random(getRNG(0));
+	fwdTablePathID.setOwnNodeID(&myOverlayKey);
 	getKadObserver().registerUp(myOverlayKey, node().getNodeId());
 	bind(KAD_CTRL_PACKET_TYPE);
 	bind(KAD_DATA_PACKET_TYPE);

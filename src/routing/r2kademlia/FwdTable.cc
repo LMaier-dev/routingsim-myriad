@@ -1,4 +1,5 @@
 #include "FwdTable.h"
+#include "R2Kademlia.h"
 
 namespace routingsim {
 
@@ -8,41 +9,24 @@ void FwdTablePathID::addEntry(KadContact_p contact)
 	if (contact == nullptr)
 		return;
 
-	const kad_path& currentpath(contact->getPath());
+	// Routingtable entry on node 4: Dest 5: < 3 2 >
+
+	kad_path currentpath(contact->getPath());
+	// add destination node ID to path (will never be empty then)
+	currentpath.push_back(contact->getKey());
+
+	PathID incomingPathID(getPathID(*ownNodeID, currentpath));
+		
+	FwdTableEntry fwdentry;
 	
-	if ( currentpath.size()==0 )
-	{ // next hop is our physical neighbor
-		PathID incomingPathID(getPathID(R2Kademlia::getOverlayKey(), contact->getKey()));
+	fwdentry.outgoingPathID= getPathID(currentpath);
+	fwdentry.nextHopNode= currentpath[0];
+	fwdentry.fwdState= FwdTableEntry::State::valid;
+	fwdentry.fwdAction=
+		(currentpath.size()==1) // next hop is our physical neighbor
+		? FwdTableEntry::Action::fwdNextKadId : FwdTableEntry::Action::fwdNextPathID;
 		
-		FwdTableEntry fwdentry;
-		
-		fwdentry.outgoingPathID= getPathID(currentpath);
-		fwdentry.nextHopNode= contact->getKey();
-		fwdentry.fwdState= State::valid;
-		fwdentry.fwdAction= Action::fwdNextKadId;
-	}
-	else
-	{
-		PathID incomingPathID(getPathID(R2Kademlia::getOverlayKey(), currentpath));
-		
-		FwdTableEntry fwdentry;
-		if (currentpath.size()==1)
-		{
-			fwdentry.outgoingPathID= getPathID(currentpath);
-			fwdentry.nextHopNode= currentpath[0];
-			fwdentry.fwdState= State::valid;
-			fwdentry.fwdAction= Action::fwdNextPathID;
-		}
-		else
-		{
-			fwdentry.outgoingPathID= getPathID(currentpath);
-			fwdentry.nextHopNode= currentpath[0];
-			fwdentry.fwdState= State::valid;
-			fwdentry.fwdAction= Action::fwdNextPathID;
-		}
-		
-		PIDFwdTable[incomingPathID]= fwdentry;
-	}
+	PIDFwdTable[incomingPathID]= fwdentry;
 }
 	
 } // end namespace

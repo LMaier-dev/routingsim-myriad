@@ -19,9 +19,9 @@
  */
 
 #include "KadContact.h"
-#include "PathID.h"
 
 namespace routingsim {
+
 std::ostream& operator<<(std::ostream& os, const KadContact& c) {
 	os << c.getKey().shortStr();
 	// state is next V = valid, I = invalid, U = undefined
@@ -39,7 +39,7 @@ std::ostream& operator<<(std::ostream& os, const KadContact& c) {
 		os << "< ";
 		for (auto key : c.getPath())
 			os << key.shortStr() << ' ';
-		os << "> = " << PathID(c.getPath());
+		os << "> ";
 		
 	}
 	return os;

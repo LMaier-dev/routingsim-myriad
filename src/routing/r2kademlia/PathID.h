@@ -24,17 +24,16 @@ public:
 	PathID(const kad_path& path);
 	bool isUndefined() const { return pathId == UndefinedPathID; };
 	uint64_t operator()() const { return pathId; };
+	bool operator==(const PathID& other) const { return pathId == other.pathId; }
 
 };
-
-
-std::ostream& operator<<(std::ostream& os, const PathID& pid);
 
 
 PathID getPathID(const kad_path& path);
 
 PathID getPathID(const OverlayKey& prependKey, const kad_path& path);
 
+std::ostream& operator<<(std::ostream& os, const PathID& pid);
 
 } // end namespace
 
