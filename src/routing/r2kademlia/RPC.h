@@ -32,7 +32,6 @@ using packet_p = std::unique_ptr<KadPacket>;
 
 /**
  * A basic implementation of a component that sets up rpc calls.
- * TODO retransmissions and timeouts
  */
 class RPCProtocol : public Protocol {
 
