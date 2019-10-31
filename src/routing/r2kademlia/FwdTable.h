@@ -47,6 +47,10 @@ namespace routingsim {
 		// cannot use constructor to set ID, because OnInitialize generates the Node ID
 	        void setOwnNodeID(const OverlayKey* myownNodeID) { ownNodeID= myownNodeID; };
 		void addEntry(KadContact_p contact);
+
+		// from cObject()
+		virtual std::string str() const;
+
 	private:
 		const OverlayKey* ownNodeID = nullptr;
 	};

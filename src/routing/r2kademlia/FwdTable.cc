@@ -3,6 +3,51 @@
 
 namespace routingsim {
 
+std::string FwdTablePathID::str() const
+{
+	std::ostringstream out;
+
+	for (auto& pidfwdtableentry : PIDFwdTable)
+	{
+		const FwdTableEntry&  fwdentry= pidfwdtableentry.second;
+
+		out << "in:[" << pidfwdtableentry.first << "] (";
+		switch (fwdentry.fwdState) {
+			case FwdTableEntry::State::undefined:
+				out << 'U';
+			case FwdTableEntry::State::valid:
+				out << 'V';
+			case FwdTableEntry::State::obsolete:
+				out << 'O';
+			case FwdTableEntry::State::invalid:
+				out << 'I';
+			default:
+				out << '?';
+		} // end switch;
+
+	        out << ") A:";
+		switch (fwdentry.fwdAction) {
+			case FwdTableEntry::Action::undefined:
+				out << 'U';
+			case FwdTableEntry::Action::fwdNextPathID:
+				out << 'P';
+			case FwdTableEntry::Action::fwdNextKadId:
+				out << 'N';
+			case FwdTableEntry::Action::fwdlocal:
+				out << 'L';
+			default:
+				out << '?';
+		} // end switch;
+
+		out << " out: " << fwdentry.outgoingPathID
+		    << "nh: " << fwdentry.nextHopNode;
+	}
+
+	return out.str();
+
+}
+
+
 
 void FwdTablePathID::addEntry(KadContact_p contact)
 {
