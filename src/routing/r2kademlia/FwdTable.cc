@@ -11,36 +11,43 @@ std::string FwdTablePathID::str() const
 	{
 		const FwdTableEntry&  fwdentry= pidfwdtableentry.second;
 
-		out << "in:[" << pidfwdtableentry.first << "] (";
+		out << "[" << pidfwdtableentry.first << "=>" << fwdentry.outgoingPathID << "] (";
 		switch (fwdentry.fwdState) {
 			case FwdTableEntry::State::undefined:
 				out << 'U';
+				break;
 			case FwdTableEntry::State::valid:
 				out << 'V';
+				break;
 			case FwdTableEntry::State::obsolete:
 				out << 'O';
+				break;
 			case FwdTableEntry::State::invalid:
 				out << 'I';
+				break;
 			default:
 				out << '?';
 		} // end switch;
 
-	        out << ") A:";
+	        out << ':';
 		switch (fwdentry.fwdAction) {
 			case FwdTableEntry::Action::undefined:
 				out << 'U';
+				break;
 			case FwdTableEntry::Action::fwdNextPathID:
 				out << 'P';
+				break;
 			case FwdTableEntry::Action::fwdNextKadId:
 				out << 'N';
+				break;
 			case FwdTableEntry::Action::fwdlocal:
 				out << 'L';
+				break;
 			default:
 				out << '?';
 		} // end switch;
 
-		out << " out: " << fwdentry.outgoingPathID
-		    << "nh: " << fwdentry.nextHopNode;
+		out << ") nh <" << fwdentry.nextHopNode.shortStr() << ">; ";
 	}
 
 	return out.str();
@@ -51,6 +58,8 @@ std::string FwdTablePathID::str() const
 
 void FwdTablePathID::addEntry(KadContact_p contact)
 {
+	EV_TRACE << "FwdTablePathID::addEntry called" << endl;
+	
 	if (contact == nullptr)
 		return;
 
@@ -72,6 +81,7 @@ void FwdTablePathID::addEntry(KadContact_p contact)
 		? FwdTableEntry::Action::fwdNextKadId : FwdTableEntry::Action::fwdNextPathID;
 		
 	PIDFwdTable[incomingPathID]= fwdentry;
+	EV_TRACE << "FwdTablePathID::addEntry finished." << endl;
 }
 	
 } // end namespace

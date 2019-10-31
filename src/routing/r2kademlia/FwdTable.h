@@ -41,7 +41,7 @@ namespace routingsim {
 	};
 
 
-	class FwdTablePathID {
+	class FwdTablePathID : public cObject {
 	public:
 		std::unordered_map<PathID,FwdTableEntry> PIDFwdTable;
 		// cannot use constructor to set ID, because OnInitialize generates the Node ID

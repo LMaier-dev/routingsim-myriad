@@ -65,6 +65,7 @@ void R2Kademlia::onInitialize() {
 	WATCH(myOverlayKey);
 	WATCH(neighborTable);
 	WATCH_OBJ(routingTable);
+	WATCH_OBJ(fwdTablePathID);
 
 	sendToNeighbors(makeHelloPacket());
 }
@@ -345,12 +346,12 @@ bool R2Kademlia::handleProbeResponse(KadPacket_p answer, RPCState& rpcState) {
 	return true;
 }
 
-// GET NEIGHBOR
+// Request Physical Neighbors from contact 
 void R2Kademlia::sendGetNeighbors(KadContact_p contact)
 {
 	EV_TRACE << "sending query route request to " << *contact << endl;
 	auto req = makePacket<KadQueryRouteReq>(contact, "KadQueryRouteReq");
-	req->setNeighborhood(1);
+	req->setNeighborhood(1); // only physical neighbors (1 hop away)
 	req->setContactsOnly(false);
 	sendRpcCall(
 		std::move(req),
@@ -361,7 +362,9 @@ void R2Kademlia::sendGetNeighbors(KadContact_p contact)
 }
 
 void R2Kademlia::handlePacket(std::unique_ptr<KadQueryRouteReq> packet) {
-	EV_TRACE << "received KadQueryRouteRsp from " << packet->getSource().shortStr() << endl;
+	EV_TRACE << "received KadQueryRouteReq from " << packet->getSource().shortStr() << endl;
+
+	// TODO currently only getting physical neighbors is implemented
 	ASSERT(packet->getNeighborhood() == 1);
 	ASSERT(!packet->getContactsOnly());
 	auto response = makeAnswer<KadQueryRouteRsp>(*packet);
@@ -782,7 +785,9 @@ void R2Kademlia::onBucketEmpty(KadBucket& bucket) {
 
 
 void R2Kademlia::onNewContact(KadContact_p contact) {
-	
+
+	EV_TRACE << "onNewContact(" << contact->getKey().shortStr() << ") called" << endl;
+
 	if (contact->getPathLength() < discoveryRadius)
 		sendGetNeighbors(contact);
 	

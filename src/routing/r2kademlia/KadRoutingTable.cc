@@ -246,9 +246,13 @@ void KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path)
 		handleNewContact(key, std::move(path));
 		return;
 	}
+
 	auto contact = std::make_unique<KadContact>(key, std::move(path));
 	if (bucket.size() < bucketSize)
+	{
+		policy->onNewContact(contact.get());
 		bucket.contacts.push_back(std::move(contact));
+	}
 	else {
 		if (not proximityNeighborSelection) {
 			EV_INFO << "dropping new contact " << *contact << endl;
