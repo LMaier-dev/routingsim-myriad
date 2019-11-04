@@ -1,5 +1,6 @@
-This is RoutingSim, an event-discrete simluator for routing protocols based on 
-OMNet++. 
+This is RoutingSim, an event-discrete simulator for routing protocols based on 
+OMNet++.
+
 The paper explaining the idea behind RoutingSim can be found here:
 Werle, C.; Mies, S.; Zitterbart, M.: On Benchmarking Routing Protocols, 2011. 
 17th IEEE International Conference on Networks (ICON 2011), 
