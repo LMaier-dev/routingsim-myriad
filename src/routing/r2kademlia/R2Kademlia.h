@@ -31,6 +31,7 @@
 namespace routingsim {
 
 // packet types
+using KadDataPacket_p = std::unique_ptr<KadDataPacket>;
 using KadPacket_p = std::unique_ptr<KadPacket>;
 using KadAnswer_p = std::unique_ptr<KadAnswer>;
 using KadHello_p = std::unique_ptr<KadHello>;
@@ -82,10 +83,14 @@ class R2Kademlia : public RPCProtocol, public KadPolicy, public StatisticSample
 	 * This does not make any routing decision.
 	 */
 	void forwardPacket(KadPacket_p packet, NodePkt_p nodePkt);
+	/// forwards a data packet
+	void forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt);
 	/// sends a received packet again after the source route was manipulated
 	void resendPacket(KadPacket_p packet);
 	/// routes a packet to a neighbor based on the source route in the packet
 	void sendPacket(KadPacket_p packet) override;
+	/// routes a packet to a neighbor based on the  in the packet
+	void sendPacket(KadDataPacket_p packet);
 	/// chooses the contact to forward a request to according to the overlay metric.
 	const KadContact& chooseNextHop(const KadContactList&, const OverlayKey& target, const OverlayKey& source);
 	/// sends a probe request to the given contact
@@ -94,6 +99,8 @@ class R2Kademlia : public RPCProtocol, public KadPolicy, public StatisticSample
 	void sendGetNeighbors(KadContact_p contact);
 	/// sends a find node call to find this node (rediscovery may use a not via failed link)
 	void sendFindNode(const OverlayKey& key, bool exact=false, const OverlayKey* notvia_unreachable_node= nullptr, const OverlayKey* notvia_failednode_neighbor= nullptr);
+	/// sends a data packet
+	void sendData(const OverlayKey& key);
 	//@}
 
 	/** @name policy foo */
@@ -123,6 +130,11 @@ public:
 	uint getDroppedPackets() const { return droppedPackets; }
 	uint getSentPackets() const { return sentPackets; }
 	uint getReceivedPackets() const { return receivedPackets; }
+	
+	uint getForwardedDataPackets() const { return forwardedDataPackets; }
+	uint getDroppedDataPackets() const { return droppedDataPackets; }
+	uint getSentDataPackets() const { return sentDataPackets; }
+	uint getReceivedDataPackets() const { return receivedDataPackets; }
 	void recordScalars();
 	void recordRoutingTable();
 
@@ -140,6 +152,9 @@ private:
 	std::unique_ptr<T> makePacket(const KadContact& contact, const char *name=nullptr){
 		return makePacket<T>(&contact, name);
 	};
+	/// crafts a data packet, sets the route to the given contact.
+	template<typename T>
+	std::unique_ptr<T>makeDataPacket(const KadContact* contact, const char *name);
 	/// crafts a packet of type T, sets the route and nonce according to original
 	template<typename T>
 	std::unique_ptr<T> makeAnswer(KadPacket& original);
@@ -154,6 +169,7 @@ private:
 	/// adds a timer to the timer vectors, sends a timer packet
 	void addTimer(simtime_t initialOffset, simtime_t duration, std::function<void()> callback);
 	void doProbe();
+	void doDataProbe();
 	void doReachabilityTest();
 	//@}
 
@@ -249,6 +265,10 @@ private:
 	uint droppedPackets = 0;
 	uint sentPackets = 0;
 	uint receivedPackets = 0;
+	uint forwardedDataPackets = 0;
+	uint droppedDataPackets = 0;
+	uint sentDataPackets = 0;
+	uint receivedDataPackets = 0;
 	uint sentRediscovery = 0;
 	uint succeededRediscovery = 0;
 	uint droppedRediscovery = 0;

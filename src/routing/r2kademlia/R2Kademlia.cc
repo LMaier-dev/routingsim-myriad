@@ -62,6 +62,7 @@ void R2Kademlia::onInitialize() {
 	simtime_t probeInterval = (simtime_t) par("probeInterval").doubleValue();
 	addTimer(probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doProbe, this));
 	addTimer(probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doReachabilityTest, this));
+	//addTimer(probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doDataProbe, this));
 	WATCH(myOverlayKey);
 	WATCH(neighborTable);
 	WATCH_OBJ(routingTable);
@@ -268,6 +269,55 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt) {
 }
 
 
+void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
+
+	// we do not route hello packets!
+	ASSERT(packet->getType() == KAD_Data);
+	ASSERT(packet->hasRemainingHops());
+	ASSERT(packet->getControlInfo() == nullptr);
+
+	PathID incomingPathID(packet->getDestPathID());
+	if (incomingPathID != UndefinedPathID)
+	{
+		auto pidentry= fwdTablePathID.NIDPIDTable.find(packet->getDstNodeID());
+		if ( pidentry != fwdTablePathID.NIDPIDTable.end() )
+		{ // pidentry->second is incomingPathID
+			incomingPathID= pidentry->second;
+		}
+	}
+		
+	// lookup outgoing pathID
+	auto fwdentry= fwdTablePathID.PIDFwdTable.find(incomingPathID);
+	if (fwdentry != fwdTablePathID.PIDFwdTable.end())
+	{
+		FwdTableEntry& nh= fwdentry->second;
+		if (nh.fwdState == FwdTableEntry::State::valid)
+		{
+			if (nh.fwdAction == FwdTableEntry::Action::fwdNextPathID)
+				packet->setDestPathID(nh.outgoingPathID);
+		}
+		
+	       	nodeid_t nid = neighborTable.getNodeId(nh.nextHopNode);
+		if (nid != undefined_node) {
+			nodePkt->setType(KAD_CTRL_PACKET_TYPE);
+			nodePkt->encapsulate(packet.release());
+			sendToNode(nid, std::move(nodePkt));
+			forwardedDataPackets++;
+		}
+		else {
+			// Trying to send to a next hop that is not a physical next hop
+			// That will not fly...
+			
+			//TODO onMissingNeighbor(std::move(packet), std::move(nodePkt));
+		}
+
+	} 
+
+	
+}
+
+
+	
 void R2Kademlia::resendPacket(KadPacket_p packet) {
 	getKadObserver().registerPacketOverlayHop(*packet);
 	NodePkt_p nodePkt = NodePkt_p(check_and_cast<NodePkt *>(packet->removeControlInfo()));
@@ -285,6 +335,19 @@ void R2Kademlia::sendPacket(KadPacket_p packet) {
 	}
 	sentPackets++;
 	forwardPacket(std::move(packet), std::move(nodePkt));
+}
+
+
+void R2Kademlia::sendPacket(KadDataPacket_p packet) {
+	//ASSERT(packet->getSource() == myOverlayKey);
+	ASSERT(packet->getControlInfo() == nullptr);
+	auto nodePkt = std::make_unique<NodePkt>(packet->getName());
+	if(packet->getType() == KAD_Data) {
+		getKadObserver().registerDataPacket(*packet);
+		getStatistics().registerMessage(nodePkt.get());
+	}
+	sentDataPackets++;
+	forwardDataPacket(std::move(packet), std::move(nodePkt));
 }
 
 
@@ -455,6 +518,32 @@ bool R2Kademlia::handleQueryRouteResponse(KadPacket_p answer, RPCState& rpcState
 	readRTableRsp(std::move(response));
 	return true;
 }
+
+
+void R2Kademlia::sendData(const OverlayKey& key) {
+	EV_TRACE << "sendData to " << key.shortStr() << endl;
+	auto contacts = routingTable.getClosestContacts(key, findNodeNumber);
+	//ASSERT(contacts.size() > 0);
+	if (contacts.size() > 0)
+	{
+		const KadContact& contact = chooseNextHop(contacts, key, myOverlayKey);
+		ASSERT(contact.isValid());
+		ASSERT(!contact.getKey().isUnspecified());
+		if (contact.getKey() == myOverlayKey)
+		{
+			EV_ERROR << "I'm the next hop for the destination. Will not send anything." << endl;
+			return;
+		}
+		auto packet = makeDataPacket<KadDataPacket>(&contact, "KadDataPacket");
+		EV_TRACE << "sending KadDataPacket id=" << packet->getId() << endl;
+		sendPacket(std::move(packet));
+	}
+	else
+	{ // no contacts to choose from (usually only possible for isolated nodes)
+		EV_WARN << "no contacts found, cannot send KadDataPacket" << endl;
+	}
+}
+
 
 
 // FIND NODE
@@ -698,7 +787,29 @@ void R2Kademlia::onMissingNeighbor(KadPacket_p packet, NodePkt_p pkt) {
 
 void R2Kademlia::onErrorPacket(KadError& error) {
 
-	EV_INFO << "received ERROR packet" << endl;
+	EV_INFO << "received ERROR packet (" << error.getErrorType() << ") ";
+	switch (error.getErrorType()) {
+		case KAD_NoError:
+			EV_INFO << "No Error";
+			break;
+		case KAD_HopLimitExceeded:
+			EV_INFO << "HopLimitExceeded";
+			break;
+		case KAD_SegmentFailure:
+			EV_INFO << "SegmentFailure";
+			break;
+		case KAD_NodeUnreachable:
+			EV_INFO << "NodeUnreachable";
+			break;
+		case KAD_PathIDUnknown:
+			EV_INFO << "PathIDUnkown";
+			break;
+		case KAD_RouteFailureDeadEnd:
+			EV_INFO << "RouteFailureDeadEnd";
+			break;
+	}
+	EV_INFO	<< endl;
+	
 	switch (error.getErrorType()) {
 		// the following errors indicate a problem with the route to the contact
 		case KAD_SegmentFailure:
@@ -768,6 +879,9 @@ void R2Kademlia::sampleStatistics (Statistics &stats) {
 	stats.value("forwardedPackets", forwardedPackets-sentPackets);
 	stats.value("sentPackets", sentPackets);
 	stats.value("receivedPackets", receivedPackets);
+	stats.value("forwardedPackets", forwardedPackets-sentPackets);
+	stats.value("sentPackets", sentPackets);
+	stats.value("receivedPackets", receivedPackets);
 	stats.value("routingTableContacts", routingTable.getNumContacts());
 	stats.value("routingTableBuckets", routingTable.getNumBuckets());
 	stats.value("routingTableUpdates", routingTable.getUpdateCount());
@@ -802,7 +916,12 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 void R2Kademlia::onImprovement(const KadContact& contact) {
 	// path got improved for this contact -> potentially send UpdateRouteReq
 	EV_TRACE << "onImprovement(" << contact.getKey().shortStr() << ") called" << endl;
-
+	
+	if (contact.isValid())
+	{
+		fwdTablePathID.modEntry(&contact);
+	}
+	
 	// TODO: wait grace period
 	if ( neighborTable.isNeighbor(contact.getKey()) )
 	{ // this is true after re-enabling a physical neighbor
@@ -818,6 +937,10 @@ void R2Kademlia::recordScalars() {
 	recordScalar("droppedPackets", droppedPackets);
 	recordScalar("sentPackets", sentPackets);
 	recordScalar("receivedPackets", receivedPackets);
+	recordScalar("forwardedDataPackets", forwardedDataPackets);
+	recordScalar("droppedDataPackets", droppedDataPackets);
+	recordScalar("sentDataPackets", sentDataPackets);
+	recordScalar("receivedDataPackets", receivedDataPackets);
 	recordScalar("rediscoverySent", sentRediscovery);
 	recordScalar("rediscoverySuccess", succeededRediscovery);
 	recordScalar("rediscoveryFailed", droppedRediscovery);
@@ -1001,6 +1124,34 @@ void R2Kademlia::scheduleUpdate(const KadContact& affectedContact, KadRouteUpdat
 
 }
 
+
+template<typename T>
+std::unique_ptr<T> R2Kademlia::makeDataPacket(const KadContact* contact, const char *name) {
+	auto packet = std::make_unique<T>();
+	packet->setName(name);
+	packet->setSrcNodeID(myOverlayKey);
+	packet->setDstNodeID(contact->getKey());
+	packet->setHopLimit(hopLimit);
+
+	auto pidentry= fwdTablePathID.NIDPIDTable.find(contact->getKey());
+	if ( pidentry != fwdTablePathID.NIDPIDTable.end() )
+	{ // pidentry.second is incomingPathID
+		// lookup outgoing pathID
+		auto fwdentry= fwdTablePathID.PIDFwdTable.find(pidentry->second);
+		if (fwdentry != fwdTablePathID.PIDFwdTable.end())
+		{
+			FwdTableEntry& nh= fwdentry->second;
+			if (nh.fwdState == FwdTableEntry::State::valid)
+			{
+				if (nh.fwdAction == FwdTableEntry::Action::fwdNextPathID)
+					packet->setDestPathID(nh.outgoingPathID);
+			}
+		}
+	}
+	return packet;
+}
+
+
 template<typename T>
 std::unique_ptr<T> R2Kademlia::makePacket(const KadContact* contact, const char *name) {
 	auto packet = std::make_unique<T>();
@@ -1138,6 +1289,18 @@ void R2Kademlia::doProbe() {
 	if (probeKey == myOverlayKey) probeKey[0] ^= 1;
 	sendFindNode(probeKey, exact);
 }
+
+
+void R2Kademlia::doDataProbe() {
+	if (neighborTable.size() == 0) return; // we are isolated
+	const OverlayKey* probeKey(nullptr);
+	do {
+		probeKey = &getKadObserver().getRandomNodeKey();
+	} while(*probeKey == myOverlayKey);
+	
+	sendData(*probeKey);
+}
+
 
 
 void R2Kademlia::doReachabilityTest() {

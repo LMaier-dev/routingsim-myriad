@@ -204,6 +204,15 @@ void KadObserver::registerPacket(KadPacket& packet) {
 	packet.markTracked();
 	registeredPackets++;
 }
+
+
+void KadObserver::registerDataPacket(KadDataPacket& packet) {
+	if (simTime() < getSimulation()->getWarmupPeriod()) return;
+	packet.markTracked();
+	registeredPackets++;
+}
+
+
 void KadObserver::registerPacketDropped(KadPacket& packet, const OverlayKey& current, const OverlayKey& target) {
 	if (not packet.isTracked()) return;
 	if (simTime() < getSimulation()->getWarmupPeriod()) return;

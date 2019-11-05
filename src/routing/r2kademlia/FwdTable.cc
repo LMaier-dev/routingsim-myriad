@@ -58,9 +58,7 @@ std::string FwdTablePathID::str() const
 
 void FwdTablePathID::addEntry(KadContact_p contact)
 {
-	EV_TRACE << "FwdTablePathID::addEntry called" << endl;
-	
-	if (contact == nullptr)
+       	if (contact == nullptr)
 		return;
 
 	// Routingtable entry on node 4: Dest 5: < 3 2 >
@@ -81,7 +79,57 @@ void FwdTablePathID::addEntry(KadContact_p contact)
 		? FwdTableEntry::Action::fwdNextKadId : FwdTableEntry::Action::fwdNextPathID;
 		
 	PIDFwdTable[incomingPathID]= fwdentry;
-	EV_TRACE << "FwdTablePathID::addEntry finished." << endl;
+	NIDPIDTable[contact->getKey()]= incomingPathID;
 }
+
+
+
+void FwdTablePathID::modEntry(KadContact_p contact)
+{
+       	if (contact == nullptr)
+		return;
+
+	PathID priorPathID= UndefinedPathID;
+	auto pidentry= NIDPIDTable.find(contact->getKey());
+	// Lookup old entry if it exists
+	if ( pidentry != NIDPIDTable.end() )
+	{
+		// Routingtable entry on node 4: Dest 5: < 3 2 >
+		priorPathID= pidentry->second;
+		if ( PIDFwdTable.find(priorPathID) == PIDFwdTable.end() )
+		{
+			EV_ERROR << "FwdTablePathID::modEntry earlier PathID not found" << endl;
+		}
+		else
+		{ // set old entry to obsolete state
+			FwdTableEntry& priorfwdentry(PIDFwdTable[pidentry->second]);
+			priorfwdentry.fwdState= FwdTableEntry::State::obsolete;
+		}
+		
+		kad_path currentpath(contact->getPath());
+		// add destination node ID to path (will never be empty then)
+		currentpath.push_back(contact->getKey());
+
+		PathID incomingPathID(getPathID(*ownNodeID, currentpath));
+		
+		FwdTableEntry fwdentry;
+		
+		fwdentry.outgoingPathID= getPathID(currentpath);
+		fwdentry.nextHopNode= currentpath[0];
+		fwdentry.fwdState= FwdTableEntry::State::valid;
+		fwdentry.fwdAction=
+			(currentpath.size()==1) // next hop is our physical neighbor
+			? FwdTableEntry::Action::fwdNextKadId : FwdTableEntry::Action::fwdNextPathID;
+		fwdentry.prevPathID= priorPathID;
+		PIDFwdTable[incomingPathID]= fwdentry;
+		NIDPIDTable[contact->getKey()]= incomingPathID;
+
+	}
+	else
+	{
+		EV_WARN << "FwdTablePathID::modEntry() no prior entry found" << endl;
+	}
 	
+}
+
 } // end namespace

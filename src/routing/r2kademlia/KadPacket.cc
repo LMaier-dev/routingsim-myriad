@@ -74,5 +74,9 @@ void KadPacket::setReturnPathFrom(KadPacket& other) {
 		setRoute(i, other.getRoute(other.progress - i));
 }
 
+
+Register_Class(KadDataPacket);
+
+	
 } // namespace
 

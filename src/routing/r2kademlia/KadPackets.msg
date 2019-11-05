@@ -25,6 +25,7 @@ typedef std::vector<OverlayKey> key_vector_t;
 
 namespace routingsim;
 class KadPacket extends cPacket;
+class KadDataPacket extends cPacket;
 class noncobject nodeid_t;
 class noncobject OverlayKey;
 class noncobject key_vector_t;
@@ -75,8 +76,10 @@ packet KadUpdateRouteReq extends KadPacket {
         uint8_t action[] enum(KadRouteUpdateAction);
 }
 
-//TODO: KadDataMsg
-
+//KadDataMsg
+packet KadDataMsg extends KadDataPacket {
+       type = KAD_Data;
+}
 // ------------
 
 // ERROR

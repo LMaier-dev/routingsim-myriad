@@ -95,5 +95,35 @@ private:
 	uint16_t overlayHops = 1;
 	bool tracked = false;
 };
+
+
+
+class KadDataPacket : public KadDataPacket_Base
+{
+public:
+	/** @name member functions needed for minimal implementation */
+	//@{
+	KadDataPacket(const char *name=nullptr, short kind=0) : KadDataPacket_Base(name, kind) {}
+	KadDataPacket(const KadDataPacket& other) : KadDataPacket_Base(other) {}
+	~KadDataPacket() { };
+	KadDataPacket& operator=(const KadDataPacket& other)
+		{KadDataPacket_Base::operator=(other); return *this;}
+	virtual KadDataPacket *dup() const override {return new KadDataPacket(*this);}
+	inline bool hasRemainingHops() const { return hopLimit > 0; }
+	//@}
+
+
+	/** @name inline utility functions */
+	//@{
+	// --- inline track
+	inline void countOverlayHop() { overlayHops++; }
+	inline uint16_t getOverlayHops() { return overlayHops; }
+	inline void markTracked() { tracked = true; }
+	inline bool isTracked() { return tracked; }
+private:
+	uint16_t overlayHops = 1;
+	bool tracked = false;
+};
+
 } // namespace
 #endif // __ROUTINGSIM_KadPacket_H_

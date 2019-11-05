@@ -57,8 +57,9 @@ packet KadPacket {
 
 class noncobject PathID;
 
-// a fast path packet
-packet KadPIDFwdPacket {
+// a fast path Data packet
+packet KadDataPacket {
+	@customize(true);
 	PathID destPathID;
 	OverlayKey dstNodeID;
 	OverlayKey srcNodeID;

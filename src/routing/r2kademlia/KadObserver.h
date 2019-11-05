@@ -116,6 +116,11 @@ public:
 	void registerPacketDropped(KadPacket&, const OverlayKey& current, const OverlayKey& target=OverlayKey::UNSPECIFIED_KEY);
 	void registerPacketDelivered(KadPacket&);
 	void registerPacketOverlayHop(KadPacket&);
+	void registerDataPacket(KadDataPacket&);
+	void registerDataPacketDropped(KadDataPacket&, const OverlayKey& current, const OverlayKey& target=OverlayKey::UNSPECIFIED_KEY);
+	void registerDataPacketDelivered(KadDataPacket&);
+	void registerDataPacketOverlayHop(KadDataPacket&);
+
 	virtual void sampleStatistics (Statistics &stats) override;
 };
 
