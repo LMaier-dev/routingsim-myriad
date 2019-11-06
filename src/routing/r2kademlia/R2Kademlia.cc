@@ -62,7 +62,7 @@ void R2Kademlia::onInitialize() {
 	simtime_t probeInterval = (simtime_t) par("probeInterval").doubleValue();
 	addTimer(probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doProbe, this));
 	addTimer(probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doReachabilityTest, this));
-	//addTimer(probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doDataProbe, this));
+	addTimer(probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doDataProbe, this));
 	WATCH(myOverlayKey);
 	WATCH(neighborTable);
 	WATCH_OBJ(routingTable);
@@ -1129,6 +1129,7 @@ template<typename T>
 std::unique_ptr<T> R2Kademlia::makeDataPacket(const KadContact* contact, const char *name) {
 	auto packet = std::make_unique<T>();
 	packet->setName(name);
+	packet->setType(KAD_Data);
 	packet->setSrcNodeID(myOverlayKey);
 	packet->setDstNodeID(contact->getKey());
 	packet->setHopLimit(hopLimit);
