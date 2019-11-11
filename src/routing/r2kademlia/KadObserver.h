@@ -60,6 +60,11 @@ private:
 	unsigned int deliveredPackets = 0;
 	unsigned int droppedPackets = 0;
 	unsigned int registeredPackets = 0;
+
+	unsigned int deliveredDataPackets = 0;
+	unsigned int droppedDataPackets = 0;
+	unsigned int registeredDataPackets = 0;
+	
 	enum dataType : uint8_t {hopCount=0, distance=1, prefixDist=2, overlayHops=3,
 		stretchMul=4, stretchAdd=5, prefixPerHop=6, distanceLeft=7,
 		prefixDistLeft=8, hopCountDropped=9, overlayHopsDropped=10,
@@ -116,10 +121,11 @@ public:
 	void registerPacketDropped(KadPacket&, const OverlayKey& current, const OverlayKey& target=OverlayKey::UNSPECIFIED_KEY);
 	void registerPacketDelivered(KadPacket&);
 	void registerPacketOverlayHop(KadPacket&);
-	void registerDataPacket(KadDataPacket&);
-	void registerDataPacketDropped(KadDataPacket&, const OverlayKey& current, const OverlayKey& target=OverlayKey::UNSPECIFIED_KEY);
-	void registerDataPacketDelivered(KadDataPacket&);
-	void registerDataPacketOverlayHop(KadDataPacket&);
+	
+	void registerPacket(KadDataPacket&);
+	void registerPacketDropped(KadDataPacket&, const OverlayKey& current, const OverlayKey& target=OverlayKey::UNSPECIFIED_KEY);
+	void registerPacketDelivered(KadDataPacket&);
+	void registerPacketOverlayHop(KadDataPacket&);
 
 	virtual void sampleStatistics (Statistics &stats) override;
 };

@@ -206,7 +206,7 @@ void KadObserver::registerPacket(KadPacket& packet) {
 }
 
 
-void KadObserver::registerDataPacket(KadDataPacket& packet) {
+void KadObserver::registerPacket(KadDataPacket& packet) {
 	if (simTime() < getSimulation()->getWarmupPeriod()) return;
 	packet.markTracked();
 	registeredPackets++;
@@ -242,6 +242,39 @@ void KadObserver::registerPacketDropped(KadPacket& packet, const OverlayKey& cur
 		messageDroppedInfos.push_back(info);
 
 }
+
+
+void KadObserver::registerPacketDropped(KadDataPacket& packet, const OverlayKey& current, const OverlayKey& target) {
+	if (not packet.isTracked()) return;
+	if (simTime() < getSimulation()->getWarmupPeriod()) return;
+	droppedDataPackets++;
+	const OverlayKey& fromKey = packet.getSrcNodeID();
+	const OverlayKey& toKey = target.isUnspecified() ? packet.getDstNodeID() : target;
+	if (not exists(fromKey) or not exists(toKey)) {
+		EV_ERROR << "missing keys on packet" << endl;
+		return;
+	}
+	MessageDroppedInfo info{};
+	info.hops = getR2Kademlia(fromKey).getHopLimitDefault() - packet.getHopLimit();
+	info.overlayHops = packet.getOverlayHops();
+	info.distance = getPhysicalDistance(fromKey, toKey);
+	info.distanceLeft = getPhysicalDistance(current, toKey);
+	info.prefixDist = fromKey.sharedPrefixLength(toKey);
+	info.prefixDistLeft = current.sharedPrefixLength(toKey);
+	info.reason = 0;
+	histograms[hopCountDropped]->collect(info.hops);
+	histograms[overlayHopsDropped]->collect(info.overlayHops);
+	histograms[distanceDropped]->collect(info.distance);
+	histograms[distanceLeft]->collect(info.distanceLeft);
+	histograms[prefixDistDropped]->collect(info.prefixDist);
+	histograms[prefixDistLeft]->collect(info.prefixDistLeft);
+
+	if (simTime() > messageSampleTime and messageDroppedInfos.size() < numMessageDroppedInfos)
+		messageDroppedInfos.push_back(info);
+
+}
+
+
 void KadObserver::registerPacketDelivered(KadPacket& packet) {
 	if (not packet.isTracked()) return;
 	if (simTime() < getSimulation()->getWarmupPeriod()) return;
@@ -268,10 +301,42 @@ void KadObserver::registerPacketDelivered(KadPacket& packet) {
 	if (simTime() > messageSampleTime and messageDeliveryInfos.size() < numMessageDeliveryInfos)
 		messageDeliveryInfos.push_back(info);
 }
+
+
+
+void KadObserver::registerPacketDelivered(KadDataPacket& packet) {
+	if (not packet.isTracked()) return;
+	if (simTime() < getSimulation()->getWarmupPeriod()) return;
+	deliveredDataPackets++;
+	const OverlayKey fromKey = packet.getSrcNodeID();
+	const OverlayKey toKey = packet.getDstNodeID();
+	if (not exists(fromKey) or not exists(toKey)) {
+		EV_ERROR << "missing keys on packet" << endl;
+		return;
+	}
+	MessageDeliveryInfo info{};
+	info.hops = getR2Kademlia(fromKey).getHopLimitDefault()-packet.getHopLimit();
+	info.distance = getPhysicalDistance(fromKey, toKey);
+	info.prefixDist = fromKey.getLength() - fromKey.sharedPrefixLength(toKey);
+	info.overlayHops = packet.getOverlayHops();
+	ASSERT(info.overlayHops > 0);
+	histograms[hopCount]->collect(info.hops);
+	histograms[distance]->collect(info.distance);
+	histograms[stretchMul]->collect(info.hops / (double)info.distance);
+	histograms[stretchAdd]->collect(info.hops - info.distance);
+	histograms[prefixDist]->collect(info.prefixDist);
+	histograms[overlayHops]->collect(info.overlayHops);
+	histograms[prefixPerHop]->collect(info.prefixDist / (double)info.overlayHops);
+	if (simTime() > messageSampleTime and messageDeliveryInfos.size() < numMessageDeliveryInfos)
+		messageDeliveryInfos.push_back(info);
+}
+
+
 void KadObserver::registerPacketOverlayHop(KadPacket& packet) {
 	if (simTime() < getSimulation()->getWarmupPeriod()) return;
 	packet.countOverlayHop();
 }
+
 
 void KadObserver::sampleStatistics (Statistics &stats) {
 	for (uint i=0; i<histograms.size(); i++)

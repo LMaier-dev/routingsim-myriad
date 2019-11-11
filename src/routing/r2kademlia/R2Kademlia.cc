@@ -111,6 +111,13 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		
 	ASSERT(pkt->getType() == KAD_CTRL_PACKET_TYPE || pkt->getType() == KAD_DATA_PACKET_TYPE);
 
+	if ( pkt->getType() == KAD_DATA_PACKET_TYPE )
+	{
+		EV_TRACE << "calling handleDataPacket" << endl;
+		handleDataPacket(std::move(pkt));
+		return;
+	}
+
 	// we should check whether the link via this message travelled is
 	// still active, otherwise we should drop this message as it was affected
 	// by the link failure, e.g., more precisely using (getDuration(), getArrivalTime())
@@ -172,7 +179,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 
 		// these types may forward packets, so they count themselves
 		if (handleIfFitting<KadFindNodeReq>(packet)) return;
-		// these types never forward packets
+		// these types never forwardpackets
 		countReceived(*packet);
 		if (handleIfFitting<KadQueryRouteReq>(packet)) return;
 		if (handleIfFitting<KadUpdateRouteReq>(packet)) return;
@@ -228,6 +235,33 @@ void R2Kademlia::reset() {
 }
 
 
+
+void R2Kademlia::handleDataPacket(NodePkt_p pkt) {
+	
+	EV << "handleDataPacket()" << endl;
+	KadDataPacket_p packet = std::unique_ptr<KadDataPacket>(check_and_cast<KadDataPacket*>(pkt->decapsulate()));
+	
+	EV << "received data packet from " << packet->getSrcNodeID().shortStr() << endl;
+
+	// we should check whether the link via this message travelled is
+	// still active, otherwise we should drop this message as it was affected
+	// by the link failure, e.g., more precisely using (getDuration(), getArrivalTime())
+	const hop_t taken_hop= pkt->getHop();
+	//ASSERT(Node::getNode(this)->getNodeId() == taken_hop.to);
+
+	if (!getNetworkManager()->getTopology().isConnected(taken_hop.from,taken_hop.to))
+	{
+		EV_WARN << "received packet (msg id: " << packet->getId() << ") via an inactive link, thus will discard" << endl;
+		if (!packet->getControlInfo())
+			packet->setControlInfo(pkt.release());
+		//countDataDropped(*packet, packet->getDstNodeID());
+		return;
+	}
+
+	forwardDataPacket(std::move(packet), std::move(pkt));
+}
+
+
 void R2Kademlia::handlePacket(KadHello_p packet) {
 	EV << "received hello packet from " << packet->getSource().shortStr() << endl;
 	neighborTable.addNeighbor(packet->getSourceId(), packet->getSource());
@@ -255,7 +289,6 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt) {
 	const OverlayKey& nextHop = packet->getNextHop();
 	nodeid_t nid = neighborTable.getNodeId(nextHop);
 	if (nid != undefined_node) {
-		nodePkt->setType(KAD_CTRL_PACKET_TYPE);
 		nodePkt->encapsulate(packet.release());
 		sendToNode(nid, std::move(nodePkt));
 		forwardedPackets++;
@@ -295,11 +328,14 @@ void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 		{
 			if (nh.fwdAction == FwdTableEntry::Action::fwdNextPathID)
 				packet->setDestPathID(nh.outgoingPathID);
+			else
+			{
+				packet->setDestPathID(UndefinedPathID);
+			}
 		}
 		
 	       	nodeid_t nid = neighborTable.getNodeId(nh.nextHopNode);
 		if (nid != undefined_node) {
-			nodePkt->setType(KAD_CTRL_PACKET_TYPE);
 			nodePkt->encapsulate(packet.release());
 			sendToNode(nid, std::move(nodePkt));
 			forwardedDataPackets++;
@@ -307,7 +343,7 @@ void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 		else {
 			// Trying to send to a next hop that is not a physical next hop
 			// That will not fly...
-			
+			EV_ERROR << "forwardDataPacket: wrong next hop" << endl;
 			//TODO onMissingNeighbor(std::move(packet), std::move(nodePkt));
 		}
 
@@ -321,6 +357,7 @@ void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 void R2Kademlia::resendPacket(KadPacket_p packet) {
 	getKadObserver().registerPacketOverlayHop(*packet);
 	NodePkt_p nodePkt = NodePkt_p(check_and_cast<NodePkt *>(packet->removeControlInfo()));
+	nodePkt->setType(KAD_CTRL_PACKET_TYPE);
 	forwardPacket(std::move(packet), std::move(nodePkt));
 }
 
@@ -329,6 +366,7 @@ void R2Kademlia::sendPacket(KadPacket_p packet) {
 	ASSERT(packet->getSource() == myOverlayKey);
 	ASSERT(packet->getControlInfo() == nullptr);
 	auto nodePkt = std::make_unique<NodePkt>(packet->getName());
+	nodePkt->setType(KAD_CTRL_PACKET_TYPE);
 	if(packet->getType() == KAD_FindNodeReq && check_and_cast<KadFindNodeReq*>(packet.get())->getExact()) {
 		getKadObserver().registerPacket(*packet);
 		getStatistics().registerMessage(nodePkt.get());
@@ -342,10 +380,12 @@ void R2Kademlia::sendPacket(KadDataPacket_p packet) {
 	//ASSERT(packet->getSource() == myOverlayKey);
 	ASSERT(packet->getControlInfo() == nullptr);
 	auto nodePkt = std::make_unique<NodePkt>(packet->getName());
-	if(packet->getType() == KAD_Data) {
-		getKadObserver().registerDataPacket(*packet);
+	nodePkt->setType(KAD_DATA_PACKET_TYPE);
+	if (packet->getType() == KAD_Data) {
+		getKadObserver().registerPacket(*packet);
 		getStatistics().registerMessage(nodePkt.get());
 	}
+		
 	sentDataPackets++;
 	forwardDataPacket(std::move(packet), std::move(nodePkt));
 }
@@ -774,6 +814,32 @@ void R2Kademlia::onMissingNeighbor(KadPacket_p packet, NodePkt_p pkt) {
 		default:
 		{
 			if (packet->getSource() == myOverlayKey)
+			{
+				EV_DEBUG << "I'm the source, so not returning any message" << endl;
+				return;
+			}
+			else
+				returnToSender(KAD_SegmentFailure, std::move(packet));
+		}
+	} // end switch
+}
+
+
+void R2Kademlia::onMissingNeighbor(KadDataPacket_p packet, NodePkt_p pkt) {
+//  	getStatistics().dropMessage(pkt, undefined_node);
+	EV_WARN << "onMissingNeighbor(data) called - packet next hop should be PID:" << packet->getDestPathID() << endl;
+	droppedDataPackets++;
+	// do not generate Error packets for Error or UpdateRoute packets
+	switch (packet->getType()) {
+		case KAD_Error:
+		case KAD_UpdateRouteReq:
+		case KAD_QueryRouteRsp:
+		case KAD_FindNodeRsp:	
+			EV << "not generating error packet for packet type " << packet->getName() << "(" << packet->getType() << ")" << endl;
+			break;
+		default:
+		{
+			if (packet->getSrcNodeID() == myOverlayKey)
 			{
 				EV_DEBUG << "I'm the source, so not returning any message" << endl;
 				return;
@@ -1313,6 +1379,7 @@ void R2Kademlia::doReachabilityTest() {
 	sendFindNode(*key, true);
 }
 
+
 void R2Kademlia::countReceived(KadPacket& packet) {
 	receivedPackets++;
 	getKadObserver().registerPacketDelivered(packet);
@@ -1321,6 +1388,17 @@ void R2Kademlia::countReceived(KadPacket& packet) {
 		packet.getProgress()
 	);
 }
+
+
+void R2Kademlia::countReceived(KadDataPacket& packet) {
+	receivedDataPackets++;
+	getKadObserver().registerPacketDelivered(packet);
+	getStatistics().deliveredMessage(
+		check_and_cast<cMessage *>(packet.getControlInfo()),
+		getHopLimitDefault()-packet.getHopLimit()
+	);
+}
+
 
 void R2Kademlia::countDropped(KadPacket& packet, const OverlayKey& target) {
 	droppedPackets++;
@@ -1332,6 +1410,19 @@ void R2Kademlia::countDropped(KadPacket& packet, const OverlayKey& target) {
 		check_and_cast<cMessage *>(packet.getControlInfo()), nid
 	);
 }
+
+
+void R2Kademlia::countDropped(KadDataPacket& packet, const OverlayKey& target) {
+	droppedDataPackets++;
+	getKadObserver().registerPacketDropped(packet, myOverlayKey, target);
+	nodeid_t nid = undefined_node;
+	if (getKadObserver().exists(target))
+		nid = getKadObserver().getNodeId(target);
+	getStatistics().dropMessage(
+		check_and_cast<cMessage *>(packet.getControlInfo()), nid
+	);
+}
+
 
 void R2Kademlia::returnToSender(uint8_t errorType, KadPacket_p packet) {
 	KadError_p answer = makeAnswer<KadError>(*packet);
@@ -1347,6 +1438,23 @@ void R2Kademlia::returnToSender(uint8_t errorType, KadPacket_p packet) {
 	else // we sent this packet!
 		handleAnswer(std::move(answer));
 }
+
+
+void R2Kademlia::returnToSender(uint8_t errorType, KadDataPacket_p packet) {
+	// KadError_p answer = makeAnswer<KadError>(*packet);
+	// answer->setErrorType(errorType);
+	
+	// EV_TRACE << "returnToSender() - return path:";
+	// for (const auto& c : answer->getSrcPath())
+	// 	EV_TRACE << ' ' << c.shortStr();
+	// EV_TRACE << endl;		
+	// answer->encapsulate(packet.release());
+	// if (answer->hasRemainingHops())
+	// 	sendPacket(std::move(answer));
+	// else // we sent this packet!
+	// 	handleAnswer(std::move(answer));
+}
+
 
 template<typename T> bool R2Kademlia::handleIfFitting(KadPacket_p& packet) {
 	ASSERT(packet); // no nullptr here!

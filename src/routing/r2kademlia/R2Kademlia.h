@@ -73,6 +73,7 @@ class R2Kademlia : public RPCProtocol, public KadPolicy, public StatisticSample
 	virtual void handlePacket(std::unique_ptr<KadUpdateRouteReq> packet);
 	virtual void handlePacket(std::unique_ptr<KadFindNodeReq> packet);
 	virtual void handlePacket(KadAnswer_p packet);
+	virtual void handleDataPacket(NodePkt_p packet);
 	//@}
 
 	/** @name sending packets out*/
@@ -106,6 +107,7 @@ class R2Kademlia : public RPCProtocol, public KadPolicy, public StatisticSample
 	/** @name policy foo */
 	//@{
 	void onMissingNeighbor(KadPacket_p packet, NodePkt_p pkt);
+	void onMissingNeighbor(KadDataPacket_p packet, NodePkt_p pkt);
 	/** Called when an error packet is encountered, updates routing information */
 	void onErrorPacket(KadError& error);
 	//@}
@@ -121,6 +123,9 @@ public:
 	/** Called when a route got improved */
 	virtual void onImprovement(const KadContact& contact) override;
 	//@}
+
+
+	uint getHopLimitDefault() const { return hopLimit; };
 
 	/** @name statistics functions used by statistics module */
 	//@{
@@ -179,12 +184,17 @@ private:
 	void countReceived(KadPacket& packet);
 	/// does statistics on dropped packet
 	void countDropped(KadPacket& packet, const OverlayKey& target);
+	/// does statistics on received data packet
+	void countReceived(KadDataPacket& packet);
+	/// does statistics on dropped data packet
+	void countDropped(KadDataPacket& packet, const OverlayKey& target);
 	/**
 	 * sends an error packet to the sender of the given packet
 	 * the original packet is encapsulated on the error packet
 	 * @errorType the error type for the error packet
 	 */
 	void returnToSender(uint8_t errorType, KadPacket_p packet);
+	void returnToSender(uint8_t errorType, KadDataPacket_p packet);
 	/**
 	 * Tries to cast packet to type T.
 	 * If this succeeds, the method handlePacket(T) is called, the given pointer
