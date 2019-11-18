@@ -69,6 +69,7 @@ class R2Kademlia : public RPCProtocol, public KadPolicy, public StatisticSample
 	virtual void handlePacket(KadHello_p packet);
 	/// responds to probe request
 	virtual void handlePacket(std::unique_ptr<KadProbeReq> packet);
+	virtual void handlePacket(std::unique_ptr<KadPNDiscReq> packet);
 	virtual void handlePacket(std::unique_ptr<KadQueryRouteReq> packet);
 	virtual void handlePacket(std::unique_ptr<KadUpdateRouteReq> packet);
 	virtual void handlePacket(std::unique_ptr<KadFindNodeReq> packet);
@@ -98,6 +99,8 @@ class R2Kademlia : public RPCProtocol, public KadPolicy, public StatisticSample
 	void sendProbe(KadContact_p contact);
 	/// sends a "get neighbors" call to the contact
 	void sendGetNeighbors(KadContact_p contact);
+	/// sends a PNDisc Request to the Physical Neighbor
+	void sendDiscoveryReq(KadContact_p contact);
 	/// sends a find node call to find this node (rediscovery may use a not via failed link)
 	void sendFindNode(const OverlayKey& key, bool exact=false, const OverlayKey* notvia_unreachable_node= nullptr, const OverlayKey* notvia_failednode_neighbor= nullptr);
 	/// sends a data packet
@@ -219,6 +222,7 @@ private:
 	//@{
 	bool handleProbeResponse(KadPacket_p answer, RPCState& rpcState);
 	bool handleQueryRouteResponse(KadPacket_p answer, RPCState& rpcState);
+	bool handlePNDiscResponse(KadPacket_p answer, RPCState& rpcState);
 	bool handleFindNodeResponse(KadPacket_p answer, RPCState& rpcState);
 	bool handleRPCTimeOut(KadPacket_p answer, RPCState& rpcState);
 	//@}

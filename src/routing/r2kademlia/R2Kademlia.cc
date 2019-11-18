@@ -134,7 +134,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		countDropped(*packet, packet->getTarget());
 		return;
 	}
-		
+	
 	
 	KadPacket_p packet = \
 		std::unique_ptr<KadPacket>(check_and_cast<KadPacket*>(pkt->decapsulate()));
@@ -142,8 +142,10 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	      << " <" << packet->getName() << "> this="
 		 << static_cast<void*>(packet.get()) << " c:" << packet->getCreationTime() << endl;
 	*/
+	
 	// hello packets do not include my key
 	if (handleIfFitting<KadHello>(packet)) return;
+
 	// other packets should do so
 	packet->advanceProgress(); // increase hop count
 	if (packet->getCurrentHop() != myOverlayKey) {
@@ -152,7 +154,8 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		countDropped(*packet, packet->getTarget());
 		return;
 	}
-	if (packet->hasRemainingHops()){
+	
+	if (packet->hasRemainingHops()) {
 		// we are not the recipient
 		if (pathSnooping) {
 			// aka PATH OVERHEARING
@@ -173,6 +176,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	}
 	else { // no hops left, packet is addressed to me
 		packet->setControlInfo(pkt.release());
+		
 		// learn route from packet
 		//TODO optimization use isPathInteresting
 		routingTable.addPath(packet->getSource(), packet->reversePath(packet->getIntermediatePath())) ;
@@ -181,6 +185,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		if (handleIfFitting<KadFindNodeReq>(packet)) return;
 		// these types never forwardpackets
 		countReceived(*packet);
+		if (handleIfFitting<KadPNDiscReq>(packet)) return;
 		if (handleIfFitting<KadQueryRouteReq>(packet)) return;
 		if (handleIfFitting<KadUpdateRouteReq>(packet)) return;
 		if (handleIfFitting<KadAnswer>(packet)) return;
@@ -264,10 +269,16 @@ void R2Kademlia::handleDataPacket(NodePkt_p pkt) {
 
 void R2Kademlia::handlePacket(KadHello_p packet) {
 	EV << "received hello packet from " << packet->getSource().shortStr() << endl;
+
 	neighborTable.addNeighbor(packet->getSourceId(), packet->getSource());
 	EV_TRACE << "neighbor table: "<< neighborTable << endl;
+
 	routingTable.addPath(packet->getSource(), kad_path());
 	//EV_TRACE << "handlePacket: "<< static_cast<void*>(packet.get()) << endl;
+
+	// send back PNDiscReq to get contacts from physical neighbor
+	//TODO wait random time
+	sendDiscoveryReq(routingTable.getContact(packet->getSource()));
 }
 
 
@@ -449,12 +460,13 @@ bool R2Kademlia::handleProbeResponse(KadPacket_p answer, RPCState& rpcState) {
 	return true;
 }
 
+
 // Request Physical Neighbors from contact 
 void R2Kademlia::sendGetNeighbors(KadContact_p contact)
 {
 	EV_TRACE << "sending query route request to " << *contact << endl;
 	auto req = makePacket<KadQueryRouteReq>(contact, "KadQueryRouteReq");
-	req->setNeighborhood(1); // only physical neighbors (1 hop away)
+	req->setNeighborhood(1); // get only physical neighbors (1 hop away)
 	req->setContactsOnly(false);
 	sendRpcCall(
 		std::move(req),
@@ -463,6 +475,46 @@ void R2Kademlia::sendGetNeighbors(KadContact_p contact)
 		std::bind(&R2Kademlia::handleRPCTimeOut, this, ph::_1, ph::_2)
 	);
 }
+
+
+// Send PNDiscReq
+void R2Kademlia::sendDiscoveryReq(KadContact_p contact)
+{
+	EV_TRACE << "sending PNDisc request to " << *contact << endl;
+	auto req = makePacket<KadPNDiscReq>(contact, "KadPNDiscReq");
+	req->setSourceId(node().getNodeId());
+	req->setNeighborhood(1); // get only physical neighbors (1 hop away)
+	req->setContactsOnly(false);
+	//req->setHopLimit(1);
+	sendRpcCall(
+		std::move(req),
+		std::bind(&R2Kademlia::handlePNDiscResponse, this, ph::_1, ph::_2),
+		std::bind(&R2Kademlia::handlePNDiscResponse, this, ph::_1, ph::_2),
+		std::bind(&R2Kademlia::handleRPCTimeOut, this, ph::_1, ph::_2)
+	);
+}
+
+
+// handle PNDiscReq
+void R2Kademlia::handlePacket(std::unique_ptr<KadPNDiscReq> packet) {
+	EV_TRACE << "received PNDiscReq from " << packet->getSource().shortStr() << endl;
+
+	// since this is physical neighbor add it to our neighbortable
+	neighborTable.addNeighbor(packet->getSourceId(), packet->getSource());
+	EV_TRACE << "neighbor table: "<< neighborTable << endl;
+
+	// TODO currently only getting physical neighbors is implemented
+	ASSERT(packet->getNeighborhood() == 1);
+	ASSERT(!packet->getContactsOnly());
+	auto response = makeAnswer<KadPNDiscRsp>(*packet);
+	std::vector<OverlayKey> neighbors = neighborTable.getNeighbors();
+	response->setContactArraySize(neighbors.size());
+	response->setPathArraySize(neighbors.size());
+	for (uint i = 0; i < neighbors.size(); i++)
+		response->setContact(i, neighbors[i]);
+	sendPacket(std::move(response));
+}
+
 
 void R2Kademlia::handlePacket(std::unique_ptr<KadQueryRouteReq> packet) {
 	EV_TRACE << "received KadQueryRouteReq from " << packet->getSource().shortStr() << endl;
@@ -547,6 +599,16 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadUpdateRouteReq> packet) {
 		}
 	}
 
+}
+
+
+bool R2Kademlia::handlePNDiscResponse(KadPacket_p answer, RPCState& rpcState)
+{
+	if (rpcState.status != RPC_SUCCESS) return true;
+	auto response = safe_packet_cast<KadPNDiscRsp>(answer);
+	EV_TRACE << "PNDiscRsp received " << response->getContactArraySize() << " neighbors from " << response->getSource().shortStr() << endl;
+	readRTableRsp(std::move(response));
+	return true;
 }
 
 	
@@ -968,8 +1030,21 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 
 	EV_TRACE << "onNewContact(" << contact->getKey().shortStr() << ") called" << endl;
 
-	if (contact->getPathLength() < discoveryRadius)
+	if (contact->getPathLength() == 0) 
+	{ // physical neighbor, may have been heard of its existence by some third node!
+	  // avoid further actions until we hear a HELLO
+		if (not neighborTable.isNeighbor(contact->getKey()))
+		{
+			EV_TRACE << "onNewContact: will ignore supposed physical neighbor not being in Neighbor table" << endl;
+			return;
+		}
+	}
+
+	// ask for neighbors of new contact
+	if (contact->getPathLength() > 0 && contact->getPathLength() < discoveryRadius)
+	{
 		sendGetNeighbors(contact);
+	}
 	
 	if (contact->isValid())
 	{

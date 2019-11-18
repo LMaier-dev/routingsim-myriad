@@ -176,7 +176,9 @@ void KadRoutingTable::addPath(const OverlayKey& key, kad_path path)
 		// else new path is not interesting
 	}
 	else // contact is new
+	{
 		handleNewContact(key, std::move(path));
+	}
 }
 
 
@@ -217,7 +219,9 @@ void KadRoutingTable::addPath(const OverlayKey& key, const kad_path& path, const
 		// else new path is not interesting
 	}
 	else // contact is new
+	{
 		handleNewContact(key, concatViaPath(viaPath, path));
+	}
 }
 
 	

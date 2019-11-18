@@ -52,7 +52,7 @@ packet KadAnswer extends KadPacket {}
 
 /// compare RTableRequestType from Spec
 packet KadRTableReq extends KadPacket {
-	// reserved flag is ommited
+	// reserved flag is omitted
 	bool contactsOnly = false;
 	uint8_t neighborhood = 63;
 }
@@ -76,7 +76,7 @@ packet KadUpdateRouteReq extends KadPacket {
         uint8_t action[] enum(KadRouteUpdateAction);
 }
 
-//KadDataMsg
+// KadDataMsg
 packet KadDataMsg extends KadDataPacket {
        type = KAD_Data;
 }
@@ -89,11 +89,25 @@ packet KadError extends KadAnswer {
 }
 
 // HELLO
-// compare PHello
+// compare PNHello
 packet KadHello extends KadPacket {
 	type = KAD_PNHello;
 	nodeid_t sourceId;
 }
+
+
+// PNDiscReq
+packet KadPNDiscReq extends KadRTableReq {
+	type = KAD_PNDiscReq;
+	nodeid_t sourceId;
+}
+
+// PNDiscRsp
+packet KadPNDiscRsp extends KadRTableRsp {
+	type = KAD_PNDiscRsp;
+}
+
+
 
 // PROBE
 packet KadProbeReq extends KadPacket {
