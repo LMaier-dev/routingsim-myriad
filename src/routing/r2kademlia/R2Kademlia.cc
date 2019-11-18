@@ -650,7 +650,8 @@ void R2Kademlia::sendData(const OverlayKey& key) {
 
 // FIND NODE
 void R2Kademlia::sendFindNode(const OverlayKey& key, bool exact, const OverlayKey* notvia_unreachable_node, const OverlayKey* notvia_failednode_neighbor) {
-	EV_TRACE << "sendFindNode w/ " << key.shortStr() << (notvia_unreachable_node ? " (Rediscovery)" : "") << endl;
+	EV_TRACE << "sendFindNode w/ " << key.shortStr() << (exact ? " (NID)" : " (RID)") // Node ID or Resource ID?
+		 << (notvia_unreachable_node ? " (Rediscovery)" : "") << endl;
 	auto contacts = routingTable.getClosestContacts(key, findNodeNumber);
 	//ASSERT(contacts.size() > 0);
 	if (contacts.size() > 0)
