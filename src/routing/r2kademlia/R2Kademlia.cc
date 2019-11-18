@@ -1007,9 +1007,9 @@ void R2Kademlia::sampleStatistics (Statistics &stats) {
 	stats.value("forwardedPackets", forwardedPackets-sentPackets);
 	stats.value("sentPackets", sentPackets);
 	stats.value("receivedPackets", receivedPackets);
-	stats.value("forwardedPackets", forwardedPackets-sentPackets);
-	stats.value("sentPackets", sentPackets);
-	stats.value("receivedPackets", receivedPackets);
+	stats.value("forwardedDataPackets", forwardedDataPackets-sentDataPackets);
+	stats.value("sentDataPackets", sentDataPackets);
+	stats.value("receivedDataPackets", receivedDataPackets);
 	stats.value("routingTableContacts", routingTable.getNumContacts());
 	stats.value("routingTableBuckets", routingTable.getNumBuckets());
 	stats.value("routingTableUpdates", routingTable.getUpdateCount());
