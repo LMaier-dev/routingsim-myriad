@@ -110,6 +110,8 @@ public:
 		{KadDataPacket_Base::operator=(other); return *this;}
 	virtual KadDataPacket *dup() const override {return new KadDataPacket(*this);}
 	inline bool hasRemainingHops() const { return hopLimit > 0; }
+	inline void advanceProgress() { ASSERT(hopLimit > 0); hopLimit--;}
+
 	//@}
 
 

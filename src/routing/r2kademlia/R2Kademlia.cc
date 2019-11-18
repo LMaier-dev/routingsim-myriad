@@ -82,13 +82,13 @@ void R2Kademlia::onDisconnect( nodeid_t nid ) {
 	// if this node is taken down, the packets arrive after the reset
 	if(neighborTable.size() == 0) return;
 	OverlayKey key = neighborTable.getOverlayKey(nid);
-	ASSERT(!key.isUnspecified());
+	ASSERT(not key.isUnspecified());
 	ASSERT(neighborTable.getNodeId(key) == nid );
 
 	neighborTable.removeNeighbor(nid);
 	ASSERT(neighborTable.getNodeId(key) == undefined_node);
 	// set contact invalid (was routingTable.removeContact(key))
-	if (!routingTable.setContactInvalid(key)) {
+	if (not routingTable.setContactInvalid(key)) {
 		// this should only happen for nodes with very large degree
 		EV_ERROR << "missing contact " << nid << " " << key << " on node " << node().getNodeId() << endl;
 		return;
@@ -113,7 +113,6 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 
 	if ( pkt->getType() == KAD_DATA_PACKET_TYPE )
 	{
-		EV_TRACE << "calling handleDataPacket" << endl;
 		handleDataPacket(std::move(pkt));
 		return;
 	}
@@ -124,11 +123,11 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	const hop_t taken_hop= pkt->getHop();
 	//ASSERT(Node::getNode(this)->getNodeId() == taken_hop.to);
 
-	if (!getNetworkManager()->getTopology().isConnected(taken_hop.from,taken_hop.to))
+	if (not getNetworkManager()->getTopology().isConnected(taken_hop.from,taken_hop.to))
 	{
 		KadPacket_p packet = std::unique_ptr<KadPacket>(check_and_cast<KadPacket*>(pkt->decapsulate()));
 		EV_WARN << "received packet (msg id: " << packet->getId() << ") via an inactive link, thus will discard" << endl;
-		if (!packet->getControlInfo())
+		if (packet->getControlInfo() != nullptr)
 			packet->setControlInfo(pkt.release());
 
 		countDropped(*packet, packet->getTarget());
@@ -242,11 +241,13 @@ void R2Kademlia::reset() {
 
 
 void R2Kademlia::handleDataPacket(NodePkt_p pkt) {
+	EV << "handleDataPacket() - ";
 	
-	EV << "handleDataPacket()" << endl;
 	KadDataPacket_p packet = std::unique_ptr<KadDataPacket>(check_and_cast<KadDataPacket*>(pkt->decapsulate()));
 	
-	EV << "received data packet from " << packet->getSrcNodeID().shortStr() << endl;
+	EV << "received data packet from "
+	   << packet->getSrcNodeID().shortStr() << " to "
+	   << packet->getDstNodeID().shortStr() << " HL:" << packet->getHopLimit() << endl;
 
 	// we should check whether the link via this message travelled is
 	// still active, otherwise we should drop this message as it was affected
@@ -254,12 +255,12 @@ void R2Kademlia::handleDataPacket(NodePkt_p pkt) {
 	const hop_t taken_hop= pkt->getHop();
 	//ASSERT(Node::getNode(this)->getNodeId() == taken_hop.to);
 
-	if (!getNetworkManager()->getTopology().isConnected(taken_hop.from,taken_hop.to))
+	if (not getNetworkManager()->getTopology().isConnected(taken_hop.from,taken_hop.to))
 	{
 		EV_WARN << "received packet (msg id: " << packet->getId() << ") via an inactive link, thus will discard" << endl;
-		if (!packet->getControlInfo())
+		if (packet->getControlInfo() != nullptr)
 			packet->setControlInfo(pkt.release());
-		//countDataDropped(*packet, packet->getDstNodeID());
+		countDropped(*packet, packet->getDstNodeID());
 		return;
 	}
 
@@ -315,41 +316,101 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt) {
 
 void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 
-	// we do not route hello packets!
 	ASSERT(packet->getType() == KAD_Data);
 	ASSERT(packet->hasRemainingHops());
 	ASSERT(packet->getControlInfo() == nullptr);
 
 	PathID incomingPathID(packet->getDestPathID());
 	if (incomingPathID != UndefinedPathID)
-	{
+	{ // incoming PathID present
 		auto pidentry= fwdTablePathID.NIDPIDTable.find(packet->getDstNodeID());
 		if ( pidentry != fwdTablePathID.NIDPIDTable.end() )
 		{ // pidentry->second is incomingPathID
 			incomingPathID= pidentry->second;
 		}
 	}
-		
-	// lookup outgoing pathID
+	else
+	{ // next hop is destination ID
+		// should be just my own key or direct neighbor!
+		if (packet->getDstNodeID() == myOverlayKey)
+		{ // destined to myself
+			EV_TRACE << "next hop is me (after " << getHopLimitDefault()-packet->getHopLimit() << " hops)" << endl;
+			// consume packet
+			//countReceived(*packet);
+			return;
+		}
+		else
+		{ // destined to next hop that should be PN
+			EV_TRACE << "next hop is " << packet->getDstNodeID().shortStr() << " (PN)" << endl;
+
+			nodeid_t nid= neighborTable.getNodeId(packet->getDstNodeID());
+			if (nid != undefined_node)
+			{ // just forward
+				packet->advanceProgress(); // reduce hop limit
+				nodePkt->encapsulate(packet.release());
+				sendToNode(nid, std::move(nodePkt));
+				forwardedDataPackets++;
+			}
+			else
+			{
+				// Trying to send to a next hop that is not a physical next hop
+				// That will not fly...
+				EV_ERROR << "forwardDataPacket: next hop is not a physical node" << endl;
+				//TODO onMissingNeighbor(std::move(packet), std::move(nodePkt));
+
+				// forwarding failed
+				//countDropped(*packet);
+			}
+
+			return;
+		}
+
+	}
+
+	// lookup outgoing PathID (next hop) based on incoming PathID
 	auto fwdentry= fwdTablePathID.PIDFwdTable.find(incomingPathID);
 	if (fwdentry != fwdTablePathID.PIDFwdTable.end())
 	{
 		FwdTableEntry& nh= fwdentry->second;
 		if (nh.fwdState == FwdTableEntry::State::valid)
-		{
+		{ // 
 			if (nh.fwdAction == FwdTableEntry::Action::fwdNextPathID)
+			{ // set new outgoing PathID
 				packet->setDestPathID(nh.outgoingPathID);
+				EV_TRACE << "New outgoing PathID: " << nh.outgoingPathID << endl;
+			}
 			else
-			{
+			if (nh.fwdAction == FwdTableEntry::Action::fwdNextKadId)
+			{ // next hop will be destination NID
 				packet->setDestPathID(UndefinedPathID);
+				EV_TRACE << "Forward to Next KadID: " << packet->getDstNodeID().shortStr() << endl;
+			}
+			else
+			if (nh.fwdAction == FwdTableEntry::Action::fwdlocal)
+			{
+				EV_TRACE << "Forward action: local delivery" << endl;
 			}
 		}
-		
+		else
+		if (nh.fwdState == FwdTableEntry::State::obsolete)
+		{ // obsolete, but maybe still good enough to forward
+			EV_WARN << "obsolete PathID entry hit" << endl;
+		}
+		else
+		if (nh.fwdState == FwdTableEntry::State::invalid)
+		{
+			EV_ERROR << "invalid PathID entry hit" << endl;
+		}
+		else
+			EV_ERROR << "hit forwarding table entry with undefined table" << endl;
+
 	       	nodeid_t nid = neighborTable.getNodeId(nh.nextHopNode);
 		if (nid != undefined_node) {
+			packet->advanceProgress(); // decrease hop limit
 			nodePkt->encapsulate(packet.release());
 			sendToNode(nid, std::move(nodePkt));
 			forwardedDataPackets++;
+			EV_TRACE << "send to next hop nid=" << nid << endl;
 		}
 		else {
 			// Trying to send to a next hop that is not a physical next hop
@@ -358,9 +419,12 @@ void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 			//TODO onMissingNeighbor(std::move(packet), std::move(nodePkt));
 		}
 
-	} 
-
-	
+	}
+	else
+	{
+		EV_WARN << "forwardDataPacket: incoming PathID not found" << endl;
+		//TODO send error message back
+	}
 }
 
 
@@ -378,7 +442,7 @@ void R2Kademlia::sendPacket(KadPacket_p packet) {
 	ASSERT(packet->getControlInfo() == nullptr);
 	auto nodePkt = std::make_unique<NodePkt>(packet->getName());
 	nodePkt->setType(KAD_CTRL_PACKET_TYPE);
-	if(packet->getType() == KAD_FindNodeReq && check_and_cast<KadFindNodeReq*>(packet.get())->getExact()) {
+	if(packet->getType() == KAD_FindNodeReq and check_and_cast<KadFindNodeReq*>(packet.get())->getExact()) {
 		getKadObserver().registerPacket(*packet);
 		getStatistics().registerMessage(nodePkt.get());
 	}
@@ -405,7 +469,7 @@ void R2Kademlia::sendPacket(KadDataPacket_p packet) {
 /**
  * Assumption is that the contact list is sorted by XOR and distance to target  */
 const KadContact& R2Kademlia::chooseNextHop(const KadContactList& contacts, const OverlayKey& target, const OverlayKey& source) {
-	if (proximityRouting && contacts.size() > 1) {
+	if (proximityRouting and contacts.size() > 1) {
 		const KadContact* contact = contacts.front();
 		int dprefix = (contact->getKey() ^ target).log_2();
 		size_t dproxMin = contact->getPathLength();
@@ -505,7 +569,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadPNDiscReq> packet) {
 
 	// TODO currently only getting physical neighbors is implemented
 	ASSERT(packet->getNeighborhood() == 1);
-	ASSERT(!packet->getContactsOnly());
+	ASSERT(not packet->getContactsOnly());
 	auto response = makeAnswer<KadPNDiscRsp>(*packet);
 	std::vector<OverlayKey> neighbors = neighborTable.getNeighbors();
 	response->setContactArraySize(neighbors.size());
@@ -521,7 +585,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadQueryRouteReq> packet) {
 
 	// TODO currently only getting physical neighbors is implemented
 	ASSERT(packet->getNeighborhood() == 1);
-	ASSERT(!packet->getContactsOnly());
+	ASSERT(not packet->getContactsOnly());
 	auto response = makeAnswer<KadQueryRouteRsp>(*packet);
 	std::vector<OverlayKey> neighbors = neighborTable.getNeighbors();
 	response->setContactArraySize(neighbors.size());
@@ -667,7 +731,7 @@ void R2Kademlia::sendFindNode(const OverlayKey& key, bool exact, const OverlayKe
 		auto packet = makePacket<KadFindNodeReq>(contact, "FindNode");
 		packet->setQuery(key);
 		packet->setExact(exact);
-		if (notvia_unreachable_node &&  notvia_failednode_neighbor)
+		if (notvia_unreachable_node and  notvia_failednode_neighbor)
 		{ // this is an immediate rediscovery packet
 			ASSERT(exact);
 			packet->setNotVia(true);
@@ -1042,7 +1106,7 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 	}
 
 	// ask for neighbors of new contact
-	if (contact->getPathLength() > 0 && contact->getPathLength() < discoveryRadius)
+	if (contact->getPathLength() > 0 and contact->getPathLength() < discoveryRadius)
 	{
 		sendGetNeighbors(contact);
 	}
@@ -1140,7 +1204,7 @@ void R2Kademlia::sendUpdates()
 	      notifyContact= updateQueue.erase(notifyContact) )
 	{
 		KadContact_p notify_target= routingTable.getContact(notifyContact->first);
-		if (notify_target && notify_target->isValid())
+		if (notify_target and notify_target->isValid())
 		{ // only notify contacts that we have a path to (i.e., that are valid)
 			// UpdateRouteReqs are not expecting an answer, so no RPC call
 			auto packet = makePacket<KadUpdateRouteReq>(notify_target, "UpdateRoute");
@@ -1179,7 +1243,7 @@ void R2Kademlia::sendUpdates()
 void R2Kademlia::scheduleRediscovery(const OverlayKey& contactkey, const OverlayKey& notvia_unreachable_node, const OverlayKey& notvia_failednode_neighbor)
 {
 	KadContact_p rt_contact= routingTable.getContact(contactkey);
-	if (rt_contact && rt_contact->isRediscovering())
+	if (rt_contact and rt_contact->isRediscovering())
 	{
 		// do not schedule for rediscovery if there is something still in progress
 		EV_WARN << "Rediscovery not scheduled for contact " << contactkey.shortStr()
@@ -1226,7 +1290,7 @@ void R2Kademlia::scheduleUpdate(const KadContact& affectedContact, KadRouteUpdat
 			}
 			// or it is a physical neighbor of the affected node (here the last hop in the path)
 			if ( affectedContact.getPathLength() > 0
-			     &&
+			     and
 			     affectedContact.getPath()[affectedContact.getPathLength()-1] == notifyContact->getKey() ) {
 				//EV_TRACE << " is the last hop - skipped." << endl;
 				
@@ -1376,7 +1440,7 @@ void R2Kademlia::rediscoverContacts() {
 		if (rt_contact) { // so contact still exists
 			// contact may have been recovered meanwhile
 			// do not rediscover contact which is already Rediscovering
-			if (rt_contact->isInvalid() && !rt_contact->isRediscovering())
+			if (rt_contact->isInvalid() and not rt_contact->isRediscovering())
 			{
 				// set contact state to rediscovering
 				const_cast<KadContact*>(rt_contact)->setRediscovering();

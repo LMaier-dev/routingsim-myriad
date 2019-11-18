@@ -39,7 +39,7 @@ public:
 	/// returns a vector of all known neighbors
 	std::vector<OverlayKey> getNeighbors() const;
 	/// returns the node id of the neighbor with the given key.
-	/// @returns unspecified_node if the key is not found
+	/// @returns undefined_node if the key is not found
 	nodeid_t getNodeId(const OverlayKey& key) const;
 	/// returns the overlay key of the given neighbor node id if known, else unspecified
 	const OverlayKey& getOverlayKey(nodeid_t nodeId) const;
