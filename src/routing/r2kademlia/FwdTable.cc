@@ -89,7 +89,7 @@ void FwdTablePathID::modEntry(KadContact_p contact)
        	if (contact == nullptr)
 		return;
 
-	PathID priorPathID= UndefinedPathID;
+	PathID priorPathID= PathID::UndefinedPathID;
 	auto pidentry= NIDPIDTable.find(contact->getKey());
 	// Lookup old entry if it exists
 	if ( pidentry != NIDPIDTable.end() )

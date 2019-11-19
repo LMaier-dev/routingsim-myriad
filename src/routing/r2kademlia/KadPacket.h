@@ -103,7 +103,8 @@ class KadDataPacket : public KadDataPacket_Base
 public:
 	/** @name member functions needed for minimal implementation */
 	//@{
-	KadDataPacket(const char *name=nullptr, short kind=0) : KadDataPacket_Base(name, kind) {}
+        KadDataPacket(const char *name=nullptr, short kind=0) :
+      	KadDataPacket_Base(name, kind)  { }
 	KadDataPacket(const KadDataPacket& other) : KadDataPacket_Base(other) {}
 	~KadDataPacket() { };
 	KadDataPacket& operator=(const KadDataPacket& other)

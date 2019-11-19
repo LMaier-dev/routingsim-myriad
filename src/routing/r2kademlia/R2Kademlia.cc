@@ -127,7 +127,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	{
 		KadPacket_p packet = std::unique_ptr<KadPacket>(check_and_cast<KadPacket*>(pkt->decapsulate()));
 		EV_WARN << "received packet (msg id: " << packet->getId() << ") via an inactive link, thus will discard" << endl;
-		if (packet->getControlInfo() != nullptr)
+		if (packet->getControlInfo() == nullptr)
 			packet->setControlInfo(pkt.release());
 
 		countDropped(*packet, packet->getTarget());
@@ -241,11 +241,11 @@ void R2Kademlia::reset() {
 
 
 void R2Kademlia::handleDataPacket(NodePkt_p pkt) {
-	EV << "handleDataPacket() - ";
+	EV_TRACE << "handleDataPacket() - ";
 	
 	KadDataPacket_p packet = std::unique_ptr<KadDataPacket>(check_and_cast<KadDataPacket*>(pkt->decapsulate()));
 	
-	EV << "received data packet from "
+	EV_TRACE << "received data packet from "
 	   << packet->getSrcNodeID().shortStr() << " to "
 	   << packet->getDstNodeID().shortStr() << " HL:" << packet->getHopLimit() << endl;
 
@@ -258,12 +258,14 @@ void R2Kademlia::handleDataPacket(NodePkt_p pkt) {
 	if (not getNetworkManager()->getTopology().isConnected(taken_hop.from,taken_hop.to))
 	{
 		EV_WARN << "received packet (msg id: " << packet->getId() << ") via an inactive link, thus will discard" << endl;
-		if (packet->getControlInfo() != nullptr)
+		if (packet->getControlInfo() == nullptr)
 			packet->setControlInfo(pkt.release());
+		
 		countDropped(*packet, packet->getDstNodeID());
 		return;
 	}
 
+	// this should either forward to next hop or deliver locally
 	forwardDataPacket(std::move(packet), std::move(pkt));
 }
 
@@ -320,27 +322,24 @@ void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 	ASSERT(packet->hasRemainingHops());
 	ASSERT(packet->getControlInfo() == nullptr);
 
+	//  own originated packets will possess the right (incoming) DestPathID, see makeDataPacket()
 	PathID incomingPathID(packet->getDestPathID());
-	if (incomingPathID != UndefinedPathID)
-	{ // incoming PathID present
-		auto pidentry= fwdTablePathID.NIDPIDTable.find(packet->getDstNodeID());
-		if ( pidentry != fwdTablePathID.NIDPIDTable.end() )
-		{ // pidentry->second is incomingPathID
-			incomingPathID= pidentry->second;
-		}
-	}
-	else
+	
+	// incomingPathID is only undefined for last hop packets	
+	if (incomingPathID == PathID::UndefinedPathID)
 	{ // next hop is destination ID
 		// should be just my own key or direct neighbor!
 		if (packet->getDstNodeID() == myOverlayKey)
 		{ // destined to myself
 			EV_TRACE << "next hop is me (after " << getHopLimitDefault()-packet->getHopLimit() << " hops)" << endl;
-			// consume packet
-			//countReceived(*packet);
+			// successfully delivered! consume packet
+			packet->setControlInfo(nodePkt.release());
+
+			countReceived(*packet);
 			return;
 		}
 		else
-		{ // destined to next hop that should be PN
+		{ // if forwarding incoming packet it is destined to next hop that should be PN
 			EV_TRACE << "next hop is " << packet->getDstNodeID().shortStr() << " (PN)" << endl;
 
 			nodeid_t nid= neighborTable.getNodeId(packet->getDstNodeID());
@@ -359,7 +358,8 @@ void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 				//TODO onMissingNeighbor(std::move(packet), std::move(nodePkt));
 
 				// forwarding failed
-				//countDropped(*packet);
+				packet->setControlInfo(nodePkt.release());
+				countDropped(*packet, packet->getDstNodeID());
 			}
 
 			return;
@@ -382,7 +382,7 @@ void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 			else
 			if (nh.fwdAction == FwdTableEntry::Action::fwdNextKadId)
 			{ // next hop will be destination NID
-				packet->setDestPathID(UndefinedPathID);
+				packet->setDestPathID(PathID::UndefinedPathID);
 				EV_TRACE << "Forward to Next KadID: " << packet->getDstNodeID().shortStr() << endl;
 			}
 			else
@@ -402,7 +402,7 @@ void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 			EV_ERROR << "invalid PathID entry hit" << endl;
 		}
 		else
-			EV_ERROR << "hit forwarding table entry with undefined table" << endl;
+			EV_ERROR << "hit forwarding table entry with undefined state" << endl;
 
 	       	nodeid_t nid = neighborTable.getNodeId(nh.nextHopNode);
 		if (nid != undefined_node) {
@@ -417,12 +417,14 @@ void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 			// That will not fly...
 			EV_ERROR << "forwardDataPacket: wrong next hop" << endl;
 			//TODO onMissingNeighbor(std::move(packet), std::move(nodePkt));
+			packet->setControlInfo(nodePkt.release());
+			countDropped(*packet, packet->getDstNodeID());
 		}
 
 	}
 	else
-	{
-		EV_WARN << "forwardDataPacket: incoming PathID not found" << endl;
+	{ // incoming PathID not found: may be the case if entry already deleted
+		EV_WARN << "forwardDataPacket: incoming PathID " << incomingPathID << " not found in FwdPIDTable" << endl;
 		//TODO send error message back
 	}
 }
@@ -442,7 +444,7 @@ void R2Kademlia::sendPacket(KadPacket_p packet) {
 	ASSERT(packet->getControlInfo() == nullptr);
 	auto nodePkt = std::make_unique<NodePkt>(packet->getName());
 	nodePkt->setType(KAD_CTRL_PACKET_TYPE);
-	if(packet->getType() == KAD_FindNodeReq and check_and_cast<KadFindNodeReq*>(packet.get())->getExact()) {
+	if (packet->getType() == KAD_FindNodeReq and check_and_cast<KadFindNodeReq*>(packet.get())->getExact()) {
 		getKadObserver().registerPacket(*packet);
 		getStatistics().registerMessage(nodePkt.get());
 	}
@@ -702,6 +704,7 @@ void R2Kademlia::sendData(const OverlayKey& key) {
 		}
 		auto packet = makeDataPacket<KadDataPacket>(&contact, "KadDataPacket");
 		EV_TRACE << "sending KadDataPacket id=" << packet->getId() << endl;
+		// note that makeDataPacket sets DestPathID accordingly!
 		sendPacket(std::move(packet));
 	}
 	else
@@ -980,7 +983,7 @@ void R2Kademlia::onMissingNeighbor(KadDataPacket_p packet, NodePkt_p pkt) {
 
 void R2Kademlia::onErrorPacket(KadError& error) {
 
-	EV_INFO << "received ERROR packet (" << error.getErrorType() << ") ";
+	EV_INFO << "received ERROR packet (" << (uint8_t) error.getErrorType() << ") ";
 	switch (error.getErrorType()) {
 		case KAD_NoError:
 			EV_INFO << "No Error";
@@ -1340,20 +1343,16 @@ std::unique_ptr<T> R2Kademlia::makeDataPacket(const KadContact* contact, const c
 	packet->setDstNodeID(contact->getKey());
 	packet->setHopLimit(hopLimit);
 
+	// when creating a packet we set everything so that we can forward the packet
 	auto pidentry= fwdTablePathID.NIDPIDTable.find(contact->getKey());
 	if ( pidentry != fwdTablePathID.NIDPIDTable.end() )
 	{ // pidentry.second is incomingPathID
-		// lookup outgoing pathID
-		auto fwdentry= fwdTablePathID.PIDFwdTable.find(pidentry->second);
-		if (fwdentry != fwdTablePathID.PIDFwdTable.end())
-		{
-			FwdTableEntry& nh= fwdentry->second;
-			if (nh.fwdState == FwdTableEntry::State::valid)
-			{
-				if (nh.fwdAction == FwdTableEntry::Action::fwdNextPathID)
-					packet->setDestPathID(nh.outgoingPathID);
-			}
-		}
+		// this will be used to lookup the outgoing PID in forwardDataPacket()
+		packet->setDestPathID(pidentry->second);
+	}
+	else
+	{
+		EV_ERROR << "makeDataPacket() - no PathID found for destination " << contact->getKey().shortStr() << endl;
 	}
 	return packet;
 }

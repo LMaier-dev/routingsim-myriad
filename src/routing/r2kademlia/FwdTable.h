@@ -16,9 +16,9 @@ namespace routingsim {
 
 	class FwdTableEntry {
 	public:
-		PathID outgoingPathID = UndefinedPathID;
+		PathID outgoingPathID = PathID::UndefinedPathID;
 		OverlayKey nextHopNode = OverlayKey::UNSPECIFIED_KEY;
-		PathID prevPathID = UndefinedPathID;
+		PathID prevPathID = PathID::UndefinedPathID;
 
 		enum class State {
 			undefined     = 0,
@@ -44,9 +44,10 @@ namespace routingsim {
 
 	class FwdTablePathID : public cObject {
 	public:
-		// This stores PathID -> PathID/NextHop mappings plus state and action
+		// This stores incoming PathID -> PathID/NextHop mappings plus state and action
 		std::unordered_map<PathID,FwdTableEntry> PIDFwdTable;
-		// This stores NodeID to PathID mapping
+		// This stores NodeID to incoming PathID mapping
+		// (outgoing PID can be determined by lookup in PIDFwdTable)
 		std::unordered_map<OverlayKey,PathID> NIDPIDTable;
 		// cannot use constructor to set ID, because OnInitialize generates the Node ID
 	        void setOwnNodeID(const OverlayKey* myownNodeID) { ownNodeID= myownNodeID; };

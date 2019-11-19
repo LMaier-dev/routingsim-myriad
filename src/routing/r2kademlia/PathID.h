@@ -9,22 +9,20 @@
 namespace routingsim {
 
 using kad_path = std::vector<OverlayKey>;
-//using uint64_t =  unsigned long long;
-
-constexpr uint64_t UndefinedPathID= 0x0ULL;
 
 class PathID {
 
 
 public:
-
+	static const uint64_t UndefinedPathID= 0x0ULL;
+	
 	uint64_t pathId;
 	
         PathID(uint64_t pid= UndefinedPathID) : pathId(pid) {};
 	PathID(const kad_path& path);
 	bool isUndefined() const { return pathId == UndefinedPathID; };
         operator uint64_t() const { return pathId; };
-	bool operator==(const PathID& other) const { return pathId == other.pathId; }
+	//bool operator==(const PathID& other) const { return pathId == other.pathId; }
 
 };
 
