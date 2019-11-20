@@ -63,10 +63,12 @@ void FwdTablePathID::addEntry(KadContact_p contact)
 
 	// Routingtable entry on node 4: Dest 5: < 3 2 >
 
+	// note: this path may be empty for physical neighbors
 	kad_path currentpath(contact->getPath());
-	// add destination node ID to path (will never be empty then)
+	// add destination node ID to end of the path (will never be empty then)
 	currentpath.push_back(contact->getKey());
 
+	// prepend own nodeID for incoming PathID
 	PathID incomingPathID(getPathID(*ownNodeID, currentpath));
 		
 	FwdTableEntry fwdentry;
@@ -80,6 +82,19 @@ void FwdTablePathID::addEntry(KadContact_p contact)
 		
 	PIDFwdTable[incomingPathID]= fwdentry;
 	NIDPIDTable[contact->getKey()]= incomingPathID;
+
+	EV_TRACE << "addEntry(): inPID:" << incomingPathID << " outPID:"
+		 << fwdentry.outgoingPathID << " path: " ;
+	
+	if (currentpath.size() == 0)
+		EV_TRACE << "<->" << endl;
+	else {
+		EV_TRACE << "< ";
+		for (auto key : currentpath)
+			EV_TRACE << key.shortStr() << ' ';
+		EV_TRACE << '>' << endl;
+		
+	}
 }
 
 
@@ -123,6 +138,18 @@ void FwdTablePathID::modEntry(KadContact_p contact)
 		fwdentry.prevPathID= priorPathID;
 		PIDFwdTable[incomingPathID]= fwdentry;
 		NIDPIDTable[contact->getKey()]= incomingPathID;
+
+		EV_TRACE << "modEntry(): inPID:" << incomingPathID << " outPID:"
+			 << fwdentry.outgoingPathID << " path: " ;
+	
+		if (currentpath.size() == 0)
+			EV_TRACE << "<->" << endl;
+		else {
+			EV_TRACE << "< ";
+			for (auto key : currentpath)
+				EV_TRACE << key.shortStr() << ' ';
+			EV_TRACE << '>' << endl;
+		}
 
 	}
 	else

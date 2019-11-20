@@ -504,6 +504,7 @@ KadContact_p KadRoutingTable::getContact(const OverlayKey& key) const
 	return getBucket(key).getContact(key);
 }
 
+
 kad_path KadRoutingTable::concatViaPath(const kad_path& viaPath, const kad_path& path) const
 {
 	kad_path newPath{};
@@ -515,6 +516,7 @@ kad_path KadRoutingTable::concatViaPath(const kad_path& viaPath, const kad_path&
 	newPath.reserve((left - viaPath.begin()) + (path.end() - right.base()));
 	std::copy(viaPath.begin(), left, std::back_inserter(newPath));
 	std::copy(right.base(), path.end(), std::back_inserter(newPath));
+
 	return newPath;
 }
 

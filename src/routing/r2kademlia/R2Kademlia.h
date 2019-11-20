@@ -87,6 +87,9 @@ class R2Kademlia : public RPCProtocol, public KadPolicy, public StatisticSample
 	void forwardPacket(KadPacket_p packet, NodePkt_p nodePkt);
 	/// forwards a data packet
 	void forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt);
+	/// forwards a data packet based on PathID present in the packet
+	bool forwardDataPacketToNextHop(KadDataPacket_p& packet, NodePkt_p& nodePkt);
+	
 	/// sends a received packet again after the source route was manipulated
 	void resendPacket(KadPacket_p packet);
 	/// routes a packet to a neighbor based on the source route in the packet
@@ -287,6 +290,7 @@ private:
 	uint succeededRediscovery = 0;
 	uint droppedRediscovery = 0;
 	uint forwardedRediscovery = 0;
+	uint inconsistentPathHit = 0;
 	//@}
 
 	/** @name timer things */

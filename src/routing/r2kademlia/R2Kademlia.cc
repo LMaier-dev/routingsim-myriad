@@ -316,6 +316,75 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt) {
 }
 
 
+// uses the PID of the packet to determine the next hop and transmits it
+// @returns true in case of successful forwarding/transmission to next hop or dropped packet
+bool R2Kademlia::forwardDataPacketToNextHop(KadDataPacket_p& packet, NodePkt_p& nodePkt)
+{
+	// lookup outgoing PathID (next hop) based on incoming PathID
+	auto fwdentry= fwdTablePathID.PIDFwdTable.find(packet->getDestPathID());
+	if (fwdentry != fwdTablePathID.PIDFwdTable.end())
+	{
+		FwdTableEntry& nh= fwdentry->second;
+		if (nh.fwdState == FwdTableEntry::State::valid)
+		{ // 
+			if (nh.fwdAction == FwdTableEntry::Action::fwdNextPathID)
+			{ // set new outgoing PathID
+				packet->setDestPathID(nh.outgoingPathID);
+				EV_TRACE << "New outgoing PathID: " << nh.outgoingPathID << endl;
+			}
+			else
+			if (nh.fwdAction == FwdTableEntry::Action::fwdNextKadId)
+			{ // next hop will be destination NID
+				packet->setDestPathID(PathID::UndefinedPathID);
+				EV_TRACE << "Forward to Next KadID: " << packet->getDstNodeID().shortStr() << endl;
+			}
+			else
+			if (nh.fwdAction == FwdTableEntry::Action::fwdlocal)
+			{
+				EV_TRACE << "Forward action: local delivery" << endl;
+			}
+		}
+		else
+		if (nh.fwdState == FwdTableEntry::State::obsolete)
+		{ // obsolete, but maybe still good enough to forward
+			EV_WARN << "obsolete PathID entry hit" << endl;
+		}
+		else
+		if (nh.fwdState == FwdTableEntry::State::invalid)
+		{
+			EV_ERROR << "invalid PathID entry hit" << endl;
+		}
+		else
+			EV_ERROR << "hit forwarding table entry with undefined state" << endl;
+
+	       	nodeid_t nid = neighborTable.getNodeId(nh.nextHopNode);
+		if (nid != undefined_node) {
+			packet->advanceProgress(); // decrease hop limit
+			nodePkt->encapsulate(packet.release());
+			sendToNode(nid, std::move(nodePkt));
+			forwardedDataPackets++;
+			EV_TRACE << "send to next hop nid=" << nid << endl;
+			// true means success
+			return true;
+		}
+		else {
+			// Trying to send to a next hop that is not a physical next hop
+			// That will not fly...
+			EV_ERROR << "forwardDataPacket: wrong next hop" << endl;
+			//TODO onMissingNeighbor(std::move(packet), std::move(nodePkt));
+			packet->setControlInfo(nodePkt.release());
+			countDropped(*packet, packet->getDstNodeID());
+
+			return true;
+		}
+
+	}
+
+	// false means failure
+	return false;
+}
+	
+
 void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 
 	ASSERT(packet->getType() == KAD_Data);
@@ -367,66 +436,44 @@ void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 
 	}
 
-	// lookup outgoing PathID (next hop) based on incoming PathID
-	auto fwdentry= fwdTablePathID.PIDFwdTable.find(incomingPathID);
-	if (fwdentry != fwdTablePathID.PIDFwdTable.end())
-	{
-		FwdTableEntry& nh= fwdentry->second;
-		if (nh.fwdState == FwdTableEntry::State::valid)
-		{ // 
-			if (nh.fwdAction == FwdTableEntry::Action::fwdNextPathID)
-			{ // set new outgoing PathID
-				packet->setDestPathID(nh.outgoingPathID);
-				EV_TRACE << "New outgoing PathID: " << nh.outgoingPathID << endl;
-			}
-			else
-			if (nh.fwdAction == FwdTableEntry::Action::fwdNextKadId)
-			{ // next hop will be destination NID
-				packet->setDestPathID(PathID::UndefinedPathID);
-				EV_TRACE << "Forward to Next KadID: " << packet->getDstNodeID().shortStr() << endl;
-			}
-			else
-			if (nh.fwdAction == FwdTableEntry::Action::fwdlocal)
-			{
-				EV_TRACE << "Forward action: local delivery" << endl;
-			}
-		}
-		else
-		if (nh.fwdState == FwdTableEntry::State::obsolete)
-		{ // obsolete, but maybe still good enough to forward
-			EV_WARN << "obsolete PathID entry hit" << endl;
-		}
-		else
-		if (nh.fwdState == FwdTableEntry::State::invalid)
-		{
-			EV_ERROR << "invalid PathID entry hit" << endl;
-		}
-		else
-			EV_ERROR << "hit forwarding table entry with undefined state" << endl;
+	packet->setDestPathID(incomingPathID);
+	if (not forwardDataPacketToNextHop(packet, nodePkt))
+	{ // incoming PathID not found
+		// may be the case if entry already deleted/overwritten, or
+		// has never existed due to shortcut route heard from other nodes
+		EV_WARN << "forwardDataPacket: incoming PathID " << incomingPathID << " not found in FwdPIDTable" << endl;
+		inconsistentPathHit++;
 
-	       	nodeid_t nid = neighborTable.getNodeId(nh.nextHopNode);
-		if (nid != undefined_node) {
-			packet->advanceProgress(); // decrease hop limit
-			nodePkt->encapsulate(packet.release());
-			sendToNode(nid, std::move(nodePkt));
-			forwardedDataPackets++;
-			EV_TRACE << "send to next hop nid=" << nid << endl;
+		// 2nd chance in case for inconsistent paths (e.g., due to overhearing/shortening):
+		// lookup path ID to destination ID
+		// this would avoid routing via the overlay (which should be the last resort)
+		auto pidentry= fwdTablePathID.NIDPIDTable.find(packet->getDstNodeID());
+		if ( pidentry != fwdTablePathID.NIDPIDTable.end() )
+		{ // pidentry.second is incomingPathID
+			// this will be used to lookup the outgoing PID in forwardDataPacket()
+			packet->setDestPathID(pidentry->second);
+			EV_TRACE << "new PID for dest " << packet->getDstNodeID() << ": " << pidentry->second << endl;
+
+			if (not forwardDataPacketToNextHop(packet, nodePkt))
+			{
+				//TODO send error message back
+				EV_WARN << "2nd chance forwarding failed while trying to forward. TODO send error message back. Dropping packet" << endl;				
+			}
+			else
+			{ // 2nd chance had success or dropped
+				return;
+			}
 		}
-		else {
-			// Trying to send to a next hop that is not a physical next hop
-			// That will not fly...
-			EV_ERROR << "forwardDataPacket: wrong next hop" << endl;
-			//TODO onMissingNeighbor(std::move(packet), std::move(nodePkt));
+		else
+		{
+			EV_WARN << "No PID found for contact: 2nd chance forwarding failed. TODO send error message back. Dropping packet" << endl;				
+		
+			// if we are here 2nd chance failed
 			packet->setControlInfo(nodePkt.release());
 			countDropped(*packet, packet->getDstNodeID());
 		}
-
 	}
-	else
-	{ // incoming PathID not found: may be the case if entry already deleted
-		EV_WARN << "forwardDataPacket: incoming PathID " << incomingPathID << " not found in FwdPIDTable" << endl;
-		//TODO send error message back
-	}
+	// else: Packet was sent off or dropped by function
 }
 
 
