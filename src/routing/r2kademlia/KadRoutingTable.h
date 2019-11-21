@@ -95,12 +95,14 @@ public:
 
 	/**
 	 * add a potentially new path, adds a contacts or updates an existing one
+	 * @returns true if path was added
 	 */
-	void addPath(const OverlayKey& key, kad_path path);
+	bool addPath(const OverlayKey& key, kad_path path);
 	/**
 	 * add a potentially new path, adds a contact or updates an existing one
+	 * @returns true if path was added
 	 */
-	void addPath(const OverlayKey& key, const kad_path& path, const kad_path& via);
+	bool addPath(const OverlayKey& key, const kad_path& path, const kad_path& via);
 	/**
 	 * Removes the contact with the given key from the routing table.
 	 * @returns true if the contact was removed, false if it was not present
@@ -170,8 +172,8 @@ public:
 protected:
 	/// removes duplicates and loops from a path
 	void simplifyPath(kad_path& path);
-	/// adds a new contact, called by addPath
-	virtual void handleNewContact(const OverlayKey& key, kad_path path);
+	/// adds a new contact, called by addPath, returns true if contact was added
+	virtual bool handleNewContact(const OverlayKey& key, kad_path path);
 	/** @name bucket access */
 	//@{
 	/** returns the index of the bucket corresponding to the given overlay key. */

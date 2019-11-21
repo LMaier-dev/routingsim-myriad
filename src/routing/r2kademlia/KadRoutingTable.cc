@@ -99,10 +99,11 @@ size_type KadRoutingTable::getBucketIndex(const OverlayKey& key) const
 	return std::min(buckets.size()-1, index);
 }
 
-	
-void KadRoutingTable::addPath(const OverlayKey& key, kad_path path)
+
+/// @returns true in case path was added
+bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path)
 {
-	if (key == myKey) return;
+	if (key == myKey) return false;
 	
 	// we must be careful: some neighbor may tell me paths that lead via me to my neighbors
 	// we simply discard this information as it cannot be more current than mine
@@ -115,7 +116,7 @@ void KadRoutingTable::addPath(const OverlayKey& key, kad_path path)
 		for (const auto& node : path)
 			EV_TRACE << node.shortStr() << ' ';
 		EV_TRACE << endl;
-		return;
+		return false;
 	}
 
 	/*
@@ -155,7 +156,7 @@ void KadRoutingTable::addPath(const OverlayKey& key, kad_path path)
 			if (not neighbortable.isNeighbor(path[0])) {
 				EV_ERROR << "Tried to use add path with invalid physical neighbor "
 					 << path[0] << " as next hop - ignoring";
-				return;
+				return false;
 			}
 		}
 		
@@ -171,24 +172,27 @@ void KadRoutingTable::addPath(const OverlayKey& key, kad_path path)
 			// do something on improved path according to policy
 			policy->onImprovement(*contact);
 
-			return;
+			return true;
 		}
-		// else new path is not interesting
+		// else contact exists, but new path is not interesting
+		
+		return false;
 	}
 	else // contact is new
 	{
-		handleNewContact(key, std::move(path));
+		return handleNewContact(key, std::move(path));
 	}
 }
 
 
-void KadRoutingTable::addPath(const OverlayKey& key, const kad_path& path, const kad_path& viaPath)
+/// @returns true in case path was added
+bool KadRoutingTable::addPath(const OverlayKey& key, const kad_path& path, const kad_path& viaPath)
 {
-	if (key == myKey) return;
+	if (key == myKey)
+		return false;
 
 	if (pathSimplification) {
-		addPath(key, concatViaPath(viaPath, path));
-		return;
+		return addPath(key, concatViaPath(viaPath, path));
 	}
 
 	KadContact *contact = getContactInternal(key);
@@ -214,13 +218,16 @@ void KadRoutingTable::addPath(const OverlayKey& key, const kad_path& path, const
 			// do something on improved path according to policy
 			policy->onImprovement(*contact);
 			
-			return;
+			return true;
 		}
-		// else new path is not interesting
+		// else contact exists, but new path is not interesting
+		EV_TRACE << "Contact known, but new path not added " << *contact << endl;
+
+		return false;
 	}
 	else // contact is new
 	{
-		handleNewContact(key, concatViaPath(viaPath, path));
+		return handleNewContact(key, concatViaPath(viaPath, path));
 	}
 }
 
@@ -238,8 +245,9 @@ void KadRoutingTable::simplifyPath(kad_path& path)
 	}
 }
 
-	
-void KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path)
+
+// @returns true if contact was inserted into routing table, false if not
+bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path)
 {
 	ASSERT(key != myKey);
 	KadBucket& bucket = getBucket(key);
@@ -247,8 +255,7 @@ void KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path)
 	if (isSplittable(bucket)) {
 		splitLastBucket();
 		// we recurse to get the new bucket after the split
-		handleNewContact(key, std::move(path));
-		return;
+		return handleNewContact(key, std::move(path));
 	}
 
 	auto contact = std::make_unique<KadContact>(key, std::move(path));
@@ -256,11 +263,13 @@ void KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path)
 	{
 		policy->onNewContact(contact.get());
 		bucket.contacts.push_back(std::move(contact));
+		
+		return true;
 	}
 	else {
 		if (not proximityNeighborSelection) {
 			EV_INFO << "dropping new contact " << *contact << endl;
-			return;
+			return false;
 		}
 		// contact replacement
 		auto& contacts = bucket.contacts;
@@ -277,11 +286,17 @@ void KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path)
 			EV_DEBUG << "replacing contact, new: " << *contact << " old: " << **result << endl;
 			*result = std::move(contact);
 			policy->onNewContact(result->get());
+			
+			return true;
 		}
 		else {
 			EV_TRACE << "dropping new contact " << *contact << endl;
+			return false;
 		}
 	}
+	
+	// just as safety measure in case we fall through here
+	return false;
 }
 
 void KadRoutingTable::splitLastBucket()
