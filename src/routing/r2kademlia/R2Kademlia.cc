@@ -284,7 +284,10 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt) {
 	ASSERT(packet->getType() != KAD_PNHello);
 	ASSERT(packet->hasRemainingHops());
 	ASSERT(packet->getControlInfo() == nullptr);
-	//TODO optimization: we could check if the target is a neighbor...
+	
+	//TODO optimization: potential shortcut - we check if the target is a already neighbor
+	// only allowed for exact and not strict routing
+	
 	const OverlayKey& nextHop = packet->getNextHop();
 	nodeid_t nid = neighborTable.getNodeId(nextHop);
 	if (nid != undefined_node) {
@@ -299,9 +302,6 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt) {
 	}
 
 }
-
-
-
 
 	
 void R2Kademlia::resendPacket(KadPacket_p packet) {

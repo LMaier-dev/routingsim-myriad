@@ -64,7 +64,11 @@ std::string KadRoutingTable::str() const
 		for (const auto& contact : b.contacts) {
 			out << ' ' << *contact;
 		}
-		out << "} ";
+		out << "}+{";
+		for (const auto& econtact : b.PNContacts) {
+			out << ' ' << *econtact;
+		}
+		out << '}';		
 		i++;
 	}
 	
@@ -135,7 +139,8 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path)
 		// find other cycles/duplicates
 		simplifyPath(path);
 	}
-	
+
+	// sanity check: either path was empty before or it was not and is not empty after simplification
 	ASSERT(pathWasNotEmpty==false || (pathWasNotEmpty && path.empty()==false));
 	
 	KadContact *contact = getContactInternal(key);
@@ -147,6 +152,17 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path)
 		if (!contact->isPhysicalNeighbor() && path.empty()==true)
 		{
 			contact->setPhysicalNeighbor();
+			// move over to PNcontacts
+			
+			KadBucket& bucket = getBucket(key);
+			auto it = bucket.findContact(key);
+			if (it != bucket.contacts.end()){
+				bucket.PNContacts.push_back(std::move(*it));
+				bucket.contacts.erase(it);
+			}
+			else
+				EV_ERROR << "Contact existed already, but not found" << endl;
+			
 			EV_TRACE << "Contact existed already, but seems to be a PN now: " << *contact << endl;
 		}
 
@@ -203,6 +219,17 @@ bool KadRoutingTable::addPath(const OverlayKey& key, const kad_path& path, const
 		if (!contact->isPhysicalNeighbor() && concatViaPath(viaPath, path).empty())
 		{
 			contact->setPhysicalNeighbor();
+			// move over to PNcontacts
+			
+			KadBucket& bucket = getBucket(key);
+			auto it = bucket.findContact(key);
+			if (it != bucket.contacts.end()){
+				bucket.PNContacts.push_back(std::move(*it));
+				bucket.contacts.erase(it);
+			}
+			else
+				EV_ERROR << "Contact existed already, but not found" << endl;
+			
 			EV_TRACE << "Contact existed already, but seems to be a PN now: " << *contact << endl;
 		}
 		
@@ -258,7 +285,18 @@ bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path)
 		return handleNewContact(key, std::move(path));
 	}
 
+	bool isPhysicalNeighbor(path.empty() == true);
 	auto contact = std::make_unique<KadContact>(key, std::move(path));
+
+	// physical neighbors get always inserted as contact
+	if (isPhysicalNeighbor)
+	{
+		policy->onNewContact(contact.get());
+		bucket.PNContacts.push_back(std::move(contact));
+		return true;
+	}
+
+	// not a physical Neighbor: then perform contact replacement
 	if (bucket.size() < bucketSize)
 	{
 		policy->onNewContact(contact.get());
@@ -299,6 +337,7 @@ bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path)
 	return false;
 }
 
+
 void KadRoutingTable::splitLastBucket()
 {
 	EV_DEBUG << "splitting bucket" << endl;
@@ -316,6 +355,10 @@ void KadRoutingTable::splitLastBucket()
 	// sort contacts into new buckets
 	for (auto& contact : oldBucket.contacts)
 		getBucket(contact.get()).contacts.push_back(std::move(contact));
+	
+	// sort PNcontacts into new buckets
+	for (auto& contact : oldBucket.PNContacts)
+		getBucket(contact.get()).PNContacts.push_back(std::move(contact));
 }
 
 
@@ -351,7 +394,10 @@ KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_t
 	size_type index = getBucketIndex(key);
 	auto bucket = buckets.begin() + index;
 	if (bucket->size() >= n)
+	{
 		copyValidContacts(bucket->contacts, result);
+		copyValidContacts(bucket->PNContacts, result);
+	}
 	else {
 		// not enough contacts in first bucket
 		// now we scan the level of the accelerated lookup
@@ -361,10 +407,16 @@ KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_t
 		auto level = buckets.begin() + firstOnLevelIndex;
 		for (; level < buckets.end() and result.size() < n; level+=width) {
 			if (level == buckets.end()-1)
+			{
 				copyValidContacts(level->contacts, result);
+				copyValidContacts(level->PNContacts, result);
+			}
 			else // always insert the whole level
 				for (uint i = 0; i < width and level+i < buckets.end(); i++)
+				{
 					copyValidContacts(level[i].contacts, result);
+					copyValidContacts(level[i].PNContacts, result);
+				}
 		}
 		// if we still do not have enough contacts, we go up the tree
 		auto otherBucket = buckets.begin() + firstOnLevelIndex;
@@ -396,7 +448,10 @@ KadContactList KadRoutingTable::getAllContacts() const
 	KadContactList result{};
 	result.reserve(bucketSize * buckets.size());
 	for (auto& bucket : buckets)
+	{
 		copyContacts(bucket.contacts, result);
+		copyContacts(bucket.PNContacts, result);
+	}
 	return result;
 }
 
@@ -406,7 +461,11 @@ KadContactList KadRoutingTable::getAllValidContacts() const
 	KadContactList result{};
 	result.reserve(bucketSize * buckets.size());
 	for (auto& bucket : buckets)
+	{
 		copyValidContacts(bucket.contacts, result);
+		copyValidContacts(bucket.PNContacts, result);
+	}
+
 	return result;
 }
 
@@ -507,7 +566,7 @@ bool KadRoutingTable::removeContact(const OverlayKey& key)
 	KadBucket& bucket = getBucket(key);
 	bool result = bucket.removeContact(key);
 	if (!result)
-		EV << "failed to remove contact " << key << endl;
+		EV_ERROR << "failed to remove contact " << key << endl;
 	if (bucket.empty())
 		policy->onBucketEmpty(bucket);
 	return result;
@@ -536,13 +595,21 @@ kad_path KadRoutingTable::concatViaPath(const kad_path& viaPath, const kad_path&
 }
 
 //----------- KadBucket --------------
+
+/// @returns the contact either from ordinary contacts or from PN contacts
 KadContact *KadBucket::getContact(const OverlayKey& key)
 {
 	auto it = findContact(key);
-	if (it != contacts.end())
+	if (it != contacts.end() )
 		return it->get();
+	
+	it = findPNContact(key);
+	if (it != PNContacts.end() )
+		return it->get();
+
 	return nullptr;
 }
+
 
 bool KadBucket::removeContact(const OverlayKey& key)
 {
@@ -552,15 +619,34 @@ bool KadBucket::removeContact(const OverlayKey& key)
 		return true;
 	}
 	else
-		return false;
+	{ // not found in contacts yet, try PNContacts
+		it = findPNContact(key);
+		if (it != PNContacts.end()){
+			PNContacts.erase(it);
+			return true;
+		}
+	}
+	// if we arrive here, nothing found
+	return false;
 }
+
 
 std::vector<std::unique_ptr<KadContact>>::iterator KadBucket::findContact(const OverlayKey& key)
 {
 	auto it = contacts.begin();
 	for (; it !=  contacts.end() && !(*it)->hasKey(key); it++);
+
 	return it;
 }
+
+
+std::vector<std::unique_ptr<KadContact>>::iterator KadBucket::findPNContact(const OverlayKey& key)
+{
+	auto it = PNContacts.begin();
+	for (; it !=  PNContacts.end() && !(*it)->hasKey(key); it++);
+	return it;
+}
+
 
 // ---------------- other class independent methods ----------------
 

@@ -42,20 +42,26 @@ public:
 	/** tries to remove the contact, returns true if found */
 	inline bool removeContact(const OverlayKey& key);
 	/** returns true if the contact list is empty */
-	inline bool empty() { return contacts.empty(); }
+	inline bool empty() { return contacts.empty() && PNContacts.empty(); }
 	/** returns the size of the contact list */
-	inline size_type size() const { return contacts.size(); }
+	inline size_type size() const { return contacts.size() + PNContacts.size(); }
 	/// Common stdc++ console output method
 	friend std::ostream& operator<<(std::ostream& os, const KadBucket& b) {
-		return os << b.contacts.size() << " contacts";
+		return os << b.contacts.size()+ b.PNContacts.size() << " contacts (PN: " << b.PNContacts.size() << ")";
 	}
 protected:
 	/**
-	 * Returns an iterator at the contacts position.
+	 * Returns an iterator at the contact's position.
 	 * Returns contacts->end() if the contact is not found.
 	 */
 	std::vector<std::unique_ptr<KadContact>>::iterator findContact(const OverlayKey& key);
+	std::vector<std::unique_ptr<KadContact>>::iterator findPNContact(const OverlayKey& key);
+
+	// regular Kademlia bucket
 	std::vector<std::unique_ptr<KadContact>> contacts;
+	// extends the bucket by physical neighbors only that should be known,
+	// but do not fit into the regular bucket anymore
+	std::vector<std::unique_ptr<KadContact>> PNContacts; 
 };
 
 /**
