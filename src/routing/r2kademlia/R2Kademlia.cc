@@ -174,7 +174,25 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 			if (path_of_interest.size() > 0)
 				routingTable.addPath(packet->getTarget(), path_of_interest);
 		}
+		
 		//TODO ERROR OVERHEARING, more overhearing
+
+		// add potential pathID for destination at this intermediate node
+		switch (packet->getType())
+		{
+			case KAD_QueryRouteReq: // will install in forward direction
+			case KAD_QueryRouteRsp: // will install in reverse direction
+				if (routingTable.getContact(packet->getTarget()) == nullptr)
+				{ // contact not present yet (then also no neighbor)
+					if (packet->getProgress()+1 <= packet->getRouteArraySize())
+					{
+						KadContact contact(packet->getTarget(), packet->getSrcPath(packet->getProgress()+1, packet->getRouteArraySize()));
+						fwdTablePathID.addEntry(&contact);
+					}
+				}
+				break;
+		} // end switch
+		
 		forwardPacket(std::move(packet), std::move(pkt));
 		return;
 	}
