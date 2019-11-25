@@ -86,7 +86,7 @@ void R2Kademlia::handleDataPacket(NodePkt_p pkt) {
 		if (packet->getControlInfo() == nullptr)
 			packet->setControlInfo(pkt.release());
 		
-		countDropped(*packet, packet->getDstNodeID());
+		countDropped(*packet, packet->getDstNodeID(), travelledDisabledLink);
 		return;
 	}
 
@@ -153,7 +153,7 @@ bool R2Kademlia::forwardDataPacketToNextHop(KadDataPacket_p& packet, NodePkt_p& 
 			EV_ERROR << "forwardDataPacket: wrong next hop" << endl;
 			//TODO onMissingNeighbor(std::move(packet), std::move(nodePkt));
 			packet->setControlInfo(nodePkt.release());
-			countDropped(*packet, packet->getDstNodeID());
+			countDropped(*packet, packet->getDstNodeID(), wrongNextHop);
 
 			return true;
 		}
@@ -208,7 +208,7 @@ void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 
 				// forwarding failed
 				packet->setControlInfo(nodePkt.release());
-				countDropped(*packet, packet->getDstNodeID());
+				countDropped(*packet, packet->getDstNodeID(), missingNeighbor);
 			}
 
 			return;
@@ -237,7 +237,9 @@ void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 			if (not forwardDataPacketToNextHop(packet, nodePkt))
 			{
 				//TODO send error message back
-				EV_WARN << "2nd chance forwarding failed while trying to forward. TODO send error message back. Dropping packet" << endl;				
+				EV_WARN << "2nd chance forwarding failed while trying to forward. TODO send error message back. Dropping packet" << endl;
+				countDropped(*packet, packet->getDstNodeID(), secondChanceFailed);
+				return;
 			}
 			else
 			{ // 2nd chance had success or dropped
@@ -250,7 +252,7 @@ void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 		
 			// if we are here 2nd chance failed
 			packet->setControlInfo(nodePkt.release());
-			countDropped(*packet, packet->getDstNodeID());
+			countDropped(*packet, packet->getDstNodeID(), secondChanceFailed);
 		}
 	}
 	// else: Packet was sent off or dropped by function
@@ -333,7 +335,7 @@ void R2Kademlia::countReceived(KadDataPacket& packet) {
 }
 
 
-void R2Kademlia::countDropped(KadDataPacket& packet, const OverlayKey& target) {
+	void R2Kademlia::countDropped(KadDataPacket& packet, const OverlayKey& target, uint8_t reason) {
 	droppedDataPackets++;
 	getKadObserver().registerPacketDropped(packet, myOverlayKey, target);
 	nodeid_t nid = undefined_node;

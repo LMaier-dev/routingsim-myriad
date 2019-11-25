@@ -213,7 +213,7 @@ void KadObserver::registerPacket(KadDataPacket& packet) {
 }
 
 
-void KadObserver::registerPacketDropped(KadPacket& packet, const OverlayKey& current, const OverlayKey& target) {
+void KadObserver::registerPacketDropped(KadPacket& packet, const OverlayKey& current, const OverlayKey& target, uint8_t reason) {
 	if (not packet.isTracked()) return;
 	if (simTime() < getSimulation()->getWarmupPeriod()) return;
 	droppedPackets++;
@@ -230,7 +230,7 @@ void KadObserver::registerPacketDropped(KadPacket& packet, const OverlayKey& cur
 	info.distanceLeft = getPhysicalDistance(current, toKey);
 	info.prefixDist = fromKey.sharedPrefixLength(toKey);
 	info.prefixDistLeft = current.sharedPrefixLength(toKey);
-	info.reason = 0;
+	info.reason = reason;
 	histograms[hopCountDropped]->collect(info.hops);
 	histograms[overlayHopsDropped]->collect(info.overlayHops);
 	histograms[distanceDropped]->collect(info.distance);
@@ -244,7 +244,7 @@ void KadObserver::registerPacketDropped(KadPacket& packet, const OverlayKey& cur
 }
 
 
-void KadObserver::registerPacketDropped(KadDataPacket& packet, const OverlayKey& current, const OverlayKey& target) {
+void KadObserver::registerPacketDropped(KadDataPacket& packet, const OverlayKey& current, const OverlayKey& target, uint8_t reason) {
 	if (not packet.isTracked()) return;
 	if (simTime() < getSimulation()->getWarmupPeriod()) return;
 	droppedDataPackets++;
@@ -261,7 +261,7 @@ void KadObserver::registerPacketDropped(KadDataPacket& packet, const OverlayKey&
 	info.distanceLeft = getPhysicalDistance(current, toKey);
 	info.prefixDist = fromKey.sharedPrefixLength(toKey);
 	info.prefixDistLeft = current.sharedPrefixLength(toKey);
-	info.reason = 0;
+	info.reason = reason;
 	histograms[hopCountDropped]->collect(info.hops);
 	histograms[overlayHopsDropped]->collect(info.overlayHops);
 	histograms[distanceDropped]->collect(info.distance);

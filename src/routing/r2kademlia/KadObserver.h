@@ -26,12 +26,16 @@ namespace routingsim {
 using cHistogramPtr = std::unique_ptr<cHistogram>;
 
 class MessageStatistics;
+
+
 struct MessageDeliveryInfo {
 	uint hops = 0;
 	uint overlayHops = 0;
 	uint distance = 0;
 	uint prefixDist = 0;
 };
+
+
 struct MessageDroppedInfo {
 	uint hops = 0;
 	uint overlayHops = 0;
@@ -41,6 +45,7 @@ struct MessageDroppedInfo {
 	uint prefixDistLeft = 0;
 	uint reason = 0;
 };
+
 
 /**
  * The R2/Kademlia Global Observer
@@ -118,12 +123,12 @@ public:
 	uint getPopularity(const OverlayKey& key);
 
 	void registerPacket(KadPacket&);
-	void registerPacketDropped(KadPacket&, const OverlayKey& current, const OverlayKey& target=OverlayKey::UNSPECIFIED_KEY);
+	void registerPacketDropped(KadPacket&, const OverlayKey& current, const OverlayKey& target=OverlayKey::UNSPECIFIED_KEY, uint8_t reason= 0);
 	void registerPacketDelivered(KadPacket&);
 	void registerPacketOverlayHop(KadPacket&);
 	
 	void registerPacket(KadDataPacket&);
-	void registerPacketDropped(KadDataPacket&, const OverlayKey& current, const OverlayKey& target=OverlayKey::UNSPECIFIED_KEY);
+	void registerPacketDropped(KadDataPacket&, const OverlayKey& current, const OverlayKey& target=OverlayKey::UNSPECIFIED_KEY, uint8_t reason= 0);
 	void registerPacketDelivered(KadDataPacket&);
 	void registerPacketOverlayHop(KadDataPacket&);
 

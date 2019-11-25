@@ -38,6 +38,21 @@ using KadHello_p = std::unique_ptr<KadHello>;
 using KadError_p = std::unique_ptr<KadError>;
 
 using UpdateList_t = std::list< std::pair<KadContact, KadRouteUpdateAction> >;
+
+enum reasoncode : uint8_t {
+	unspecified = 0,
+        hopLimitExceeded = 1,	
+	nextHopUnknown = 2,
+	travelledDisabledLink = 3,
+	wrongNextHop= 4,
+	routeFailureDeadEnd= 5,
+	secondChanceFailed = 6,
+	missingNeighbor = 7,
+	unhandledType= 128
+};
+
+
+
 /**
  * Implementation of R2Kademlia.
  * Routing with R/Kademlia...
@@ -189,11 +204,11 @@ private:
 	/// does statistics on received packet
 	void countReceived(KadPacket& packet);
 	/// does statistics on dropped packet
-	void countDropped(KadPacket& packet, const OverlayKey& target);
+	void countDropped(KadPacket& packet, const OverlayKey& target, uint8_t reason);
 	/// does statistics on received data packet
 	void countReceived(KadDataPacket& packet);
 	/// does statistics on dropped data packet
-	void countDropped(KadDataPacket& packet, const OverlayKey& target);
+	void countDropped(KadDataPacket& packet, const OverlayKey& target, uint8_t reason);
 	/**
 	 * sends an error packet to the sender of the given packet
 	 * the original packet is encapsulated on the error packet

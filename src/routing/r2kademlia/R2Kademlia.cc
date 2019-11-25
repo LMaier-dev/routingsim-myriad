@@ -130,7 +130,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		if (packet->getControlInfo() == nullptr)
 			packet->setControlInfo(pkt.release());
 
-		countDropped(*packet, packet->getTarget());
+		countDropped(*packet, packet->getTarget(), travelledDisabledLink);
 		return;
 	}
 	
@@ -151,7 +151,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	if (packet->getCurrentHop() != myOverlayKey) {
 		EV_ERROR << "dropping packet, current hop does not fit!" << endl;
 		//TODO how does this happen?
-		countDropped(*packet, packet->getTarget());
+		countDropped(*packet, packet->getTarget(), wrongNextHop);
 		return;
 	}
 
@@ -184,7 +184,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 			case KAD_QueryRouteRsp: // will install in reverse direction
 				if (routingTable.getContact(packet->getTarget()) == nullptr)
 				{ // contact not present yet (then also no neighbor)
-					if (packet->getProgress()+1 <= packet->getRouteArraySize())
+					if (packet->getProgress()+1U <= packet->getRouteArraySize())
 					{
 						KadContact contact(packet->getTarget(), packet->getSrcPath(packet->getProgress()+1, packet->getRouteArraySize()));
 						fwdTablePathID.addEntry(&contact);
@@ -212,7 +212,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		if (handleIfFitting<KadAnswer>(packet)) return;
 		if (handleIfFitting<KadProbeReq>(packet)) return;
 		EV_ERROR << "dropping unhandled packet of type " << (int)packet->getType() << endl;
-		countDropped(*packet, packet->getTarget());
+		countDropped(*packet, packet->getTarget(), unhandledType);
 	}
 }
 
@@ -637,7 +637,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 	{
 		// send back Route Failure: no route toward destination known
 		// the only contact we know is the source
-		countDropped(*packet, query);
+		countDropped(*packet, query, routeFailureDeadEnd);
 		returnToSender(KAD_RouteFailureDeadEnd, std::move(packet));
 
 		if (is_rediscovery)
@@ -654,7 +654,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 		if (contacts.front()->getKey() == packet->getSource()) {
 			if (contacts.size() == 1) {
 				// the only contact we know is the source
-				countDropped(*packet, query);
+				countDropped(*packet, query, routeFailureDeadEnd);
 				returnToSender(KAD_RouteFailureDeadEnd, std::move(packet));
 
 				if (is_rediscovery)
@@ -710,7 +710,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 					EV_WARN << "no prefix progress made - dropping request" << endl;
 				}
 				// since we need an exact match and cannot make any progress, we are lost here
-				countDropped(*packet, query);
+				countDropped(*packet, query, routeFailureDeadEnd);
 				//TODO: if we find a closer contact too far away, we should send HOP LIMIT EXCEEDED
 				returnToSender(KAD_RouteFailureDeadEnd, std::move(packet));
 
@@ -1324,7 +1324,7 @@ void R2Kademlia::countReceived(KadPacket& packet) {
 }
 
 
-void R2Kademlia::countDropped(KadPacket& packet, const OverlayKey& target) {
+void R2Kademlia::countDropped(KadPacket& packet, const OverlayKey& target, uint8_t reason) {
 	droppedPackets++;
 	getKadObserver().registerPacketDropped(packet, myOverlayKey, target);
 	nodeid_t nid = undefined_node;
