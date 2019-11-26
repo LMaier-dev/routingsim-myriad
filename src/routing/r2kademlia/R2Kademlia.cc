@@ -925,6 +925,17 @@ void R2Kademlia::onBucketEmpty(KadBucket& bucket) {
 }
 
 
+void R2Kademlia::onContactRemoval(KadContact_p contact)
+{
+	EV_TRACE << "onContactRemoval(" << ((contact != nullptr) ? contact->getKey().shortStr() : "nullptr") << ") called" << endl;
+	if (contact == nullptr)
+		return;
+	
+	// delete from Forwarding table PID
+	fwdTablePathID.delEntry(contact);
+}
+
+
 void R2Kademlia::onNewContact(KadContact_p contact) {
 
 	EV_TRACE << "onNewContact(" << contact->getKey().shortStr() << ") called" << endl;

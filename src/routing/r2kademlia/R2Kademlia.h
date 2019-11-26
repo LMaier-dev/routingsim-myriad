@@ -141,6 +141,9 @@ public:
 	virtual void onBucketEmpty(KadBucket& bucket) override;
 	/** called when a new contact is created in the routing table*/
 	virtual void onNewContact(KadContact_p contact) override;
+	/** called when a contact is going to be deleted from routing table*/
+	virtual void onContactRemoval(KadContact_p contact) override;
+
 	/** Called when a route got improved */
 	virtual void onImprovement(const KadContact& contact) override;
 	//@}

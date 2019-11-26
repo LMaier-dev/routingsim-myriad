@@ -565,12 +565,18 @@ double KadRoutingTable::getAveragePathStretch() const
 
 bool KadRoutingTable::removeContact(const OverlayKey& key)
 {
+	// function will be called *before* contact is actually removed
+	policy->onContactRemoval(getContact(key));
+	
 	KadBucket& bucket = getBucket(key);
 	bool result = bucket.removeContact(key);
-	if (!result)
+	if (!result) {
 		EV_ERROR << "failed to remove contact " << key << endl;
+	}
+	
 	if (bucket.empty())
 		policy->onBucketEmpty(bucket);
+	
 	return result;
 }
 
