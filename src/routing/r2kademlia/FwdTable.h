@@ -53,6 +53,8 @@ namespace routingsim {
 	        void setOwnNodeID(const OverlayKey* myownNodeID) { ownNodeID= myownNodeID; };
 		void addEntry(KadContact_p contact);
 		void modEntry(KadContact_p contact);
+		void delEntry(KadContact_p contact);
+		void delPIDEntry(PathID pid);
 
 		// from cObject()
 		virtual std::string str() const;
