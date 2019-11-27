@@ -77,7 +77,7 @@ void FwdTablePathID::addEntry(KadContact_p contact)
 	auto it= NIDPIDTable.find(contact->getKey());
 	if (it != NIDPIDTable.end())
 	{
-		EV_WARN << "addEntry(): PID entry for contact " << contact->getKey().shortStr() << " existed already" << endl;
+		EV_WARN << "addEntry(): PID entry for contact " << contact->getKey().shortStr() << " existed already with incoming PID " << it->second << endl;
 		// do the right thing now and call modEntry
 		modEntry(contact);
 		return;
@@ -121,6 +121,16 @@ void FwdTablePathID::modEntry(KadContact_p contact)
 	{
 		kad_path currentpath(contact->getPath());
 		// add destination node ID to path (will never be empty then)
+		EV_TRACE << "modEntry(): Dest NodeID " << contact->getKey().shortStr() << endl;
+		if (currentpath.size() == 0)
+			EV_TRACE << "<->" << endl;
+		else {
+			EV_TRACE << "< ";
+			for (auto key : currentpath)
+				EV_TRACE << key.shortStr() << ' ';
+			EV_TRACE << '>' << endl;
+		}
+
 		currentpath.push_back(contact->getKey());
 		// calculate incomingPathID
 		PathID incomingPathID(getPathID(*ownNodeID, currentpath));

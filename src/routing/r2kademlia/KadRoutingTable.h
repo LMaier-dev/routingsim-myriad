@@ -105,7 +105,7 @@ public:
 	 * add a potentially new path, adds a contacts or updates an existing one
 	 * @returns true if path was added
 	 */
-	bool addPath(const OverlayKey& key, kad_path path);
+	bool addPath(const OverlayKey& key, kad_path path, KadContact::PathProperty prop);
 	/**
 	 * add a potentially new path, adds a contact or updates an existing one
 	 * @returns true if path was added
@@ -179,9 +179,9 @@ public:
 
 protected:
 	/// removes duplicates and loops from a path
-	void simplifyPath(kad_path& path);
+	bool simplifyPath(kad_path& path) const;
 	/// adds a new contact, called by addPath, returns true if contact was added
-	virtual bool handleNewContact(const OverlayKey& key, kad_path path);
+	virtual bool handleNewContact(const OverlayKey& key, kad_path path, KadContact::PathProperty prop);
 	/** @name bucket access */
 	//@{
 	/** returns the index of the bucket corresponding to the given overlay key. */
