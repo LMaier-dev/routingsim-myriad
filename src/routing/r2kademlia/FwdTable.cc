@@ -60,7 +60,7 @@ void FwdTablePathID::addEntry(KadContact_p contact)
 {
        	if (contact == nullptr)
 		return;
-	
+
 	// Routingtable entry on node 4: Dest 5: < 3 2 >
 
 	// note: this path may be empty for physical neighbors
@@ -121,7 +121,7 @@ void FwdTablePathID::modEntry(KadContact_p contact)
 	{
 		kad_path currentpath(contact->getPath());
 		// add destination node ID to path (will never be empty then)
-		EV_TRACE << "modEntry(): Dest NodeID " << contact->getKey().shortStr() << endl;
+		EV_TRACE << "modEntry(): Dest NodeID " << contact->getKey().shortStr();
 		if (currentpath.size() == 0)
 			EV_TRACE << "<->" << endl;
 		else {

@@ -188,9 +188,9 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 			case KAD_ProbeRsp: // will install in reverse direction
 				if (routingTable.getContact(packet->getTarget()) == nullptr)
 				{ // contact not present yet (then also no neighbor)
-					if (packet->getProgress()+1U <= packet->getRouteArraySize())
+					if (packet->getProgress()+1U <= packet->getRouteArraySize()-1)
 					{
-						KadContact contact(packet->getTarget(), packet->getSrcPath(packet->getProgress()+1, packet->getRouteArraySize()));
+						KadContact contact(packet->getTarget(), packet->getSrcPath(packet->getProgress()+1, packet->getRouteArraySize()-1));
 						fwdTablePathID.addEntry(&contact);
 					}
 				}
