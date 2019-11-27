@@ -44,6 +44,13 @@ public:
 		invalid       = 3
 	};
 
+	enum class PathProperty : uint8_t {
+		undefined     = 0,
+		direct        = 1, // path was directly learned, i.e., traversed
+		indirect      = 2, // path was indirectly learned
+		invalid       = 3  // path is invalid
+	};
+
 	KadContact(const KadContact&) = default;
         KadContact(KadContact&& k) : key(std::move(k.key)), path(std::move(k.path)), state(k.state), physicalNeighbor(k.physicalNeighbor) {};
         explicit KadContact(const OverlayKey& key): key(key), path(), state(State::undefined) {};
@@ -79,6 +86,8 @@ public:
 	/// sets the path to reach this contact (will implicitly set status to valid)
 	inline void setPath(kad_path path) { this->path = std::move(path); setValid(); }
 	inline const kad_path& getPath() const { return path; }
+	inline PathProperty getPathProperty() const { return pathproperty; } 
+	inline void setPathProperty(PathProperty newprop) { pathproperty= newprop; } 
 
 	/// Common stdc++ console output method
 	friend std::ostream& operator<<(std::ostream& os, const KadContact& c);
@@ -86,6 +95,7 @@ private:
 	OverlayKey key;	/// the OverlayKey of this contact
 	kad_path path;		/// the best known source routing path to reach this contact
 	State state= State::undefined; /// the state of the contact
+	PathProperty pathproperty= PathProperty::undefined; /// the path property
 	bool physicalNeighbor= false; /// true if we have a direct physical link to this neighbor
 };
 

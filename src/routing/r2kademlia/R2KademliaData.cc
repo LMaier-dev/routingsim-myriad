@@ -168,8 +168,15 @@ bool R2Kademlia::forwardDataPacketToNextHop(KadDataPacket_p& packet, NodePkt_p& 
 void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 
 	ASSERT(packet->getType() == KAD_Data);
-	ASSERT(packet->hasRemainingHops());
 	ASSERT(packet->getControlInfo() == nullptr);
+
+	if (packet->hasRemainingHops() == 0)
+	{ // Loop detected
+		// TODO send back error message
+		//returnToSender(KAD_SegmentFailure, std::move(packet));
+		countDropped(*packet, packet->getDstNodeID(), hopLimitExceeded);
+		return;
+	}
 
 	//  own originated packets will possess the right (incoming) DestPathID, see makeDataPacket()
 	PathID incomingPathID(packet->getDestPathID());

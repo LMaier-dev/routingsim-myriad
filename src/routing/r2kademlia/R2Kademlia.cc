@@ -168,11 +168,15 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 			// avoid learning about supposed physical Neighbors
 			kad_path path_of_interest(packet->reversePath(packet->getSrcPath(1, packet->getProgress())));
 			if (path_of_interest.size() > 0)
-				routingTable.addPath(packet->getSource(), path_of_interest);
+			{
+				routingTable.addPath(packet->getSource(), path_of_interest, KadContact::PathProperty::indirect);
+			}
 			
 			path_of_interest= packet->getSrcPath(packet->getProgress()+1, packet->getRouteArraySize()-1);
 			if (path_of_interest.size() > 0)
-				routingTable.addPath(packet->getTarget(), path_of_interest);
+			{
+				routingTable.addPath(packet->getTarget(), path_of_interest, KadContact::PathProperty::indirect);
+			}
 		}
 		
 		//TODO ERROR OVERHEARING, more overhearing
@@ -180,8 +184,8 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		// add potential pathID for destination at this intermediate node
 		switch (packet->getType())
 		{
-			case KAD_QueryRouteReq: // will install in forward direction
-			case KAD_QueryRouteRsp: // will install in reverse direction
+			case KAD_ProbeReq: // will install in forward direction
+			case KAD_ProbeRsp: // will install in reverse direction
 				if (routingTable.getContact(packet->getTarget()) == nullptr)
 				{ // contact not present yet (then also no neighbor)
 					if (packet->getProgress()+1U <= packet->getRouteArraySize())
@@ -201,7 +205,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		
 		// learn route from packet
 		//TODO optimization use isPathInteresting
-		routingTable.addPath(packet->getSource(), packet->reversePath(packet->getIntermediatePath())) ;
+		routingTable.addPath(packet->getSource(), packet->reversePath(packet->getIntermediatePath()), KadContact::PathProperty::direct);
 
 		// these types may forward packets, so they count themselves
 		if (handleIfFitting<KadFindNodeReq>(packet)) return;
@@ -271,7 +275,7 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 	EV_TRACE << "neighbor table: "<< neighborTable << endl;
 
 	// try to add neighbor to routing table
-	if (routingTable.addPath(packet->getSource(), kad_path()))
+	if (routingTable.addPath(packet->getSource(), kad_path(), KadContact::PathProperty::direct))
 	{
 		// send back PNDiscReq to get contacts from physical neighbor
 		//TODO wait random time
@@ -446,7 +450,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadPNDiscReq> packet) {
 	neighborTable.addNeighbor(packet->getSourceId(), packet->getSource());
 	EV_TRACE << "neighbor table: "<< neighborTable << endl;
 
-	routingTable.addPath(packet->getSource(), kad_path());
+	routingTable.addPath(packet->getSource(), kad_path(), KadContact::PathProperty::direct);
 
 	// TODO currently only getting physical neighbors is implemented
 	ASSERT(packet->getNeighborhood() == 1);
@@ -960,7 +964,11 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 	{
 		fwdTablePathID.addEntry(contact);
 	}
-	
+
+	if (contact->isValid() and contact->getPathProperty() == KadContact::PathProperty::indirect)
+	{ // send a probe packet for installing PIDs in intermediate nodes for this indirectly learned route
+		sendProbe(contact);
+	}
 }
 
 
@@ -972,7 +980,12 @@ void R2Kademlia::onImprovement(const KadContact& contact) {
 	{
 		fwdTablePathID.modEntry(&contact);
 	}
-	
+
+	if (contact.isValid() and contact.getPathProperty() == KadContact::PathProperty::indirect)
+	{ // send a probe packet for installing PIDs in intermediate nodes for this indirectly learned route
+		sendProbe(&contact);
+	}
+
 	// TODO: wait grace period
 	if ( neighborTable.isNeighbor(contact.getKey()) )
 	{ // this is true after re-enabling a physical neighbor
