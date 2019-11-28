@@ -188,7 +188,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 			case KAD_ProbeRsp: // will install in reverse direction
 				if (routingTable.getContact(packet->getTarget()) == nullptr)
 				{ // contact not present yet (then also no neighbor)
-					if (packet->getProgress()+1U <= packet->getRouteArraySize()-1)
+					if (packet->getProgress()+1U <= packet->getRouteArraySize()-1U)
 					{
 						KadContact contact(packet->getTarget(), packet->getSrcPath(packet->getProgress()+1, packet->getRouteArraySize()-1));
 						fwdTablePathID.addEntry(&contact);
@@ -301,7 +301,6 @@ void R2Kademlia::handlePacket(KadAnswer_p packet) {
 
 
 void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt) {
-
 	// we do not route hello packets!
 	ASSERT(packet->getType() != KAD_PNHello);
 	ASSERT(packet->hasRemainingHops());
@@ -309,9 +308,13 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt) {
 	
 	//TODO optimization: potential shortcut - we check if the target is a already neighbor
 	// only allowed for exact and not strict routing
-	
+
 	const OverlayKey& nextHop = packet->getNextHop();
 	nodeid_t nid = neighborTable.getNodeId(nextHop);
+
+	EV_TRACE << "forwardPacket(): " << packet->getName() << " dest " << packet->getTarget().shortStr()
+		 << " next hop: " << nextHop.shortStr() << " (" << nid << ')' << endl;
+
 	if (nid != undefined_node) {
 		nodePkt->encapsulate(packet.release());
 		sendToNode(nid, std::move(nodePkt));
@@ -320,6 +323,7 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt) {
 	else {
 		// Trying to send to a next hop that is not a physical next hop
 		// That will not fly...
+		EV_ERROR << "forwardPacket(): could not find next hop!" << endl;
 		onMissingNeighbor(std::move(packet), std::move(nodePkt));
 	}
 
@@ -388,6 +392,7 @@ const KadContact& R2Kademlia::chooseNextHop(const KadContactList& contacts, cons
 
 // PING
 void R2Kademlia::sendProbe(KadContact_p contact) {
+	EV_TRACE << "sending ProbeReq from " << myOverlayKey.shortStr() << " to " << contact->getKey().shortStr() << endl;
 	sendRpcCall(
 		makePacket<KadProbeReq>(contact, "KadProbeReq"),
 		std::bind(&R2Kademlia::handleProbeResponse, this, ph::_1, ph::_2),
