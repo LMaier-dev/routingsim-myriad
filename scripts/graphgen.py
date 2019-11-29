@@ -225,6 +225,7 @@ def clos_fat_tree(k, hosts=False):
                 for host in range(k//2):
                     G.add_edge(node_id, host_offset + pod*k**2//4 + node*k//2 + host)
                 assert(len(G.edges(node_id)) == k)
+    G = networkx.convert_node_labels_to_integers(G)
     return G
 
 
