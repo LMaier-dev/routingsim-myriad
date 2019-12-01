@@ -105,7 +105,7 @@ bool R2Kademlia::forwardDataPacketToNextHop(KadDataPacket_p& packet, NodePkt_p& 
 	if (fwdentry != fwdTablePathID.PIDFwdTable.end())
 	{
 		FwdTableEntry& nh= fwdentry->second;
-		if (nh.fwdState == FwdTableEntry::State::valid)
+		if (nh.isValid())
 		{ // 
 			if (nh.fwdAction == FwdTableEntry::Action::fwdNextPathID)
 			{ // set new outgoing PathID
@@ -125,12 +125,12 @@ bool R2Kademlia::forwardDataPacketToNextHop(KadDataPacket_p& packet, NodePkt_p& 
 			}
 		}
 		else
-		if (nh.fwdState == FwdTableEntry::State::obsolete)
+		if (nh.isObsolete())
 		{ // obsolete, but maybe still good enough to forward
 			EV_WARN << "obsolete PathID entry hit" << endl;
 		}
 		else
-		if (nh.fwdState == FwdTableEntry::State::invalid)
+		if (nh.isInvalid())
 		{
 			EV_ERROR << "invalid PathID entry hit" << endl;
 		}
@@ -169,7 +169,8 @@ void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 
 	ASSERT(packet->getType() == KAD_Data);
 	ASSERT(packet->getControlInfo() == nullptr);
-
+        ASSERT(packet->hasRemainingHops());
+	
 	if (packet->hasRemainingHops() == 0)
 	{ // Loop detected
 		// TODO send back error message

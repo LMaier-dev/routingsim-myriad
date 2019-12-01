@@ -33,9 +33,10 @@ simple R2Kademlia extends routingsim.foundation.Protocol
 		int discoveryRadius = default(2);
 		bool proximityRouting = default(true);
 		bool proximityNeighborSelection = default(true);
-		int hopLimit = default(100);
+		int hopLimit = default(256);
 		/// if activated the node collects path information from passing packets
 		bool pathSnooping = default(true);
+		bool sendDataPackets = default(true);
 		bool pathSimplification = default(true);
 		double probeInterval = default(2s) @unit(s);
 		/// 0=none, 1=random, 2=exiting, 3=bucket_expand, 4=random_suffix, 5=suffix_expand, 6=random_bucket

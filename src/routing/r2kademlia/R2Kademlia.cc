@@ -53,6 +53,7 @@ void R2Kademlia::onInitialize() {
 	proximityRouting = par("proximityRouting").boolValue();
 	hopLimit = (uint) par("hopLimit").intValue();
 	pathSnooping = par("pathSnooping").boolValue();
+        sendDataPackets = par("sendDataPackets").boolValue();
 	probeStrategy = (uint) par("probeStrategy").intValue();
 	detailedRoutingTableStats = par("detailedRoutingTableStats").boolValue();
 	rediscoveryWaitTime = (simtime_t) (par("rediscoveryWaitTime").doubleValue() * 0.001); // given in ms
@@ -62,7 +63,9 @@ void R2Kademlia::onInitialize() {
 	simtime_t probeInterval = (simtime_t) par("probeInterval").doubleValue();
 	addTimer(probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doProbe, this));
 	addTimer(probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doReachabilityTest, this));
-	addTimer(probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doDataProbe, this));
+	if (sendDataPackets)
+		addTimer(getSimulation()->getWarmupPeriod(), probeInterval, std::bind(&R2Kademlia::doDataProbe, this));
+
 	WATCH(myOverlayKey);
 	WATCH(neighborTable);
 	WATCH_OBJ(routingTable);
@@ -191,7 +194,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 					if (packet->getProgress()+1U <= packet->getRouteArraySize()-1U)
 					{
 						KadContact contact(packet->getTarget(), packet->getSrcPath(packet->getProgress()+1, packet->getRouteArraySize()-1));
-						fwdTablePathID.addEntry(&contact);
+						fwdTablePathID.addEntry(&contact, true);
 					}
 				}
 				break;
@@ -646,6 +649,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 	{
 		// send back Route Failure: no route toward destination known
 		// the only contact we know is the source
+		EV_TRACE << "no contacts closer to destination found" << endl;
 		countDropped(*packet, query, routeFailureDeadEnd);
 		returnToSender(KAD_RouteFailureDeadEnd, std::move(packet));
 
@@ -663,6 +667,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 		if (contacts.front()->getKey() == packet->getSource()) {
 			if (contacts.size() == 1) {
 				// the only contact we know is the source
+				EV_TRACE << "only one contact known: the source" << endl;
 				countDropped(*packet, query, routeFailureDeadEnd);
 				returnToSender(KAD_RouteFailureDeadEnd, std::move(packet));
 
@@ -823,7 +828,7 @@ void R2Kademlia::onMissingNeighbor(KadPacket_p packet, NodePkt_p pkt) {
 
 void R2Kademlia::onErrorPacket(KadError& error) {
 
-	EV_INFO << "received ERROR packet (" << (uint8_t) error.getErrorType() << ") ";
+	EV_INFO << "received ERROR packet (" << (unsigned int) error.getErrorType() << ") ";
 	switch (error.getErrorType()) {
 		case KAD_NoError:
 			EV_INFO << "No Error";
@@ -967,7 +972,7 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 	
 	if (contact->isValid())
 	{
-		fwdTablePathID.addEntry(contact);
+		fwdTablePathID.addEntry(contact, false);
 	}
 
 	if (contact->isValid() and contact->getPathProperty() == KadContact::PathProperty::indirect)
@@ -1369,7 +1374,7 @@ void R2Kademlia::returnToSender(uint8_t errorType, KadPacket_p packet) {
 	KadError_p answer = makeAnswer<KadError>(*packet);
 	answer->setErrorType(errorType);
 	
-	EV_TRACE << "returnToSender() - return path:";
+	EV_TRACE << "returnToSender() - error: " << (unsigned int) errorType << " - return path:";
 	for (const auto& c : answer->getSrcPath())
 		EV_TRACE << ' ' << c.shortStr();
 	EV_TRACE << endl;		

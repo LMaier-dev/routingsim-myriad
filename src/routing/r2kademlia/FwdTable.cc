@@ -12,24 +12,13 @@ std::string FwdTablePathID::str() const
 		const FwdTableEntry&  fwdentry= pidfwdtableentry.second;
 
 		out << "[" << pidfwdtableentry.first << "=>" << fwdentry.outgoingPathID << "] (";
-		switch (fwdentry.fwdState) {
-			case FwdTableEntry::State::undefined:
-				out << 'U';
-				break;
-			case FwdTableEntry::State::valid:
-				out << 'V';
-				break;
-			case FwdTableEntry::State::obsolete:
-				out << 'O';
-				break;
-			case FwdTableEntry::State::invalid:
-				out << 'I';
-				break;
-			default:
-				out << '?';
-		} // end switch;
-
+		if (fwdentry.isUndefined()) out << 'U';
+		if (fwdentry.isValid()) out << 'V';
+		if (fwdentry.isObsolete()) out << 'O';
+		if (fwdentry.isInvalid()) out << 'I';
+		if (fwdentry.isForeign()) out << 'F';
 	        out << ':';
+
 		switch (fwdentry.fwdAction) {
 			case FwdTableEntry::Action::undefined:
 				out << 'U';
@@ -56,7 +45,7 @@ std::string FwdTablePathID::str() const
 
 
 
-void FwdTablePathID::addEntry(KadContact_p contact)
+void FwdTablePathID::addEntry(KadContact_p contact, bool foreignPID)
 {
        	if (contact == nullptr)
 		return;
@@ -78,6 +67,13 @@ void FwdTablePathID::addEntry(KadContact_p contact)
 	if (it != NIDPIDTable.end())
 	{
 		EV_WARN << "addEntry(): PID entry for contact " << contact->getKey().shortStr() << " existed already with incoming PID " << it->second << endl;
+		
+		if (it->second == incomingPathID)
+		{
+			EV_WARN << "addEntry(): same PID entry for contact already existed - ignored" << endl;
+			return;
+		}
+		
 		// do the right thing now and call modEntry
 		modEntry(contact);
 		return;
@@ -85,7 +81,9 @@ void FwdTablePathID::addEntry(KadContact_p contact)
 
 	fwdentry.outgoingPathID= getPathID(currentpath);
 	fwdentry.nextHopNode= currentpath[0];
-	fwdentry.fwdState= FwdTableEntry::State::valid;
+	fwdentry.setValid();
+	if (foreignPID)
+		fwdentry.setForeign();
 	fwdentry.fwdAction=
 		(currentpath.size()==1) // next hop is our physical neighbor
 		? FwdTableEntry::Action::fwdNextKadId : FwdTableEntry::Action::fwdNextPathID;
@@ -93,7 +91,7 @@ void FwdTablePathID::addEntry(KadContact_p contact)
 	PIDFwdTable[incomingPathID]= fwdentry;
 	NIDPIDTable[contact->getKey()]= incomingPathID;
 
-	EV_TRACE << "addEntry(): inPID:" << incomingPathID << " outPID:"
+	EV_TRACE << "addEntry(): inPID: " << incomingPathID << " outPID: "
 		 << fwdentry.outgoingPathID << " path: " ;
 	
 	if (currentpath.size() == 0)
@@ -149,7 +147,7 @@ void FwdTablePathID::modEntry(KadContact_p contact)
 		else
 		{ // set old entry to obsolete state
 			FwdTableEntry& priorfwdentry(PIDFwdTable[pidentry->second]);
-			priorfwdentry.fwdState= FwdTableEntry::State::obsolete;
+			priorfwdentry.setObsolete();
 			// delete the entry before priorPathID (i.e., the one before the penultimate entry)
 			//TODO make this configurable in depth
 			if (priorfwdentry.prevPathID != PathID::UndefinedPathID)
@@ -157,15 +155,14 @@ void FwdTablePathID::modEntry(KadContact_p contact)
 				auto it= PIDFwdTable.find(priorfwdentry.prevPathID);
 				if (it != PIDFwdTable.end())
 				{
-					if (it->second.fwdState != FwdTableEntry::State::valid)
+					if (it->second.isObsolete())
 					{ // remove entry before priorPathID
 						PIDFwdTable.erase(it);
 					}
 					else
-						EV_WARN << "PID entry before prior penultimate entry still valid";
+						EV_WARN << "PID entry before prior penultimate entry not obsolete";
 				}
 			}
-				
 
 		}
 
@@ -174,7 +171,7 @@ void FwdTablePathID::modEntry(KadContact_p contact)
 		
 		fwdentry.outgoingPathID= getPathID(currentpath);
 		fwdentry.nextHopNode= currentpath[0];
-		fwdentry.fwdState= FwdTableEntry::State::valid;
+		fwdentry.setValid();
 		fwdentry.fwdAction=
 			(currentpath.size()==1) // next hop is our physical neighbor
 			? FwdTableEntry::Action::fwdNextKadId : FwdTableEntry::Action::fwdNextPathID;

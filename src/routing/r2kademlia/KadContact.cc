@@ -28,11 +28,25 @@ std::ostream& operator<<(std::ostream& os, const KadContact& c) {
 	os << ":(" << (c.getState() == KadContact::State::valid ? 'V' :
 		       ((c.getState() == KadContact::State::invalid) ? 'I' :
 			((c.getState() == KadContact::State::rediscovering) ? 'R' : 'U')));
-	
+
 	if ( c.isPhysicalNeighbor() ) {
 		os << "/P";
 	}
 	os << ")";
+	switch(c.getPathProperty()) {
+		case KadContact::PathProperty::undefined: os << 'u';
+			break;
+		case KadContact::PathProperty::direct: os << 'd';
+			break;
+		case KadContact::PathProperty::indirect: os << 'i';
+			break;
+		case KadContact::PathProperty::invalid: os << '#';
+			break;
+		default:
+			os << '?';
+			break;
+	} // end switch
+
 	if (c.getPath().size() == 0)
 		return os << "<->";
 	else {
@@ -40,7 +54,6 @@ std::ostream& operator<<(std::ostream& os, const KadContact& c) {
 		for (auto key : c.getPath())
 			os << key.shortStr() << ' ';
 		os << "> ";
-		
 	}
 	return os;
 }

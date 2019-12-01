@@ -15,24 +15,42 @@
 namespace routingsim {
 
 	class FwdTableEntry {
+	private:
+		uint8_t fwdState = State::undefined;
+
 	public:
 		PathID outgoingPathID = PathID::UndefinedPathID;
 		OverlayKey nextHopNode = OverlayKey::UNSPECIFIED_KEY;
 		PathID prevPathID = PathID::UndefinedPathID;
 
-		enum class State {
+		enum State : uint8_t {
 			undefined     = 0,
 			valid         = 1,
-			obsolete      = 2,
-			invalid       = 3
-		} fwdState = State::undefined;
-		
+			foreign       = 2,
+			obsolete      = 4,
+			invalid       = 8
+		};
+
 		enum class Action {
 		     undefined     = 0,
 		     fwdNextPathID = 1,
 		     fwdNextKadId  = 2,
 		     fwdlocal      = 3
 		} fwdAction = Action::undefined;
+
+		void setObsolete() { fwdState &= ~State::valid; fwdState |= State::invalid; }
+		bool isObsolete() const { return fwdState & State::invalid; }
+
+		void setInvalid() { fwdState &= ~State::valid; fwdState |= State::invalid; }
+		bool isInvalid() const { return fwdState & State::invalid; }
+
+		void setValid() { fwdState &= ~State::invalid; fwdState |= State::valid; }
+		bool isValid() const { return fwdState & State::valid; }
+
+		void setForeign() { fwdState = fwdState | State::foreign; };
+		bool isForeign() const { return fwdState & State::foreign; };
+
+		bool isUndefined() const { return fwdState == State::undefined; }
 	};
 	
 
@@ -51,7 +69,7 @@ namespace routingsim {
 		std::unordered_map<OverlayKey,PathID> NIDPIDTable;
 		// cannot use constructor to set ID, because OnInitialize generates the Node ID
 	        void setOwnNodeID(const OverlayKey* myownNodeID) { ownNodeID= myownNodeID; };
-		void addEntry(KadContact_p contact);
+		void addEntry(KadContact_p contact, bool foreignPID);
 		void modEntry(KadContact_p contact);
 		void delEntry(KadContact_p contact);
 		void delPIDEntry(PathID pid);

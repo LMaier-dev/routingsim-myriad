@@ -79,6 +79,7 @@ packet KadUpdateRouteReq extends KadPacket {
 // KadDataMsg
 packet KadDataMsg extends KadDataPacket {
        type = KAD_Data;
+       bool redirected;
 }
 // ------------
 
@@ -113,6 +114,7 @@ packet KadPNDiscRsp extends KadRTableRsp {
 packet KadProbeReq extends KadPacket {
 	type = KAD_ProbeReq;
 }
+
 packet KadProbeRsp extends KadAnswer {
 	type = KAD_ProbeRsp;
 }
