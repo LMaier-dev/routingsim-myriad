@@ -64,7 +64,10 @@ void R2Kademlia::onInitialize() {
 	addTimer(probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doProbe, this));
 	addTimer(probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doReachabilityTest, this));
 	if (sendDataPackets)
-		addTimer(getSimulation()->getWarmupPeriod(), probeInterval, std::bind(&R2Kademlia::doDataProbe, this));
+	{
+	  EV << "will send data packets after " << getSimulation()->getWarmupPeriod() << endl;
+	  addTimer(getSimulation()->getWarmupPeriod()+probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doDataProbe, this));
+	}
 
 	WATCH(myOverlayKey);
 	WATCH(neighborTable);
