@@ -17,7 +17,7 @@ namespace routingsim {
 	class FwdTableEntry {
 	private:
 		uint8_t fwdState = State::undefined;
-
+                uint16_t pathlen = 0; // default: number of hops to destination
 	public:
 		PathID outgoingPathID = PathID::UndefinedPathID;
 		OverlayKey nextHopNode = OverlayKey::UNSPECIFIED_KEY;
@@ -51,6 +51,10 @@ namespace routingsim {
 		bool isForeign() const { return fwdState & State::foreign; };
 
 		bool isUndefined() const { return fwdState == State::undefined; }
+
+
+		void setPathLength(uint16_t plen) { pathlen= plen; }
+		uint16_t getPathLength() const { return pathlen; }
 	};
 	
 

@@ -80,6 +80,7 @@ void FwdTablePathID::addEntry(KadContact_p contact, bool foreignPID)
 	}
 
 	fwdentry.outgoingPathID= getPathID(currentpath);
+	fwdentry.setPathLength(currentpath.size());
 	fwdentry.nextHopNode= currentpath[0];
 	fwdentry.setValid();
 	if (foreignPID)
@@ -117,21 +118,22 @@ void FwdTablePathID::modEntry(KadContact_p contact)
 	// Lookup old entry if it exists
 	if ( pidentry != NIDPIDTable.end() )
 	{
-		kad_path currentpath(contact->getPath());
-		// add destination node ID to path (will never be empty then)
+		kad_path newpath(contact->getPath());
+
 		EV_TRACE << "modEntry(): Dest NodeID " << contact->getKey().shortStr();
-		if (currentpath.size() == 0)
+		if (newpath.size() == 0)
 			EV_TRACE << "<->" << endl;
 		else {
 			EV_TRACE << "< ";
-			for (auto key : currentpath)
+			for (auto key : newpath)
 				EV_TRACE << key.shortStr() << ' ';
 			EV_TRACE << '>' << endl;
 		}
 
-		currentpath.push_back(contact->getKey());
+		// add destination node ID to path (will never be empty then)
+		newpath.push_back(contact->getKey());
 		// calculate incomingPathID
-		PathID incomingPathID(getPathID(*ownNodeID, currentpath));
+		PathID incomingPathID(getPathID(*ownNodeID, newpath));
 
 		// Routingtable entry on node 4: Dest 5: < 3 2 >
 		priorPathID= pidentry->second;
@@ -157,6 +159,7 @@ void FwdTablePathID::modEntry(KadContact_p contact)
 				{
 					if (it->second.isObsolete())
 					{ // remove entry before priorPathID
+						EV_TRACE << "deleting PID entry " << priorfwdentry.prevPathID << endl;
 						PIDFwdTable.erase(it);
 					}
 					else
@@ -169,11 +172,11 @@ void FwdTablePathID::modEntry(KadContact_p contact)
 		
 		FwdTableEntry fwdentry;
 		
-		fwdentry.outgoingPathID= getPathID(currentpath);
-		fwdentry.nextHopNode= currentpath[0];
+		fwdentry.outgoingPathID= getPathID(newpath);
+		fwdentry.nextHopNode= newpath[0];
 		fwdentry.setValid();
 		fwdentry.fwdAction=
-			(currentpath.size()==1) // next hop is our physical neighbor
+			(newpath.size()==1) // next hop is our physical neighbor
 			? FwdTableEntry::Action::fwdNextKadId : FwdTableEntry::Action::fwdNextPathID;
 		fwdentry.prevPathID= priorPathID;
 		PIDFwdTable[incomingPathID]= fwdentry;
@@ -182,11 +185,11 @@ void FwdTablePathID::modEntry(KadContact_p contact)
 		EV_TRACE << "modEntry(): inPID:" << incomingPathID << " outPID:"
 			 << fwdentry.outgoingPathID << " path: " ;
 	
-		if (currentpath.size() == 0)
+		if (newpath.size() == 0)
 			EV_TRACE << "<->" << endl;
 		else {
 			EV_TRACE << "< ";
-			for (auto key : currentpath)
+			for (auto key : newpath)
 				EV_TRACE << key.shortStr() << ' ';
 			EV_TRACE << '>' << endl;
 		}
