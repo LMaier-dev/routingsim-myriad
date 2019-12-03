@@ -36,7 +36,7 @@ std::string FwdTablePathID::str() const
 				out << '?';
 		} // end switch;
 
-		out << ") nh <" << fwdentry.nextHopNode.shortStr() << ">; ";
+		out << ") nh <" << fwdentry.nextHopNode.shortStr() << ">(" << fwdentry.getPathLength() << "); ";
 	}
 
 	return out.str();
@@ -59,7 +59,11 @@ void FwdTablePathID::addEntry(KadContact_p contact, bool foreignPID)
 
 	// prepend own nodeID for incoming PathID
 	PathID incomingPathID(getPathID(*ownNodeID, currentpath));
-		
+
+	// check for already existing PID
+	if (PIDFwdTable.find(incomingPathID) != PIDFwdTable.end())
+		return; // already there
+	
 	FwdTableEntry fwdentry;
 	
 	// Check for previous existing entry for this contact
@@ -75,7 +79,7 @@ void FwdTablePathID::addEntry(KadContact_p contact, bool foreignPID)
 		}
 		
 		// do the right thing now and call modEntry
-		modEntry(contact);
+		modEntry(contact, foreignPID);
 		return;
 	}
 
@@ -107,11 +111,11 @@ void FwdTablePathID::addEntry(KadContact_p contact, bool foreignPID)
 }
 
 
-
-void FwdTablePathID::modEntry(KadContact_p contact)
+// returns false if entry is not accepted (e.g., path is longer)
+bool FwdTablePathID::modEntry(KadContact_p contact, bool foreignPID)
 {
        	if (contact == nullptr)
-		return;
+		return false;
 
 	PathID priorPathID= PathID::UndefinedPathID;
 	auto pidentry= NIDPIDTable.find(contact->getKey());
@@ -140,11 +144,13 @@ void FwdTablePathID::modEntry(KadContact_p contact)
 		if ( PIDFwdTable.find(priorPathID) == PIDFwdTable.end() )
 		{
 			EV_ERROR << "FwdTablePathID::modEntry earlier PathID not found" << endl;
+			return false;
+
 		}
 		else if (priorPathID == incomingPathID)
 		{ // same PathID already existed, just return
 			EV_WARN << "modEntry(): same PID entry for contact already existed" << endl;
-			return;
+			return false;
 		}
 		else
 		{ // set old entry to obsolete state
@@ -193,12 +199,15 @@ void FwdTablePathID::modEntry(KadContact_p contact)
 				EV_TRACE << key.shortStr() << ' ';
 			EV_TRACE << '>' << endl;
 		}
+		return true;
 	}
 	else
 	{
 		EV_WARN << "FwdTablePathID::modEntry() no prior entry found" << endl;
+		return false;
 	}
 	
+	return false;
 }
 
 

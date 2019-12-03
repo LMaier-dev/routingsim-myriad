@@ -949,6 +949,7 @@ void R2Kademlia::onContactRemoval(KadContact_p contact)
 		return;
 	
 	// delete from Forwarding table PID
+	// TODO: this can be scheduled for happening later
 	fwdTablePathID.delEntry(contact);
 }
 
@@ -991,7 +992,7 @@ void R2Kademlia::onImprovement(const KadContact& contact) {
 	
 	if (contact.isValid())
 	{
-		fwdTablePathID.modEntry(&contact);
+		fwdTablePathID.modEntry(&contact, false);
 	}
 
 	if (contact.isValid() and contact.getPathProperty() == KadContact::PathProperty::indirect)
