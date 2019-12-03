@@ -34,6 +34,22 @@ void KadPacket::appendRoute(const kad_path& path) {
 		setActive(old_size + i, false);
 	}
 }
+
+// path should also contain target node
+void KadPacket::modRoute(const kad_path& path) {
+	auto tail_size = getRouteArraySize()-progress-1; // progress is index starting from 0
+	ASSERT(tail_size >= path.size());
+
+	size_t newsize= progress + 1 + path.size();
+	ASSERT(newsize <= getRouteArraySize());
+	for(size_t i = 0; i < path.size(); i++) {
+		setRoute(progress + 1 + i, path[i]);
+		setActive(progress + 1 + i, false);
+	}
+	setRouteArraySize(newsize);
+	setActiveArraySize(newsize);
+}
+
 void KadPacket::appendHop(const OverlayKey& key) {
 	auto index = getRouteArraySize();
 	setRouteArraySize(index+1);

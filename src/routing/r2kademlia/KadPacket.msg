@@ -23,21 +23,24 @@ cplusplus {{
 namespace routingsim;
 
 enum KadPDUType {
-	KAD_PNHello = 			0x01;
-	KAD_PNDiscReq = 		0x03;
-	KAD_PNDiscRsp = 		0x04;
+	KAD_PNHello = 		0x01;
+	KAD_PNDiscReq = 	0x03;
+	KAD_PNDiscRsp = 	0x04;
 
-	KAD_FindNodeReq = 		0x09;
-	KAD_FindNodeRsp = 		0x0a;
+	KAD_FindNodeReq = 	0x09;
+	KAD_FindNodeRsp = 	0x0a;
 	KAD_QueryRouteReq = 	0x0b;
 	KAD_QueryRouteRsp = 	0x0c;
 	KAD_UpdateRouteReq = 	0x0d;
 
-	KAD_Error =				0x71;
-	KAD_ProbeReq = 			0x81;
-	KAD_ProbeRsp = 			0x82;
+	KAD_Error =		0x71;
+	KAD_ProbeReq = 		0x81;
+	KAD_ProbeRsp = 		0x82;
 
-	KAD_Data = 				0x10;
+	KAD_SetupPathReq = 	0x83;
+	KAD_SetupPathRsp = 	0x84;
+
+	KAD_Data = 		0x10;
 }
 
 class noncobject OverlayKey;

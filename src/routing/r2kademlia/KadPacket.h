@@ -52,6 +52,8 @@ public:
 	void appendRoute(const KadContact& contact);
 	/// appends the key and path of the specified contact to the source route
 	inline void appendRoute(const KadContact* contact) { appendRoute(*contact); }
+	/// modifies the path from current hop to target (only short paths allowed)
+	void modRoute(const kad_path& path);
 	/// returns the source route as a kad_path (std::vector) from the given position
 	/// until the given "to" position (excluding "to")
 	kad_path getSrcPath(uint from, uint to);

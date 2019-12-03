@@ -84,6 +84,7 @@ class R2Kademlia : public RPCProtocol, public KadPolicy, public StatisticSample
 	virtual void handlePacket(KadHello_p packet);
 	/// responds to probe request
 	virtual void handlePacket(std::unique_ptr<KadProbeReq> packet);
+	virtual void handlePacket(std::unique_ptr<KadSetupPathReq> packet);
 	virtual void handlePacket(std::unique_ptr<KadPNDiscReq> packet);
 	virtual void handlePacket(std::unique_ptr<KadQueryRouteReq> packet);
 	virtual void handlePacket(std::unique_ptr<KadUpdateRouteReq> packet);
@@ -115,6 +116,8 @@ class R2Kademlia : public RPCProtocol, public KadPolicy, public StatisticSample
 	const KadContact& chooseNextHop(const KadContactList&, const OverlayKey& target, const OverlayKey& source);
 	/// sends a probe request to the given contact
 	void sendProbe(KadContact_p contact);
+	/// sends a path setup request to the given contact
+	void sendSetupPath(KadContact_p contact);
 	/// sends a "get neighbors" call to the contact
 	void sendGetNeighbors(KadContact_p contact);
 	/// sends a PNDisc Request to the Physical Neighbor
@@ -212,6 +215,9 @@ private:
 	void countReceived(KadDataPacket& packet);
 	/// does statistics on dropped data packet
 	void countDropped(KadDataPacket& packet, const OverlayKey& target, uint8_t reason);
+	/// try a shortcut route and modify source route of the packet
+	void applyShortcut(KadPacket& packet);
+
 	/**
 	 * sends an error packet to the sender of the given packet
 	 * the original packet is encapsulated on the error packet
@@ -242,6 +248,7 @@ private:
 	/** @name callback functions for RPC calls */
 	//@{
 	bool handleProbeResponse(KadPacket_p answer, RPCState& rpcState);
+	bool handleSetupPathResponse(KadPacket_p answer, RPCState& rpcState);
 	bool handleQueryRouteResponse(KadPacket_p answer, RPCState& rpcState);
 	bool handlePNDiscResponse(KadPacket_p answer, RPCState& rpcState);
 	bool handleFindNodeResponse(KadPacket_p answer, RPCState& rpcState);

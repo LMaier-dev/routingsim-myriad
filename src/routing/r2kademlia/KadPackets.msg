@@ -119,6 +119,17 @@ packet KadProbeRsp extends KadAnswer {
 	type = KAD_ProbeRsp;
 }
 
+
+// PROBE
+packet KadSetupPathReq extends KadPacket {
+	type = KAD_SetupPathReq;
+}
+
+packet KadSetupPathRsp extends KadAnswer {
+	type = KAD_SetupPathRsp;
+}
+
+
 // QUERY ROUTE
 packet KadQueryRouteReq extends KadRTableReq {
 	type = KAD_QueryRouteReq;

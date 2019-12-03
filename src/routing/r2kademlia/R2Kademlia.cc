@@ -190,13 +190,17 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		// add potential pathID for destination at this intermediate node
 		switch (packet->getType())
 		{
-			case KAD_ProbeReq: // will install in forward direction
-			case KAD_ProbeRsp: // will install in reverse direction
+			case KAD_SetupPathReq: // allowed to take shortcuts
+				applyShortcut(*packet);
+				break;
+
+			case KAD_SetupPathRsp: // will install in forward direction
 				if (routingTable.getContact(packet->getTarget()) == nullptr)
 				{ // contact not present yet (then also no neighbor)
 					if (packet->getProgress()+1U <= packet->getRouteArraySize()-1U)
 					{
-						KadContact contact(packet->getTarget(), packet->getSrcPath(packet->getProgress()+1, packet->getRouteArraySize()-1));
+						// use existing path from answer
+						KadContact contact(packet->getTarget(), packet->reversePath(packet->getSrcPath(1, packet->getProgress())));
 						fwdTablePathID.addEntry(&contact, true);
 					}
 				}
@@ -220,6 +224,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		if (handleIfFitting<KadQueryRouteReq>(packet)) return;
 		if (handleIfFitting<KadUpdateRouteReq>(packet)) return;
 		if (handleIfFitting<KadAnswer>(packet)) return;
+		if (handleIfFitting<KadSetupPathReq>(packet)) return;
 		if (handleIfFitting<KadProbeReq>(packet)) return;
 		EV_ERROR << "dropping unhandled packet of type " << (int)packet->getType() << endl;
 		countDropped(*packet, packet->getTarget(), unhandledType);
@@ -269,9 +274,6 @@ void R2Kademlia::reset() {
 	//TODO clear timers
 	//TODO clear rpc states
 }
-
-
-
 
 
 void R2Kademlia::handlePacket(KadHello_p packet) {
@@ -410,10 +412,34 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadProbeReq> packet) {
 	sendPacket(makeAnswer<KadProbeRsp>(*packet));
 }
 
+
 bool R2Kademlia::handleProbeResponse(KadPacket_p answer, RPCState& rpcState) {
 	if (rpcState.status != RPC_SUCCESS) return true;
 	ASSERT(answer->getSource() == rpcState.original_packet->getTarget());
 	std::unique_ptr<KadProbeRsp> probeRsp = safe_packet_cast<KadProbeRsp>(answer);
+	return true;
+}
+
+
+// Path Setup Request/Response
+void R2Kademlia::sendSetupPath(KadContact_p contact) {
+	EV_TRACE << "sending SetupPathReq from " << myOverlayKey.shortStr() << " to " << contact->getKey().shortStr() << endl;
+	sendRpcCall(
+		makePacket<KadSetupPathReq>(contact, "KadSetupPathReq"),
+		std::bind(&R2Kademlia::handleSetupPathResponse, this, ph::_1, ph::_2),
+		std::bind(&R2Kademlia::handleSetupPathResponse, this, ph::_1, ph::_2),
+		std::bind(&R2Kademlia::handleRPCTimeOut, this, ph::_1, ph::_2));
+}
+
+void R2Kademlia::handlePacket(std::unique_ptr<KadSetupPathReq> packet) {
+	sendPacket(makeAnswer<KadSetupPathRsp>(*packet));
+}
+
+
+bool R2Kademlia::handleSetupPathResponse(KadPacket_p answer, RPCState& rpcState) {
+	if (rpcState.status != RPC_SUCCESS) return true;
+	ASSERT(answer->getSource() == rpcState.original_packet->getTarget());
+	std::unique_ptr<KadSetupPathRsp> pathSetupRsp = safe_packet_cast<KadSetupPathRsp>(answer);
 	return true;
 }
 
@@ -979,9 +1005,12 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 		fwdTablePathID.addEntry(contact, false);
 	}
 
-	if (contact->isValid() and contact->getPathProperty() == KadContact::PathProperty::indirect)
-	{ // send a probe packet for installing PIDs in intermediate nodes for this indirectly learned route
-		sendProbe(contact);
+	if (contact->isValid() and contact->getPathProperty() == KadContact::PathProperty::indirect
+	    and contact->getPathLength() > 1)
+	{ // send a path setup request packet for installing PIDs in intermediate nodes for this indirectly learned route
+		// only do this for paths longer than two hops
+		EV_TRACE << "Triggering path setup to " << contact->getKey().shortStr() << endl;
+		sendSetupPath(contact);
 	}
 }
 
@@ -996,8 +1025,9 @@ void R2Kademlia::onImprovement(const KadContact& contact) {
 	}
 
 	if (contact.isValid() and contact.getPathProperty() == KadContact::PathProperty::indirect)
-	{ // send a probe packet for installing PIDs in intermediate nodes for this indirectly learned route
-		sendProbe(&contact);
+	{ // send a path setup request packet for installing PIDs in intermediate nodes for this indirectly learned route
+		EV_TRACE << "Triggering path setup to " << contact.getKey().shortStr() << endl;
+		sendSetupPath(&contact);
 	}
 
 	// TODO: wait grace period
@@ -1065,6 +1095,44 @@ NodePkt_p R2Kademlia::makeHelloPacket()
 	nodePkt->setType(KAD_CTRL_PACKET_TYPE);
 	nodePkt->encapsulate(hello.release());
 	return nodePkt;
+}
+
+
+void R2Kademlia::applyShortcut(KadPacket& packet)
+{
+	auto knownContact= routingTable.getContact(packet.getTarget());
+
+	if (knownContact != nullptr)
+	{ // destination Contact is known, check for route shortcut
+		if (knownContact->isValid())
+		{
+			// getProgress() is currently pointing to my own node ID
+			kad_path path_of_interest= packet.getSrcPath(packet.getProgress()+1, packet.getRouteArraySize()-1);
+			if (path_of_interest.size() > 0) // check: not much shortcut possible for only one hop, but maybe better for consistency
+			{
+				if (knownContact->getPathLength() > path_of_interest.size())
+					return;
+
+				// TODO now check for cycles
+				// replace residual path with my known (shorter) route
+				EV_TRACE << "modifying route due to shortcut: old=< ";
+
+				for (auto key : packet.getSrcPath())
+					EV_TRACE << key.shortStr() << ' ';
+
+				packet.modRoute(knownContact->getPath());
+
+				EV_TRACE << "> new=< ";
+				for (auto key : packet.getSrcPath())
+					EV_TRACE << key.shortStr() << ' ';
+				EV_TRACE << '>' << endl;
+
+			}
+
+		}
+		else
+			EV_WARN << "Contact in non valid state: " << *knownContact;
+	}
 }
 
 
