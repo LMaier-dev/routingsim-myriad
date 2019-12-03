@@ -37,8 +37,8 @@ enum KadPDUType {
 	KAD_ProbeReq = 		0x81;
 	KAD_ProbeRsp = 		0x82;
 
-	KAD_SetupPathReq = 	0x83;
-	KAD_SetupPathRsp = 	0x84;
+	KAD_PathSetupReq = 	0x83;
+	KAD_PathSetupRsp = 	0x84;
 
 	KAD_Data = 		0x10;
 }
