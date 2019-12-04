@@ -50,5 +50,5 @@ packet KadPacket {
 	uint16_t progress = 0;
 	nonce_t nonce;
 	uint8_t type enum(KadPDUType);
-	uint16_t hopLimit = 100;
+	uint16_t hopLimit = 256;
 }
