@@ -1434,7 +1434,7 @@ void R2Kademlia::countReceived(KadPacket& packet) {
 
 void R2Kademlia::countDropped(KadPacket& packet, const OverlayKey& target, uint8_t reason) {
 	droppedPackets++;
-	getKadObserver().registerPacketDropped(packet, myOverlayKey, target);
+	getKadObserver().registerPacketDropped(packet, myOverlayKey, target, reason);
 	nodeid_t nid = undefined_node;
 	if (getKadObserver().exists(target))
 		nid = getKadObserver().getNodeId(target);
