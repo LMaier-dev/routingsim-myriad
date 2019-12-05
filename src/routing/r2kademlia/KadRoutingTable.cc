@@ -71,7 +71,7 @@ std::string KadRoutingTable::str() const
 		out << '}';		
 		i++;
 	}
-	
+
 	return out.str();
 }
 
@@ -83,9 +83,10 @@ size_type KadRoutingTable::getBucketIndex(const OverlayKey& key) const
 
 	// i is now the index of the LSB of the first non zero sub integer in delta
 	int i = delta.getLength() - (prefixLen+1)*accelerationFactor;
+	EV_TRACE << "getBucketIndex(" << key.shortStr() << ") i=" << i;
 	if (i < 0) // this is my key
 		return buckets.size() - 1;
-	ASSERT(delta.getBitRange(i, accelerationFactor) != 0);
+	//ASSERT(delta.getBitRange(i, accelerationFactor) != 0);
 	ASSERT(i + accelerationFactor >= delta.getLength() or
 			delta.getBitRange(i + accelerationFactor, accelerationFactor) == 0);
 
@@ -98,6 +99,7 @@ size_type KadRoutingTable::getBucketIndex(const OverlayKey& key) const
 	// => index = (prefixLen+1) * levelWidth - subint
 	size_type index = (prefixLen+1)*getLevelWidth() - delta.getBitRange(i, accelerationFactor);
 	ASSERT(index <= getMaxNumBuckets());
+	//EV_TRACE << " delta=" << delta.shortStr() << " plen=" << prefixLen << " subint=" << delta.getBitRange(i, accelerationFactor) << " index=" << index << endl;
 	// old calculation formula, just for checking...
 	// ASSERT(index == (key.getLength() - i)/accelerationFactor * getLevelWidth()- delta.getBitRange(i, accelerationFactor));
 	return std::min(buckets.size()-1, index);
@@ -108,7 +110,7 @@ size_type KadRoutingTable::getBucketIndex(const OverlayKey& key) const
 bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, KadContact::PathProperty pathprop)
 {
 	if (key == myKey) return false;
-	
+
 	// we must be careful: some neighbor may tell me paths that lead via me to my neighbors
 	// we simply discard this information as it cannot be more current than mine
 
@@ -141,9 +143,17 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, KadContact::
 		path_was_simplified= simplifyPath(path);
 	}
 
+	// sanity check: do not use paths that lead via an invalid neighbor as first hop
+	if (path.size() > 0 and not neighbortable.isNeighbor(path[0]))
+	{ // first hop must be found in neighbortable
+		EV_WARN << "Tried to use add path with invalid physical neighbor "
+			<< path[0] << " as next hop - ignoring";
+		return false;
+	}
+
 	// sanity check: either path was empty before or it was not and is not empty after simplification
 	ASSERT(pathWasNotEmpty==false or (pathWasNotEmpty and path.empty()==false));
-	
+
 	KadContact *contact = getContactInternal(key);
 	if (contact) {
 		// contact is known
@@ -154,7 +164,7 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, KadContact::
 		{
 			contact->setPhysicalNeighbor();
 			contact->setPathProperty(KadContact::PathProperty::direct);
-			
+
 			// move over to PNcontacts			
 			KadBucket& bucket = getBucket(key);
 			auto it = bucket.findContact(key);
@@ -166,16 +176,6 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, KadContact::
 				EV_ERROR << "Contact existed already, but not found" << endl;
 			
 			EV_TRACE << "Contact existed already, but seems to be a PN now: " << *contact << endl;
-		}
-
-		// sanity check: do not use paths that lead via an invalid neighbor as first hop
-		if (path.size() > 0) {
-			// first hop must be found in neighbortable
-			if (not neighbortable.isNeighbor(path[0])) {
-				EV_ERROR << "Tried to use add path with invalid physical neighbor "
-					 << path[0] << " as next hop - ignoring";
-				return false;
-			}
 		}
 		
 		// if contact was marked invalid, update path and status:
@@ -191,14 +191,14 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, KadContact::
 			}
 
 			updateCount++;
-			
+
 			// do something on improved path according to policy
 			policy->onImprovement(*contact);
 
 			return true;
 		}
 		// else contact exists, but new path is not interesting
-		
+
 		return false;
 	}
 	else // contact is new
@@ -309,6 +309,10 @@ bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, Kad
 		contact->setPathProperty(KadContact::PathProperty::direct);
 		policy->onNewContact(contact.get());
 		bucket.PNContacts.push_back(std::move(contact));
+
+		// sanity checking XXX
+		ASSERT(getContact(key) != nullptr);
+
 		return true;
 	}
 
@@ -318,7 +322,10 @@ bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, Kad
 	{ // still room in contacts left
 		policy->onNewContact(contact.get());
 		bucket.contacts.push_back(std::move(contact));
-		
+
+		// sanity checking XXX
+		ASSERT(getContact(key) != nullptr);
+
 		return true;
 	}
 	else {
@@ -341,7 +348,10 @@ bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, Kad
 			EV_DEBUG << "replacing contact, new: " << *contact << " old: " << **result << endl;
 			*result = std::move(contact);
 			policy->onNewContact(result->get());
-			
+
+			// sanity checking XXX
+			ASSERT(getContact(key) != nullptr);
+
 			return true;
 		}
 		else {

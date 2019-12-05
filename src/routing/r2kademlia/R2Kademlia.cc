@@ -984,10 +984,10 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 
 	EV_TRACE << "onNewContact(" << contact->getKey().shortStr() << ") called" << endl;
 
+	// physical neighbor, may have been heard of its existence by some third node!
+	// avoid further actions until we hear a HELLO
 	if (contact->getPathLength() == 0) 
-	{ // physical neighbor, may have been heard of its existence by some third node!
-	  // avoid further actions until we hear a HELLO
-		if (not neighborTable.isNeighbor(contact->getKey()))
+	{ 	if (not neighborTable.isNeighbor(contact->getKey()))
 		{
 			EV_TRACE << "onNewContact: will ignore supposed physical neighbor not being in Neighbor table yet" << endl;
 			return;
