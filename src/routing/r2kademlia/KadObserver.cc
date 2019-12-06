@@ -262,12 +262,12 @@ void KadObserver::registerPacketDropped(KadDataPacket& packet, const OverlayKey&
 	info.prefixDist = fromKey.sharedPrefixLength(toKey);
 	info.prefixDistLeft = current.sharedPrefixLength(toKey);
 	info.reason = reason;
-	histograms[hopCountDropped]->collect(info.hops);
-	histograms[overlayHopsDropped]->collect(info.overlayHops);
-	histograms[distanceDropped]->collect(info.distance);
-	histograms[distanceLeft]->collect(info.distanceLeft);
-	histograms[prefixDistDropped]->collect(info.prefixDist);
-	histograms[prefixDistLeft]->collect(info.prefixDistLeft);
+	histograms[hopCountDroppedData]->collect(info.hops);
+	histograms[overlayHopsDroppedData]->collect(info.overlayHops);
+	histograms[distanceDroppedData]->collect(info.distance);
+	histograms[distanceLeftData]->collect(info.distanceLeft);
+	histograms[prefixDistDroppedData]->collect(info.prefixDist);
+	histograms[prefixDistLeftData]->collect(info.prefixDistLeft);
 
 	if (simTime() > messageSampleTime and messageDroppedInfos.size() < numMessageDroppedInfos)
 		messageDroppedInfos.push_back(info);
@@ -320,13 +320,13 @@ void KadObserver::registerPacketDelivered(KadDataPacket& packet) {
 	info.prefixDist = fromKey.getLength() - fromKey.sharedPrefixLength(toKey);
 	info.overlayHops = packet.getOverlayHops();
 	ASSERT(info.overlayHops > 0);
-	histograms[hopCount]->collect(info.hops);
-	histograms[distance]->collect(info.distance);
-	histograms[stretchMul]->collect(info.hops / (double)info.distance);
-	histograms[stretchAdd]->collect(info.hops - info.distance);
-	histograms[prefixDist]->collect(info.prefixDist);
-	histograms[overlayHops]->collect(info.overlayHops);
-	histograms[prefixPerHop]->collect(info.prefixDist / (double)info.overlayHops);
+	histograms[hopCountData]->collect(info.hops);
+	histograms[distanceData]->collect(info.distance);
+	histograms[stretchMulData]->collect(info.hops / (double)info.distance);
+	histograms[stretchAddData]->collect(info.hops - info.distance);
+	histograms[prefixDistData]->collect(info.prefixDist);
+	histograms[overlayHopsData]->collect(info.overlayHops);
+	histograms[prefixPerHopData]->collect(info.prefixDist / (double)info.overlayHops);
 	if (simTime() > messageSampleTime and messageDeliveryInfos.size() < numMessageDeliveryInfos)
 		messageDeliveryInfos.push_back(info);
 }
@@ -342,12 +342,17 @@ void KadObserver::sampleStatistics (Statistics &stats) {
 	for (uint i=0; i<histograms.size(); i++)
 		if (histograms[i]->getCount() > 0)
 			outVectors[i]->record(histograms[i]->getMean());
+	// delivery ratio control packets
 	if (deliveredPackets > 0)
 		addOutVectors[deliveryRatioV]->record(deliveredPackets/((double)deliveredPackets + droppedPackets));
+	
+	// delivery ratio data packets
+	if (deliveredDataPackets > 0)
+		addOutVectors[deliveryRatioDataV]->record(deliveredDataPackets/((double)deliveredDataPackets + droppedDataPackets));
 
-	addOutVectors[deliveredPacketsV]->record(deliveredPackets);
-	addOutVectors[droppedPacketsV]->record(droppedPackets);
-	addOutVectors[roamingPacketsV]->record(registeredPackets - deliveredPackets - droppedPackets);
+	addOutVectors[deliveredDataPacketsV]->record(deliveredDataPackets);
+	addOutVectors[droppedDataPacketsV]->record(droppedDataPackets);
+	addOutVectors[roamingDataPacketsV]->record(registeredDataPackets - deliveredDataPackets - droppedDataPackets);
 
 	if (resetAfterSample) {
 		for (auto& h : histograms)
@@ -355,6 +360,9 @@ void KadObserver::sampleStatistics (Statistics &stats) {
 		deliveredPackets = 0;
 		droppedPackets = 0;
 		registeredPackets = 0;
+		deliveredDataPackets = 0;
+		droppedDataPackets = 0;
+		registeredDataPackets = 0;
 		recordScalar("lastReset", simTime());
 	}
 }

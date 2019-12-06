@@ -73,8 +73,14 @@ private:
 	enum dataType : uint8_t {hopCount=0, distance=1, prefixDist=2, overlayHops=3,
 		stretchMul=4, stretchAdd=5, prefixPerHop=6, distanceLeft=7,
 		prefixDistLeft=8, hopCountDropped=9, overlayHopsDropped=10,
-		prefixDistDropped=11, distanceDropped=12};
-	enum addDataType : uint8_t {deliveryRatioV=0, deliveredPacketsV=1, droppedPacketsV=2, roamingPacketsV=3};
+		prefixDistDropped=11, distanceDropped=12,
+		hopCountData=13, distanceData=14, prefixDistData=15, overlayHopsData=16,
+		stretchMulData=17, stretchAddData=18, prefixPerHopData=19, distanceLeftData=20,
+		prefixDistLeftData=21, hopCountDroppedData=22, overlayHopsDroppedData=23,
+		prefixDistDroppedData=24, distanceDroppedData=25};
+	enum addDataType : uint8_t {deliveryRatioV=0, deliveredPacketsV=1, droppedPacketsV=2, roamingPacketsV=3,
+			            deliveryRatioDataV=4, deliveredDataPacketsV=5, droppedDataPacketsV=6,
+			            roamingDataPacketsV=7};
 	// histograms and vectors for statistics
 	std::vector<cHistogramPtr> histograms;
 	std::vector<std::unique_ptr<cOutVector>> outVectors;
