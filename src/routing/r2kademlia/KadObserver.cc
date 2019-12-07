@@ -36,7 +36,7 @@ void KadObserver::initialize() {
 	numMessageDeliveryInfos = par("messageDeliverySample").intValue();
 	numMessageDroppedInfos = par("messageDroppedSample").intValue();
 
-	histograms.resize(13);
+	histograms.resize(26);
 	histograms[hopCount] = cHistogramPtr(getIntHistogram("hopCount"));
 	histograms[distance] = cHistogramPtr(getIntHistogram("distance"));
 	histograms[prefixDist] = cHistogramPtr(getIntHistogram("prefixDist"));
@@ -50,7 +50,21 @@ void KadObserver::initialize() {
 	histograms[overlayHopsDropped] = cHistogramPtr(getIntHistogram("overlayHopsDropped"));
 	histograms[prefixDistDropped] = cHistogramPtr(getIntHistogram("prefixDistDropped"));
 	histograms[distanceDropped] = cHistogramPtr(getIntHistogram("distanceDropped"));
+	histograms[hopCountData] = cHistogramPtr(getIntHistogram("hopCountData"));
+	histograms[distanceData] = cHistogramPtr(getIntHistogram("distanceData"));
+	histograms[prefixDistData] = cHistogramPtr(getIntHistogram("prefixDistData"));
+	histograms[overlayHopsData] = cHistogramPtr(getIntHistogram("overlayHopsData"));
+	histograms[stretchMulData] = std::make_unique<cHistogram>("stretchMulData");
+	histograms[stretchAddData] = cHistogramPtr(getIntHistogram("stretchAddData"));
+	histograms[prefixPerHopData] = std::make_unique<cHistogram>("prefixPerHopData");
+	histograms[distanceLeftData] = cHistogramPtr(getIntHistogram("distanceLeftData"));
+	histograms[prefixDistLeftData] = cHistogramPtr(getIntHistogram("prefixDistLeftData"));
+	histograms[hopCountDroppedData] = cHistogramPtr(getIntHistogram("hopCountDroppedData"));
+	histograms[overlayHopsDroppedData] = cHistogramPtr(getIntHistogram("overlayHopsDroppedData"));
+	histograms[prefixDistDroppedData] = cHistogramPtr(getIntHistogram("prefixDistDroppedData"));
+	histograms[distanceDroppedData] = cHistogramPtr(getIntHistogram("distanceDroppedData"));
 
+	
 	outVectors.resize(histograms.size());
 	outVectors[hopCount] = std::make_unique<cOutVector>("hopCount");
 	outVectors[distance] = std::make_unique<cOutVector>("distance");
@@ -65,12 +79,29 @@ void KadObserver::initialize() {
 	outVectors[overlayHopsDropped] = std::make_unique<cOutVector>("overlayHopsDropped");
 	outVectors[prefixDistDropped] = std::make_unique<cOutVector>("prefixDistDropped");
 	outVectors[distanceDropped] = std::make_unique<cOutVector>("distanceDropped");
+	outVectors[hopCountData] = std::make_unique<cOutVector>("hopCountData");
+	outVectors[distanceData] = std::make_unique<cOutVector>("distanceData");
+	outVectors[prefixDistData] = std::make_unique<cOutVector>("prefixDistData");
+	outVectors[overlayHopsData] = std::make_unique<cOutVector>("overlayHopsData");
+	outVectors[stretchMulData] = std::make_unique<cOutVector>("stretchMulData");
+	outVectors[stretchAddData] = std::make_unique<cOutVector>("stretchAddData");
+	outVectors[prefixPerHopData] = std::make_unique<cOutVector>("prefixPerHopData");
+	outVectors[distanceLeftData] = std::make_unique<cOutVector>("distanceLeftData");
+	outVectors[prefixDistLeftData] = std::make_unique<cOutVector>("prefixDistLeftData");
+	outVectors[hopCountDroppedData] = std::make_unique<cOutVector>("hopCountDroppedData");
+	outVectors[overlayHopsDroppedData] = std::make_unique<cOutVector>("overlayHopsDroppedData");
+	outVectors[prefixDistDroppedData] = std::make_unique<cOutVector>("prefixDistDroppedData");
+	outVectors[distanceDroppedData] = std::make_unique<cOutVector>("distanceDroppedData");
 
-	addOutVectors.resize(4);
+	addOutVectors.resize(8);
 	addOutVectors[deliveryRatioV] = std::make_unique<cOutVector>("deliveryRatio");
 	addOutVectors[deliveredPacketsV] = std::make_unique<cOutVector>("deliveredPackets");
 	addOutVectors[droppedPacketsV] = std::make_unique<cOutVector>("droppedPackets");
 	addOutVectors[roamingPacketsV] = std::make_unique<cOutVector>("roamingPackets");
+	addOutVectors[deliveryRatioDataV] = std::make_unique<cOutVector>("deliveryRatioData");
+	addOutVectors[deliveredDataPacketsV] = std::make_unique<cOutVector>("deliveredDataPackets");
+	addOutVectors[droppedDataPacketsV] = std::make_unique<cOutVector>("droppedDataPackets");
+	addOutVectors[roamingDataPacketsV] = std::make_unique<cOutVector>("roamingDataPackets");
 }
 
 void KadObserver::finish() {
