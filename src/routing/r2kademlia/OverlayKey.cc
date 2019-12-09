@@ -561,8 +561,8 @@ uint32_t OverlayKey::sharedPrefixLength(const OverlayKey& compKey,
 	uint32_t j;
 	bool msb = true;
 
-	// count equal limbs first:
-	for (i=aSize-1; i>=0; --i) {
+	// count equal limbs (machine words) first:
+	for (i= aSize-1; i>=0; --i) {
 		if (this->key[i] != compKey.key[i]) {
 			// XOR first differing limb for easy counting of the bits:
 			mp_limb_t d = this->key[i] ^ compKey.key[i];
@@ -571,7 +571,8 @@ uint32_t OverlayKey::sharedPrefixLength(const OverlayKey& compKey,
 			length += j;
 			break;
 		}
-		length += GMP_LIMB_BITS;
+		// first limb may be not fully used
+		length += (msb ? keyLength % GMP_LIMB_BITS : GMP_LIMB_BITS);
 		msb = false;
 	}
 
@@ -587,11 +588,13 @@ int OverlayKey::log_2() const
 		i--;
 	}
 
+	// all zero: undefined
 	if (i<0) {
 		return -1;
 	}
-
+	// start at first non zero machine word
 	mp_limb_t j = key[i];
+	// i * GMP_LIMB_BITS is the number of bits in the LSB words
 	i *= GMP_LIMB_BITS;
 	while (j!=0) {
 		j >>= 1;
@@ -724,7 +727,7 @@ int OverlayKey::getCommonPrefixLength(const OverlayKey& a, const OverlayKey& b)
 // private methods (mostly inlines)
 //--------------------------------------------------------------------
 
-// trims a key after each operation
+// trims uppermost (unused) bits of a key after each operation
 inline void OverlayKey::trim()
 {
 	key[aSize-1] &= GMP_MSB_MASK;
