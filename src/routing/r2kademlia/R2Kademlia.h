@@ -199,10 +199,11 @@ private:
 	/** @name timer functions */
 	//@{
 	/// adds a timer to the timer vectors, sends a timer packet
-	void addTimer(simtime_t initialOffset, simtime_t duration, std::function<void()> callback);
-	void doProbe();
-	void doDataProbe();
-	void doReachabilityTest();
+	void addTimer(simtime_t initialOffset, simtime_t duration, std::function<void(short timerId)> callback);
+	void doProbe(short timerId);
+	void doProbeSelf(short timerId);
+	void doDataProbe(short timerId);
+	void doReachabilityTest(short timerId);
 	//@}
 
 	/** @name private helpers */
@@ -322,7 +323,7 @@ private:
 	/** @name timer things */
 	//@{
 	std::vector<simtime_t> timerDuration;
-	std::vector<std::function<void()>> timerCallback;
+	std::vector<std::function<void(short)>> timerCallback;
 	std::vector<cMessage *> timerMsg;
 	//@}
 };

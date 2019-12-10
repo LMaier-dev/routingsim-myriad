@@ -54,7 +54,7 @@ std::unique_ptr<T> R2Kademlia::makeDataPacket(const KadContact* contact, const c
 
 
 
-void R2Kademlia::doDataProbe() {
+void R2Kademlia::doDataProbe(short timerID) {
 	if (neighborTable.size() == 0) return; // we are isolated
 	const OverlayKey* probeKey(nullptr);
 	do {

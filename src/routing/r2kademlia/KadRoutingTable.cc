@@ -310,9 +310,6 @@ bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, Kad
 		policy->onNewContact(contact.get());
 		bucket.PNContacts.push_back(std::move(contact));
 
-		// sanity checking XXX
-		ASSERT(getContact(key) != nullptr);
-
 		return true;
 	}
 
@@ -322,9 +319,6 @@ bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, Kad
 	{ // still room in contacts left
 		policy->onNewContact(contact.get());
 		bucket.contacts.push_back(std::move(contact));
-
-		// sanity checking XXX
-		ASSERT(getContact(key) != nullptr);
 
 		return true;
 	}
@@ -348,9 +342,6 @@ bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, Kad
 			EV_DEBUG << "replacing contact, new: " << *contact << " old: " << **result << endl;
 			*result = std::move(contact);
 			policy->onNewContact(result->get());
-
-			// sanity checking XXX
-			ASSERT(getContact(key) != nullptr);
 
 			return true;
 		}

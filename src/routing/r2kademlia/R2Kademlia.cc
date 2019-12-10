@@ -31,6 +31,7 @@ Define_Module(R2Kademlia);
 
 void R2Kademlia::onInitialize() {
 	EV << "R2Kademlia::onInitialize()" << endl;
+	OverlayKey::setKeyLength(112);
 	myOverlayKey = OverlayKey::random(getRNG(0));
 	fwdTablePathID.setOwnNodeID(&myOverlayKey);
 	getKadObserver().registerUp(myOverlayKey, node().getNodeId());
@@ -61,12 +62,16 @@ void R2Kademlia::onInitialize() {
 
 	getStatistics().addSample(this);
 	simtime_t probeInterval = (simtime_t) par("probeInterval").doubleValue();
-	addTimer(probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doProbe, this));
-	addTimer(probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doReachabilityTest, this));
+	// doProbeSelf is required for joining (will do exponential backoff)
+	addTimer(SimTime(100,SIMTIME_MS), SimTime(200,SIMTIME_MS), std::bind(&R2Kademlia::doProbeSelf, this, ph::_1));
+	// regularly send FindNodeReq to randomly chosen NodeIDs
+	addTimer(probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doProbe, this, ph::_1));
+	// check whether other existing nodes can be reached (uses KadObserver)
+	addTimer(probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doReachabilityTest, this, ph::_1));
 	if (sendDataPackets)
 	{
 	  EV << "will send data packets after " << getSimulation()->getWarmupPeriod() << endl;
-	  addTimer(getSimulation()->getWarmupPeriod()+probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doDataProbe, this));
+	  addTimer(getSimulation()->getWarmupPeriod()+probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doDataProbe, this, ph::_1));
 	}
 
 	WATCH(myOverlayKey);
@@ -252,7 +257,7 @@ void R2Kademlia::onSelfMessage(cMessage_p msg) {
 	ASSERT(timerId >= 0);
 	ASSERT((size_t)timerId < timerDuration.size());
 	ASSERT(timerMsg[timerId] == msg.get());
-	timerCallback[timerId]();
+	timerCallback[timerId](timerId);
 	// reschedule timer if duration > 0, otherwise it was a one shot timer
 	if (timerDuration[timerId] > 0)
 	{
@@ -613,7 +618,7 @@ bool R2Kademlia::handleQueryRouteResponse(KadPacket_p answer, RPCState& rpcState
 
 // FIND NODE
 void R2Kademlia::sendFindNode(const OverlayKey& key, bool exact, const OverlayKey* notvia_unreachable_node, const OverlayKey* notvia_failednode_neighbor) {
-	EV_TRACE << "sendFindNode w/ " << key.shortStr() << (exact ? " (NID)" : " (RID)") // Node ID or Resource ID?
+	EV_TRACE << "sendFindNode w/ " << key.shortStr() << (exact ? " (NID)" : (key == myOverlayKey ? " (JOIN)" :" (RID)")) // Node ID or Resource ID?
 		 << (notvia_unreachable_node ? " (Rediscovery)" : "") << endl;
 	auto contacts = routingTable.getClosestContacts(key, findNodeNumber);
 	//ASSERT(contacts.size() > 0);
@@ -688,11 +693,12 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 		return;
 	}
 
-	// routing table has at least one entry
+	// precondition here: routing table has at least one entry
 	if (query != myOverlayKey) { // someone else routing via us
 
 		// the first contact is closest to query key
 		// if it is the source, we would route it back in a loop
+		// (may be also the case if a node tries to join and looks up its own node ID)
 		if (contacts.front()->getKey() == packet->getSource()) {
 			if (contacts.size() == 1) {
 				// the only contact we know is the source
@@ -706,7 +712,9 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 				return;
 			}
 			else // remove source from answer
+			{
 				contacts.erase(contacts.begin());
+			}
 		}
 
 		/*
@@ -718,7 +726,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 		EV_TRACE << endl;
 		*/
 		
-		// if contact is closer to destination than we, it's ok
+		// if contact is closer to destination than us, it's ok
 		if ((contacts.front()->getKey() ^ query) < (myOverlayKey ^ query)
 				and contacts.front()->getPathLength() < packet->getHopLimit()) {
 			// we have found a closer contact that is close enough
@@ -1325,8 +1333,9 @@ void R2Kademlia::readRTableRsp(std::unique_ptr<KadRTableRsp> packet) {
 	}
 }
 
+
 /* if duration is 0, this is a one shot timer */
-void R2Kademlia::addTimer(simtime_t initialOffset, simtime_t duration, std::function<void()> callback) {
+void R2Kademlia::addTimer(simtime_t initialOffset, simtime_t duration, std::function<void(short timerId)> callback) {
 	ASSERT(timerDuration.size() == timerCallback.size());
 	ASSERT(timerDuration.size() < std::numeric_limits<short>::max());
 	ASSERT(duration >= 0);
@@ -1371,7 +1380,7 @@ void R2Kademlia::rediscoverContacts() {
 }
 
 
-void R2Kademlia::doProbe() {
+void R2Kademlia::doProbe(short timerId) {
 	if (neighborTable.size() == 0) return; // we are isolated
 	OverlayKey probeKey;
 	bool exact = false;
@@ -1412,7 +1421,23 @@ void R2Kademlia::doProbe() {
 }
 
 
-void R2Kademlia::doReachabilityTest() {
+void R2Kademlia::doProbeSelf(short timerId) {
+	static const simtime_t maxDuration(360); // check every 5 minutes
+
+	// exponential backoff double duration until we reached maxDuration
+	if (timerDuration[timerId] < maxDuration)
+	{ // double waiting time for next call until maxDuration is reached
+		timerDuration[timerId] = std::min(2 * timerDuration[timerId], maxDuration);
+	}
+	
+	if (neighborTable.size() == 0) return; // we are isolated
+	bool exact= false;
+	
+	sendFindNode(myOverlayKey, exact);
+}
+
+
+void R2Kademlia::doReachabilityTest(short timerID) {
 	if (neighborTable.size() == 0) return; // we are isolated
 	const OverlayKey* key;
 	do {
