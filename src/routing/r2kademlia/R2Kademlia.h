@@ -287,6 +287,7 @@ private:
 	/// if activated the node collects path information from passing packets
 	bool pathSnooping;
 	bool sendDataPackets;
+	bool usePathIDs;
 	uint8_t probeStrategy;
 	simtime_t rediscoveryWaitTime;
 	simtime_t updateWaitTime;

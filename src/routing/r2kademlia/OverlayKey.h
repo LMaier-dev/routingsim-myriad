@@ -26,6 +26,7 @@
 #ifndef __OVERLAYKEY_H_
 #define __OVERLAYKEY_H_
 
+// uses GNU multiple precision functions
 #include <gmp.h>
 #include <stdint.h>
 

@@ -55,6 +55,12 @@ void R2Kademlia::onInitialize() {
 	hopLimit = (uint) par("hopLimit").intValue();
 	pathSnooping = par("pathSnooping").boolValue();
         sendDataPackets = par("sendDataPackets").boolValue();
+        usePathIDs = par("usePathIDs").boolValue();
+	if (sendDataPackets and not usePathIDs)
+	{
+		EV_WARN << "usePathIDs must be set if sendDataPackets is enabled, changed to usePathIDs=on" << endl;
+		usePathIDs= true;
+	}
 	probeStrategy = (uint) par("probeStrategy").intValue();
 	detailedRoutingTableStats = par("detailedRoutingTableStats").boolValue();
 	rediscoveryWaitTime = (simtime_t) (par("rediscoveryWaitTime").doubleValue() * 0.001); // given in ms
@@ -206,7 +212,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 					{
 						// use existing path from answer
 						KadContact contact(packet->getTarget(), packet->reversePath(packet->getSrcPath(1, packet->getProgress())));
-						fwdTablePathID.addEntry(&contact, true);
+						if (usePathIDs) fwdTablePathID.addEntry(&contact, true);
 					}
 				}
 				break;
@@ -984,7 +990,7 @@ void R2Kademlia::onContactRemoval(KadContact_p contact)
 	
 	// delete from Forwarding table PID
 	// TODO: this can be scheduled for happening later
-	fwdTablePathID.delEntry(contact);
+	if (usePathIDs) fwdTablePathID.delEntry(contact);
 }
 
 
@@ -1010,7 +1016,7 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 	
 	if (contact->isValid())
 	{
-		fwdTablePathID.addEntry(contact, false);
+		if (usePathIDs) fwdTablePathID.addEntry(contact, false);
 	}
 
 	if (contact->isValid() and contact->getPathProperty() == KadContact::PathProperty::indirect
@@ -1029,7 +1035,7 @@ void R2Kademlia::onImprovement(const KadContact& contact) {
 	
 	if (contact.isValid())
 	{
-		fwdTablePathID.modEntry(&contact, false);
+		if (usePathIDs) fwdTablePathID.modEntry(&contact, false);
 	}
 
 	if (contact.isValid() and contact.getPathProperty() == KadContact::PathProperty::indirect)

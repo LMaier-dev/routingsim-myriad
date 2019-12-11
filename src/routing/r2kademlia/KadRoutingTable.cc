@@ -83,12 +83,26 @@ size_type KadRoutingTable::getBucketIndex(const OverlayKey& key) const
 
 	// i is now the index of the LSB of the first non zero sub integer in delta
 	int i = delta.getLength() - (prefixLen+1)*accelerationFactor;
-	//EV_TRACE << "getBucketIndex(" << key.shortStr() << ") i=" << i;
 	if (i < 0) // this is my key
 		return buckets.size() - 1;
-	//ASSERT(delta.getBitRange(i, accelerationFactor) != 0);
+
+	// bool debuginfo(false);
+	// if (delta.getBitRange(i, accelerationFactor) == 0)
+	// {
+	// 	EV_WARN << "delta.getBitRange(i, accelerationFactor) == 0, key: "
+	// 		<< key << " nodekey: " << myKey << " delta: " << delta << endl;
+	// 	debuginfo= true;
+	// }
+	ASSERT(delta.getBitRange(i, accelerationFactor) != 0);
+
+	// if (not (i + accelerationFactor >= delta.getLength() or
+	// 	 delta.getBitRange(i + accelerationFactor, accelerationFactor) == 0))
+	// {
+	// 	EV_WARN << "i + accelerationFactor < delta.getLength() and delta.getBitRange(i + accelerationFactor, accelerationFactor) != 0), key: " << key << " nodekey: " << myKey << " delta: " << delta << endl;
+	// 	debuginfo= true;
+	// }
 	ASSERT(i + accelerationFactor >= delta.getLength() or
-			delta.getBitRange(i + accelerationFactor, accelerationFactor) == 0);
+		delta.getBitRange(i + accelerationFactor, accelerationFactor) == 0);
 
 	// bucket 0 is the farthest one from my id.
 	// the prefixLen denotes depth of the level
@@ -99,7 +113,16 @@ size_type KadRoutingTable::getBucketIndex(const OverlayKey& key) const
 	// => index = (prefixLen+1) * levelWidth - subint
 	size_type index = (prefixLen+1)*getLevelWidth() - delta.getBitRange(i, accelerationFactor);
 	ASSERT(index <= getMaxNumBuckets());
-	//EV_TRACE << " delta=" << delta.shortStr() << " plen=" << prefixLen << " subint=" << delta.getBitRange(i, accelerationFactor) << " index=" << index << endl;
+
+	// if (debuginfo)
+	// {
+	// 	EV_TRACE << "getBucketIndex(" << key << ") len/acc=" << delta.getLength() << "/" << accelerationFactor
+	// 		 << " i=" << i
+	// 		 << " delta=" << delta << " plen=" << prefixLen
+	// 		 << " subint=" << (unsigned int) delta.getBitRange(i, accelerationFactor)
+	// 		 << " index=" << index << " maxindex=" << buckets.size()-1 << endl;
+	// }
+
 	// old calculation formula, just for checking...
 	// ASSERT(index == (key.getLength() - i)/accelerationFactor * getLevelWidth()- delta.getBitRange(i, accelerationFactor));
 	return std::min(buckets.size()-1, index);
@@ -400,7 +423,7 @@ inline void copyValidContacts(const std::vector<std::unique_ptr<KadContact>>& so
 
 
 /** 
- * returns at most n contacts closes to key
+ * returns at most n contacts closest to key
  * ContactList is sorted according to XOR metric with respect to key, i.e., the first returned contact
  * is the closest to key
  */
@@ -453,7 +476,7 @@ KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_t
 		}
 	};
 	std::sort(result.begin(), result.end(), KadContactCompare(key));
-	// if we have found move than n contacts, we need to remove some
+	// if we have found more than n contacts, we need to remove some
 	if (result.size() > n) {
 		result.resize(n);
 	}
