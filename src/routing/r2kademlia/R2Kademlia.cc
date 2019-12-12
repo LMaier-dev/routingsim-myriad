@@ -537,8 +537,8 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadUpdateRouteReq> packet) {
 	ASSERT(packet->getContactArraySize() == packet->getPathArraySize());
 	ASSERT(packet->getContactArraySize() == packet->getActionArraySize());
 
-	// path to origin of this KadUpdateRouteReq
-	kad_path source_path= packet->reversePath(packet->getSrcPath());
+	// path to origin of this KadUpdateRouteReq (excluding myself)
+	kad_path source_path= packet->reversePath(packet->getSrcPath(1,packet->getRouteArraySize()-1));
 	EV_TRACE << "path to origin: <";
 	for (const OverlayKey& k : source_path)
 		EV_TRACE << k.shortStr() << ' ';

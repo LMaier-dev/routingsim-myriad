@@ -311,9 +311,13 @@ bool KadRoutingTable::simplifyPath(kad_path& path) const
 // @returns true if contact was inserted into routing table, false if not
 bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, KadContact::PathProperty pathprop)
 {
-	ASSERT(key != myKey);
+	ASSERT(key != myKey); // never insert myself
+	// get responsible bucket for contact
 	KadBucket& bucket = getBucket(key);
-	ASSERT(!bucket.getContact(key));
+	ASSERT(!bucket.getContact(key)); // contact should be new
+	// if contact would be inserted into the deepest bucket (new ID-wise neighbor):
+	// expand routing table by splitting the bucket and increase the depth:
+	// this will ensure that all ID-wise neighbors will be learned and kept
 	if (isSplittable(bucket)) {
 		splitLastBucket();
 		// we recurse to get the new bucket after the split
@@ -330,7 +334,7 @@ bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, Kad
 		if (pathprop != KadContact::PathProperty::direct)
 			EV_WARN << "handleNewContact(): inconsistent path property, should be direct, but is " << (uint8_t) pathprop << endl;
 		contact->setPathProperty(KadContact::PathProperty::direct);
-		policy->onNewContact(contact.get());
+		policy->onNewContact(contact.get()); // this should be safe even when contact is not yet added to bucket
 		bucket.PNContacts.push_back(std::move(contact));
 
 		return true;
@@ -345,7 +349,7 @@ bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, Kad
 
 		return true;
 	}
-	else {
+	else { // no space in bucket for inserting the new contact: replace existing one?
 		if (not proximityNeighborSelection) {
 			EV_INFO << "dropping new contact " << *contact << endl;
 			return false;
