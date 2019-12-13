@@ -976,8 +976,10 @@ void R2Kademlia::onErrorPacket(KadError& error) {
 				{ // maybe already invalid or rediscovering
 					if (affectedContact->isRediscovering())
 					{ // must check whether this is an error message for the rediscovery attempt
+						EV_TRACE << "Contact " << affectedContact->getKey().shortStr()
+							 << " already in state rediscovering" << endl;
 						auto findnodereq= dynamic_cast<const KadFindNodeReq*>(original);
-						if (findnodereq->getNotVia() == false) {
+						if (findnodereq == nullptr or findnodereq->getNotVia() == false) {
 							// failed packet was not a rediscovery packet
 							break;
 						}
