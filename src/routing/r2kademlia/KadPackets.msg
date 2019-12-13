@@ -53,8 +53,9 @@ packet KadAnswer extends KadPacket {}
 /// compare RTableRequestType from Spec
 packet KadRTableReq extends KadPacket {
 	// reserved flag is omitted
-	bool contactsOnly = false;
-	uint8_t neighborhood = 63;
+	bool contactsOnly = false; // return contacts only
+	bool overlayNeighbors = false; // return k nearest overlay neighbors of the node
+	uint8_t neighborhood = 63; // physical l-hop neighborhood, 63 means full table
 }
 
 /// compare RTable or ContactList from Spec

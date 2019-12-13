@@ -118,8 +118,10 @@ class R2Kademlia : public RPCProtocol, public KadPolicy, public StatisticSample
 	void sendProbe(KadContact_p contact);
 	/// sends a path setup request to the given contact
 	void sendPathSetup(KadContact_p contact);
-	/// sends a "get neighbors" call to the contact
-	void sendGetNeighbors(KadContact_p contact);
+	/// sends a "get physical neighbors" call to the contact
+	void sendGetPhysicalNeighbors(KadContact_p contact);
+	/// sends a "get overlay neighbors" call to the contact
+	void sendGetOverlayNeighbors(KadContact_p contact);
 	/// sends a PNDisc Request to the Physical Neighbor
 	void sendDiscoveryReq(KadContact_p contact);
 	/// sends a find node call to find this node (rediscovery may use a not via failed link)

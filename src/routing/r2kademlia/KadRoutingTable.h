@@ -167,10 +167,11 @@ public:
 	/// returns how many times contacts have been replaced
 	inline uint getReplacementCount() const { return replacementCount; }
 	/// returns the maximum size of a bucket, i.e. the size after which a bucket is split
-	inline size_type getSplitSize() { return bucketSize; }
+	inline size_type getSplitSize() const { return bucketSize; }
 	/// returns true if the key is known, i.e. there is a contact present
-	inline bool isKnown(const OverlayKey& key) { return getContact(key) != nullptr; }
-
+	inline bool isKnown(const OverlayKey& key) const { return getContact(key) != nullptr; }
+	/// returns true if key is in last bucket
+	inline bool isInLastBucket(const OverlayKey& key) const { return getBucketIndex(key) == buckets.size()-1; }
 
 	/// returns the distance between the two keys
 	inline OverlayKey distance(const OverlayKey& a, const OverlayKey& b) const { return a ^ b; }

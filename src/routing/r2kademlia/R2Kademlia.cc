@@ -455,13 +455,31 @@ bool R2Kademlia::handlePathSetupResponse(KadPacket_p answer, RPCState& rpcState)
 }
 
 
-// Request Physical Neighbors from contact 
-void R2Kademlia::sendGetNeighbors(KadContact_p contact)
+// Request Physical Neighbors from contact
+void R2Kademlia::sendGetPhysicalNeighbors(KadContact_p contact)
 {
-	EV_TRACE << "sending query route request to " << *contact << endl;
+	EV_TRACE << "sending query route request (PN) to " << *contact << endl;
 	auto req = makePacket<KadQueryRouteReq>(contact, "KadQueryRouteReq");
 	req->setNeighborhood(1); // get only physical neighbors (1 hop away)
 	req->setContactsOnly(false);
+	req->setOverlayNeighbors(false);
+	sendRpcCall(
+		std::move(req),
+		std::bind(&R2Kademlia::handleQueryRouteResponse, this, ph::_1, ph::_2),
+		std::bind(&R2Kademlia::handleQueryRouteResponse, this, ph::_1, ph::_2),
+		std::bind(&R2Kademlia::handleRPCTimeOut, this, ph::_1, ph::_2)
+	);
+}
+
+
+// Request k nearest Overlay Neighbors from contact 
+void R2Kademlia::sendGetOverlayNeighbors(KadContact_p contact)
+{
+	EV_TRACE << "sending query route request (ON) to " << *contact << endl;
+	auto req = makePacket<KadQueryRouteReq>(contact, "KadQueryRouteReq");
+	req->setNeighborhood(0); // no physical neighbors
+	req->setOverlayNeighbors(true); // get only overlay neighbors
+	req->setContactsOnly(false); // get also the routes
 	sendRpcCall(
 		std::move(req),
 		std::bind(&R2Kademlia::handleQueryRouteResponse, this, ph::_1, ph::_2),
@@ -516,15 +534,44 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadPNDiscReq> packet) {
 void R2Kademlia::handlePacket(std::unique_ptr<KadQueryRouteReq> packet) {
 	EV_TRACE << "received KadQueryRouteReq from " << packet->getSource().shortStr() << endl;
 
-	// TODO currently only getting physical neighbors is implemented
-	ASSERT(packet->getNeighborhood() == 1);
+	//  packet->getContactsOnly() not implemented yet
 	ASSERT(not packet->getContactsOnly());
 	auto response = makeAnswer<KadQueryRouteRsp>(*packet);
-	std::vector<OverlayKey> neighbors = neighborTable.getNeighbors();
-	response->setContactArraySize(neighbors.size());
-	response->setPathArraySize(neighbors.size());
-	for (uint i = 0; i < neighbors.size(); i++)
-		response->setContact(i, neighbors[i]);
+	if (packet->getNeighborhood() == 1)
+	{
+		std::vector<OverlayKey> neighbors(neighborTable.getNeighbors());
+		response->setContactArraySize(neighbors.size());
+		response->setPathArraySize(neighbors.size());
+		for (uint i = 0; i < neighbors.size(); i++)
+			response->setContact(i, neighbors[i]);
+	}
+	else
+	if (packet->getNeighborhood() == 63) // means to get full routing table
+	{
+		KadContactList allcontacts= routingTable.getAllContacts();
+		response->setContactArraySize(allcontacts.size());
+		response->setPathArraySize(allcontacts.size());
+		for (uint i = 0; i < allcontacts.size(); i++)
+		{
+			response->setContact(i, allcontacts[i]->getKey());
+			response->setPath(i, allcontacts[i]->getPath());
+		}
+	}
+
+	if (packet->getOverlayNeighbors())
+	{
+		KadContactList ovlyneighbors= routingTable.getClosestContacts(myOverlayKey, routingTable.getSplitSize());
+
+		response->setContactArraySize(ovlyneighbors.size());
+		response->setPathArraySize(ovlyneighbors.size());
+		for (uint i = 0; i < ovlyneighbors.size(); i++)
+		{
+			response->setContact(i, ovlyneighbors[i]->getKey());
+			response->setPath(i, ovlyneighbors[i]->getPath());
+		}
+
+	}
+
 	sendPacket(std::move(response));
 }
 
@@ -1008,18 +1055,25 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 		}
 	}
 
-	// ask for neighbors of new contact
+	// ask for physical neighbors if new contact is within discovery radius
 	if (contact->getPathLength() > 0 and contact->getPathLength() < discoveryRadius)
 	{
-		sendGetNeighbors(contact);
+		sendGetPhysicalNeighbors(contact);
 	}
 	
 	if (contact->isValid())
 	{
+		// request info about overlay neighbors of nodes in our deepest bucket
+		if (routingTable.isInLastBucket(contact->getKey()))
+		{
+			EV_TRACE << "New contact is in deepest bucket, will ask for its routing table" << endl;
+			sendGetOverlayNeighbors(contact);
+		}
+
 		if (usePathIDs) fwdTablePathID.addEntry(contact, false);
 	}
 
-	if (contact->isValid() and contact->getPathProperty() == KadContact::PathProperty::indirect
+	if (usePathIDs and contact->isValid() and contact->getPathProperty() == KadContact::PathProperty::indirect
 	    and contact->getPathLength() > 1)
 	{ // send a path setup request packet for installing PIDs in intermediate nodes for this indirectly learned route
 		// only do this for paths longer than two hops
@@ -1038,7 +1092,7 @@ void R2Kademlia::onImprovement(const KadContact& contact) {
 		if (usePathIDs) fwdTablePathID.modEntry(&contact, false);
 	}
 
-	if (contact.isValid() and contact.getPathProperty() == KadContact::PathProperty::indirect)
+	if (usePathIDs and contact.isValid() and contact.getPathProperty() == KadContact::PathProperty::indirect)
 	{ // send a path setup request packet for installing PIDs in intermediate nodes for this indirectly learned route
 		EV_TRACE << "Triggering path setup to " << contact.getKey().shortStr() << endl;
 		sendPathSetup(&contact);
