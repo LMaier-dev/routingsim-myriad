@@ -137,6 +137,8 @@ class neighbor_t {
 public:
 	nodeid_t id;
 	simtime_t activity;
+	simtime_t lastsent;
+
 	cGate * out;
 };
 

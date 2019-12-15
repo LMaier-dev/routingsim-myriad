@@ -181,7 +181,12 @@ void Node::sendToNode( nodeid_t nid, NodePkt* np ) {
 
 	// send packet with delay
 	simtime_t delay = ((double)intuniform(minDelay,maxDelay))/1000.0;
-	sendDelayed(np,delay, n.out);
+	// schedule not before earlier sent message!
+	if (simTime() < n.lastsent)
+		delay+= n.lastsent-simTime();
+	
+	n.lastsent= simTime()+delay;
+	sendDelayed(np, delay, n.out);
 }
 
 void Node::sendToModules( NodePkt* np ) {

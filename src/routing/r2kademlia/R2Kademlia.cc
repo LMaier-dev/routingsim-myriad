@@ -293,6 +293,10 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 	neighborTable.addNeighbor(packet->getSourceId(), packet->getSource());
 	EV_TRACE << "neighbor table: "<< neighborTable << endl;
 
+	// PNDiscovery should be send before any further messages to avoid missing neighbors
+	KadContact neighborcontact(packet->getSource(), kad_path());
+	sendDiscoveryReq(&neighborcontact);
+
 	// try to add neighbor to routing table
 	if (routingTable.addPath(packet->getSource(), kad_path(), KadContact::PathProperty::direct))
 	{
@@ -303,11 +307,7 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 	else
 		EV_TRACE << "adding neighbor failed (maybe was already there)" << endl;
 
-	KadContact neighborcontact(packet->getSource(), kad_path());
-	sendDiscoveryReq(&neighborcontact);
-
 	//EV_TRACE << "handlePacket: "<< static_cast<void*>(packet.get()) << endl;
-
 }
 
 
@@ -898,7 +898,7 @@ void R2Kademlia::onMissingNeighbor(KadPacket_p packet, NodePkt_p pkt) {
 		case KAD_UpdateRouteReq:
 		case KAD_QueryRouteRsp:
 		case KAD_FindNodeRsp:	
-			EV << "not generating error packet for packet type " << packet->getName() << "(" << packet->getType() << ")" << endl;
+			EV << "not generating error packet for packet type " << packet->getName() << "(" << (unsigned int) packet->getType() << ")" << endl;
 			break;
 		default:
 		{
