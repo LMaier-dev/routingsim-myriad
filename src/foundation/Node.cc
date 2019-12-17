@@ -184,8 +184,9 @@ void Node::sendToNode( nodeid_t nid, NodePkt* np ) {
 	// schedule not before earlier sent message!
 	if (simTime() < n.lastsent)
 		delay+= n.lastsent-simTime();
-	
+
 	n.lastsent= simTime()+delay;
+
 	sendDelayed(np, delay, n.out);
 }
 
@@ -245,6 +246,7 @@ void Node::onHello( NodePkt* pkt ) {
 
 	// set record
 	nr.activity = simTime();
+	nr.lastsent = 0;
 	nr.id  = nid;
 	nr.out = gate("toNeighbors$o", pkt->getArrivalGate()->getIndex() );
 

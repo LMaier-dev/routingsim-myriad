@@ -419,12 +419,17 @@ void R2Kademlia::sendProbe(KadContact_p contact) {
 		std::bind(&R2Kademlia::handleRPCTimeOut, this, ph::_1, ph::_2));
 }
 
+
 void R2Kademlia::handlePacket(std::unique_ptr<KadProbeReq> packet) {
 	sendPacket(makeAnswer<KadProbeRsp>(*packet));
 }
 
 
 bool R2Kademlia::handleProbeResponse(KadPacket_p answer, RPCState& rpcState) {
+	// cancel associated timer message
+	cancelAndDelete(rpcState.timeoutMsg);
+	rpcState.timeoutMsg= nullptr;
+
 	if (rpcState.status != RPC_SUCCESS) return true;
 	ASSERT(answer->getSource() == rpcState.original_packet->getTarget());
 	std::unique_ptr<KadProbeRsp> probeRsp = safe_packet_cast<KadProbeRsp>(answer);
@@ -448,6 +453,10 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadPathSetupReq> packet) {
 
 
 bool R2Kademlia::handlePathSetupResponse(KadPacket_p answer, RPCState& rpcState) {
+	// cancel associated timer message
+	cancelAndDelete(rpcState.timeoutMsg);
+	rpcState.timeoutMsg= nullptr;
+
 	if (rpcState.status != RPC_SUCCESS) return true;
 	ASSERT(answer->getSource() == rpcState.original_packet->getTarget());
 	std::unique_ptr<KadPathSetupRsp> pathSetupRsp = safe_packet_cast<KadPathSetupRsp>(answer);
@@ -648,6 +657,9 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadUpdateRouteReq> packet) {
 
 bool R2Kademlia::handlePNDiscResponse(KadPacket_p answer, RPCState& rpcState)
 {
+	// cancel associated timer message
+	cancelAndDelete(rpcState.timeoutMsg);
+	rpcState.timeoutMsg= nullptr;
 	if (rpcState.status != RPC_SUCCESS) return true;
 	auto response = safe_packet_cast<KadPNDiscRsp>(answer);
 	EV_TRACE << "PNDiscRsp received " << response->getContactArraySize() << " neighbors from " << response->getSource().shortStr() << endl;
@@ -658,6 +670,9 @@ bool R2Kademlia::handlePNDiscResponse(KadPacket_p answer, RPCState& rpcState)
 	
 bool R2Kademlia::handleQueryRouteResponse(KadPacket_p answer, RPCState& rpcState)
 {
+	// cancel associated timer message
+	cancelAndDelete(rpcState.timeoutMsg);
+	rpcState.timeoutMsg= nullptr;
 	if (rpcState.status != RPC_SUCCESS) return true;
 	auto response = safe_packet_cast<KadQueryRouteRsp>(answer);
 	EV_TRACE << "received " << response->getContactArraySize() << " neighbors from " << response->getSource().shortStr() << endl;
@@ -841,6 +856,9 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 
 
 bool R2Kademlia::handleFindNodeResponse(KadPacket_p answer_, RPCState& rpcState) {
+	// cancel associated timer message
+	cancelAndDelete(rpcState.timeoutMsg);
+	rpcState.timeoutMsg= nullptr;
 	if (rpcState.status != RPC_SUCCESS) return true;
 	auto answer = safe_packet_cast<KadFindNodeRsp>(answer_);
 	ASSERT(answer->getContactArraySize() == answer->getPathArraySize());
