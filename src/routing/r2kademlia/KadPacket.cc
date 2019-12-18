@@ -86,8 +86,37 @@ void KadPacket::setReturnPathFrom(KadPacket& other) {
 	// we include the current hop
 	ASSERT(route_arraysize == 0);
 	setRouteArraySize(other.progress + 1);
-	for(uint i=0; i <= other.progress; i++)
+	for (uint i= 0; i <= other.progress; i++)
 		setRoute(i, other.getRoute(other.progress - i));
+}
+
+
+void KadPacket::setSimplifiedReturnPathFrom(KadPacket& other) {
+	// we include the current hop
+	ASSERT(route_arraysize == 0);
+	uint index= 0;
+	for (uint i= 0; i <= other.progress; i++)
+	{
+		const OverlayKey& current= other.getRoute(other.progress - i);
+		bool skip= false;
+		uint j= 0;
+		while (j < other.progress - i)
+		{
+			if (other.getRoute(j) == current)
+			{
+				skip= true;
+				break;
+			}
+			j++;
+		}
+		// j is now either other.progress - i or the leftmost index of the same key
+		setRoute(index, other.getRoute(j));
+		index++;
+		// if we skipped elements we can forward i accordingly
+		if (skip)
+			i= other.progress - j;
+	}  // end for
+	setRouteArraySize(index);
 }
 
 
