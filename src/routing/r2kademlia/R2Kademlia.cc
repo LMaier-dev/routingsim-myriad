@@ -85,7 +85,8 @@ void R2Kademlia::onInitialize() {
 	WATCH_OBJ(routingTable);
 	WATCH_OBJ(fwdTablePathID);
 
-	sendToNeighbors(makeHelloPacket());
+	// the following is not necessary, because onConnect will do this
+	//sendToNeighbors(makeHelloPacket());
 }
 
 
@@ -1359,7 +1360,11 @@ template<typename T>
 std::unique_ptr<T> R2Kademlia::makeAnswer(KadPacket& original) {
 	auto answer = std::make_unique<T>();
 	answer->setName((std::string(original.getName()) + std::string("Answer")).c_str());
-	answer->setReturnPathFrom(original);
+	if (routingTable.usePathSimplification())
+		answer->setSimplifiedReturnPathFrom(original);
+	else
+		answer->setReturnPathFrom(original);
+
 	ASSERT(answer->getSource() == myOverlayKey);
 	answer->setNonce(original.getNonce());
 	return answer;

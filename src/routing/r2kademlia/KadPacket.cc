@@ -94,6 +94,9 @@ void KadPacket::setReturnPathFrom(KadPacket& other) {
 void KadPacket::setSimplifiedReturnPathFrom(KadPacket& other) {
 	// we include the current hop
 	ASSERT(route_arraysize == 0);
+	kad_path resultpath;
+	resultpath.reserve(other.progress + 1); // result may be shorter
+
 	uint index= 0;
 	for (uint i= 0; i <= other.progress; i++)
 	{
@@ -109,14 +112,17 @@ void KadPacket::setSimplifiedReturnPathFrom(KadPacket& other) {
 			}
 			j++;
 		}
+		resultpath.push_back(current);
 		// j is now either other.progress - i or the leftmost index of the same key
-		setRoute(index, other.getRoute(j));
 		index++;
 		// if we skipped elements we can forward i accordingly
 		if (skip)
 			i= other.progress - j;
 	}  // end for
+
 	setRouteArraySize(index);
+	for (uint i= 0; i < index; i++)
+		setRoute(i, resultpath[i]);
 }
 
 

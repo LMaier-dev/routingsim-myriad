@@ -178,6 +178,9 @@ public:
 	/// returns the distance of the given key to my key
 	inline OverlayKey distance(const OverlayKey& key) const { return key ^ myKey; }
 
+	/// pathSimplification on?
+	bool usePathSimplification() const { return pathSimplification; }
+
 protected:
 	/// removes duplicates and loops from a path
 	bool simplifyPath(kad_path& path) const;
