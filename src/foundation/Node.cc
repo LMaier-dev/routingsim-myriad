@@ -64,8 +64,8 @@ void Node::initialize() {
 	} else
 		this->id = par("id").intValue();
 
-	minDelay = par("nodeMinDelay").intValue();
-	maxDelay = par("nodeMaxDelay").intValue();
+	minDelay = par("nodeMinDelay").intValue()*1000; // nodeMinDelay is given in ms, but we want µs precision
+	maxDelay = par("nodeMaxDelay").intValue()*1000; // nodeMaxDelay is given in ms, but we want µs precision
 
 	initNeighbors();
 }
@@ -179,8 +179,8 @@ void Node::sendToNode( nodeid_t nid, NodePkt* np ) {
 		return;
 	}
 
-	// send packet with delay
-	simtime_t delay = ((double)intuniform(minDelay,maxDelay))/1000.0;
+	// send packet with delay (use µs precision)
+	simtime_t delay = ((double)intuniform(minDelay,maxDelay))/1000000.0;
 	// schedule not before earlier sent message!
 	if (simTime() < n.lastsent)
 		delay+= n.lastsent-simTime();

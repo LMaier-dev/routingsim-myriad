@@ -26,8 +26,8 @@ parameters:
     string protocols;
 
     // minimum and maximum delay in milliseconds
-    int nodeMinDelay @unit(ms) = default(52ms);
-    int nodeMaxDelay @unit(ms) = default(60ms);
+    int nodeMinDelay @unit(ms) = default(0ms);
+    int nodeMaxDelay @unit(ms) = default(4ms);
 
 gates:
     inout toProtocols[];

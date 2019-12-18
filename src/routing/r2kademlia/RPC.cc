@@ -37,11 +37,14 @@ void RPCProtocol::sendRpcCall(packet_p rpcCall, rpc_callback_t success_callback,
 	rpcState.error_callback = error_callback;
 	rpcState.timeout_callback = timeout_callback;
 	rpcState.original_packet = std::unique_ptr<packet_t>(rpcCall->dup());
-	RPCtimeoutMsg* rpc_timeout_msg= new RPCtimeoutMsg(nonce);
-	rpcState.timeoutMsg= rpc_timeout_msg; // just a reference for cancelling
-	// start timer for RPC timeout
-	scheduleAt(simTime() + SimTime(rpcState.timeout_ms,SIMTIME_MS), rpc_timeout_msg);
-	
+	// only schedule timer message in case we want retransmissions
+	if (rpcState.maxRetransmissions > 0)
+	{
+		RPCtimeoutMsg* rpc_timeout_msg= new RPCtimeoutMsg(nonce);
+		rpcState.timeoutMsg= rpc_timeout_msg; // just a reference for cancelling
+		// start timer for RPC timeout
+		scheduleAt(simTime() + SimTime(rpcState.timeout_ms,SIMTIME_MS), rpc_timeout_msg);
+	}
 	// register
 	states[nonce] = std::move(rpcState);
 	// send out
@@ -54,16 +57,17 @@ void RPCProtocol::handleAnswer(packet_p answer)
 	nonce_t nonce = answer->getNonce();
 	auto it = states.find(nonce);
 	if (it == states.end()) {
-		EV_WARN << "received answer packet with unknown nonce" << endl;
+		EV_ERROR << "received answer packet with unknown nonce " << answer->getNonce() << endl;
 		return;
 	}
-	
+
 	bool result;
 	RPCState& rpcState = it->second;
 
 	// cancel RPC timeout timer
-	cancelAndDelete(rpcState.timeoutMsg);
-	
+	if (rpcState.timeoutMsg != nullptr)
+		cancelAndDelete(rpcState.timeoutMsg);
+
 	if (answer->getType() == KAD_Error) {
 		rpcState.status = RPC_ERROR;
 		result = rpcState.error_callback(std::move(answer), rpcState);
@@ -108,13 +112,14 @@ void RPCProtocol::handleTimeOut(nonce_t nonce)
 
 
 void RPCProtocol::finish() {
-	EV_TRACE << "# states left: " << states.size() << endl;
-	for (const auto& state : states)
-	{
-		EV_TRACE << "Nonce: " << state.first << " RPCState " << state.second.status
-			 << " Packet: " << (state.second.original_packet ? state.second.original_packet->getName() : "NULL")
-			 << " id=" << (state.second.original_packet ? state.second.original_packet->getId() : 0) << endl;
-	}
+
+	EV_TRACE << "RPC: # of states left: " << states.size() << endl;
+	// for (const auto& state : states)
+	// {
+	// 	EV_TRACE << "Nonce: " << state.first << " RPCState " << state.second.status
+	// 		 << " Packet: " << (state.second.original_packet ? state.second.original_packet->getName() : "NULL")
+	// 		 << " id=" << (state.second.original_packet ? state.second.original_packet->getId() : 0) << endl;
+	// }
 }
 	
 } // namespace
