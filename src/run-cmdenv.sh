@@ -1,2 +1,2 @@
 #!/bin/bash
-./RoutingSim ../simulations/r2kademlia/thesis.ini -u Cmdenv -c $*
+./RoutingSim ../simulations/r2kademlia/thesis.ini -u Cmdenv -c $* --cmdenv-redirect-output=true

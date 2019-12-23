@@ -586,6 +586,8 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadUpdateRouteReq> packet) {
 	ASSERT(packet->getContactArraySize() == packet->getPathArraySize());
 	ASSERT(packet->getContactArraySize() == packet->getActionArraySize());
 
+	receivedRouteUpdates++;
+
 	// path to origin of this KadUpdateRouteReq (excluding myself)
 	kad_path source_path= packet->reversePath(packet->getSrcPath(0, packet->getRouteArraySize()-1));
 	EV_TRACE << "path to origin: <";
@@ -1017,6 +1019,8 @@ void R2Kademlia::sampleStatistics (Statistics &stats) {
 	stats.value("forwardedDataPackets", forwardedDataPackets-sentDataPackets);
 	stats.value("sentDataPackets", sentDataPackets);
 	stats.value("receivedDataPackets", receivedDataPackets);
+	stats.value("sentRouteUpdates", sentRouteUpdates);
+	stats.value("receivedRouteUpdates", receivedRouteUpdates);
 	stats.value("routingTableContacts", routingTable.getNumContacts());
 	stats.value("routingTableBuckets", routingTable.getNumBuckets());
 	stats.value("routingTableUpdates", routingTable.getUpdateCount());
@@ -1243,6 +1247,7 @@ void R2Kademlia::sendUpdates()
 			EV_DEBUG << endl;
 			// send UpdateRouteReq w/ failed link
 			sendPacket(std::move(packet));
+			sentRouteUpdates++;
 		}
 	}
 	// the updateQueue map should now be empty again
@@ -1405,7 +1410,7 @@ void R2Kademlia::readRTableRsp(std::unique_ptr<KadRTableRsp> packet) {
 /* if duration is 0, this is a one shot timer */
 void R2Kademlia::addTimer(simtime_t initialOffset, simtime_t duration, std::function<void(short timerId)> callback) {
 	ASSERT(timerDuration.size() == timerCallback.size());
-	ASSERT(timerDuration.size() < std::numeric_limits<short>::max());
+	ASSERT(timerDuration.size() < std::numeric_limits<long unsigned int>::max());
 	ASSERT(duration >= 0);
 	timerDuration.push_back(duration);
 	timerCallback.push_back(callback);

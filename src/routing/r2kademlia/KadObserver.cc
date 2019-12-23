@@ -36,7 +36,7 @@ void KadObserver::initialize() {
 	numMessageDeliveryInfos = par("messageDeliverySample").intValue();
 	numMessageDroppedInfos = par("messageDroppedSample").intValue();
 
-	histograms.resize(26);
+	histograms.resize(28);
 	histograms[hopCount] = cHistogramPtr(getIntHistogram("hopCount"));
 	histograms[distance] = cHistogramPtr(getIntHistogram("distance"));
 	histograms[prefixDist] = cHistogramPtr(getIntHistogram("prefixDist"));
@@ -63,6 +63,8 @@ void KadObserver::initialize() {
 	histograms[overlayHopsDroppedData] = cHistogramPtr(getIntHistogram("overlayHopsDroppedData"));
 	histograms[prefixDistDroppedData] = cHistogramPtr(getIntHistogram("prefixDistDroppedData"));
 	histograms[distanceDroppedData] = cHistogramPtr(getIntHistogram("distanceDroppedData"));
+	histograms[sentRouteUpdates] = cHistogramPtr(getIntHistogram("sentRouteUpdates"));
+	histograms[receivedRouteUpdates] = cHistogramPtr(getIntHistogram("receivedRouteUpdates"));
 
 	
 	outVectors.resize(histograms.size());
@@ -92,6 +94,8 @@ void KadObserver::initialize() {
 	outVectors[overlayHopsDroppedData] = std::make_unique<cOutVector>("overlayHopsDroppedData");
 	outVectors[prefixDistDroppedData] = std::make_unique<cOutVector>("prefixDistDroppedData");
 	outVectors[distanceDroppedData] = std::make_unique<cOutVector>("distanceDroppedData");
+	outVectors[sentRouteUpdates] = std::make_unique<cOutVector>("sentRouteUpdates");
+	outVectors[receivedRouteUpdates] = std::make_unique<cOutVector>("receivedRouteUpdates");
 
 	addOutVectors.resize(8);
 	addOutVectors[deliveryRatioV] = std::make_unique<cOutVector>("deliveryRatio");
@@ -370,6 +374,7 @@ void KadObserver::registerPacketOverlayHop(KadPacket& packet) {
 
 
 void KadObserver::sampleStatistics (Statistics &stats) {
+	// records the mean of all histograms as vector
 	for (uint i=0; i<histograms.size(); i++)
 		if (histograms[i]->getCount() > 0)
 			outVectors[i]->record(histograms[i]->getMean());

@@ -77,7 +77,7 @@ private:
 		hopCountData=13, distanceData=14, prefixDistData=15, overlayHopsData=16,
 		stretchMulData=17, stretchAddData=18, prefixPerHopData=19, distanceLeftData=20,
 		prefixDistLeftData=21, hopCountDroppedData=22, overlayHopsDroppedData=23,
-		prefixDistDroppedData=24, distanceDroppedData=25};
+		prefixDistDroppedData=24, distanceDroppedData=25, sentRouteUpdates= 26, receivedRouteUpdates= 27};
 	enum addDataType : uint8_t {deliveryRatioV=0, deliveredPacketsV=1, droppedPacketsV=2, roamingPacketsV=3,
 			            deliveryRatioDataV=4, deliveredDataPacketsV=5, droppedDataPacketsV=6,
 			            roamingDataPacketsV=7};
