@@ -206,16 +206,11 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 				applyShortcut(*packet);
 				break;
 
-			case KAD_PathSetupRsp: // will install in forward direction
-				if (routingTable.getContact(packet->getTarget()) == nullptr)
-				{ // contact not present yet (then also no neighbor)
-					if (packet->getProgress()+1U <= packet->getRouteArraySize()-1U)
-					{
-						// use existing path from answer
-						KadContact contact(packet->getTarget(), packet->reversePath(packet->getSrcPath(1, packet->getProgress())));
-						if (usePathIDs) fwdTablePathID.addEntry(&contact, true);
-					}
-				}
+			case KAD_PathSetupRsp: // will install path in data forward direction
+				// use existing path from answer (must reverse path)
+				KadContact contact(packet->getSource(),
+						   packet->reversePath(packet->getSrcPath(1, packet->getProgress())));
+				if (usePathIDs) fwdTablePathID.addEntry(&contact, true);
 				break;
 		} // end switch
 		
@@ -445,6 +440,8 @@ void R2Kademlia::sendPathSetup(KadContact_p contact) {
 }
 
 void R2Kademlia::handlePacket(std::unique_ptr<KadPathSetupReq> packet) {
+	EV_TRACE << "received PathSetupReq from " << packet->getSource().shortStr() << " to " << packet->getTarget().shortStr()
+		 << " sending back answer" << endl;
 	sendPacket(makeAnswer<KadPathSetupRsp>(*packet));
 }
 
