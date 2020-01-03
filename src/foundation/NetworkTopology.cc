@@ -1109,7 +1109,7 @@ vector<nodeid_t> NetworkTopology::getActiveTopologyPath(nodeid_t from, nodeid_t 
 		// add next predecessor
 		path.push_back(pred);
 
-		// done construcing path?
+		// done constructing path?
 		if (pred == from)
 			done = true;
 	}

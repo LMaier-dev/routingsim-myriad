@@ -25,7 +25,7 @@
 namespace routingsim {
 Define_Module(Statistics);
 
-static Statistics* stats = NULL;
+static Statistics* stats = nullptr;
 static std::unordered_map<const char*, Statistics*> statsMap;
 
 // convenience method, used in Statistics::Value()
@@ -46,9 +46,15 @@ cHistogram* getIntHistogram(const char* name, int rangeLower, int rangeUpper, in
 	return hist;
 }
 
+
+
+
 // this class describes a sampling value
 class Statistics::Value {
 public:
+	static constexpr unsigned short qvaluenumber = 10;
+	static const double qvalues[qvaluenumber];
+
 	int n;
 	double avg;
 	double min;
@@ -68,6 +74,7 @@ public:
 	cHistogram* histogram;
 	cHistogram* histogramAbs;
 	cHistogram* histogramDelta;
+	cOutVector* quantileVec[qvaluenumber];
 	int f;
 
 	double eqTrigger;
@@ -91,6 +98,11 @@ public:
 		histogram = getDensityHistogram(name, "AvgDensity", size);
 		histogramAbs = getDensityHistogram(name, "Density", size);
 		histogramDelta = getDensityHistogram(name, "AvgDeltaDensity", size);
+		// initialize quantile vectors
+		for (unsigned int i= 0; i < qvaluenumber; i++)
+		{
+			quantileVec[i]= new cOutVector((string(name)+ string("Q") + std::to_string((int) (qvalues[i]*100.0))).c_str());
+		}
 		eqTriggerName = (string(name) + string("Trigger"));
 		eqTrigger = INFINITY;
 		lastLog = simTime();
@@ -107,12 +119,18 @@ public:
 		delete histogram;
 		delete histogramAbs;
 		delete histogramDelta;
+		for (unsigned int i= 0; i < qvaluenumber; i++)
+		{
+			delete quantileVec[i];
+			quantileVec[i]= nullptr;
+		}
 	}
 
 	void finish(cSimpleModule* module) {
 		histogram->record();
 		histogramAbs->record();
 		histogramDelta->record();
+
 		if (eqTrigger != INFINITY) {
 			module->recordScalar(eqTriggerName.c_str(),
 					((double) eqTriggerCount / (double) eqTriggerNum));
@@ -134,6 +152,44 @@ public:
 		eqTrigger = trigger;
 	}
 
+	void calcQuantiles() {
+		// this function calculates a number of quantiles given in qvalues[]
+		// this is more efficient than running getCDF() in a loop, because we are doing it in one sweep
+		int numBins = histogramAbs->getNumBins();
+		unsigned int qindex= 0;
+		double lowerEdge = histogramAbs->getBinEdge(0);
+		double upperEdge = histogramAbs->getBinEdge(0);
+		double sum= 0;
+		double sumweights= histogramAbs->getSumWeights();
+		double delta = 0;
+
+		int i= 0; // we start with the underflowbin
+		while (qindex < qvaluenumber and i < numBins)
+		{
+			lowerEdge = histogramAbs->getBinEdge(i);
+			upperEdge = histogramAbs->getBinEdge(i + 1);
+			delta = histogramAbs->getBinValue(i) / sumweights;
+
+			if ( (sum + delta) < qvalues[qindex] ) 
+			{ // sum + delta does not exceed quantile value yet
+				// proceed with next bin
+				i++;
+				sum+= delta;
+			}
+			else // (sum + delta >= qvalues[qindex])
+			{
+				// current bin (+sum) hits or exceeds desired quantile
+				// calculate x based on interpolation of partial bin
+				quantileVec[qindex]->record( ((qvalues[qindex] - sum) / delta * (upperEdge-lowerEdge)) + lowerEdge );
+
+				// advance quantile index
+				qindex++;
+			}
+		} // end while
+
+		// since the histogram should sum up to 1, all quantile values should have been covered
+	}
+
 	void record(cSimpleModule* module) {
 		ASSERT(n != 0);
 		double value = avg / n;
@@ -152,6 +208,7 @@ public:
 			histogramDelta->collect((value - lastavg) / dx);
 			minVecDelta->record((min - lastmin) / dx);
 			maxVecDelta->record((max - lastmax) / dx);
+			calcQuantiles();
 		}
 		lastavg = value;
 		lastmin = min;
@@ -165,22 +222,26 @@ public:
 	}
 };
 
+
+constexpr const double Statistics::Value::qvalues[]= { 0.50, 0.60, 0.70, 0.75, 0.80, 0.85, 0.90, 0.95, 0.98, 0.99 };
+
+
 int Statistics::numInitStages() const {
 	return 4;
 }
 
 Statistics::Statistics() {
-	samplingTimer = NULL;
-	deliveryRatio = NULL;
-	messagesDeliveredVector = NULL;
-	messagesDroppedVector = NULL;
-	shortestPathDeliveryRatio = NULL;
-	shortestPathMessagesDeliveredVector = NULL;
-	shortestPathMessagesDroppedVector = NULL;
-	hopCount = NULL;
-	realHopCount = NULL;
-	addStretch = NULL;
-	mulStretch = NULL;
+	samplingTimer = nullptr;
+	deliveryRatio = nullptr;
+	messagesDeliveredVector = nullptr;
+	messagesDroppedVector = nullptr;
+	shortestPathDeliveryRatio = nullptr;
+	shortestPathMessagesDeliveredVector = nullptr;
+	shortestPathMessagesDroppedVector = nullptr;
+	hopCount = nullptr;
+	realHopCount = nullptr;
+	addStretch = nullptr;
+	mulStretch = nullptr;
 }
 
 void Statistics::initialize(int stage) {
@@ -244,13 +305,13 @@ Statistics::~Statistics() {
 	delete addStretch;
 	delete mulStretch;
 
-	//delete all statistics and set to NULL
+	// delete all statistics and set to nullptr
 	for (auto it = statsMap.begin(); it != statsMap.end(); it++) {
 		if (it->second == this)
 			statsMap.erase(it);
 	}
 	if (stats == this)
-		stats = NULL;
+		stats = nullptr;
 }
 
 const char* deliveryRatioStr = "messageDeliveryRatio";
@@ -316,7 +377,7 @@ void Statistics::dropMessage( cMessage* msg, nodeid_t dstNode ) {
 	// the context pointer is set in registerMessage
 	nodeid_t srcNode = Node::getNode(static_cast<cModule*>(msg->getContextPointer()))->getNodeId();
 
-	if (recordShortestPathDeliveryRatio and getNetworkManager() != NULL) {
+	if (recordShortestPathDeliveryRatio and getNetworkManager() != nullptr) {
 		if (getNetworkManager()->getTopology().fullTopologyPathFailed(srcNode, dstNode)) {
 			shortestPathMessagesDropped++;
 		} else {
@@ -340,7 +401,7 @@ void Statistics::deliveredMessage( cMessage* msg, int hop_count ) {
 	}
 	nodeid_t srcNode = Node::getNode(static_cast<cModule*>(msg->getContextPointer()))->getNodeId();
 	nodeid_t dstNode = Node::getNode(getSimulation()->getContextModule())->getNodeId();
-	if (getNetworkManager()!=NULL) {
+	if (getNetworkManager()!=nullptr) {
 		int realDistance = (int)getNetworkManager()->getDistance(srcNode, dstNode);
 		if (realDistance >= 0) {
 			realHopCount->collect(realDistance);
@@ -378,15 +439,15 @@ inline Statistics *createStats( const char* name = STATS_MAIN ) {
 }
 
 Statistics& getStatistics( const char* name ) {
-	if (name != NULL) {
+	if (name != nullptr) {
 		if (statsMap.count(name)==0)
 			statsMap.insert(std::make_pair(name, createStats(name)));
 		return *statsMap[name];
 	}
-	if (name == NULL && stats == NULL) {
+	if (name == nullptr && stats == nullptr) {
 		stats = dynamic_cast<Statistics*>(
 			getSimulation()->getModuleByPath(STATS_MAIN));
-		if (stats == NULL)
+		if (stats == nullptr)
 			stats = createStats();
 	}
 	return *stats;
