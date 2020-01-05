@@ -51,6 +51,7 @@ void FwdTablePathID::addEntry(KadContact_p contact, bool foreignPID)
 		return;
 
 	// Routingtable entry on node 4: Dest 5: < 3 2 >
+	EV_TRACE << "addEntry(): called for contact " << *contact << endl;
 
 	// note: this path may be empty for physical neighbors
 	kad_path currentpath(contact->getPath());
@@ -62,10 +63,13 @@ void FwdTablePathID::addEntry(KadContact_p contact, bool foreignPID)
 
 	// check for already existing PID
 	if (PIDFwdTable.find(incomingPathID) != PIDFwdTable.end())
+	{
+		EV_WARN << "addEntry(): PID entry " << incomingPathID << " exists already" << endl;
 		return; // already there
-	
+	}
+
 	FwdTableEntry fwdentry;
-	
+
 	// Check for previous existing entry for this contact
 	auto it= NIDPIDTable.find(contact->getKey());
 	if (it != NIDPIDTable.end())
@@ -98,7 +102,7 @@ void FwdTablePathID::addEntry(KadContact_p contact, bool foreignPID)
 
 	EV_TRACE << "addEntry(): inPID: " << incomingPathID << " outPID: "
 		 << fwdentry.outgoingPathID << " path: " ;
-	
+
 	if (currentpath.size() == 0)
 		EV_TRACE << "<->" << endl;
 	else {

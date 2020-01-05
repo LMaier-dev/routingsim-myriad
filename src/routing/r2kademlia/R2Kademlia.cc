@@ -210,7 +210,12 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 				// use existing path from answer (must reverse path)
 				KadContact contact(packet->getSource(),
 						   packet->reversePath(packet->getSrcPath(1, packet->getProgress())));
-				if (usePathIDs) fwdTablePathID.addEntry(&contact, true);
+				EV_TRACE << "forwarding PathSetupRsp, source path: <";
+				for (auto& k : packet->getSrcPath())
+					EV_TRACE << ' ' << k.shortStr();
+				EV_TRACE << '>' << endl;
+				if (usePathIDs)
+					fwdTablePathID.addEntry(&contact, true);
 				break;
 		} // end switch
 		
@@ -222,7 +227,10 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		
 		// learn route from packet
 		//TODO optimization use isPathInteresting
-		routingTable.addPath(packet->getSource(), packet->reversePath(packet->getIntermediatePath()), KadContact::PathProperty::direct);
+		// Paths learned from PathSetupReq are forced by source routing and thus not directly learned
+		routingTable.addPath(packet->getSource(), packet->reversePath(packet->getIntermediatePath()),
+				     packet->getType() == KAD_PathSetupReq ? KadContact::PathProperty::indirect
+				                                           : KadContact::PathProperty::direct);
 
 		// these types may forward packets, so they count themselves
 		if (handleIfFitting<KadFindNodeReq>(packet)) return;
