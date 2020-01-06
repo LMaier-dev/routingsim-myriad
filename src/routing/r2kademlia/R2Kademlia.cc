@@ -227,10 +227,24 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		
 		// learn route from packet
 		//TODO optimization use isPathInteresting
-		// Paths learned from PathSetupReq are forced by source routing and thus not directly learned
-		routingTable.addPath(packet->getSource(), packet->reversePath(packet->getIntermediatePath()),
-				     packet->getType() == KAD_PathSetupReq ? KadContact::PathProperty::indirect
-				                                           : KadContact::PathProperty::direct);
+
+		// Paths learned from incoming requests are forced by source routing and thus not directly learned
+		KadContact::PathProperty pathproperty= KadContact::PathProperty::indirect;
+		switch (packet->getType()) {
+			case KAD_FindNodeRsp:
+			case KAD_QueryRouteRsp:
+			case KAD_ProbeRsp:
+			case KAD_PathSetupRsp:
+				pathproperty= KadContact::PathProperty::direct;
+				break;
+
+			default:
+				pathproperty= KadContact::PathProperty::indirect;
+				break;
+
+		};
+
+		routingTable.addPath(packet->getSource(), packet->reversePath(packet->getIntermediatePath()), pathproperty);
 
 		// these types may forward packets, so they count themselves
 		if (handleIfFitting<KadFindNodeReq>(packet)) return;
@@ -458,6 +472,16 @@ bool R2Kademlia::handlePathSetupResponse(KadPacket_p answer, RPCState& rpcState)
 	if (rpcState.status != RPC_SUCCESS) return true;
 	ASSERT(answer->getSource() == rpcState.original_packet->getTarget());
 	std::unique_ptr<KadPathSetupRsp> pathSetupRsp = safe_packet_cast<KadPathSetupRsp>(answer);
+
+	// must check for modified path in Response, because it may have taken a shortcut
+	KadContact contact(answer->getSource(), answer->reversePath(answer->getIntermediatePath()));
+	EV_TRACE << "Received PathSetupRsp, source path: <";
+	for (auto& k : answer->getSrcPath())
+		EV_TRACE << ' ' << k.shortStr();
+	EV_TRACE << '>' << endl;
+
+	fwdTablePathID.addEntry(&contact, true);
+
 	return true;
 }
 
