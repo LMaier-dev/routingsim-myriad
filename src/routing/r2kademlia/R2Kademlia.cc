@@ -69,7 +69,9 @@ void R2Kademlia::onInitialize() {
 	getStatistics().addSample(this);
 	simtime_t probeInterval = (simtime_t) par("probeInterval").doubleValue();
 	// doProbeSelf is required for joining (will do exponential backoff)
-	addTimer(SimTime(100,SIMTIME_MS), SimTime(200,SIMTIME_MS), std::bind(&R2Kademlia::doProbeSelf, this, ph::_1));
+	// calculation for first timer is: initialOffset - duration/2 + random([0..duration])
+	// start after 100ms, use 250ms, 500ms, 1s, 2s, 4s, 8s, 16s, 32s, 64s, 128s, 256s, 300s as intervalls
+	addTimer(SimTime(225,SIMTIME_MS), SimTime(250,SIMTIME_MS), std::bind(&R2Kademlia::doProbeSelf, this, ph::_1));
 	// regularly send FindNodeReq to randomly chosen NodeIDs
 	addTimer(probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doProbe, this, ph::_1));
 	// check whether other existing nodes can be reached (uses KadObserver)
@@ -1064,6 +1066,10 @@ void R2Kademlia::sampleStatistics (Statistics &stats) {
 		stats.value("routingTablePathLength", routingTable.getAveragePathLength());
 		stats.value("routingTablePathStretch", routingTable.getAveragePathStretch());
 	}
+	stats.value("routingTableIndirectPaths", routingTable.getNumIndirectPaths());
+	stats.value("fwdTableSize", fwdTablePathID.getNumEntries());
+	stats.value("fwdTableValid", fwdTablePathID.getNumValidEntries());
+	stats.value("fwdTableForeign", fwdTablePathID.getNumForeignEntries());
 }
 // -------------- kad policy -------------
 
@@ -1170,10 +1176,15 @@ void R2Kademlia::recordScalars() {
 	recordScalar("routingTablePathStretch", routingTable.getAveragePathStretch());
 	recordScalar("routingTableUpdates", routingTable.getUpdateCount());
 	recordScalar("routingTableReplacements", routingTable.getReplacementCount());
+	recordScalar("routingTableIndirectPaths", routingTable.getNumIndirectPaths());
 	nodeid_t nid =  Node::getNode(this)->getNodeId();
 	recordScalar("nodeId", nid);
 	recordScalar("degree", getNetworkManager()->getTopology().getNodeDegree(nid));
 	recordScalar("popularity", getKadObserver().getPopularity(myOverlayKey));
+	recordScalar("fwdTableSize", fwdTablePathID.getNumEntries());
+	recordScalar("fwdTableValid", fwdTablePathID.getNumValidEntries());
+	recordScalar("fwdTableForeign", fwdTablePathID.getNumForeignEntries());
+
 }
 
 void R2Kademlia::recordRoutingTable() {
@@ -1530,7 +1541,7 @@ void R2Kademlia::doProbe(short timerId) {
 
 
 void R2Kademlia::doProbeSelf(short timerId) {
-	static const simtime_t maxDuration(360); // check every 5 minutes
+	static const simtime_t maxDuration(300); // check every 5 minutes
 
 	// exponential backoff double duration until we reached maxDuration
 	if (timerDuration[timerId] < maxDuration)
