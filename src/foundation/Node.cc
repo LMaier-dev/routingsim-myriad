@@ -64,8 +64,8 @@ void Node::initialize() {
 	} else
 		this->id = par("id").intValue();
 
-	minDelay = par("nodeMinDelay").intValue()*1000; // nodeMinDelay is given in ms, but we want µs precision
-	maxDelay = par("nodeMaxDelay").intValue()*1000; // nodeMaxDelay is given in ms, but we want µs precision
+	minDelay = par("nodeMinDelay").intValue(); // nodeMinDelay is given in µs
+	maxDelay = par("nodeMaxDelay").intValue(); // nodeMaxDelay is given in µs
 
 	initNeighbors();
 }
