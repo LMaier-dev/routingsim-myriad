@@ -77,10 +77,15 @@ private:
 		hopCountData=13, distanceData=14, prefixDistData=15, overlayHopsData=16,
 		stretchMulData=17, stretchAddData=18, prefixPerHopData=19, distanceLeftData=20,
 		prefixDistLeftData=21, hopCountDroppedData=22, overlayHopsDroppedData=23,
-		prefixDistDroppedData=24, distanceDroppedData=25, sentRouteUpdates= 26, receivedRouteUpdates= 27};
+	        prefixDistDroppedData=24, distanceDroppedData=25, sentRouteUpdates= 26, receivedRouteUpdates= 27,
+		sentPathSetup= 28, receivedPathSetup= 29, forwardedPathSetup= 30,
+		numDataTypes= 31 // insert new types before this and update value accordingly
+	};
 	enum addDataType : uint8_t {deliveryRatioV=0, deliveredPacketsV=1, droppedPacketsV=2, roamingPacketsV=3,
 			            deliveryRatioDataV=4, deliveredDataPacketsV=5, droppedDataPacketsV=6,
-			            roamingDataPacketsV=7};
+			            roamingDataPacketsV=7,
+				    numAddDataTypes= 8 // insert new types before this and update value accordingly
+	};
 	// histograms and vectors for statistics
 	std::vector<cHistogramPtr> histograms;
 	std::vector<std::unique_ptr<cOutVector>> outVectors;

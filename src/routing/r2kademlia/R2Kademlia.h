@@ -164,8 +164,12 @@ public:
 	uint getDroppedPackets() const { return droppedPackets; }
 	uint getSentPackets() const { return sentPackets; }
 	uint getReceivedPackets() const { return receivedPackets; }
+
+ 	uint getForwardedPathSetup() const { return forwardedPathSetup; }
+	uint getSentPathSetup() const { return sentPathSetup; }
+	uint getReceivedPathSetup() const { return receivedPathSetup; }
 	
-	uint getForwardedDataPackets() const { return forwardedDataPackets; }
+ 	uint getForwardedDataPackets() const { return forwardedDataPackets; }
 	uint getDroppedDataPackets() const { return droppedDataPackets; }
 	uint getSentDataPackets() const { return sentDataPackets; }
 	uint getReceivedDataPackets() const { return receivedDataPackets; }
@@ -323,6 +327,9 @@ private:
 	uint inconsistentPathHit = 0;
 	uint sentRouteUpdates = 0;
 	uint receivedRouteUpdates = 0;
+	uint sentPathSetup = 0;
+	uint receivedPathSetup = 0;
+	uint forwardedPathSetup = 0;
 	//@}
 
 	/** @name timer things */

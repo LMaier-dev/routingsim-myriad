@@ -150,6 +150,10 @@ public:
 	KadContactList getAllValidContacts() const;
 	/// returns the number of contacts in buckets
 	size_type getNumContacts() const;
+	
+	/// returns the number of paths in buckets
+	size_type getNumIndirectPaths() const;
+
 	/// invalidate all contacts with paths that contain a failed link otherNodeKey <-> failedNodeKey
 	void invalidateContacts(const OverlayKey& failedNodeKey, const OverlayKey& otherNodeKey);
 	/// invalidate all contacts with paths that contain the physical neighbor failedNodeKey as next hop 

@@ -56,7 +56,7 @@ namespace routingsim {
 		void setPathLength(uint16_t plen) { pathlen= plen; }
 		uint16_t getPathLength() const { return pathlen; }
 	};
-	
+
 
 	class FwdTableNodeID {
 	public:
@@ -77,6 +77,11 @@ namespace routingsim {
 		bool modEntry(KadContact_p contact, bool foreignPID);
 		void delEntry(KadContact_p contact);
 		void delPIDEntry(PathID pid);
+
+		// for gathering statistics
+		size_type getNumEntries() const { return PIDFwdTable.size(); };
+		size_type getNumValidEntries() const;
+		size_type getNumForeignEntries() const;
 
 		// from cObject()
 		virtual std::string str() const;

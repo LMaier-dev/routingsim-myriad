@@ -526,6 +526,20 @@ size_type KadRoutingTable::getNumContacts() const
 }
 
 
+size_type KadRoutingTable::getNumIndirectPaths() const
+{
+	size_type sum = 0;
+	for (const KadBucket& b : buckets)
+		for (const auto& contact : b.contacts) {
+			if (contact->getPathProperty() == KadContact::PathProperty::indirect)
+				sum++;
+		}
+	// no need to check for PNcontacts: they are always direct...
+	return sum;
+}
+
+
+
 /** invalidate all contacts with paths that contain a failed link otherNodeKey <-> failedNodeKey */
 void KadRoutingTable::invalidateContacts(const OverlayKey& failedNodeKey, const OverlayKey& otherNodeKey)
 {

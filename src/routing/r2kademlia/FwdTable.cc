@@ -3,6 +3,38 @@
 
 namespace routingsim {
 
+
+size_type FwdTablePathID::getNumValidEntries() const
+{
+	unsigned long sum= 0;
+	for (auto& pidfwdtableentry : PIDFwdTable)
+	{
+		const FwdTableEntry&  fwdentry= pidfwdtableentry.second;
+
+		if (fwdentry.isValid())
+			sum++;
+	}
+	return sum;
+
+}
+
+
+
+size_type FwdTablePathID::getNumForeignEntries() const
+{
+	unsigned long sum= 0;
+	for (auto& pidfwdtableentry : PIDFwdTable)
+	{
+		const FwdTableEntry&  fwdentry= pidfwdtableentry.second;
+
+		if (fwdentry.isForeign())
+			sum++;
+	}
+	return sum;
+}
+
+
+	
 std::string FwdTablePathID::str() const
 {
 	std::ostringstream out;

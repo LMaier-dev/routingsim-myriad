@@ -36,7 +36,7 @@ void KadObserver::initialize() {
 	numMessageDeliveryInfos = par("messageDeliverySample").intValue();
 	numMessageDroppedInfos = par("messageDroppedSample").intValue();
 
-	histograms.resize(28);
+	histograms.resize(numDataTypes);
 	histograms[hopCount] = cHistogramPtr(getIntHistogram("hopCount"));
 	histograms[distance] = cHistogramPtr(getIntHistogram("distance"));
 	histograms[prefixDist] = cHistogramPtr(getIntHistogram("prefixDist"));
@@ -65,6 +65,9 @@ void KadObserver::initialize() {
 	histograms[distanceDroppedData] = cHistogramPtr(getIntHistogram("distanceDroppedData"));
 	histograms[sentRouteUpdates] = cHistogramPtr(getIntHistogram("sentRouteUpdates"));
 	histograms[receivedRouteUpdates] = cHistogramPtr(getIntHistogram("receivedRouteUpdates"));
+	histograms[sentPathSetup] = cHistogramPtr(getIntHistogram("sentPathSetup"));
+	histograms[receivedPathSetup] = cHistogramPtr(getIntHistogram("receivedPathSetup"));
+	histograms[forwardedPathSetup] = cHistogramPtr(getIntHistogram("forwardedPathSetup"));
 
 	
 	outVectors.resize(histograms.size());
@@ -96,8 +99,11 @@ void KadObserver::initialize() {
 	outVectors[distanceDroppedData] = std::make_unique<cOutVector>("distanceDroppedData");
 	outVectors[sentRouteUpdates] = std::make_unique<cOutVector>("sentRouteUpdates");
 	outVectors[receivedRouteUpdates] = std::make_unique<cOutVector>("receivedRouteUpdates");
+	outVectors[sentPathSetup] = std::make_unique<cOutVector>("sentPathSetup");
+	outVectors[receivedPathSetup] = std::make_unique<cOutVector>("receivedPathSetup");
+	outVectors[forwardedPathSetup] = std::make_unique<cOutVector>("forwardedPathSetup");
 
-	addOutVectors.resize(8);
+	addOutVectors.resize(numAddDataTypes);
 	addOutVectors[deliveryRatioV] = std::make_unique<cOutVector>("deliveryRatio");
 	addOutVectors[deliveredPacketsV] = std::make_unique<cOutVector>("deliveredPackets");
 	addOutVectors[droppedPacketsV] = std::make_unique<cOutVector>("droppedPackets");

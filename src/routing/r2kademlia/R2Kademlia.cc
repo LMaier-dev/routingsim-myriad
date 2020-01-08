@@ -218,7 +218,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 					fwdTablePathID.addEntry(&contact, true);
 				break;
 		} // end switch
-		
+		forwardedPathSetup++;
 		forwardPacket(std::move(packet), std::move(pkt));
 		return;
 	}
@@ -229,7 +229,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		//TODO optimization use isPathInteresting
 
 		// Paths learned from incoming requests are forced by source routing and thus not directly learned
-		KadContact::PathProperty pathproperty= KadContact::PathProperty::indirect;
+		KadContact::PathProperty pathproperty= KadContact::PathProperty::undefined;
 		switch (packet->getType()) {
 			case KAD_FindNodeRsp:
 			case KAD_QueryRouteRsp:
@@ -454,6 +454,7 @@ bool R2Kademlia::handleProbeResponse(KadPacket_p answer, RPCState& rpcState) {
 // Path Setup Request/Response
 void R2Kademlia::sendPathSetup(KadContact_p contact) {
 	EV_TRACE << "sending PathSetupReq from " << myOverlayKey.shortStr() << " to " << contact->getKey().shortStr() << endl;
+	sentPathSetup++;
 	sendRpcCall(
 		makePacket<KadPathSetupReq>(contact, "KadPathSetupReq"),
 		std::bind(&R2Kademlia::handlePathSetupResponse, this, ph::_1, ph::_2),
@@ -464,6 +465,7 @@ void R2Kademlia::sendPathSetup(KadContact_p contact) {
 void R2Kademlia::handlePacket(std::unique_ptr<KadPathSetupReq> packet) {
 	EV_TRACE << "received PathSetupReq from " << packet->getSource().shortStr() << " to " << packet->getTarget().shortStr()
 		 << " sending back answer" << endl;
+	receivedPathSetup++;
 	sendPacket(makeAnswer<KadPathSetupRsp>(*packet));
 }
 
@@ -474,9 +476,9 @@ bool R2Kademlia::handlePathSetupResponse(KadPacket_p answer, RPCState& rpcState)
 	std::unique_ptr<KadPathSetupRsp> pathSetupRsp = safe_packet_cast<KadPathSetupRsp>(answer);
 
 	// must check for modified path in Response, because it may have taken a shortcut
-	KadContact contact(answer->getSource(), answer->reversePath(answer->getIntermediatePath()));
+	KadContact contact(pathSetupRsp->getSource(), pathSetupRsp->reversePath(pathSetupRsp->getIntermediatePath()));
 	EV_TRACE << "Received PathSetupRsp, source path: <";
-	for (auto& k : answer->getSrcPath())
+	for (auto& k : pathSetupRsp->getSrcPath())
 		EV_TRACE << ' ' << k.shortStr();
 	EV_TRACE << '>' << endl;
 
@@ -1050,6 +1052,10 @@ void R2Kademlia::sampleStatistics (Statistics &stats) {
 	stats.value("receivedDataPackets", receivedDataPackets);
 	stats.value("sentRouteUpdates", sentRouteUpdates);
 	stats.value("receivedRouteUpdates", receivedRouteUpdates);
+	stats.value("forwardedPathSetup", forwardedPathSetup);
+	stats.value("sentPathSetup", sentPathSetup);
+	stats.value("receivedPathSetup", receivedPathSetup);
+	stats.value("forwardedPathSetup", forwardedPathSetup);
 	stats.value("routingTableContacts", routingTable.getNumContacts());
 	stats.value("routingTableBuckets", routingTable.getNumBuckets());
 	stats.value("routingTableUpdates", routingTable.getUpdateCount());
