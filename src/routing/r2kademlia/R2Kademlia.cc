@@ -70,7 +70,7 @@ void R2Kademlia::onInitialize() {
 	simtime_t probeInterval = (simtime_t) par("probeInterval").doubleValue();
 	// doProbeSelf is required for joining (will do exponential backoff)
 	// calculation for first timer is: initialOffset - duration/2 + random([0..duration])
-	// start after 100ms, use 250ms, 500ms, 1s, 2s, 4s, 8s, 16s, 32s, 64s, 128s, 256s, 300s as intervalls
+	// start after 100ms, use 250ms, 500ms, 1s, 2s, 4s, 8s, 16s, 32s, 64s, 128s, 256s, 300s as intervals
 	addTimer(SimTime(225,SIMTIME_MS), SimTime(250,SIMTIME_MS), std::bind(&R2Kademlia::doProbeSelf, this, ph::_1));
 	// regularly send FindNodeReq to randomly chosen NodeIDs
 	addTimer(probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doProbe, this, ph::_1));
@@ -386,6 +386,7 @@ void R2Kademlia::sendPacket(KadPacket_p packet) {
 		getKadObserver().registerPacket(*packet);
 		getStatistics().registerMessage(nodePkt.get());
 	}
+	// EV_TRACE << "sendPacket(): " << packet->getName() << ", " << (int) packet->getType() << endl;
 	sentPackets++;
 	forwardPacket(std::move(packet), std::move(nodePkt));
 }

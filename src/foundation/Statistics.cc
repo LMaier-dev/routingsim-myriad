@@ -314,7 +314,7 @@ Statistics::~Statistics() {
 		if (it->second == this)
 			statsMap.erase(it);
 	}
-	std::cerr << "statsMap: size=" << statsMap.size() << endl;
+	// std::cerr << "statsMap: size=" << statsMap.size() << endl;
 	if (stats == this)
 		stats = nullptr;
 }
