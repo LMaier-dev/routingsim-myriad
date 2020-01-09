@@ -137,6 +137,7 @@ std::set<nodeid_t> KadObserver::sampleNodes(int n) {
 		n = nodes.size();
 	std::set<nodeid_t> sample{};
 	NetworkTopology& topo = getNetworkManager()->getTopology();
+	// use all nodes if n larger than 80% of all nodes (then sampling is not useful anymore)
 	if (n > nodes.size() * 0.8) {
 		for (auto& pair : nodes.right)
 			sample.insert(pair.first);

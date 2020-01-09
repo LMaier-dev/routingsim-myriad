@@ -49,31 +49,31 @@ cHistogram* getIntHistogram(const char* name, int rangeLower, int rangeUpper, in
 
 
 
-// this class describes a sampling value
+// this class describes a mean sampling value
 class Statistics::Value {
 public:
 	static constexpr unsigned short qvaluenumber = 10;
 	static const double qvalues[qvaluenumber];
 
 	int n;
-	double avg;
-	double min;
-	double max;
+	double avg; // note: this contains the sum of all samples until record is called
+	double min; // min average over sample set
+	double max; // max average over sample set
 	double lastvalue;
 	double lastavg;
 	double lastmin;
 	double lastmax;
 	simtime_t lastLog;
 	bool first;
-	cOutVector* avgVec;
-	cOutVector* avgVecDelta;
+	cOutVector* avgVec; // Average over sample set
+	cOutVector* avgVecDiffQuot; // Difference Quotient
 	cOutVector* minVec;
-	cOutVector* minVecDelta;
+	cOutVector* minVecDiffQuot; // Difference Quotient
 	cOutVector* maxVec;
-	cOutVector* maxVecDelta;
-	cHistogram* histogram;
-	cHistogram* histogramAbs;
-	cHistogram* histogramDelta;
+	cOutVector* maxVecDiffQuot; // Difference Quotient
+	cHistogram* histogram; // histogram of average values
+	cHistogram* histogramAbs; // histogram of actual values from sample set
+	cHistogram* histogramDiffQuot; // histogram of difference quotient from average values
 	cOutVector* quantileVec[qvaluenumber];
 	int f;
 
@@ -89,15 +89,15 @@ public:
 		avgVec = new cOutVector((string(name) + string("Avg")).c_str());
 		minVec = new cOutVector((string(name) + string("Min")).c_str());
 		maxVec = new cOutVector((string(name) + string("Max")).c_str());
-		avgVecDelta = new cOutVector(
-				(string(name) + string("AvgDelta")).c_str());
-		minVecDelta = new cOutVector(
-				(string(name) + string("MinDelta")).c_str());
-		maxVecDelta = new cOutVector(
-				(string(name) + string("MaxDelta")).c_str());
+		avgVecDiffQuot = new cOutVector(
+				(string(name) + string("AvgDiffQuot")).c_str());
+		minVecDiffQuot = new cOutVector(
+				(string(name) + string("MinDiffQuot")).c_str());
+		maxVecDiffQuot = new cOutVector(
+				(string(name) + string("MaxDiffQuot")).c_str());
 		histogram = getDensityHistogram(name, "AvgDensity", size);
 		histogramAbs = getDensityHistogram(name, "Density", size);
-		histogramDelta = getDensityHistogram(name, "AvgDeltaDensity", size);
+		histogramDiffQuot = getDensityHistogram(name, "AvgDiffQuotDensity", size);
 		// initialize quantile vectors
 		for (unsigned int i= 0; i < qvaluenumber; i++)
 		{
@@ -113,12 +113,12 @@ public:
 		delete avgVec;
 		delete minVec;
 		delete maxVec;
-		delete avgVecDelta;
-		delete minVecDelta;
-		delete maxVecDelta;
+		delete avgVecDiffQuot;
+		delete minVecDiffQuot;
+		delete maxVecDiffQuot;
 		delete histogram;
 		delete histogramAbs;
-		delete histogramDelta;
+		delete histogramDiffQuot;
 		for (unsigned int i= 0; i < qvaluenumber; i++)
 		{
 			delete quantileVec[i];
@@ -129,7 +129,7 @@ public:
 	void finish(cSimpleModule* module) {
 		histogram->record();
 		histogramAbs->record();
-		histogramDelta->record();
+		histogramDiffQuot->record();
 
 		if (eqTrigger != INFINITY) {
 			module->recordScalar(eqTriggerName.c_str(),
@@ -163,7 +163,8 @@ public:
 		double sumweights= histogramAbs->getSumWeights();
 		double delta = 0;
 
-		int i= 0; // we start with the underflowbin
+		// TODO: use underflowbin first and overflowbin as last
+		int i= 0; 
 		while (qindex < qvaluenumber and i < numBins)
 		{
 			lowerEdge = histogramAbs->getBinEdge(i);
@@ -192,7 +193,8 @@ public:
 
 	void record(cSimpleModule* module) {
 		ASSERT(n != 0);
-		double value = avg / n;
+		double value = avg / n; // value is now the average value
+		//std::cerr << "Value::record(" << avgVec->getName() << "), n=" << n << " avg=" << avg << " value: " << value << endl;
 		if (eqTrigger != INFINITY) {
 			if (eqTrigger == value)
 				eqTriggerCount++;
@@ -204,10 +206,12 @@ public:
 		maxVec->record(max);
 		if (!first) {
 			double dx = (simTime() - lastLog).dbl();
-			avgVecDelta->record((value - lastavg) / dx);
-			histogramDelta->collect((value - lastavg) / dx);
-			minVecDelta->record((min - lastmin) / dx);
-			maxVecDelta->record((max - lastmax) / dx);
+			avgVecDiffQuot->record((value - lastavg) / dx);
+			//std::cerr << "Value::record(" << avgVecDiffQuot->getName() << "), lastavg:" << lastavg << " diff:" << (value - lastavg) << " delta:" << (value - lastavg)/dx << " dx=" << dx << endl;
+
+			histogramDiffQuot->collect((value - lastavg) / dx);
+			minVecDiffQuot->record((min - lastmin) / dx);
+			maxVecDiffQuot->record((max - lastmax) / dx);
 			calcQuantiles();
 		}
 		lastavg = value;
@@ -310,6 +314,7 @@ Statistics::~Statistics() {
 		if (it->second == this)
 			statsMap.erase(it);
 	}
+	std::cerr << "statsMap: size=" << statsMap.size() << endl;
 	if (stats == this)
 		stats = nullptr;
 }

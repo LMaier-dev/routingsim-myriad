@@ -1045,6 +1045,7 @@ void R2Kademlia::onErrorPacket(KadError& error) {
 }
 
 
+// this is called periodically for all sampled modules in Statistics::sample()
 void R2Kademlia::sampleStatistics (Statistics &stats) {
 	stats.value("forwardedPackets", forwardedPackets-sentPackets);
 	stats.value("sentPackets", sentPackets);
@@ -1054,7 +1055,6 @@ void R2Kademlia::sampleStatistics (Statistics &stats) {
 	stats.value("receivedDataPackets", receivedDataPackets);
 	stats.value("sentRouteUpdates", sentRouteUpdates);
 	stats.value("receivedRouteUpdates", receivedRouteUpdates);
-	stats.value("forwardedPathSetup", forwardedPathSetup);
 	stats.value("sentPathSetup", sentPathSetup);
 	stats.value("receivedPathSetup", receivedPathSetup);
 	stats.value("forwardedPathSetup", forwardedPathSetup);
