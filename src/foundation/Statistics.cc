@@ -153,9 +153,13 @@ public:
 	}
 
 	void calcQuantiles() {
-		// this function calculates a number of quantiles given in qvalues[]
+		// this function calculates a number of quantiles given in qvalues[] from Absolute Values of each
+		// sampling node (not the average value) as stored in histogram
 		// this is more efficient than running getCDF() in a loop, because we are doing it in one sweep
 		int numBins = histogramAbs->getNumBins();
+		if (numBins <= 0) // cannot work with empty histogram, sorry
+			return;
+
 		unsigned int qindex= 0;
 		double lowerEdge = histogramAbs->getBinEdge(0);
 		double upperEdge = histogramAbs->getBinEdge(0);
@@ -194,7 +198,8 @@ public:
 	void record(cSimpleModule* module) {
 		ASSERT(n != 0);
 		double value = avg / n; // value is now the average value
-		//std::cerr << "Value::record(" << avgVec->getName() << "), n=" << n << " avg=" << avg << " value: " << value << endl;
+		//EV_STATICCONTEXT
+		//EV_TRACE << "Value::record(" << avgVec->getName() << "), n=" << n << " avg=" << avg << " value: " << value << endl;
 		if (eqTrigger != INFINITY) {
 			if (eqTrigger == value)
 				eqTriggerCount++;
@@ -206,8 +211,9 @@ public:
 		maxVec->record(max);
 		if (!first) {
 			double dx = (simTime() - lastLog).dbl();
+			// DiffQuot is the difference quotient (= average rate of change)
 			avgVecDiffQuot->record((value - lastavg) / dx);
-			//std::cerr << "Value::record(" << avgVecDiffQuot->getName() << "), lastavg:" << lastavg << " diff:" << (value - lastavg) << " delta:" << (value - lastavg)/dx << " dx=" << dx << endl;
+			//EV_TRACE << "Value::record(" << avgVecDiffQuot->getName() << "), lastavg:" << lastavg << " diff:" << (value - lastavg) << " delta:" << (value - lastavg)/dx << " dx=" << dx << endl;
 
 			histogramDiffQuot->collect((value - lastavg) / dx);
 			minVecDiffQuot->record((min - lastmin) / dx);
@@ -285,19 +291,18 @@ void Statistics::initialize(int stage) {
 void Statistics::finish() {
 	for (auto& value : values) {
 		value.second->finish(this);
-		delete value.second;
 	}
-	values.clear();
 	recordScalar("simTime", simTime());
-	cancelAndDelete(samplingTimer);
+	cancelEvent(samplingTimer);
 	hopCount->record();
 	realHopCount->record();
 	addStretch->record();
 	mulStretch->record();
-	msgs.clear();
 }
 
 Statistics::~Statistics() {
+	cancelAndDelete(samplingTimer);
+
 	delete deliveryRatio;
 	delete messagesDeliveredVector;
 	delete messagesDroppedVector;
@@ -309,12 +314,18 @@ Statistics::~Statistics() {
 	delete addStretch;
 	delete mulStretch;
 
+	for (auto& value : values)
+		delete value.second;
+	values.clear();
+	msgs.clear();
+
 	// delete all statistics and set to nullptr
 	for (auto it = statsMap.begin(); it != statsMap.end(); it++) {
 		if (it->second == this)
 			statsMap.erase(it);
 	}
 	// std::cerr << "statsMap: size=" << statsMap.size() << endl;
+
 	if (stats == this)
 		stats = nullptr;
 }
