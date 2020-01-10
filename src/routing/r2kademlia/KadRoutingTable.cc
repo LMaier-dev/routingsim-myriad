@@ -141,10 +141,10 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, KadContact::
 	// find my key -> this is a poisonous path via me, simply ignore this
 	if (std::find(path.begin(), path.end(), myKey) != path.end())
 	{
-		EV_TRACE << "not adding poisonous path to " << key.shortStr() << " leading via me (" << myKey.shortStr() << "): ";
-		for (const auto& node : path)
-			EV_TRACE << node.shortStr() << ' ';
-		EV_TRACE << endl;
+		//EV_TRACE << "not adding poisonous path to " << key.shortStr() << " leading via me (" << myKey.shortStr() << "): ";
+		//for (const auto& node : path)
+		//	EV_TRACE << node.shortStr() << ' ';
+		//EV_TRACE << endl;
 		return false;
 	}
 
@@ -198,7 +198,7 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, KadContact::
 			else
 				EV_ERROR << "Contact existed already, but not found" << endl;
 			
-			EV_TRACE << "Contact existed already, but seems to be a PN now: " << *contact << endl;
+			//EV_TRACE << "Contact existed already, but seems to be a PN now: " << *contact << endl;
 		}
 		
 		// if contact was marked invalid, update path and status:
@@ -261,7 +261,7 @@ bool KadRoutingTable::addPath(const OverlayKey& key, const kad_path& path, const
 			else
 				EV_ERROR << "Contact existed already, but not found" << endl;
 			
-			EV_TRACE << "Contact existed already, but seems to be a PN now: " << *contact << endl;
+			//EV_TRACE << "Contact existed already, but seems to be a PN now: " << *contact << endl;
 		}
 		
 		// if contact was marked invalid, update path and status:
@@ -280,7 +280,7 @@ bool KadRoutingTable::addPath(const OverlayKey& key, const kad_path& path, const
 			return true;
 		}
 		// else contact exists, but new path is not interesting
-		EV_TRACE << "Contact known, but new path not added " << *contact << endl;
+		//EV_TRACE << "Contact known, but new path not added " << *contact << endl;
 
 		return false;
 	}
@@ -352,7 +352,7 @@ bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, Kad
 	}
 	else { // no space in bucket for inserting the new contact: replace existing one?
 		if (not proximityNeighborSelection) {
-			EV_INFO << "dropping new contact " << *contact << endl;
+			//EV_INFO << "dropping new contact " << *contact << endl;
 			return false;
 		}
 		// contact replacement if contact is better than existing ones
@@ -367,14 +367,14 @@ bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, Kad
 		}
 		if (result != contacts.end()) {
 			replacementCount++;
-			EV_DEBUG << "replacing contact, new: " << *contact << " old: " << **result << endl;
+			//EV_DEBUG << "replacing contact, new: " << *contact << " old: " << **result << endl;
 			*result = std::move(contact);
 			policy->onNewContact(result->get());
 
 			return true;
 		}
 		else {
-			EV_TRACE << "dropping new contact " << *contact << endl;
+			//EV_TRACE << "dropping new contact " << *contact << endl;
 			return false;
 		}
 	}
@@ -615,7 +615,7 @@ double KadRoutingTable::getAveragePathStretch() const
 			    sum += (contact->getPathLength()+1) / getKadObserver().getPhysicalDistance(myKey, contact->getKey());
 			else
 				EV_WARN << "Physical Distance = " << getKadObserver().getPhysicalDistance(myKey, contact->getKey())
-					<< ": " << myKey << " to " << contact->getKey().toString().substr(0, 6) << endl;
+					<< ": " << myKey << " to " << contact->getKey().shortStr() << endl;
 			count++;
 		}
 	return count == 0 ? 0.0 : sum / count;

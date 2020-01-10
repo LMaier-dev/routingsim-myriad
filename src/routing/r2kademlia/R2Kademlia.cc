@@ -98,7 +98,7 @@ void R2Kademlia::onConnect( nodeid_t nid ) {
 
 
 void R2Kademlia::onDisconnect( nodeid_t nid ) {
-	EV_TRACE << "onDisconnect " << nid << endl;
+	//EV_TRACE << "onDisconnect " << nid << endl;
 	// if this node is taken down, the packets arrive after the reset
 	if(neighborTable.size() == 0) return;
 	OverlayKey key = neighborTable.getOverlayKey(nid);
@@ -212,10 +212,10 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 				// use existing path from answer (must reverse path)
 				KadContact contact(packet->getSource(),
 						   packet->reversePath(packet->getSrcPath(1, packet->getProgress())));
-				EV_TRACE << "forwarding PathSetupRsp, source path: <";
-				for (auto& k : packet->getSrcPath())
-					EV_TRACE << ' ' << k.shortStr();
-				EV_TRACE << '>' << endl;
+				//EV_TRACE << "forwarding PathSetupRsp, source path: <";
+				//for (auto& k : packet->getSrcPath())
+					//EV_TRACE << ' ' << k.shortStr();
+				//EV_TRACE << '>' << endl;
 				if (usePathIDs)
 					fwdTablePathID.addEntry(&contact, true);
 				break;
@@ -269,7 +269,7 @@ void R2Kademlia::onSelfMessage(cMessage_p msg) {
 	{
 		msg.release(); 		// no double deletion
 		
-		EV_TRACE << "RPC Timeout Message for nonce " << rpctimeout->nonce << endl;
+		//EV_TRACE << "RPC Timeout Message for nonce " << rpctimeout->nonce << endl;
 
 		handleTimeOut(rpctimeout->nonce);
 
@@ -311,7 +311,7 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 	EV << "received hello packet from " << packet->getSource().shortStr() << endl;
 
 	neighborTable.addNeighbor(packet->getSourceId(), packet->getSource());
-	EV_TRACE << "neighbor table: "<< neighborTable << endl;
+	//EV_TRACE << "neighbor table: "<< neighborTable << endl;
 
 	// PNDiscovery should be send before any further messages to avoid missing neighbors
 	KadContact neighborcontact(packet->getSource(), kad_path());
@@ -332,7 +332,7 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 
 
 void R2Kademlia::handlePacket(KadAnswer_p packet) {
-	EV_DEBUG << "received answer packet (for nonce=" << packet->getNonce() << ") from " << packet->getSource().shortStr() << endl;
+	//EV_DEBUG << "received answer packet (for nonce=" << packet->getNonce() << ") from " << packet->getSource().shortStr() << endl;
 	if (packet->getType() == KAD_Error)
 		onErrorPacket(*check_and_cast<KadError *>(packet.get()));
 	handleAnswer(std::move(packet)); // see RPC.cc
@@ -351,8 +351,8 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt) {
 	const OverlayKey& nextHop = packet->getNextHop();
 	nodeid_t nid = neighborTable.getNodeId(nextHop);
 
-	EV_TRACE << "forwardPacket(): " << packet->getName() << " dest " << packet->getTarget().shortStr()
-		 << " next hop: " << nextHop.shortStr() << " (" << nid << ')' << endl;
+	//EV_TRACE << "forwardPacket(): " << packet->getName() << " dest " << packet->getTarget().shortStr()
+	//	 << " next hop: " << nextHop.shortStr() << " (" << nid << ')' << endl;
 
 	if (nid != undefined_node) {
 		nodePkt->encapsulate(packet.release());
@@ -456,7 +456,7 @@ bool R2Kademlia::handleProbeResponse(KadPacket_p answer, RPCState& rpcState) {
 
 // Path Setup Request/Response
 void R2Kademlia::sendPathSetup(KadContact_p contact) {
-	EV_TRACE << "sending PathSetupReq from " << myOverlayKey.shortStr() << " to " << contact->getKey().shortStr() << endl;
+	//EV_TRACE << "sending PathSetupReq from " << myOverlayKey.shortStr() << " to " << contact->getKey().shortStr() << endl;
 	sentPathSetup++;
 	sendRpcCall(
 		makePacket<KadPathSetupReq>(contact, "KadPathSetupReq"),
@@ -466,8 +466,8 @@ void R2Kademlia::sendPathSetup(KadContact_p contact) {
 }
 
 void R2Kademlia::handlePacket(std::unique_ptr<KadPathSetupReq> packet) {
-	EV_TRACE << "received PathSetupReq from " << packet->getSource().shortStr() << " to " << packet->getTarget().shortStr()
-		 << " sending back answer" << endl;
+	//EV_TRACE << "received PathSetupReq from " << packet->getSource().shortStr() << " to " << packet->getTarget().shortStr()
+	//	 << " sending back answer" << endl;
 	receivedPathSetup++;
 	sendPacket(makeAnswer<KadPathSetupRsp>(*packet));
 }
@@ -480,10 +480,10 @@ bool R2Kademlia::handlePathSetupResponse(KadPacket_p answer, RPCState& rpcState)
 
 	// must check for modified path in Response, because it may have taken a shortcut
 	KadContact contact(pathSetupRsp->getSource(), pathSetupRsp->reversePath(pathSetupRsp->getIntermediatePath()));
-	EV_TRACE << "Received PathSetupRsp, source path: <";
-	for (auto& k : pathSetupRsp->getSrcPath())
-		EV_TRACE << ' ' << k.shortStr();
-	EV_TRACE << '>' << endl;
+	//EV_TRACE << "Received PathSetupRsp, source path: <";
+	//for (auto& k : pathSetupRsp->getSrcPath())
+	//	EV_TRACE << ' ' << k.shortStr();
+	//EV_TRACE << '>' << endl;
 
 	fwdTablePathID.addEntry(&contact, true);
 
@@ -1014,8 +1014,8 @@ void R2Kademlia::onErrorPacket(KadError& error) {
 				{ // maybe already invalid or rediscovering
 					if (affectedContact->isRediscovering())
 					{ // must check whether this is an error message for the rediscovery attempt
-						EV_TRACE << "Contact " << affectedContact->getKey().shortStr()
-							 << " already in state rediscovering" << endl;
+						//EV_TRACE << "Contact " << affectedContact->getKey().shortStr()
+						//	 << " already in state rediscovering" << endl;
 						auto findnodereq= dynamic_cast<const KadFindNodeReq*>(original);
 						if (findnodereq == nullptr or findnodereq->getNotVia() == false) {
 							// failed packet was not a rediscovery packet
@@ -1081,7 +1081,7 @@ void R2Kademlia::onBucketEmpty(KadBucket& bucket) {
 
 void R2Kademlia::onContactRemoval(KadContact_p contact)
 {
-	EV_TRACE << "onContactRemoval(" << ((contact != nullptr) ? contact->getKey().shortStr() : "nullptr") << ") called" << endl;
+	//EV_TRACE << "onContactRemoval(" << ((contact != nullptr) ? contact->getKey().shortStr() : "nullptr") << ") called" << endl;
 	if (contact == nullptr)
 		return;
 	
@@ -1100,7 +1100,7 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 	if (contact->getPathLength() == 0) 
 	{ 	if (not neighborTable.isNeighbor(contact->getKey()))
 		{
-			EV_TRACE << "onNewContact: will ignore supposed physical neighbor not being in Neighbor table yet" << endl;
+			EV_DEBUG << "onNewContact: will ignore supposed physical neighbor not being in Neighbor table yet" << endl;
 			return;
 		}
 	}
@@ -1116,7 +1116,7 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 		// request info about overlay neighbors of nodes in our deepest bucket
 		if (routingTable.isInLastBucket(contact->getKey()))
 		{
-			EV_TRACE << "New contact is in deepest bucket, will ask for its routing table" << endl;
+			//EV_TRACE << "New contact is in deepest bucket, will ask for its routing table" << endl;
 			sendGetOverlayNeighbors(contact);
 		}
 
@@ -1127,7 +1127,7 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 	    and contact->getPathLength() > 1)
 	{ // send a path setup request packet for installing PIDs in intermediate nodes for this indirectly learned route
 		// only do this for paths longer than two hops
-		EV_TRACE << "Triggering path setup to " << contact->getKey().shortStr() << endl;
+		//EV_TRACE << "Triggering path setup to " << contact->getKey().shortStr() << endl;
 		sendPathSetup(contact);
 	}
 }
@@ -1144,7 +1144,7 @@ void R2Kademlia::onImprovement(const KadContact& contact) {
 
 	if (usePathIDs and contact.isValid() and contact.getPathProperty() == KadContact::PathProperty::indirect)
 	{ // send a path setup request packet for installing PIDs in intermediate nodes for this indirectly learned route
-		EV_TRACE << "Triggering path setup to " << contact.getKey().shortStr() << endl;
+		//EV_TRACE << "Triggering path setup to " << contact.getKey().shortStr() << endl;
 		sendPathSetup(&contact);
 	}
 
@@ -1238,19 +1238,19 @@ void R2Kademlia::applyShortcut(KadPacket& packet)
 
 				// TODO now check for cycles
 				// replace residual path with my known (shorter) route
-				EV_TRACE << "modifying route due to shortcut: old=< ";
+				//EV_TRACE << "modifying route due to shortcut: old=< ";
 
-				for (auto key : packet.getSrcPath())
-					EV_TRACE << key.shortStr() << ' ';
+				//for (auto key : packet.getSrcPath())
+				//	EV_TRACE << key.shortStr() << ' ';
 
 				kad_path newpath(knownContact->getPath());
 				newpath.push_back(knownContact->getKey());
 				packet.modRoute(newpath);
 
-				EV_TRACE << "> new=< ";
-				for (auto key : packet.getSrcPath())
-					EV_TRACE << key.shortStr() << ' ';
-				EV_TRACE << '>' << endl;
+				//EV_TRACE << "> new=< ";
+				//for (auto key : packet.getSrcPath())
+				//	EV_TRACE << key.shortStr() << ' ';
+				//EV_TRACE << '>' << endl;
 
 			}
 
@@ -1273,7 +1273,7 @@ void R2Kademlia::sendUpdates()
 		{ // only notify contacts that we have a path to (i.e., that are valid)
 			// UpdateRouteReqs are not expecting an answer, so no RPC call
 			auto packet = makePacket<KadUpdateRouteReq>(notify_target, "UpdateRoute");
-			EV_TRACE << "UpdateRoute packet to " << notifyContact->first.shortStr() << " w/ ";
+			//EV_TRACE << "UpdateRoute packet to " << notifyContact->first.shortStr() << " w/ ";
 			const auto& updatelist(notifyContact->second);
 			// write down all routing notifications for a specific contact
 			packet->setContactArraySize(updatelist.size());
@@ -1465,8 +1465,8 @@ void R2Kademlia::addTimer(simtime_t initialOffset, simtime_t duration, std::func
 	timerMsg.push_back(msg);
 	simtime_t scatter = uniform(0, duration);
 	scheduleAt(simTime() + initialOffset - duration/2 + scatter, msg);
-	EV_TRACE << "scheduled timer message " << msg << ( (duration != 0) ? " with duration " : " after ")
-		 <<   ((duration != 0) ? duration : initialOffset) <<  endl;
+	//EV_TRACE << "scheduled timer message " << msg << ( (duration != 0) ? " with duration " : " after ")
+	//	 <<   ((duration != 0) ? duration : initialOffset) <<  endl;
 }
 
 

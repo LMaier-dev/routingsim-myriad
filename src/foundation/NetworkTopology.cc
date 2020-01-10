@@ -1129,7 +1129,9 @@ vector<nodeid_t> NetworkTopology::getFullTopologyPath(nodeid_t from, nodeid_t to
 	dvis dv(to);
 	try {
 		dijkstra_shortest_paths(*BGLtopology, vertex(from, *BGLtopology), weight_map(get(&BGLEdge::weight, *BGLtopology)).predecessor_map(&p[0]).visitor(dv));
-	} catch (const dijkstra_finish&) {EV << "Aborted sp calculation from " << from << " to " << to << " as sp was found on *full* topology" << endl; };
+	} catch (const dijkstra_finish&) {
+		EV << "Aborted sp calculation from " << from << " to " << to << " as sp was found on *full* topology" << endl;
+	};
 
 	path.push_back(to);
 	nodeid_t pred = to;
@@ -1182,7 +1184,7 @@ bool NetworkTopology::fullTopologyPathFailed(nodeid_t from, nodeid_t to) const {
 		}
 		//only if the edge exists
 		if ( edge(prev, *pit, *BGLtopology).second ) {
-			EV_TRACE << "\t(" << prev << "\t" << *pit << ") active : " <<  (*BGLtopology)[ edge(prev, *pit, *BGLtopology).first ].active  << endl;
+			//EV_TRACE << "\t(" << prev << "\t" << *pit << ") active : " <<  (*BGLtopology)[ edge(prev, *pit, *BGLtopology).first ].active  << endl;
 			if ( (*BGLtopology)[ edge(prev, *pit, *BGLtopology).first ].active == false ) {
 				// failed edge on path
 				return true;
