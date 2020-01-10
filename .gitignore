@@ -48,7 +48,6 @@ RoutingSim_dbg
 *.qtenvrc
 plots/*
 *.ipynb
-simulations/topologies/*
 */__pycache__/*
 *.pyc
 .cproject

@@ -134,7 +134,7 @@ def main():
             ["time", datetime.now()]]
         G.graph['filename'] = f"{p.name}.txt"
     else:
-        print("unkonw generator")
+        print("unknown generator")
         exit()
     if not opt.nostats:
         print("generating stats...")
