@@ -27,7 +27,7 @@ size_type FwdTablePathID::getNumForeignEntries() const
 	{
 		const FwdTableEntry&  fwdentry= pidfwdtableentry.second;
 
-		if (fwdentry.isForeign())
+		if (fwdentry.isValid() and fwdentry.isForeign())
 			sum++;
 	}
 	return sum;
