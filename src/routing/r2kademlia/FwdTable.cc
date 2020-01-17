@@ -3,7 +3,7 @@
 
 namespace routingsim {
 
-
+// this counts only valid and active entries (=non obsolete)
 size_type FwdTablePathID::getNumValidEntries() const
 {
 	unsigned long sum= 0;
@@ -11,7 +11,7 @@ size_type FwdTablePathID::getNumValidEntries() const
 	{
 		const FwdTableEntry&  fwdentry= pidfwdtableentry.second;
 
-		if (fwdentry.isValid())
+		if (fwdentry.isValid() and not(fwdentry.isObsolete()))
 			sum++;
 	}
 	return sum;
@@ -19,7 +19,7 @@ size_type FwdTablePathID::getNumValidEntries() const
 }
 
 
-
+// this counts only foreign valid and active entries (=non obsolete)
 size_type FwdTablePathID::getNumForeignEntries() const
 {
 	unsigned long sum= 0;
@@ -27,7 +27,7 @@ size_type FwdTablePathID::getNumForeignEntries() const
 	{
 		const FwdTableEntry&  fwdentry= pidfwdtableentry.second;
 
-		if (fwdentry.isValid() and fwdentry.isForeign())
+		if (fwdentry.isValid() and not(fwdentry.isObsolete()) and fwdentry.isForeign())
 			sum++;
 	}
 	return sum;

@@ -38,8 +38,8 @@ namespace routingsim {
 		     fwdlocal      = 3
 		} fwdAction = Action::undefined;
 
-		void setObsolete() { fwdState &= ~State::valid; fwdState |= State::invalid; }
-		bool isObsolete() const { return fwdState & State::invalid; }
+		void setObsolete() { setInvalid(); fwdState |= State::obsolete; }
+		bool isObsolete() const { return fwdState & State::obsolete; }
 
 		void setInvalid() { fwdState &= ~State::valid; fwdState |= State::invalid; }
 		bool isInvalid() const { return fwdState & State::invalid; }
