@@ -120,12 +120,12 @@ void Disco::onMessage(NodePkt *np) {
 			cooldownTimer->setName("cooldownTimer");
 			scheduleAt(simTime()+cooldownTime, cooldownTimer);
 
-			//pick random nodes sending packets
+			// pick random nodes sending packets
 			double p = uniform(0,1);
 			if (p < probingNodeFraction) {
 				sendDataPacketsTimer = new NodePkt();
 				sendDataPacketsTimer->setName("sendDataPacketsTimer");
-				scheduleAt(simTime()+60, sendDataPacketsTimer);
+				scheduleAt(simTime()+uniform(0.5*probeInterval,1.5*probeInterval), sendDataPacketsTimer);
 			}
 
 			cancelAndDelete(initialTimer);
@@ -142,29 +142,32 @@ void Disco::onMessage(NodePkt *np) {
 	}
 
 	switch (np->getType()) {
-	case landmarkAnnouncement:
-		handleLandmarkAnnouncement(np);
-		break;
+		case landmarkAnnouncement:
+			handleLandmarkAnnouncement(np);
+			break;
 
-	case vicinityAnnouncement:
-		handleVicinityPacket(np);
-		break;
+		case vicinityAnnouncement:
+			handleVicinityPacket(np);
+			break;
 
-	case dataPacket:
-		// we generate the packet and enqueue it
-		// packet is deleted only if we ourselves are the final destination
-		handleDataPacket(np);
-		return;
-	case BetterPathPkt:
-		// we generate the packet and enqueue it, must not delete
-		handleBetterPathPkt(np);
-		return;
-	default:
-		EV << "Unknown packet of type: " << np->getType() << endl;
-		EV << "arrived on gate " << np->getArrivalGate()->getFullName();
+		case dataPacket:
+			// we generate the packet and enqueue it
+			// packet is deleted only if we ourselves are the final destination
+			handleDataPacket(np);
+			return;
+
+		case BetterPathPkt:
+			// we generate the packet and enqueue it, must not delete
+			handleBetterPathPkt(np);
+			return;
+
+		default:
+			EV << "Unknown packet of type: " << np->getType() << endl;
+			EV << "arrived on gate " << np->getArrivalGate()->getFullName();
 	}
 	delete(np);
 }
+
 
 void Disco::printLandmarks() {
 	EV << " Path to all Landmarks known to Node: " << localNodeId.origin << endl;
@@ -179,6 +182,7 @@ void Disco::printLandmarks() {
 	}
 	EV << endl;
 }
+
 
 void Disco::printVicinity() {
 	EV << " Path to all Nodes in the Vicinity of Node: " << localNodeId.origin << endl;
@@ -199,6 +203,7 @@ void Disco::printVicinity() {
 		EV << " No Landmark known yet" << endl;
 	}
 }
+
 
 void Disco::printRoutingPath(StandardPkt* stdp) {
 	EV<< " Path from" << stdp->getSource().origin <<" to " << stdp->getDestination().origin << "via Landmark " <<stdp->getVia_Landmark().origin << endl;
@@ -232,6 +237,7 @@ void Disco::handleLandmarkAnnouncement(NodePkt *np) {
 	}
 }
 
+
 void Disco::saveAddAndSendPackage(NodePkt *np, DiscoPkt *dp) {
 	int hop_count = dp->getPathVectorArraySize();
 	saveNewPathVector(np->getType(),dp);
@@ -248,10 +254,12 @@ void Disco::saveAddAndSendPackage(NodePkt *np, DiscoPkt *dp) {
 	sendToOtherNeighbors(np);
 }
 
+
 void Disco::nodeStatistics() {
 	//known landmarks, vicinity size, ...
 	activeNeighbors.record(node().getNeighbors().size());
 }
+
 
 void Disco::vicinityStatistics() {
 	vicinitySize.record(vicinityVector.size());
@@ -264,12 +272,14 @@ void Disco::vicinityStatistics() {
 	// landmark in vicinity?
 }
 
+
 void Disco::landmarkStatistics() {
 	if (myAddr.valid && getLandmarkIdx(myAddr.landmark) != -1) {
 		landmarkID.record(myAddr.landmark.id);
 		landmarkDistance.record(landmarkVector[getLandmarkIdx(myAddr.landmark)].PathVector.size());
 	}
 }
+
 
 void Disco::messageStatistics() {
 	statLandmarkAnnouncementsOriginated.record(LandmarkAnnouncementsOriginated);
@@ -523,6 +533,8 @@ void Disco::onInitialize()
 	up_Down_Stream_Shortcutting = par("up_Down_Stream_Shortcutting");
 	probingNodeFraction = par("probingNodeFraction");
 	probePacketDestinationFraction = par("probePacketDestinationFraction");
+	probeInterval = (simtime_t) par("probeInterval").doubleValue();
+
 
 	/// Set Timer
 	landmarkAnnouncementTimer=NULL;
@@ -662,7 +674,7 @@ void Disco::sendPktToNode(discoid_t addr) {
 		destination = addr.pathToNode.back();
 	}
 
-	//Generate new Pkt and set basic informations
+	// Generate new Pkt and set basic informations
 	NodePkt *np = new NodePkt();
 	np->setType(dataPacket);
 	np->setName("Data Packet");

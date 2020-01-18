@@ -34,5 +34,7 @@ parameters:
  	
  	// probe data packet configuration
 	double probingNodeFraction = default(1);
-	double probePacketDestinationFraction = default(1); 	
+	double probePacketDestinationFraction = default(1);
+	double probeInterval = default(0.4s) @unit(s);
+
 }

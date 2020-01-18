@@ -70,6 +70,7 @@ public:
 	bool valid;
 
 	bool operator==(discoid_t &t) {return this->landmark.id==t.landmark.id;}
+	
 	friend ostream &operator<<(ostream& out, const discoid_t &disco) {
 		if ( !disco.pathToNode.empty() ) {
 			out << "Destination: Node "<< disco.pathToNode.back().id <<" (non-landmark)"<< endl;
@@ -141,7 +142,7 @@ private:
 	// Probe packet configuration
 	double probingNodeFraction;
 	double probePacketDestinationFraction;
-
+	simtime_t probeInterval;
 
 	int networkSize;
 	//bool knownLandmark;
