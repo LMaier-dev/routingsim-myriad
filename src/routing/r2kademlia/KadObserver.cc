@@ -68,6 +68,8 @@ void KadObserver::initialize() {
 	histograms[sentPathSetup] = cHistogramPtr(getIntHistogram("sentPathSetup"));
 	histograms[receivedPathSetup] = cHistogramPtr(getIntHistogram("receivedPathSetup"));
 	histograms[forwardedPathSetup] = cHistogramPtr(getIntHistogram("forwardedPathSetup"));
+	histograms[stretchMulAns] = std::make_unique<cHistogram>("stretchMulAns");
+	histograms[stretchAddAns] = cHistogramPtr(getIntHistogram("stretchAddAns"));
 
 	
 	outVectors.resize(histograms.size());
@@ -102,6 +104,8 @@ void KadObserver::initialize() {
 	outVectors[sentPathSetup] = std::make_unique<cOutVector>("sentPathSetup");
 	outVectors[receivedPathSetup] = std::make_unique<cOutVector>("receivedPathSetup");
 	outVectors[forwardedPathSetup] = std::make_unique<cOutVector>("forwardedPathSetup");
+	outVectors[stretchMulAns] = std::make_unique<cOutVector>("stretchMulAns");
+	outVectors[stretchAddAns] = std::make_unique<cOutVector>("stretchAddAns");
 
 	addOutVectors.resize(numAddDataTypes);
 	addOutVectors[deliveryRatioV] = std::make_unique<cOutVector>("deliveryRatio");
@@ -332,6 +336,9 @@ void KadObserver::registerPacketDelivered(KadPacket& packet) {
 	info.distance = getPhysicalDistance(fromKey, toKey);
 	info.prefixDist = fromKey.getLength() - fromKey.sharedPrefixLength(toKey);
 	info.overlayHops = packet.getOverlayHops();
+
+	EV_TRACE << "packetDelivered: hops=" << info.hops << " distance=" << info.distance << endl;
+
 	ASSERT(info.overlayHops > 0);
 	histograms[hopCount]->collect(info.hops);
 	histograms[distance]->collect(info.distance);
@@ -361,6 +368,7 @@ void KadObserver::registerPacketDelivered(KadDataPacket& packet) {
 	info.distance = getPhysicalDistance(fromKey, toKey);
 	info.prefixDist = fromKey.getLength() - fromKey.sharedPrefixLength(toKey);
 	info.overlayHops = packet.getOverlayHops();
+	
 	ASSERT(info.overlayHops > 0);
 	histograms[hopCountData]->collect(info.hops);
 	histograms[distanceData]->collect(info.distance);
@@ -377,6 +385,25 @@ void KadObserver::registerPacketDelivered(KadDataPacket& packet) {
 void KadObserver::registerPacketOverlayHop(KadPacket& packet) {
 	if (simTime() < getSimulation()->getWarmupPeriod()) return;
 	packet.countOverlayHop();
+}
+
+
+// calculate stretch from answer packet
+void KadObserver::sampleAnswer(KadAnswer& packet) {
+	const OverlayKey fromKey = packet.getSource();
+	const OverlayKey toKey = packet.getTarget();
+	if (not exists(fromKey) or not exists(toKey)) {
+		EV_ERROR << "missing keys on packet" << endl;
+		return;
+	}
+	uint distance= getPhysicalDistance(fromKey, toKey);
+	uint hops= packet.getProgress();
+	EV_TRACE << "sampleAnswer: hops=" << hops << " distance=" << distance << endl;
+	if (distance > 0)
+	{
+		histograms[stretchMulAns]->collect(hops / (double)distance);
+		histograms[stretchAddAns]->collect(hops - distance);
+	}
 }
 
 

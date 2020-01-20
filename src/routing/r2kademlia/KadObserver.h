@@ -78,8 +78,8 @@ private:
 		stretchMulData=17, stretchAddData=18, prefixPerHopData=19, distanceLeftData=20,
 		prefixDistLeftData=21, hopCountDroppedData=22, overlayHopsDroppedData=23,
 	        prefixDistDroppedData=24, distanceDroppedData=25, sentRouteUpdates= 26, receivedRouteUpdates= 27,
-		sentPathSetup= 28, receivedPathSetup= 29, forwardedPathSetup= 30,
-		numDataTypes= 31 // insert new types before this and update value accordingly
+		sentPathSetup= 28, receivedPathSetup= 29, forwardedPathSetup= 30, stretchMulAns= 31, stretchAddAns= 32,
+		numDataTypes= 33 // insert new types before this and update value accordingly
 	};
 	enum addDataType : uint8_t {deliveryRatioV=0, deliveredPacketsV=1, droppedPacketsV=2, roamingPacketsV=3,
 			            deliveryRatioDataV=4, deliveredDataPacketsV=5, droppedDataPacketsV=6,
@@ -142,6 +142,8 @@ public:
 	void registerPacketDropped(KadDataPacket&, const OverlayKey& current, const OverlayKey& target=OverlayKey::UNSPECIFIED_KEY, uint8_t reason= 0);
 	void registerPacketDelivered(KadDataPacket&);
 	void registerPacketOverlayHop(KadDataPacket&);
+
+	void sampleAnswer(KadAnswer&);
 
 	virtual void sampleStatistics (Statistics &stats) override;
 };

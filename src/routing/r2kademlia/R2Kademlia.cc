@@ -333,8 +333,14 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 
 void R2Kademlia::handlePacket(KadAnswer_p packet) {
 	//EV_DEBUG << "received answer packet (for nonce=" << packet->getNonce() << ") from " << packet->getSource().shortStr() << endl;
-	if (packet->getType() == KAD_Error)
+	if (packet->getType() == KAD_Error) {
 		onErrorPacket(*check_and_cast<KadError *>(packet.get()));
+	}
+	else if (packet->getType() == KAD_FindNodeRsp) {
+		getKadObserver().sampleAnswer(*packet);
+	}
+
+	// the following call handles the RPC answer
 	handleAnswer(std::move(packet)); // see RPC.cc
 }
 
