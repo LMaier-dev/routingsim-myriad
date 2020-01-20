@@ -30,7 +30,7 @@ parameters:
  	bool up_Down_Stream_Shortcutting = default(true);
  	
  	bool landmark = default(false);
- 	bool extractLandmarksFromTopologyFile = default(true);
+ 	bool extractLandmarksFromTopologyFile = default(false);
  	
  	// probe data packet configuration
 	double probingNodeFraction = default(1);

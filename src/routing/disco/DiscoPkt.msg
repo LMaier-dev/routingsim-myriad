@@ -26,13 +26,13 @@ cplusplus {{
 class Node_ID {
 public:
 	nodeid_t id;
-	const char *origin;
+	const char *origin= nullptr;
 	bool operator==(const Node_ID &cmp) const {
 		return(id==cmp.id);
 	}
 };
 inline std::ostream& operator<<(std::ostream& os, const Node_ID& u ) {
-    os << " id=" << u.id << " =origin" << u.origin;
+    os << " id=" << u.id << " origin=" << (u.origin != nullptr ? u.origin : "NULL") ;
     return os;
 }
 }}

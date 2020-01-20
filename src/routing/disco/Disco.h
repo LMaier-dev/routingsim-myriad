@@ -45,15 +45,15 @@ class landmarkPath // find better name -> used not only for landmarks but also f
 public:
 	vector <Node_ID> PathVector;
 
-	Node_ID landmarkID; // nicht umbedingt nötig da wert in vektor an pos(0)
-	int hops; //nicht umbedingt nötig da gleich sizeOfVector
+	Node_ID landmarkID; // not strictly necessary since ID is in vector at pos(0) anyway
+	int hops; // not strictly necessary since equals to sizeOfVector
 
 	friend ostream& operator<<(ostream &out, const landmarkPath &lp) {
-		out << "Path Vector:";
+		out << "Path Vector: <";
 		for (unsigned int i=0; i<lp.PathVector.size(); i++) {
 			out << " " << lp.PathVector[i].id;
 		}
-		out << endl;
+		out << " >";
 		return out;
 	}
 };
@@ -69,20 +69,20 @@ public:
 	vector<Node_ID> pathToNode; /// TODO: check that landmark is not put (redundantly) into vector
 	bool valid;
 
-	bool operator==(discoid_t &t) {return this->landmark.id==t.landmark.id;}
+	bool operator==(discoid_t &t) const { return this->landmark.id == t.landmark.id; }
 	
 	friend ostream &operator<<(ostream& out, const discoid_t &disco) {
 		if ( !disco.pathToNode.empty() ) {
-			out << "Destination: Node "<< disco.pathToNode.back().id <<" (non-landmark)"<< endl;
-			out << "Landmark: Node "<< disco.landmark.id<<endl;
+			out << "Destination: Node " << (disco.pathToNode.size() > 0 ? disco.pathToNode.back().id : -1) << " (non-landmark)" << endl;
+			out << "Landmark: Node " << disco.landmark.id;
 			out << "Path from Landmark to Node:";
 			for(unsigned int i=0; i<disco.pathToNode.size(); i++) {
-				out << " "<<disco.pathToNode[i].id;
+				out << " " << disco.pathToNode[i].id;
 			}
 		} else {
-			out << "Destination: Node "<< disco.landmark.id << " (Landmark)" << endl;
+			out << "Destination: Node "<< disco.landmark.id << " (Landmark)";
 		}
-		out << endl;
+
 		return out;
 	}
 	discoid_t& operator=(const discoid_t &t) {
@@ -115,6 +115,8 @@ protected:
 
 	/// on message
 	void onMessage( NodePkt* pkt );
+
+	void onSelfMessage(cMessage* msg);
 
 	/// drop all acquired state
 	void reset();
@@ -237,8 +239,6 @@ private:
 
 	// Save Vector path; generate new Address; add own ID to package and Send it to the other Neighbors
 	void saveAddAndSendPackage(NodePkt *np, DiscoPkt *dp);
-
-
 
 	void findShortcut(StandardPkt *stdp);
 
