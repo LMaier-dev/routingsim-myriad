@@ -29,10 +29,12 @@ public:
 	/** @name member functions needed for minimal implementation */
 	//@{
 	KadPacket(const char *name=nullptr, short kind=0) : KadPacket_Base(name, kind) {}
-	KadPacket(const KadPacket& other) : KadPacket_Base(other) {}
+	KadPacket(const KadPacket& other) : KadPacket_Base(other), overlayHops(other.overlayHops),
+					    tracked(other.tracked) {}
 	~KadPacket() { };
 	KadPacket& operator=(const KadPacket& other)
-		{KadPacket_Base::operator=(other); return *this;}
+		{ KadPacket_Base::operator=(other); overlayHops= other.overlayHops; tracked= other.tracked;
+			return *this; }
 	virtual KadPacket *dup() const override {return new KadPacket(*this);}
 	//@}
 
@@ -92,9 +94,9 @@ public:
 	inline kad_path getIntermediatePath() { return getSrcPath(1, route_arraysize - 1); }
 	//@}
 	inline void countOverlayHop() { overlayHops++; }
-	inline uint16_t getOverlayHops() { return overlayHops; }
+	inline uint16_t getOverlayHops() const { return overlayHops; }
 	inline void markTracked() { tracked = true; }
-	inline bool isTracked() { return tracked; }
+	inline bool isTracked() const { return tracked; }
 private:
 	uint16_t overlayHops = 1;
 	bool tracked = false;

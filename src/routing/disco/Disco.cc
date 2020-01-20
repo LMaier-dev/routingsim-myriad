@@ -257,7 +257,7 @@ void Disco::handleLandmarkAnnouncement(NodePkt *np) {
 void Disco::saveAddAndSendPackage(NodePkt *np, DiscoPkt *dp) {
 	int hop_count = dp->getPathVectorArraySize();
 	saveNewPathVector(np->getType(),dp);
-	if(np->getType() == landmarkAnnouncement) {
+	if (np->getType() == landmarkAnnouncement) {
 		generateAddr();
 		LandmarkAnnouncementsForwarded+=node().getNeighbors().size()-1;
 		np->setName("Landmark Forward");

@@ -157,9 +157,11 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	
 	KadPacket_p packet = \
 		std::unique_ptr<KadPacket>(check_and_cast<KadPacket*>(pkt->decapsulate()));
-	/*EV_TRACE << "onMessage msgid:" << packet->getId() << " treeId:" << packet->getTreeId()
+	/*
+	  EV_TRACE << "onMessage msgid:" << packet->getId() << " treeId:" << packet->getTreeId()
 	      << " <" << packet->getName() << "> this="
-		 << static_cast<void*>(packet.get()) << " c:" << packet->getCreationTime() << endl;
+		 << static_cast<void*>(packet.get()) << " c:" << packet->getCreationTime()
+		 << " isTracked:" << packet->isTracked() << endl;
 	*/
 	
 	// hello packets do not include my key
@@ -760,7 +762,7 @@ void R2Kademlia::sendFindNode(const OverlayKey& key, bool exact, const OverlayKe
 void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 	OverlayKey& query = packet->getQuery(); // query is the destination ID
 
-	EV_TRACE << "KadFindNodeReq (id=" << packet->getId() << ", nonce=" << packet->getNonce() << ") received query for: " << query.shortStr() << endl;
+	EV_TRACE << "KadFindNodeReq (id=" << packet->getId() << ", nonce=" << packet->getNonce() << ") received query for: " << query.shortStr() << " isTracked=" << packet->isTracked() << endl;
 	bool is_rediscovery= false;
 	// check for presence of "not via" setting
 	if (packet->getNotVia())
@@ -1574,6 +1576,7 @@ void R2Kademlia::doReachabilityTest(short timerID) {
 
 
 void R2Kademlia::countReceived(KadPacket& packet) {
+	EV_TRACE << "countReceived: tracked=" << packet.isTracked() << endl;
 	receivedPackets++;
 	getKadObserver().registerPacketDelivered(packet);
 	getStatistics().deliveredMessage(
