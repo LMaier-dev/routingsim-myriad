@@ -337,7 +337,7 @@ void KadObserver::registerPacketDelivered(KadPacket& packet) {
 	info.prefixDist = fromKey.getLength() - fromKey.sharedPrefixLength(toKey);
 	info.overlayHops = packet.getOverlayHops();
 
-	EV_TRACE << "packetDelivered: hops=" << info.hops << " distance=" << info.distance << endl;
+	//EV_TRACE << "packetDelivered: hops=" << info.hops << " distance=" << info.distance << endl;
 
 	ASSERT(info.overlayHops > 0);
 	histograms[hopCount]->collect(info.hops);
@@ -398,7 +398,7 @@ void KadObserver::sampleAnswer(KadAnswer& packet) {
 	}
 	uint distance= getPhysicalDistance(fromKey, toKey);
 	uint hops= packet.getProgress();
-	EV_TRACE << "sampleAnswer: hops=" << hops << " distance=" << distance << endl;
+	//EV_TRACE << "sampleAnswer: hops=" << hops << " distance=" << distance << endl;
 	if (distance > 0)
 	{
 		histograms[stretchMulAns]->collect(hops / (double)distance);
@@ -408,7 +408,7 @@ void KadObserver::sampleAnswer(KadAnswer& packet) {
 
 
 void KadObserver::sampleStatistics (Statistics &stats) {
-	// records the mean of all histograms as vector
+	// records every histogram mean as corresponding vector
 	for (uint i=0; i<histograms.size(); i++)
 		if (histograms[i]->getCount() > 0)
 			outVectors[i]->record(histograms[i]->getMean());
