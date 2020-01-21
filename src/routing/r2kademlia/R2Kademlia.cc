@@ -143,6 +143,8 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	const hop_t taken_hop= pkt->getHop();
 	//ASSERT(Node::getNode(this)->getNodeId() == taken_hop.to);
 
+	ASSERT(pkt->getEncapsulatedPacket() != nullptr);
+
 	if (not getNetworkManager()->getTopology().isConnected(taken_hop.from,taken_hop.to))
 	{
 		KadPacket_p packet = std::unique_ptr<KadPacket>(check_and_cast<KadPacket*>(pkt->decapsulate()));
@@ -379,6 +381,7 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt) {
 	
 void R2Kademlia::resendPacket(KadPacket_p packet) {
 	getKadObserver().registerPacketOverlayHop(*packet);
+	ASSERT(packet->getControlInfo() != nullptr);
 	NodePkt_p nodePkt = NodePkt_p(check_and_cast<NodePkt *>(packet->removeControlInfo()));
 	nodePkt->setType(KAD_CTRL_PACKET_TYPE);
 	forwardPacket(std::move(packet), std::move(nodePkt));
@@ -890,6 +893,7 @@ bool R2Kademlia::handleFindNodeResponse(KadPacket_p answer_, RPCState& rpcState)
 	if (rpcState.status != RPC_SUCCESS) return true;
 	auto answer = safe_packet_cast<KadFindNodeRsp>(answer_);
 	ASSERT(answer->getContactArraySize() == answer->getPathArraySize());
+	ASSERT(rpcState.original_packet.get() != nullptr);
 	EV_TRACE << "received FindNodeRsp for " << check_and_cast<KadFindNodeReq *>(rpcState.original_packet.get())->getQuery().shortStr();
 	EV_TRACE << " from " << answer->getSource().shortStr() << " with " << answer->getContactArraySize() << " contacts"<< endl;
 	readRTableRsp(std::move(answer));
@@ -993,7 +997,7 @@ void R2Kademlia::onErrorPacket(KadError& error) {
 		case KAD_NodeUnreachable:
 		case KAD_PathIDUnknown:
 		{ // trigger rediscovery
-		
+			ASSERT(error.getEncapsulatedPacket() != nullptr);
 			KadPacket* original = check_and_cast<KadPacket *>(error.getEncapsulatedPacket());
 			ASSERT(original->getNonce() == error.getNonce());
 			ASSERT(original->getSource() == myOverlayKey);
@@ -1576,9 +1580,10 @@ void R2Kademlia::doReachabilityTest(short timerID) {
 
 
 void R2Kademlia::countReceived(KadPacket& packet) {
-	EV_TRACE << "countReceived: tracked=" << packet.isTracked() << endl;
+	//EV_TRACE << "countReceived: tracked=" << packet.isTracked() << endl;
 	receivedPackets++;
 	getKadObserver().registerPacketDelivered(packet);
+	ASSERT(packet.getControlInfo() != nullptr);
 	getStatistics().deliveredMessage(
 		check_and_cast<cMessage *>(packet.getControlInfo()),
 		packet.getProgress()
@@ -1592,6 +1597,7 @@ void R2Kademlia::countDropped(KadPacket& packet, const OverlayKey& target, uint8
 	nodeid_t nid = undefined_node;
 	if (getKadObserver().exists(target))
 		nid = getKadObserver().getNodeId(target);
+	ASSERT(packet.getControlInfo() != nullptr);
 	getStatistics().dropMessage(
 		check_and_cast<cMessage *>(packet.getControlInfo()), nid
 	);
