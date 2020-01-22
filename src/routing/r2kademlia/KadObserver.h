@@ -92,6 +92,8 @@ private:
 	std::vector<std::unique_ptr<cOutVector>> addOutVectors;
 	std::vector<MessageDeliveryInfo> messageDeliveryInfos;
 	std::vector<MessageDroppedInfo> messageDroppedInfos;
+	std::vector<MessageDeliveryInfo> dataDeliveryInfos;
+	std::vector<MessageDroppedInfo> dataDroppedInfos;
 	/// if true, histograms and averages are reset each sampling interval
 	bool resetAfterSample;
 	/// time when message recording should start
@@ -100,7 +102,8 @@ private:
 	size_type numMessageDeliveryInfos;
 	/// sets the max number of message dropped infos to be recorded
 	size_type numMessageDroppedInfos;
-
+	/// simtime limit
+	simtime_t simTimeLimit= SIMTIME_MAX;
 private:
 	R2Kademlia& getR2Kademlia(Node* nodeMod);
 	inline R2Kademlia& getR2Kademlia(nodeid_t nid) { return getR2Kademlia(getNetworkManager()->getTopology().getNodeModule(nid)); }

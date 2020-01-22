@@ -29,6 +29,9 @@ static KadObserver* observer = NULL;
 
 void KadObserver::initialize() {
 	ASSERT(observer == NULL || observer == this);
+	if (getEnvir()->getConfig()->getConfigValue("sim-time-limit") != nullptr) {
+		simTimeLimit= SimTime::parse(getEnvir()->getConfig()->getConfigValue("sim-time-limit"));
+	}
 	getStatistics().addSample(this);
 
 	resetAfterSample = par("resetAfterSample").boolValue();
@@ -189,6 +192,29 @@ void KadObserver::recordMessageScalars() {
 		mod->recordScalar("prefixDistLeft", info.prefixDistLeft);
 		mod->recordScalar("reasonDropped", info.reason);
 	}
+
+	std::string dataDeliveredStr{"dataDelivered"};
+	i = 0;
+	for (auto& info : dataDeliveryInfos){
+		cModule* mod = modType->create((dataDeliveredStr + std::to_string(++i)).c_str(), this);
+		mod->recordScalar("hopCount", info.hops);
+		mod->recordScalar("overlayHops", info.overlayHops);
+		mod->recordScalar("distance", info.distance);
+		mod->recordScalar("prefixDist", info.prefixDist);
+	}
+	i = 0;
+	std::string dataDroppedStr{"dataDropped"};
+	for (auto& info : dataDroppedInfos){
+		cModule* mod = modType->create((dataDroppedStr + std::to_string(++i)).c_str(), this);
+		mod->recordScalar("hopCountDropped", info.hops);
+		mod->recordScalar("overlayHopsDropped", info.overlayHops);
+		mod->recordScalar("distanceDropped", info.distance);
+		mod->recordScalar("distanceLeft", info.distanceLeft);
+		mod->recordScalar("prefixDistDropped", info.prefixDist);
+		mod->recordScalar("prefixDistLeft", info.prefixDistLeft);
+		mod->recordScalar("reasonDropped", info.reason);
+	}
+
 }
 
 R2Kademlia& KadObserver::getR2Kademlia(Node* nodeMod) {
@@ -315,8 +341,8 @@ void KadObserver::registerPacketDropped(KadDataPacket& packet, const OverlayKey&
 	histograms[prefixDistDroppedData]->collect(info.prefixDist);
 	histograms[prefixDistLeftData]->collect(info.prefixDistLeft);
 
-	if (simTime() > messageSampleTime and messageDroppedInfos.size() < numMessageDroppedInfos)
-		messageDroppedInfos.push_back(info);
+	if (simTime() > messageSampleTime and dataDroppedInfos.size() < numMessageDroppedInfos)
+		dataDroppedInfos.push_back(info);
 
 }
 
@@ -377,8 +403,8 @@ void KadObserver::registerPacketDelivered(KadDataPacket& packet) {
 	histograms[prefixDistData]->collect(info.prefixDist);
 	histograms[overlayHopsData]->collect(info.overlayHops);
 	histograms[prefixPerHopData]->collect(info.prefixDist / (double)info.overlayHops);
-	if (simTime() > messageSampleTime and messageDeliveryInfos.size() < numMessageDeliveryInfos)
-		messageDeliveryInfos.push_back(info);
+	if (simTime() > messageSampleTime and dataDeliveryInfos.size() < numMessageDeliveryInfos)
+		dataDeliveryInfos.push_back(info);
 }
 
 
@@ -424,7 +450,8 @@ void KadObserver::sampleStatistics (Statistics &stats) {
 	addOutVectors[droppedDataPacketsV]->record(droppedDataPackets);
 	addOutVectors[roamingDataPacketsV]->record(registeredDataPackets - deliveredDataPackets - droppedDataPackets);
 
-	if (resetAfterSample) {
+	// reset, but not if simulation hits the run time limit
+	if (resetAfterSample and simTime()<simTimeLimit) {
 		for (auto& h : histograms)
 			h->clear();
 		deliveredPackets = 0;
