@@ -86,7 +86,9 @@ void FwdTablePathID::addEntry(KadContact_p contact, bool foreignPID)
 	EV_TRACE << "addEntry(): called for contact " << *contact << endl;
 
 	// note: this path may be empty for physical neighbors
+	// Incoming PathIDs are required for physical neighbors, outgoing PathIDs not
 	kad_path currentpath(contact->getPath());
+
 	// add destination node ID to end of the path (will never be empty then)
 	currentpath.push_back(contact->getKey());
 
@@ -119,7 +121,7 @@ void FwdTablePathID::addEntry(KadContact_p contact, bool foreignPID)
 		return;
 	}
 
-	fwdentry.outgoingPathID= getPathID(currentpath);
+	fwdentry.outgoingPathID= (currentpath.size() > 1) ? getPathID(currentpath) : PathID::UndefinedPathID;
 	fwdentry.setPathLength(currentpath.size());
 	fwdentry.nextHopNode= currentpath[0];
 	fwdentry.setValid();
@@ -128,7 +130,7 @@ void FwdTablePathID::addEntry(KadContact_p contact, bool foreignPID)
 	fwdentry.fwdAction=
 		(currentpath.size()==1) // next hop is our physical neighbor
 		? FwdTableEntry::Action::fwdNextKadId : FwdTableEntry::Action::fwdNextPathID;
-		
+	
 	PIDFwdTable[incomingPathID]= fwdentry;
 	NIDPIDTable[contact->getKey()]= incomingPathID;
 
@@ -142,7 +144,6 @@ void FwdTablePathID::addEntry(KadContact_p contact, bool foreignPID)
 		for (auto key : currentpath)
 			EV_TRACE << key.shortStr() << ' ';
 		EV_TRACE << '>' << endl;
-		
 	}
 }
 

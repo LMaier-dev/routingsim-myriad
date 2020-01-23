@@ -216,10 +216,10 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 				// use existing path from answer (must reverse path)
 				KadContact contact(packet->getSource(),
 						   packet->reversePath(packet->getSrcPath(1, packet->getProgress())));
-				//EV_TRACE << "forwarding PathSetupRsp, source path: <";
-				//for (auto& k : packet->getSrcPath())
-					//EV_TRACE << ' ' << k.shortStr();
-				//EV_TRACE << '>' << endl;
+				EV_TRACE << "forwarding PathSetupRsp, source path: <";
+				for (auto& k : packet->getSrcPath())
+					EV_TRACE << ' ' << k.shortStr();
+				EV_TRACE << '>' << endl;
 				if (usePathIDs)
 					fwdTablePathID.addEntry(&contact, true);
 				break;
@@ -467,7 +467,7 @@ bool R2Kademlia::handleProbeResponse(KadPacket_p answer, RPCState& rpcState) {
 
 // Path Setup Request/Response
 void R2Kademlia::sendPathSetup(KadContact_p contact) {
-	//EV_TRACE << "sending PathSetupReq from " << myOverlayKey.shortStr() << " to " << contact->getKey().shortStr() << endl;
+	EV_TRACE << "sending PathSetupReq from " << myOverlayKey.shortStr() << " to " << contact->getKey().shortStr() << endl;
 	sentPathSetup++;
 	sendRpcCall(
 		makePacket<KadPathSetupReq>(contact, "KadPathSetupReq"),
@@ -477,8 +477,8 @@ void R2Kademlia::sendPathSetup(KadContact_p contact) {
 }
 
 void R2Kademlia::handlePacket(std::unique_ptr<KadPathSetupReq> packet) {
-	//EV_TRACE << "received PathSetupReq from " << packet->getSource().shortStr() << " to " << packet->getTarget().shortStr()
-	//	 << " sending back answer" << endl;
+	EV_TRACE << "received PathSetupReq from " << packet->getSource().shortStr() << " to " << packet->getTarget().shortStr()
+		 << " sending back answer" << endl;
 	receivedPathSetup++;
 	sendPacket(makeAnswer<KadPathSetupRsp>(*packet));
 }
@@ -491,10 +491,10 @@ bool R2Kademlia::handlePathSetupResponse(KadPacket_p answer, RPCState& rpcState)
 
 	// must check for modified path in Response, because it may have taken a shortcut
 	KadContact contact(pathSetupRsp->getSource(), pathSetupRsp->reversePath(pathSetupRsp->getIntermediatePath()));
-	//EV_TRACE << "Received PathSetupRsp, source path: <";
-	//for (auto& k : pathSetupRsp->getSrcPath())
-	//	EV_TRACE << ' ' << k.shortStr();
-	//EV_TRACE << '>' << endl;
+	EV_TRACE << "Received PathSetupRsp, source path: <";
+	for (auto& k : pathSetupRsp->getSrcPath())
+		EV_TRACE << ' ' << k.shortStr();
+	EV_TRACE << '>' << endl;
 
 	fwdTablePathID.addEntry(&contact, true);
 
@@ -1122,7 +1122,7 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 	{
 		sendGetPhysicalNeighbors(contact);
 	}
-	
+
 	if (contact->isValid())
 	{
 		// request info about overlay neighbors of nodes in our deepest bucket
@@ -1139,7 +1139,7 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 	    and contact->getPathLength() > 1)
 	{ // send a path setup request packet for installing PIDs in intermediate nodes for this indirectly learned route
 		// only do this for paths longer than two hops
-		//EV_TRACE << "Triggering path setup to " << contact->getKey().shortStr() << endl;
+		EV_TRACE << "Triggering path setup to " << contact->getKey().shortStr() << endl;
 		sendPathSetup(contact);
 	}
 }
@@ -1243,26 +1243,26 @@ void R2Kademlia::applyShortcut(KadPacket& packet)
 		{
 			// getProgress() is currently pointing to my own node ID
 			kad_path path_of_interest= packet.getSrcPath(packet.getProgress()+1, packet.getRouteArraySize()-1);
-			if (path_of_interest.size() > 0) // check: not much shortcut possible for only one hop, but maybe better for consistency
+			if (path_of_interest.size() > 1) // not much shortcut possible for only one hop
 			{
 				if (knownContact->getPathLength()+1 > path_of_interest.size())
 					return;
 
 				// TODO now check for cycles
 				// replace residual path with my known (shorter) route
-				//EV_TRACE << "modifying route due to shortcut: old=< ";
+				EV_TRACE << "modifying route due to shortcut: old=< ";
 
-				//for (auto key : packet.getSrcPath())
-				//	EV_TRACE << key.shortStr() << ' ';
+				for (auto key : packet.getSrcPath())
+					EV_TRACE << key.shortStr() << ' ';
 
 				kad_path newpath(knownContact->getPath());
 				newpath.push_back(knownContact->getKey());
 				packet.modRoute(newpath);
 
-				//EV_TRACE << "> new=< ";
-				//for (auto key : packet.getSrcPath())
-				//	EV_TRACE << key.shortStr() << ' ';
-				//EV_TRACE << '>' << endl;
+				EV_TRACE << "> new=< ";
+				for (auto key : packet.getSrcPath())
+					EV_TRACE << key.shortStr() << ' ';
+				EV_TRACE << '>' << endl;
 
 			}
 

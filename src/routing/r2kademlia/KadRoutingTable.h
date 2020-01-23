@@ -162,9 +162,9 @@ public:
 	inline size_type getNumBuckets() const { return buckets.size(); }
 	/// the position of the bit that defines the lowest bucket
 	inline size_type getDepth() const { return std::min<size_type>(ceil(getNumBuckets() / getLevelWidth()) * accelerationFactor, myKey.getLength()); }
-	/// calculates the average path length of the known contacts
+	/// calculates the average path length of the known contacts (w/o physical contacts!)
 	double getAveragePathLength() const;
-	/// calculates the average stretch of the known contacts
+	/// calculates the average stretch of the known contacts (w/o physical contacts!)
 	double getAveragePathStretch() const;
 	/// returns how many times paths have been updated
 	inline uint getUpdateCount() const { return updateCount; }
