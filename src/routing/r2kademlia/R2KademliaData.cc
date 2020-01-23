@@ -103,7 +103,7 @@ bool R2Kademlia::forwardDataPacketToNextHop(KadDataPacket_p& packet, NodePkt_p& 
 	// lookup outgoing PathID (next hop) based on incoming PathID
 	auto fwdentry= fwdTablePathID.PIDFwdTable.find(packet->getDestPathID());
 	if (fwdentry != fwdTablePathID.PIDFwdTable.end())
-	{
+	{ // entry found
 		FwdTableEntry& nh= fwdentry->second;
 		if (nh.isValid())
 		{ // 

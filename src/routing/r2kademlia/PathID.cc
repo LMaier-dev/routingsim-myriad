@@ -3,6 +3,8 @@
 
 namespace routingsim {
 
+const PathID PathID::UndefinedPathID= PathID();
+
 PathID::PathID(const kad_path& path)
 {
     if (path.size() > 0)
