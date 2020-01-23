@@ -283,7 +283,9 @@ private:
 	//@{
 	/// number of contacts returned by find node response, called "k" in research papers
 	size_type findNodeNumber;
-	/// radius of physical neighborhood discovery
+	/// discoveryRadius= radius of physical neighborhood discovery (discover n-hop neighborhood)
+	/// radius of 1 means only to discover physical neighbors
+	/// radius of two means to ask the physical neighbors for their physical neighbors, too
 	uint8_t discoveryRadius;
 	/// activates proximity routing
 	bool proximityRouting;
