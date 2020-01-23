@@ -1118,7 +1118,12 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 	}
 
 	// ask for physical neighbors if new contact is within discovery radius
-	if (contact->getPathLength() > 0 and contact->getPathLength() < discoveryRadius)
+	// contact->getPathLength() excludes the destination, so path length = 0 
+	// holds for PhyNeighbors (their Physical Neighbors are already discovered by PNDiscReq/Rsp)
+	// getPathLength()+1 corresponds to the number of hops from me to the contact.
+	// Thus, contact->getPathLength()+1 < discoveryRadius is correct, because we ask
+	// those contacts about their PNs which is even one hop further away
+	if (contact->getPathLength() > 0 and contact->getPathLength()+1 < discoveryRadius)
 	{
 		sendGetPhysicalNeighbors(contact);
 	}
