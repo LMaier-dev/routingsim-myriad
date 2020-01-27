@@ -111,7 +111,7 @@ public:
 	//@{
         KadDataPacket(const char *name=nullptr, short kind=0) :
       	KadDataPacket_Base(name, kind)  { }
-	KadDataPacket(const KadDataPacket& other) : KadDataPacket_Base(other) {}
+        KadDataPacket(const KadDataPacket& other) : KadDataPacket_Base(other), overlayHops(other.overlayHops), tracked(other.tracked) {}
 	~KadDataPacket() { };
 	KadDataPacket& operator=(const KadDataPacket& other)
 		{KadDataPacket_Base::operator=(other); return *this;}
@@ -130,7 +130,7 @@ public:
 	inline void markTracked() { tracked = true; }
 	inline bool isTracked() { return tracked; }
 private:
-	uint16_t overlayHops = 1;
+	uint16_t overlayHops = 0;
 	bool tracked = false;
 };
 

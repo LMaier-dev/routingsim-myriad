@@ -184,12 +184,12 @@ void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 	if (incomingPathID == PathID::UndefinedPathID)
 	{ // next hop (intermediate) destination ID of this path (final destination may be elsewhere)
 		// increase overlayHop count
-		packet->setOverlayHops(packet->getOverlayHops()+1);
+		packet->countOverlayHop();
 
 		// should be just my own key or direct neighbor!
 		if (packet->getDstNodeID() == myOverlayKey)
 		{ // destined to myself
-			EV_TRACE << "next hop is me (after " << getHopLimitDefault()-packet->getHopLimit() << " hops)" << endl;
+			EV_TRACE << "next hop is me (after " << getHopLimitDefault()-packet->getHopLimit() << " hops / " << packet->getOverlayHops() <<  " overlayhops )" << endl;
 			// successfully delivered! consume packet
 			packet->setControlInfo(nodePkt.release());
 

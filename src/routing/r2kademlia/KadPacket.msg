@@ -67,6 +67,5 @@ packet KadDataPacket {
 	OverlayKey dstNodeID = OverlayKey::UNSPECIFIED_KEY;
 	OverlayKey srcNodeID = OverlayKey::UNSPECIFIED_KEY;
 	uint8_t type enum(KadPDUType);
-	uint16_t overlayHops = 0;
 	uint16_t hopLimit = 255;
 }
