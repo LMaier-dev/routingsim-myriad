@@ -166,6 +166,7 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, KadContact::
 		path_was_simplified= simplifyPath(path);
 	}
 
+
 	// sanity check: do not use paths that lead via an invalid neighbor as first hop
 	if (path.size() > 0 and not neighbortable.isNeighbor(path[0]))
 	{ // first hop must be found in neighbortable
@@ -308,6 +309,18 @@ bool KadRoutingTable::simplifyPath(kad_path& path) const
 	return false;
 }
 
+/*
+/// @returns true if path was shortened, false if not
+bool KadRoutingTable::shortenPath(kad_path& path) const
+{
+	if (path.size() <= 1) // this could only be optimized in case the contact is a physical neighbor anyway
+		return false;
+	unsigned int currentlength= path.size();
+	for (auto right = path.rbegin(); right != path.rend(); right++) {		
+	}
+	return false;
+}
+*/
 
 // @returns true if contact was inserted into routing table, false if not
 bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, KadContact::PathProperty pathprop)

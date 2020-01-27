@@ -105,8 +105,11 @@ bool R2Kademlia::forwardDataPacketToNextHop(KadDataPacket_p& packet, NodePkt_p& 
 	if (fwdentry != fwdTablePathID.PIDFwdTable.end())
 	{ // entry found
 		FwdTableEntry& nh= fwdentry->second;
-		if (nh.isValid())
-		{ // 
+		if (nh.isValid() or nh.isObsolete())
+		{
+			if (nh.isObsolete()) // obsolete, but maybe still good enough to forward
+				EV_WARN << "obsolete PathID entry hit" << endl;
+
 			if (nh.fwdAction == FwdTableEntry::Action::fwdNextPathID)
 			{ // set new outgoing PathID
 				packet->setDestPathID(nh.outgoingPathID);
@@ -123,11 +126,6 @@ bool R2Kademlia::forwardDataPacketToNextHop(KadDataPacket_p& packet, NodePkt_p& 
 			{
 				EV_TRACE << "Forward action: local delivery" << endl;
 			}
-		}
-		else
-		if (nh.isObsolete())
-		{ // obsolete, but maybe still good enough to forward
-			EV_WARN << "obsolete PathID entry hit" << endl;
 		}
 		else
 		if (nh.isInvalid())
@@ -184,7 +182,7 @@ void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 	
 	// incomingPathID is only undefined for last hop packets	
 	if (incomingPathID == PathID::UndefinedPathID)
-	{ // next hop is me start of new path (maybe also just a PN)
+	{ // next hop (intermediate) destination ID of this path (final destination may be elsewhere)
 		// increase overlayHop count
 		packet->setOverlayHops(packet->getOverlayHops()+1);
 
