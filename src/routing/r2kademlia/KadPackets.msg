@@ -48,7 +48,9 @@ enum KadRouteUpdateAction {
      KAD_Unreachable = 3;
 }
 
-packet KadAnswer extends KadPacket {}
+packet KadAnswer extends KadPacket {
+	bool shortened = false; // true if return path was shortened (removed cycles)
+}
 
 /// compare RTableRequestType from Spec
 packet KadRTableReq extends KadPacket {

@@ -242,9 +242,12 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 			case KAD_QueryRouteRsp:
 			case KAD_ProbeRsp:
 			case KAD_PathSetupRsp:
-				pathproperty= KadContact::PathProperty::direct;
+			{
+				const KadAnswer* answer= dynamic_cast<const KadAnswer*>(packet.get());
+				ASSERT(answer);
+				pathproperty= answer->getShortened() ? KadContact::PathProperty::indirect : KadContact::PathProperty::direct;
 				break;
-
+			}
 			default:
 				pathproperty= KadContact::PathProperty::indirect;
 				break;
@@ -1429,9 +1432,12 @@ std::unique_ptr<T> R2Kademlia::makeAnswer(KadPacket& original) {
 	auto answer = std::make_unique<T>();
 	answer->setName((std::string(original.getName()) + std::string("Answer")).c_str());
 	if (routingTable.usePathSimplification())
-		answer->setSimplifiedReturnPathFrom(original);
+		answer->setShortened(answer->setSimplifiedReturnPathFrom(original));
 	else
+	{
 		answer->setReturnPathFrom(original);
+		answer->setShortened(false);
+	}
 
 	ASSERT(answer->getSource() == myOverlayKey);
 	answer->setNonce(original.getNonce());
@@ -1454,6 +1460,7 @@ void R2Kademlia::fillRTableRsp(KadRTableRsp& packet, const KadContactList& conta
 		}
 	}
 }
+
 
 void R2Kademlia::readRTableRsp(std::unique_ptr<KadRTableRsp> packet) {
 	ASSERT(packet->getContactArraySize() == packet->getPathArraySize());

@@ -64,8 +64,8 @@ public:
 	/// sets the path of this packet to the reverse path of the other packet
 	/// taking into acount the progress of the other packet
 	void setReturnPathFrom(KadPacket& other);
-	/// same as setReturnPathFrom, but shortens the path if possible
-	void setSimplifiedReturnPathFrom(KadPacket& other);
+	/// same as setReturnPathFrom, but shortens the path if possible (returns true if it was)
+	bool setSimplifiedReturnPathFrom(KadPacket& other);
 	//@}
 
 	/** @name inline utility functions */

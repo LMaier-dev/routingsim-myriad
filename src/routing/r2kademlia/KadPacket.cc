@@ -91,11 +91,13 @@ void KadPacket::setReturnPathFrom(KadPacket& other) {
 }
 
 
-void KadPacket::setSimplifiedReturnPathFrom(KadPacket& other) {
+// returns true if path was shortened
+bool KadPacket::setSimplifiedReturnPathFrom(KadPacket& other) {
 	// we include the current hop
 	ASSERT(route_arraysize == 0);
 	kad_path resultpath;
-	resultpath.reserve(other.progress + 1); // result may be shorter
+	uint otherPathLen= other.progress + 1;
+	resultpath.reserve(otherPathLen); // result may be shorter
 
 	uint index= 0;
 	for (uint i= 0; i <= other.progress; i++)
@@ -123,6 +125,8 @@ void KadPacket::setSimplifiedReturnPathFrom(KadPacket& other) {
 	setRouteArraySize(index);
 	for (uint i= 0; i < index; i++)
 		setRoute(i, resultpath[i]);
+
+	return index < otherPathLen;
 }
 
 
