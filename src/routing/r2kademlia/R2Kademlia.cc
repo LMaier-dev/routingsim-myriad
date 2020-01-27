@@ -216,10 +216,11 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 				// use existing path from answer (must reverse path)
 				KadContact contact(packet->getSource(),
 						   packet->reversePath(packet->getSrcPath(1, packet->getProgress())));
-				EV_TRACE << "forwarding PathSetupRsp, source path: <";
-				for (auto& k : packet->getSrcPath())
+				EV_TRACE << "forwarding PathSetupRsp, origin source path: <";
+				for (auto& k : packet->reversePath(packet->getSrcPath()))
 					EV_TRACE << ' ' << k.shortStr();
-				EV_TRACE << '>' << endl;
+				EV_TRACE << " >" << endl;
+
 				if (usePathIDs)
 					fwdTablePathID.addEntry(&contact, true);
 				break;
@@ -494,7 +495,7 @@ bool R2Kademlia::handlePathSetupResponse(KadPacket_p answer, RPCState& rpcState)
 	EV_TRACE << "Received PathSetupRsp, source path: <";
 	for (auto& k : pathSetupRsp->getSrcPath())
 		EV_TRACE << ' ' << k.shortStr();
-	EV_TRACE << '>' << endl;
+	EV_TRACE << " >" << endl;
 
 	fwdTablePathID.addEntry(&contact, true);
 
@@ -1268,9 +1269,7 @@ void R2Kademlia::applyShortcut(KadPacket& packet)
 				for (auto key : packet.getSrcPath())
 					EV_TRACE << key.shortStr() << ' ';
 				EV_TRACE << '>' << endl;
-
 			}
-
 		}
 		else
 			EV_WARN << "Contact in non valid state: " << *knownContact;

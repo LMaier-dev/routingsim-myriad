@@ -77,20 +77,29 @@ std::string FwdTablePathID::str() const
 
 
 
-void FwdTablePathID::addEntry(KadContact_p contact, bool foreignPID)
+void FwdTablePathID::addEntry(KadContact_p contact, bool isForeignPID)
 {
        	if (contact == nullptr)
 		return;
 
 	// Routingtable entry on node 4: Dest 5: < 3 2 >
-	EV_TRACE << "addEntry(): called for contact " << *contact << endl;
+	EV_TRACE << "addEntry(): called for contact " << *contact << " with path ";
 
 	// note: this path may be empty for physical neighbors
 	// Incoming PathIDs are required for physical neighbors, outgoing PathIDs not
 	kad_path currentpath(contact->getPath());
-
 	// add destination node ID to end of the path (will never be empty then)
 	currentpath.push_back(contact->getKey());
+
+	EV_TRACE << " <";
+	if (currentpath.size() == 0)
+		EV_TRACE << '-';
+	else
+	{
+		for (auto& k : currentpath)
+			EV_TRACE << ' ' << k.shortStr();
+	}
+	EV_TRACE << " >" << endl;
 
 	// prepend own nodeID for incoming PathID
 	PathID incomingPathID(getPathID(*ownNodeID, currentpath));
@@ -98,26 +107,25 @@ void FwdTablePathID::addEntry(KadContact_p contact, bool foreignPID)
 	// check for already existing PID
 	if (PIDFwdTable.find(incomingPathID) != PIDFwdTable.end())
 	{
-		EV_WARN << "addEntry(): PID entry " << incomingPathID << " exists already" << endl;
-		return; // already there
+		EV_WARN << "addEntry(): inPID entry " << incomingPathID << " exists already" << endl;
+		return; // already there, fine
 	}
 
 	FwdTableEntry fwdentry;
-
 	// Check for previous existing entry for this contact
 	auto it= NIDPIDTable.find(contact->getKey());
 	if (it != NIDPIDTable.end())
 	{
 		EV_WARN << "addEntry(): PID entry for contact " << contact->getKey().shortStr() << " existed already with incoming PID " << it->second << endl;
-		
 		if (it->second == incomingPathID)
 		{
 			EV_WARN << "addEntry(): same PID entry for contact already existed - ignored" << endl;
 			return;
 		}
-		
+
 		// do the right thing now and call modEntry
-		modEntry(contact, foreignPID);
+		// will probably add an additional entry
+		modEntry(contact, isForeignPID);
 		return;
 	}
 
@@ -125,7 +133,7 @@ void FwdTablePathID::addEntry(KadContact_p contact, bool foreignPID)
 	fwdentry.setPathLength(currentpath.size());
 	fwdentry.nextHopNode= currentpath[0];
 	fwdentry.setValid();
-	if (foreignPID)
+	if (isForeignPID)
 		fwdentry.setForeign();
 	fwdentry.fwdAction=
 		(currentpath.size()==1) // next hop is our physical neighbor
@@ -149,12 +157,14 @@ void FwdTablePathID::addEntry(KadContact_p contact, bool foreignPID)
 
 
 // returns false if entry is not accepted (e.g., path is longer)
-bool FwdTablePathID::modEntry(KadContact_p contact, bool foreignPID)
+bool FwdTablePathID::modEntry(KadContact_p contact, bool isForeignPID)
 {
        	if (contact == nullptr)
 		return false;
 
 	PathID priorPathID= PathID::UndefinedPathID;
+	bool additionalEntry= false;
+
 	auto pidentry= NIDPIDTable.find(contact->getKey());
 	// Lookup old entry if it exists
 	if ( pidentry != NIDPIDTable.end() )
@@ -176,10 +186,6 @@ bool FwdTablePathID::modEntry(KadContact_p contact, bool foreignPID)
 		// calculate incomingPathID
 		PathID incomingPathID(getPathID(*ownNodeID, newpath));
 
-		// PID already exists, just return
-		if (PIDFwdTable.find(incomingPathID) != PIDFwdTable.end())
-			return false;
-
 		// Routingtable entry on node 4: Dest 5: < 3 2 >
 		priorPathID= pidentry->second;
 		if ( PIDFwdTable.find(priorPathID) == PIDFwdTable.end() )
@@ -197,52 +203,78 @@ bool FwdTablePathID::modEntry(KadContact_p contact, bool foreignPID)
 		{ // set old entry to obsolete state if local update
 			FwdTableEntry& priorfwdentry(PIDFwdTable[pidentry->second]);
 
-			if (foreignPID)
+			if (isForeignPID)
 			{ // only accept better PIDs
-				if (newpath.size() >= priorfwdentry.getPathLength() or
-				    (newpath.size() == priorfwdentry.getPathLength() and
-				     getPathID(newpath) > pidentry->second))
-					return false;
-			}
-			priorfwdentry.setObsolete();
-			// delete the entry before priorPathID (i.e., the one before the penultimate entry)
-			//TODO make this configurable in depth
-			if (priorfwdentry.prevPathID != PathID::UndefinedPathID)
-			{
-				auto it= PIDFwdTable.find(priorfwdentry.prevPathID);
-				if (it != PIDFwdTable.end())
+				if (newpath.size() > priorfwdentry.getPathLength())
 				{
-					if (it->second.isObsolete())
-					{ // remove entry before priorPathID
-						EV_TRACE << "deleting PID entry " << priorfwdentry.prevPathID << endl;
-						PIDFwdTable.erase(it);
-					}
-					else
-						EV_WARN << "PID entry before prior penultimate entry not obsolete";
+					EV_TRACE << "new path not better: len=" << newpath.size()
+						 << " prior len=" << priorfwdentry.getPathLength() << " newPID: " << getPathID(newpath) << endl;
+					return false;
+				}
+				else
+				if (newpath.size() == priorfwdentry.getPathLength())
+				{
+					EV_TRACE << "new path has equal length: len=" << newpath.size()
+						 << " prior len=" << priorfwdentry.getPathLength() << " newPID: " << getPathID(newpath) << endl;
+					additionalEntry= true;
 				}
 			}
 
+			if (not additionalEntry)
+			{
+				priorfwdentry.setObsolete();
+				// delete the entry before priorPathID (i.e., the one before the penultimate entry)
+				//TODO make this configurable in depth
+				if (priorfwdentry.prevPathID != PathID::UndefinedPathID)
+				{
+					auto it= PIDFwdTable.find(priorfwdentry.prevPathID);
+					if (it != PIDFwdTable.end())
+					{
+						if (it->second.isObsolete())
+						{ // remove entry before priorPathID
+							EV_TRACE << "deleting PID entry " << priorfwdentry.prevPathID << endl;
+							PIDFwdTable.erase(it);
+						}
+						else
+							EV_WARN << "PID entry before prior penultimate entry not obsolete";
+					}
+				}
+			}
 		}
 
-		
 		FwdTableEntry fwdentry;
-		
-		fwdentry.outgoingPathID= getPathID(newpath);
-		fwdentry.nextHopNode= newpath[0];
-		fwdentry.setValid();
-		if (foreignPID)
-			fwdentry.setForeign();
-		fwdentry.setPathLength(newpath.size());
-		fwdentry.fwdAction=
-			(newpath.size()==1) // next hop is our physical neighbor
-			? FwdTableEntry::Action::fwdNextKadId : FwdTableEntry::Action::fwdNextPathID;
-		fwdentry.prevPathID= priorPathID;
-		PIDFwdTable[incomingPathID]= fwdentry;
-		NIDPIDTable[contact->getKey()]= incomingPathID;
+		// PID already exists, just re-enable mapping
+		auto it= PIDFwdTable.find(incomingPathID);
+		if (it != PIDFwdTable.end())
+		{
+			EV_TRACE << "modEntry(): inPID " << incomingPathID << " already existed" << endl;
+			fwdentry= it->second;
+		}
+		else
+		{ // create new entry in FwdTable
+
+			fwdentry.outgoingPathID= getPathID(newpath);
+			fwdentry.nextHopNode= newpath[0];
+			fwdentry.setValid();
+			if (isForeignPID)
+				fwdentry.setForeign();
+			fwdentry.setPathLength(newpath.size());
+			fwdentry.fwdAction=
+				(newpath.size()==1) // next hop is our physical neighbor
+				? FwdTableEntry::Action::fwdNextKadId : FwdTableEntry::Action::fwdNextPathID;
+			fwdentry.prevPathID= priorPathID;
+			PIDFwdTable[incomingPathID]= fwdentry;
+		}
+
+		// activate new mapping for replacements
+		if (not additionalEntry)
+			NIDPIDTable[contact->getKey()]= incomingPathID;
 
 		EV_TRACE << "modEntry(): inPID:" << incomingPathID << " outPID:"
-			 << fwdentry.outgoingPathID << " path: " ;
-	
+			 << fwdentry.outgoingPathID
+			 << (additionalEntry ? " additional entry" : " replacement")
+			 << " path: " ;
+
 		if (newpath.size() == 0)
 			EV_TRACE << "<->" << endl;
 		else {
@@ -258,7 +290,7 @@ bool FwdTablePathID::modEntry(KadContact_p contact, bool foreignPID)
 		EV_WARN << "FwdTablePathID::modEntry() no prior entry found" << endl;
 		return false;
 	}
-	
+
 	return false;
 }
 

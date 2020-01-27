@@ -48,6 +48,7 @@ enum reasoncode : uint8_t {
 	routeFailureDeadEnd= 5,
 	secondChanceFailed = 6,
 	missingNeighbor = 7,
+	missingPID = 8,
 	unhandledType= 128
 };
 
@@ -190,9 +191,9 @@ private:
 	std::unique_ptr<T> makePacket(const KadContact& contact, const char *name=nullptr){
 		return makePacket<T>(&contact, name);
 	};
-	/// crafts a data packet, sets the route to the given contact.
+	/// crafts a data packet, sets the DestNodeID to first argument and also PathID according to the given viacontact.
 	template<typename T>
-	std::unique_ptr<T>makeDataPacket(const KadContact* contact, const char *name);
+	std::unique_ptr<T>makeDataPacket(const OverlayKey& dstNodeID, const KadContact* viacontact, const char *name);
 	/// crafts a packet of type T, sets the route and nonce according to original
 	template<typename T>
 	std::unique_ptr<T> makeAnswer(KadPacket& original);
