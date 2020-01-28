@@ -388,7 +388,7 @@ bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, Kad
 	}
 	else { // no space in bucket for inserting the new contact: replace existing one?
 		if (not proximityNeighborSelection) {
-			//EV_INFO << "dropping new contact " << *contact << endl;
+			EV_DEBUG << "dropping new contact " << *contact << endl;
 			return false;
 		}
 		// contact replacement if contact is better than existing ones
@@ -403,14 +403,15 @@ bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, Kad
 		}
 		if (result != contacts.end()) {
 			replacementCount++;
-			//EV_DEBUG << "replacing contact, new: " << *contact << " old: " << **result << endl;
+			EV_DEBUG << "replacing contact, new: " << *contact << " old: " << **result << endl;
+			policy->onContactRemoval(result->get());
 			*result = std::move(contact);
 			policy->onNewContact(result->get());
 
 			return true;
 		}
 		else {
-			//EV_TRACE << "dropping new contact " << *contact << endl;
+			EV_DEBUG << "dropping new contact " << *contact << endl;
 			return false;
 		}
 	}

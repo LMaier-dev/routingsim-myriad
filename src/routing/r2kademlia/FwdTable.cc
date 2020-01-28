@@ -310,6 +310,7 @@ void FwdTablePathID::delPIDEntry(PathID pid)
 			delPIDEntry(it->second.prevPathID);
 			it->second.prevPathID= PathID::UndefinedPathID;
 		}
+		EV_TRACE << "FwdTablePathID::delEntry PathID " << pid << " deleted." << endl;
 		// delete this PID Entry
 		PIDFwdTable.erase(it);
 	}
@@ -333,12 +334,13 @@ void FwdTablePathID::delEntry(KadContact_p contact)
 		delPIDEntry(currentPathID);
 		// delete anchor entry in NIDPIDTable
 		NIDPIDTable.erase(pidentry);
+		EV_WARN << "delEntry(): NIDPID entry for " << contact->getKey().shortStr() << " deleted" << endl;
+
 	}
 	else
 	{
 		EV_WARN << "delEntry(): no entry for " << contact->getKey().shortStr() << " found" << endl;
 	}
-	
 }
 
 } // end namespace

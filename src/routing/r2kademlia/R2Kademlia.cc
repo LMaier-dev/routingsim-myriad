@@ -1466,6 +1466,8 @@ void R2Kademlia::readRTableRsp(std::unique_ptr<KadRTableRsp> packet) {
 	ASSERT(packet->getContactArraySize() == packet->getPathArraySize());
 	kad_path viaPath = packet->reversePath(packet->getIntermediatePath());
 	viaPath.push_back(packet->getSource());
+	//routingTable.shortenPath(viapath);
+
 	for (size_t i = 0; i < packet->getContactArraySize(); i++) {
 		// TODO optimization: isPathInteresting
 		routingTable.addPath(
