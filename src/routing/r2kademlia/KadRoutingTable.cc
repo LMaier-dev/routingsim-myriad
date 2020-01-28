@@ -178,6 +178,9 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, KadContact::
 		return false;
 	}
 
+	if (path_was_simplified) // override the given argument if path was simplified here
+		pathprop= KadContact::PathProperty::indirect;
+
 	// sanity check: either path was empty before or it was not and is not empty after simplification
 	ASSERT(pathWasNotEmpty==false or (pathWasNotEmpty and path.empty()==false));
 
@@ -212,9 +215,6 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, KadContact::
 		// or: we learn a shorter path -> update anyways
 		if (contact->isInvalid() or contact->getPathLength() > path.size()) {
 			contact->setPath(std::move(path)); // will set contact automatically to valid
-
-			if (path_was_simplified) // override the given argument if path was simplified here
-				pathprop= KadContact::PathProperty::indirect;
 
 			contact->setPathProperty(pathprop);
 			updateCount++;
