@@ -188,6 +188,8 @@ public:
 protected:
 	/// removes duplicates and loops from a path
 	bool simplifyPath(kad_path& path) const;
+	/// tries to find shortcuts using own routing table entries
+	bool shortenPath(kad_path& path) const;
 	/// adds a new contact, called by addPath, returns true if contact was added
 	virtual bool handleNewContact(const OverlayKey& key, kad_path path, KadContact::PathProperty prop);
 	/** @name bucket access */

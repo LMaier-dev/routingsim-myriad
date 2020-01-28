@@ -166,6 +166,9 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, KadContact::
 		path_was_simplified= simplifyPath(path);
 	}
 
+	// try to shorten the path using local routing table
+	if (path.size() > 0 and shortenPath(path))
+		path_was_simplified= true;
 
 	// sanity check: do not use paths that lead via an invalid neighbor as first hop
 	if (path.size() > 0 and not neighbortable.isNeighbor(path[0]))
@@ -309,18 +312,38 @@ bool KadRoutingTable::simplifyPath(kad_path& path) const
 	return false;
 }
 
-/*
+
+/// uses own routing table to find shorter paths
 /// @returns true if path was shortened, false if not
 bool KadRoutingTable::shortenPath(kad_path& path) const
 {
 	if (path.size() <= 1) // this could only be optimized in case the contact is a physical neighbor anyway
 		return false;
+
 	unsigned int currentlength= path.size();
-	for (auto right = path.rbegin(); right != path.rend(); right++) {		
+	std::list<OverlayKey> residualpath;
+	KadContact_p knowncontactp= nullptr;
+	// check for each pathelement from the far end whether the known path is shorter
+	for (auto pathit = path.crbegin(); pathit != path.crend(); pathit++) {
+		if ( (knowncontactp= getContact(*pathit)) != nullptr ) {
+			if ( knowncontactp->getPathLength()+1 < currentlength )
+			{
+				// we know a shorter replacement path, use it
+				path= knowncontactp->getPath();
+				// contact itself is not included in path
+				path.push_back(knowncontactp->getKey());
+				// append residual path
+				path.insert(path.end(), residualpath.begin(), residualpath.end());
+
+				return true;
+			}
+		}
+		residualpath.push_front(*pathit);
+		currentlength--;
 	}
 	return false;
 }
-*/
+
 
 // @returns true if contact was inserted into routing table, false if not
 bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, KadContact::PathProperty pathprop)
