@@ -65,6 +65,7 @@ void R2Kademlia::onInitialize() {
 	detailedRoutingTableStats = par("detailedRoutingTableStats").boolValue();
 	rediscoveryWaitTime = (simtime_t) (par("rediscoveryWaitTime").doubleValue() * 0.001); // given in ms
 	updateWaitTime = (simtime_t) (par("updateWaitTime").doubleValue() * 0.001);  // given in ms
+	pathSetupWaitTime = (simtime_t) (par("pathSetupWaitTime").doubleValue() * 0.001);  // given in ms
 
 	getStatistics().addSample(this);
 	simtime_t probeInterval = (simtime_t) par("probeInterval").doubleValue();
@@ -469,41 +470,6 @@ bool R2Kademlia::handleProbeResponse(KadPacket_p answer, RPCState& rpcState) {
 }
 
 
-// Path Setup Request/Response
-void R2Kademlia::sendPathSetup(KadContact_p contact) {
-	EV_TRACE << "sending PathSetupReq from " << myOverlayKey.shortStr() << " to " << contact->getKey().shortStr() << endl;
-	sentPathSetup++;
-	sendRpcCall(
-		makePacket<KadPathSetupReq>(contact, "KadPathSetupReq"),
-		std::bind(&R2Kademlia::handlePathSetupResponse, this, ph::_1, ph::_2),
-		std::bind(&R2Kademlia::handlePathSetupResponse, this, ph::_1, ph::_2),
-		std::bind(&R2Kademlia::handleRPCTimeOut, this, ph::_1, ph::_2));
-}
-
-void R2Kademlia::handlePacket(std::unique_ptr<KadPathSetupReq> packet) {
-	EV_TRACE << "received PathSetupReq from " << packet->getSource().shortStr() << " to " << packet->getTarget().shortStr()
-		 << " sending back answer" << endl;
-	receivedPathSetup++;
-	sendPacket(makeAnswer<KadPathSetupRsp>(*packet));
-}
-
-
-bool R2Kademlia::handlePathSetupResponse(KadPacket_p answer, RPCState& rpcState) {
-	if (rpcState.status != RPC_SUCCESS) return true;
-	ASSERT(answer->getSource() == rpcState.original_packet->getTarget());
-	std::unique_ptr<KadPathSetupRsp> pathSetupRsp = safe_packet_cast<KadPathSetupRsp>(answer);
-
-	// must check for modified path in Response, because it may have taken a shortcut
-	KadContact contact(pathSetupRsp->getSource(), pathSetupRsp->reversePath(pathSetupRsp->getIntermediatePath()));
-	EV_TRACE << "Received PathSetupRsp, source path: <";
-	for (auto& k : pathSetupRsp->getSrcPath())
-		EV_TRACE << ' ' << k.shortStr();
-	EV_TRACE << " >" << endl;
-
-	fwdTablePathID.addEntry(&contact, true);
-
-	return true;
-}
 
 
 // Request Physical Neighbors from contact
@@ -1149,7 +1115,7 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 	{ // send a path setup request packet for installing PIDs in intermediate nodes for this indirectly learned route
 		// only do this for paths longer than two hops
 		EV_TRACE << "Triggering path setup to " << contact->getKey().shortStr() << endl;
-		sendPathSetup(contact);
+		schedulePathSetup(contact->getKey());
 	}
 }
 
@@ -1166,7 +1132,7 @@ void R2Kademlia::onImprovement(const KadContact& contact) {
 	if (usePathIDs and contact.isValid() and contact.getPathProperty() == KadContact::PathProperty::indirect)
 	{ // send a path setup request packet for installing PIDs in intermediate nodes for this indirectly learned route
 		//EV_TRACE << "Triggering path setup to " << contact.getKey().shortStr() << endl;
-		sendPathSetup(&contact);
+		schedulePathSetup(contact.getKey());
 	}
 
 	// TODO: wait grace period
@@ -1307,10 +1273,10 @@ void R2Kademlia::sendUpdates()
 				packet->setContact(i, affectedContact.getKey());
 				packet->setPath(i, affectedContact.getPath());
 				packet->setAction(i, affectedcontactentry.second);
-				EV_DEBUG << affectedContact << "; ";
+				//EV_TRACE << affectedContact << "; ";
 				i++;
 			}
-			EV_DEBUG << endl;
+			//EV_TRACE << endl;
 			// send UpdateRouteReq w/ failed link
 			sendPacket(std::move(packet));
 			sentRouteUpdates++;
@@ -1413,35 +1379,6 @@ void R2Kademlia::scheduleUpdate(const KadContact& affectedContact, KadRouteUpdat
 		updateScheduled= true;
 	}
 
-}
-
-
-template<typename T>
-std::unique_ptr<T> R2Kademlia::makePacket(const KadContact* contact, const char *name) {
-	auto packet = std::make_unique<T>();
-	packet->setName(name);
-	// TODO optimization: do this in one go
-	packet->setSource(myOverlayKey);
-	packet->setHopLimit(hopLimit);
-	packet->appendRoute(contact);
-	return packet;
-}
-
-template<typename T>
-std::unique_ptr<T> R2Kademlia::makeAnswer(KadPacket& original) {
-	auto answer = std::make_unique<T>();
-	answer->setName((std::string(original.getName()) + std::string("Answer")).c_str());
-	if (routingTable.usePathSimplification())
-		answer->setShortened(answer->setSimplifiedReturnPathFrom(original));
-	else
-	{
-		answer->setReturnPathFrom(original);
-		answer->setShortened(false);
-	}
-
-	ASSERT(answer->getSource() == myOverlayKey);
-	answer->setNonce(original.getNonce());
-	return answer;
 }
 
 
@@ -1648,9 +1585,4 @@ template<typename T> bool R2Kademlia::handleIfFitting(KadPacket_p& packet) {
 	return true;
 }
 
-template<typename T> std::unique_ptr<T> safe_packet_cast(KadPacket_p& packet) {
-	ASSERT(packet); // no nullptr here!
-	// this will throw cRuntimeError if the cast fails
-	return std::unique_ptr<T>(check_and_cast<T*>(packet.release()));
-}
 } //namespace

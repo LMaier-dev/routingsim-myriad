@@ -249,7 +249,10 @@ private:
 	void scheduleUpdate(const KadContact& affectedcontact, KadRouteUpdateAction action);
 	/// sends all queued updates
 	void sendUpdates();
-
+	/// schedule a PathSetup
+	void schedulePathSetup(const OverlayKey& contactkey);
+	/// send all queue (valid) path setups
+	void sendScheduledPathSetups();
 
 	//@}
 
@@ -299,6 +302,7 @@ private:
 	bool usePathIDs;
 	uint8_t probeStrategy;
 	simtime_t rediscoveryWaitTime;
+	simtime_t pathSetupWaitTime;
 	simtime_t updateWaitTime;
 	bool detailedRoutingTableStats;
 	//@}
@@ -310,6 +314,13 @@ private:
 
 	// a list that is used to send rediscover messages
 	std::list<std::unique_ptr<const KadContact>> rediscoverQueue;
+
+	// a list that is used to send pathsetup messages
+	std::list<OverlayKey> pathSetupQueue;
+
+	// selfMessage
+	bool pathSetupScheduled= false;
+
 	// selfMessage
 	bool rediscoveryScheduled= false;
 	
@@ -343,11 +354,45 @@ private:
 	//@}
 };
 
+// template functions
+
+template<typename T>
+std::unique_ptr<T> R2Kademlia::makePacket(const KadContact* contact, const char *name) {
+	auto packet = std::make_unique<T>();
+	packet->setName(name);
+	// TODO optimization: do this in one go
+	packet->setSource(myOverlayKey);
+	packet->setHopLimit(hopLimit);
+	packet->appendRoute(contact);
+	return packet;
+}
+
+template<typename T>
+std::unique_ptr<T> R2Kademlia::makeAnswer(KadPacket& original) {
+	auto answer = std::make_unique<T>();
+	answer->setName((std::string(original.getName()) + std::string("Answer")).c_str());
+	if (routingTable.usePathSimplification())
+		answer->setShortened(answer->setSimplifiedReturnPathFrom(original));
+	else
+	{
+		answer->setReturnPathFrom(original);
+		answer->setShortened(false);
+	}
+
+	ASSERT(answer->getSource() == myOverlayKey);
+	answer->setNonce(original.getNonce());
+	return answer;
+}
+
 /**
  * Cast a unique_ptr for a KadPacket to another unique_ptr for a different packet.
  */
-template<typename T>
-std::unique_ptr<T> safe_packet_cast(KadPacket_p& packet);
+template<typename T> std::unique_ptr<T> safe_packet_cast(KadPacket_p& packet) {
+	ASSERT(packet); // no nullptr here!
+	// this will throw cRuntimeError if the cast fails
+	return std::unique_ptr<T>(check_and_cast<T*>(packet.release()));
+}
+
 } //namespace
 
 #endif // __ROUTINGSIM_R2Kademlia_H_
