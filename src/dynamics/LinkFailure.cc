@@ -51,9 +51,9 @@ simtime_t LinkFailure::scheduleDynamics() {
 		nodeid_t source = undefined_node;
 		nodeid_t destination = undefined_node;
 		
-		// it can be the case that the graph ist connect, but
+		// it can be the case that the graph is connected, but
 		// we cannot remove a single link without partitioning it
-		// therefore we have a maximum number of tries
+		// therefore we have a maximum number of retries
 		while (max_retries > 0 && scheduledFailures == 0)
 		{
 			max_retries--;

@@ -347,6 +347,22 @@ void R2Kademlia::handlePacket(KadAnswer_p packet) {
 	}
 	else if (packet->getType() == KAD_FindNodeRsp) {
 		getKadObserver().sampleAnswer(*packet);
+		// try to shorten the return path
+		kad_path returnpath(packet->reversePath(packet->getSrcPath()));
+		routingTable.shortenPath(returnpath);
+		getKadObserver().sampleLaterPath(returnpath);
+		bool PIDfound= false; uint pathlen= returnpath.size();
+		// start from farthest node to find potential PID entry
+		for (auto keyit= returnpath.crbegin(); keyit != returnpath.crend(); keyit++) {
+
+			if ( fwdTablePathID.NIDPIDTable.find(*keyit) != fwdTablePathID.NIDPIDTable.end() )
+			{
+				EV_TRACE << "LaterPath: found a PID for " << pathlen << "/" << returnpath.size() << endl;
+				break;
+			}
+			pathlen--;
+		} // end for
+
 	}
 
 	// the following call handles the RPC answer

@@ -73,6 +73,8 @@ void KadObserver::initialize() {
 	histograms[forwardedPathSetup] = cHistogramPtr(getIntHistogram("forwardedPathSetup"));
 	histograms[stretchMulAns] = std::make_unique<cHistogram>("stretchMulAns");
 	histograms[stretchAddAns] = cHistogramPtr(getIntHistogram("stretchAddAns"));
+	histograms[stretchMulLater] = std::make_unique<cHistogram>("stretchMulLater");
+	histograms[stretchAddLater] = cHistogramPtr(getIntHistogram("stretchAddLater"));
 
 	
 	outVectors.resize(histograms.size());
@@ -109,6 +111,8 @@ void KadObserver::initialize() {
 	outVectors[forwardedPathSetup] = std::make_unique<cOutVector>("forwardedPathSetup");
 	outVectors[stretchMulAns] = std::make_unique<cOutVector>("stretchMulAns");
 	outVectors[stretchAddAns] = std::make_unique<cOutVector>("stretchAddAns");
+	outVectors[stretchMulLater] = std::make_unique<cOutVector>("stretchMulLater");
+	outVectors[stretchAddLater] = std::make_unique<cOutVector>("stretchAddLater");
 
 	addOutVectors.resize(numAddDataTypes);
 	addOutVectors[deliveryRatioV] = std::make_unique<cOutVector>("deliveryRatio");
@@ -416,14 +420,16 @@ void KadObserver::registerPacketOverlayHop(KadPacket& packet) {
 
 // calculate stretch from answer packet
 void KadObserver::sampleAnswer(KadAnswer& packet) {
-	const OverlayKey fromKey = packet.getSource();
-	const OverlayKey toKey = packet.getTarget();
+	// answer packet has reverse path
+	const OverlayKey toKey = packet.getSource();
+	const OverlayKey fromKey = packet.getTarget();
 	if (not exists(fromKey) or not exists(toKey)) {
 		EV_ERROR << "missing keys on packet" << endl;
 		return;
 	}
 	uint distance= getPhysicalDistance(fromKey, toKey);
 	uint hops= packet.getProgress();
+
 	//EV_TRACE << "sampleAnswer: hops=" << hops << " distance=" << distance << endl;
 	if (distance > 0)
 	{
@@ -431,6 +437,28 @@ void KadObserver::sampleAnswer(KadAnswer& packet) {
 		histograms[stretchAddAns]->collect(hops - distance);
 	}
 }
+
+
+// calculate stretch from answer packet if shortened as much as possible
+// assumption is that path is not the reverse path
+void KadObserver::sampleLaterPath(const kad_path& path) {
+	const OverlayKey fromKey = path.front();
+	const OverlayKey toKey = path.back();
+	if (not exists(fromKey) or not exists(toKey)) {
+		EV_ERROR << "missing keys on packet" << endl;
+		return;
+	}
+	uint distance= getPhysicalDistance(fromKey, toKey);
+	uint hops= path.size()-1;
+
+	EV_TRACE << "sampleLaterPath: hops=" << hops << " distance=" << distance << endl;
+	if (distance > 0)
+	{
+		histograms[stretchMulLater]->collect(hops / (double)distance);
+		histograms[stretchAddLater]->collect(hops - distance);
+	}
+}
+
 
 
 void KadObserver::sampleStatistics (Statistics &stats) {

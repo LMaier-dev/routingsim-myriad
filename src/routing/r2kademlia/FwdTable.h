@@ -57,12 +57,12 @@ namespace routingsim {
 		uint16_t getPathLength() const { return pathlen; }
 	};
 
-
+	/* not yet used
 	class FwdTableNodeID {
 	public:
 		std::unordered_map<OverlayKey,FwdTableEntry> NIDFwdTable;
 	};
-
+	*/
 
 	class FwdTablePathID : public cObject {
 	public:

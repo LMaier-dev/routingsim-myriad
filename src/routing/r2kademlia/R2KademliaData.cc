@@ -171,9 +171,8 @@ void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 	
 	if (packet->hasRemainingHops() == 0)
 	{ // Loop detected
-		// TODO send back error message
-		//returnToSender(KAD_SegmentFailure, std::move(packet));
 		countDropped(*packet, packet->getDstNodeID(), hopLimitExceeded);
+		returnToSender(KAD_HopLimitExceeded, std::move(packet));
 		return;
 	}
 
@@ -218,9 +217,10 @@ void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 
 					if (not forwardDataPacketToNextHop(packet, nodePkt))
 					{
-						//TODO send error message back
 						EV_WARN << "PID based forwarding failed while trying to forward to next hop. Dropping packet" << endl;
 						countDropped(*packet, packet->getDstNodeID(), missingPID);
+						returnToSender(KAD_PathIDUnknown, std::move(packet));
+
 						return;
 					}
 					else // forwardDataPacketToNextHop had success or dropped
