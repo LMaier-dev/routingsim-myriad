@@ -5,10 +5,9 @@
 #define __ROUTINGSIM_PathID_H_
 
 #include "OverlayKey.h"
+#include "KadPath.h"
 
 namespace routingsim {
-
-using kad_path = std::vector<OverlayKey>;
 
 constexpr uint64_t UndefinedPathID_u64= 0x0ULL;
 

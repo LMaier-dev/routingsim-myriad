@@ -91,15 +91,7 @@ void FwdTablePathID::addEntry(KadContact_p contact, bool isForeignPID)
 	// add destination node ID to end of the path (will never be empty then)
 	currentpath.push_back(contact->getKey());
 
-	EV_TRACE << " <";
-	if (currentpath.size() == 0)
-		EV_TRACE << '-';
-	else
-	{
-		for (auto& k : currentpath)
-			EV_TRACE << ' ' << k.shortStr();
-	}
-	EV_TRACE << " >" << endl;
+	EV_TRACE << currentpath << endl;
 
 	// prepend own nodeID for incoming PathID
 	PathID incomingPathID(getPathID(*ownNodeID, currentpath));
@@ -143,16 +135,7 @@ void FwdTablePathID::addEntry(KadContact_p contact, bool isForeignPID)
 	NIDPIDTable[contact->getKey()]= incomingPathID;
 
 	EV_TRACE << "addEntry(): inPID: " << incomingPathID << " outPID: "
-		 << fwdentry.outgoingPathID << " path: " ;
-
-	if (currentpath.size() == 0)
-		EV_TRACE << "<->" << endl;
-	else {
-		EV_TRACE << "< ";
-		for (auto key : currentpath)
-			EV_TRACE << key.shortStr() << ' ';
-		EV_TRACE << '>' << endl;
-	}
+		 << fwdentry.outgoingPathID << " path: " << currentpath << endl;
 }
 
 
@@ -171,15 +154,7 @@ bool FwdTablePathID::modEntry(KadContact_p contact, bool isForeignPID)
 	{
 		kad_path newpath(contact->getPath());
 
-		EV_TRACE << "modEntry(): Dest NodeID " << contact->getKey().shortStr();
-		if (newpath.size() == 0)
-			EV_TRACE << "<->" << endl;
-		else {
-			EV_TRACE << "< ";
-			for (auto key : newpath)
-				EV_TRACE << key.shortStr() << ' ';
-			EV_TRACE << '>' << endl;
-		}
+		EV_TRACE << "modEntry(): Dest NodeID " << contact->getKey().shortStr() << newpath << endl;
 
 		// add destination node ID to path (will never be empty then)
 		newpath.push_back(contact->getKey());
@@ -273,16 +248,8 @@ bool FwdTablePathID::modEntry(KadContact_p contact, bool isForeignPID)
 		EV_TRACE << "modEntry(): inPID:" << incomingPathID << " outPID:"
 			 << fwdentry.outgoingPathID
 			 << (additionalEntry ? " additional entry" : " replacement")
-			 << " path: " ;
+			 << " path: " << newpath << endl;
 
-		if (newpath.size() == 0)
-			EV_TRACE << "<->" << endl;
-		else {
-			EV_TRACE << "< ";
-			for (auto key : newpath)
-				EV_TRACE << key.shortStr() << ' ';
-			EV_TRACE << '>' << endl;
-		}
 		return true;
 	}
 	else

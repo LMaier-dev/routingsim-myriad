@@ -348,6 +348,7 @@ private:
 
 	unsigned long laterpaths = 0;
 	unsigned long shortenedlaterpaths = 0;
+	unsigned long viablePIDpaths = 0;
 	
 	/** @name timer things */
 	//@{

@@ -440,16 +440,15 @@ void KadObserver::sampleAnswer(KadAnswer& packet) {
 
 
 // calculate stretch from answer packet if shortened as much as possible
-// assumption is that path is not the reverse path
-void KadObserver::sampleLaterPath(const kad_path& path) {
-	const OverlayKey fromKey = path.front();
+// assumption is that path does not contain the own node ID and is not the reverse path
+void KadObserver::sampleLaterPath(const OverlayKey& originKey, const kad_path& path) {
 	const OverlayKey toKey = path.back();
-	if (not exists(fromKey) or not exists(toKey)) {
+	if (not exists(originKey) or not exists(toKey)) {
 		EV_ERROR << "missing keys on packet" << endl;
 		return;
 	}
-	uint distance= getPhysicalDistance(fromKey, toKey);
-	uint hops= path.size()-1;
+	uint distance= getPhysicalDistance(originKey, toKey);
+	uint hops= path.size();
 
 	EV_TRACE << "sampleLaterPath: hops=" << hops << " distance=" << distance << endl;
 	if (distance > 0)

@@ -148,7 +148,7 @@ public:
 	void registerPacketOverlayHop(KadDataPacket&);
 
 	void sampleAnswer(KadAnswer&);
-	void sampleLaterPath(const kad_path& path);
+	void sampleLaterPath(const OverlayKey& originKey, const kad_path& path);
 
 	virtual void sampleStatistics (Statistics &stats) override;
 };

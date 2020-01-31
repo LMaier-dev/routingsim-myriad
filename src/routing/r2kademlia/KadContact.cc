@@ -47,14 +47,7 @@ std::ostream& operator<<(std::ostream& os, const KadContact& c) {
 			break;
 	} // end switch
 
-	if (c.getPath().size() == 0)
-		return os << "<->";
-	else {
-		os << "< ";
-		for (auto key : c.getPath())
-			os << key.shortStr() << ' ';
-		os << "> ";
-	}
+	os << c.getPath();
 	return os;
 }
 

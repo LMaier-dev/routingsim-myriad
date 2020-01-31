@@ -347,24 +347,30 @@ void R2Kademlia::handlePacket(KadAnswer_p packet) {
 	}
 	else if (packet->getType() == KAD_FindNodeRsp) {
 		getKadObserver().sampleAnswer(*packet);
-		// try to shorten the return path
-		kad_path returnpath(packet->reversePath(packet->getSrcPath()));
+		// try to shorten the return path (we exclude ourselves first)
+		kad_path returnpath(packet->reversePath(packet->getSrcPath(0,packet->getProgress())));
+		EV_TRACE << "answer packet: path to replier " << returnpath; 
 		laterpaths++;
 		if (routingTable.shortenPath(returnpath))
 			shortenedlaterpaths++;
-		getKadObserver().sampleLaterPath(returnpath);
-		bool PIDfound= false; uint pathlen= returnpath.size();
+		EV_TRACE << " shortened " << returnpath << endl;
+		getKadObserver().sampleLaterPath(getOverlayKey(),returnpath);
+	        uint pathlen= returnpath.size();
 		// start from farthest node to find potential PID entry
 		for (auto keyit= returnpath.crbegin(); keyit != returnpath.crend(); keyit++) {
 
 			if ( fwdTablePathID.NIDPIDTable.find(*keyit) != fwdTablePathID.NIDPIDTable.end() )
 			{
 				EV_TRACE << "LaterPath: found a PID for " << pathlen << "/" << returnpath.size() << endl;
-				break;
+				// the end of this path is only useful
+				if (routingTable.distance(*keyit,returnpath.back())<routingTable.distance(returnpath.back()))
+				{
+					viablePIDpaths++;
+					break;
+				}
 			}
 			pathlen--;
 		} // end for
-
 	}
 
 	// the following call handles the RPC answer
@@ -1190,8 +1196,9 @@ void R2Kademlia::recordScalars() {
 	recordScalar("fwdTableSize", fwdTablePathID.getNumEntries());
 	recordScalar("fwdTableValid", fwdTablePathID.getNumValidEntries());
 	recordScalar("fwdTableForeign", fwdTablePathID.getNumForeignEntries());
-	EV_TRACE << (double) shortenedlaterpaths / (double) laterpaths << "% "
-		 << shortenedlaterpaths << "/" << laterpaths << " of later paths shortened" << endl;
+	EV_TRACE << (shortenedlaterpaths * 100.0) / (double) laterpaths << "% "
+		 << shortenedlaterpaths << "/" << laterpaths << " of later paths shortened. "
+		 << "Viable PIDs: " << viablePIDpaths << "(" << (viablePIDpaths*100.0)/(double) laterpaths << "%)" << endl;
 }
 
 void R2Kademlia::recordRoutingTable() {

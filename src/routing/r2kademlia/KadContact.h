@@ -20,7 +20,7 @@
 #include <omnetpp.h>
 #include <memory>
 #include <vector>
-#include "OverlayKey.h"
+#include "KadPath.h"
 
 /**
  * @file KadContact.h
@@ -30,7 +30,7 @@
 namespace routingsim {
 
 // type definitions
-using kad_path = std::vector<OverlayKey>;
+
 using size_type = std::size_t;
 
 
