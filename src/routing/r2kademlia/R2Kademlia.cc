@@ -349,7 +349,9 @@ void R2Kademlia::handlePacket(KadAnswer_p packet) {
 		getKadObserver().sampleAnswer(*packet);
 		// try to shorten the return path
 		kad_path returnpath(packet->reversePath(packet->getSrcPath()));
-		routingTable.shortenPath(returnpath);
+		laterpaths++;
+		if (routingTable.shortenPath(returnpath))
+			shortenedlaterpaths++;
 		getKadObserver().sampleLaterPath(returnpath);
 		bool PIDfound= false; uint pathlen= returnpath.size();
 		// start from farthest node to find potential PID entry
@@ -1188,7 +1190,8 @@ void R2Kademlia::recordScalars() {
 	recordScalar("fwdTableSize", fwdTablePathID.getNumEntries());
 	recordScalar("fwdTableValid", fwdTablePathID.getNumValidEntries());
 	recordScalar("fwdTableForeign", fwdTablePathID.getNumForeignEntries());
-
+	EV_TRACE << (double) shortenedlaterpaths / (double) laterpaths << "% "
+		 << shortenedlaterpaths << "/" << laterpaths << " of later paths shortened" << endl;
 }
 
 void R2Kademlia::recordRoutingTable() {

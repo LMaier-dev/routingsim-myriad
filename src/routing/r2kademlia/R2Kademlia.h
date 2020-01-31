@@ -346,6 +346,9 @@ private:
 	uint forwardedPathSetup = 0;
 	//@}
 
+	unsigned long laterpaths = 0;
+	unsigned long shortenedlaterpaths = 0;
+	
 	/** @name timer things */
 	//@{
 	std::vector<simtime_t> timerDuration;
