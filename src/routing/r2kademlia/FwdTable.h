@@ -27,8 +27,9 @@ namespace routingsim {
 			undefined     = 0,
 			valid         = 1,
 			foreign       = 2,
-			obsolete      = 4,
-			invalid       = 8
+			local         = 4,
+			obsolete      = 8,
+			invalid       = 16
 		};
 
 		enum class Action {
@@ -49,6 +50,9 @@ namespace routingsim {
 
 		void setForeign() { fwdState = fwdState | State::foreign; };
 		bool isForeign() const { return fwdState & State::foreign; };
+
+		void setLocal() { fwdState = fwdState | State::local; };
+		bool isLocal() const { return fwdState & State::local; };
 
 		bool isUndefined() const { return fwdState == State::undefined; }
 

@@ -388,7 +388,7 @@ bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, Kad
 	}
 	else { // no space in bucket for inserting the new contact: replace existing one?
 		if (not proximityNeighborSelection) {
-			EV_DEBUG << "dropping new contact " << *contact << endl;
+			//EV_DEBUG << "dropping new contact " << *contact << endl;
 			return false;
 		}
 		// contact replacement if contact is better than existing ones
@@ -411,7 +411,7 @@ bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, Kad
 			return true;
 		}
 		else {
-			EV_DEBUG << "dropping new contact " << *contact << endl;
+			//EV_DEBUG << "dropping new contact " << *contact << endl;
 			return false;
 		}
 	}
@@ -600,7 +600,7 @@ void KadRoutingTable::invalidateContacts(const OverlayKey& failedNodeKey, const 
 			{ // link somewhere in the path
 				contact->setInvalid();
 				EV_TRACE << "Set Contact to invalid due to failed link <"
-					 << failedNodeKey.toString().substr(0, 6) << "," << otherNodeKey.toString().substr(0, 6) << ">:"  << *contact << endl;
+					 << failedNodeKey.shortStr() << "," << otherNodeKey.shortStr() << ">:"  << *contact << endl;
 			}
 		} // end for inner loop over all contacts
 }
@@ -633,11 +633,14 @@ double KadRoutingTable::getAveragePathLength() const
 {
 	uint count = 0;
 	double sum = 0;
-	for (const KadBucket& b : buckets)
+	for (const KadBucket& b : buckets) {
 		for (auto& contact : b.contacts) {
 			sum += contact->getPathLength();
 			count++;
 		}
+		sum += b.PNContacts.size();
+		count += b.PNContacts.size();
+	}
 	return count == 0 ? 0.0 : sum / count;
 }
 
@@ -646,15 +649,19 @@ double KadRoutingTable::getAveragePathStretch() const
 {
 	uint count = 0;
 	double sum = 0;
-	for (const KadBucket& b : buckets)
+	for (const KadBucket& b : buckets) {
 		for (auto& contact : b.contacts) {
 			if (getKadObserver().getPhysicalDistance(myKey, contact->getKey()) > 0)
-			    sum += (contact->getPathLength()+1) / getKadObserver().getPhysicalDistance(myKey, contact->getKey());
+				sum += (contact->getPathLength()+1) / getKadObserver().getPhysicalDistance(myKey, contact->getKey());
 			else
 				EV_WARN << "Physical Distance = " << getKadObserver().getPhysicalDistance(myKey, contact->getKey())
 					<< ": " << myKey << " to " << contact->getKey().shortStr() << endl;
 			count++;
 		}
+
+		sum += b.PNContacts.size();
+		count += b.PNContacts.size();
+	}
 	return count == 0 ? 0.0 : sum / count;
 }
 

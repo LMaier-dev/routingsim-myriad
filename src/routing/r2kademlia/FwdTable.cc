@@ -49,6 +49,7 @@ std::string FwdTablePathID::str() const
 		if (fwdentry.isObsolete()) out << 'O';
 		if (fwdentry.isInvalid()) out << 'I';
 		if (fwdentry.isForeign()) out << 'F';
+		if (fwdentry.isLocal()) out << 'L';
 	        out << ':';
 
 		switch (fwdentry.fwdAction) {

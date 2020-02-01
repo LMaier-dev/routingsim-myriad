@@ -217,10 +217,8 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 				// use existing path from answer (must reverse path)
 				KadContact contact(packet->getSource(),
 						   packet->reversePath(packet->getSrcPath(1, packet->getProgress())));
-				EV_TRACE << "forwarding PathSetupRsp, origin source path: <";
-				for (auto& k : packet->reversePath(packet->getSrcPath()))
-					EV_TRACE << ' ' << k.shortStr();
-				EV_TRACE << " >" << endl;
+				EV_TRACE << "forwarding PathSetupRsp, origin source path: <"
+					 << packet->reversePath(packet->getSrcPath()) << endl;
 
 				if (usePathIDs)
 					fwdTablePathID.addEntry(&contact, true);
@@ -889,7 +887,7 @@ bool R2Kademlia::handleFindNodeResponse(KadPacket_p answer_, RPCState& rpcState)
 	ASSERT(answer->getContactArraySize() == answer->getPathArraySize());
 	ASSERT(rpcState.original_packet.get() != nullptr);
 	EV_TRACE << "received FindNodeRsp for " << check_and_cast<KadFindNodeReq *>(rpcState.original_packet.get())->getQuery().shortStr();
-	EV_TRACE << " from " << answer->getSource().shortStr() << " with " << answer->getContactArraySize() << " contacts"<< endl;
+	EV_TRACE << " from " << answer->getSource().shortStr() << " with " << answer->getContactArraySize() << " contacts" << endl;
 	readRTableRsp(std::move(answer));
 	return true;
 }
@@ -1251,19 +1249,14 @@ void R2Kademlia::applyShortcut(KadPacket& packet)
 
 				// TODO now check for cycles
 				// replace residual path with my known (shorter) route
-				EV_TRACE << "modifying route due to shortcut: old=< ";
+				EV_TRACE << "modifying route due to shortcut: old=" << packet.getSrcPath();
 
-				for (auto key : packet.getSrcPath())
-					EV_TRACE << key.shortStr() << ' ';
 
 				kad_path newpath(knownContact->getPath());
 				newpath.push_back(knownContact->getKey());
 				packet.modRoute(newpath);
 
-				EV_TRACE << "> new=< ";
-				for (auto key : packet.getSrcPath())
-					EV_TRACE << key.shortStr() << ' ';
-				EV_TRACE << '>' << endl;
+				EV_TRACE << " new=" << packet.getSrcPath() << endl;
 			}
 		}
 		else
