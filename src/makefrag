@@ -1,7 +1,0 @@
-CXXFLAGS += "-std=c++14"
-
-#EXTRA_OBJS = $(EXTRA_OBS) -l routing/s4/libconhash/libconhash.a
-#
-#routing/s4/libconhash/libconhash.a :
-#		$(MAKE) -C routing/s4
-
