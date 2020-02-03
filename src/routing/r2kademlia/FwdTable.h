@@ -25,11 +25,10 @@ namespace routingsim {
 
 		enum State : uint8_t {
 			undefined     = 0,
-			valid         = 1,
-			foreign       = 2,
-			local         = 4,
-			obsolete      = 8,
-			invalid       = 16
+			valid         = 1, // path intact so far
+			local         = 2, // locally wanted (contact or neighbor)
+			foreign       = 4, // PID wanted by KadPathSetup
+			obsolete      = 8
 		};
 
 		enum class Action {
@@ -42,10 +41,10 @@ namespace routingsim {
 		void setObsolete() { setInvalid(); fwdState |= State::obsolete; }
 		bool isObsolete() const { return fwdState & State::obsolete; }
 
-		void setInvalid() { fwdState &= ~State::valid; fwdState |= State::invalid; }
-		bool isInvalid() const { return fwdState & State::invalid; }
+		void setInvalid() { fwdState &= ~State::valid; }
+		bool isInvalid() const { return (fwdState & State::valid) == 0; }
 
-		void setValid() { fwdState &= ~State::invalid; fwdState |= State::valid; }
+		void setValid() { fwdState |= State::valid; }
 		bool isValid() const { return fwdState & State::valid; }
 
 		void setForeign() { fwdState = fwdState | State::foreign; };

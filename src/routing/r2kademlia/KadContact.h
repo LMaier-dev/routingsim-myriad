@@ -73,6 +73,8 @@ public:
 	inline void setInvalid() { state= State::invalid; }
 	inline void setValid() { state= State::valid; }
 	inline void setRediscovering() { state= State::rediscovering; }
+	inline void setState(State newstate) { state= newstate; }
+
 
 	inline void setPhysicalNeighbor() { physicalNeighbor= true; }
 	

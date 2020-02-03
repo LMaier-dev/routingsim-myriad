@@ -94,7 +94,7 @@ public:
 	void init(const OverlayKey& myKey,
 		  KadPolicy* policy,
 		  size_type accelerationFactor, size_type bucketSize,
-		  bool proximityNeighborSelection, bool pathSimplification=true);
+		  bool proximityNeighborSelection, bool pathSimplification=true, uint8_t discoveryRadius= 1);
 
 	void clear() { buckets.clear(); myKey= OverlayKey::UNSPECIFIED_KEY; };
 	
@@ -186,6 +186,8 @@ public:
 	bool usePathSimplification() const { return pathSimplification; }
 	/// tries to find shortcuts using own routing table entries
 	bool shortenPath(kad_path& path) const;
+	/// concatenates the two paths
+	kad_path concatViaPath(const kad_path& viaPath, const kad_path& path) const;
 
 protected:
 	/// removes duplicates and loops from a path
@@ -243,9 +245,8 @@ private:
 	uint replacementCount = 0;
 	/// counts the number of improvements made to contact paths
 	uint updateCount = 0;
-
-	/// concatenates the two paths
-	kad_path concatViaPath(const kad_path& viaPath, const kad_path& path) const;
+	/// discoveryRadius (from R2Kademlia class)
+	uint8_t discoveryRadius = 1;
 };
 
 } //namespace

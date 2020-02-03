@@ -29,8 +29,8 @@ bool containsUndirectedLink(const kad_path& path, const OverlayKey& firstNodeKey
 
 	
 void KadRoutingTable::init(const OverlayKey& myKey, KadPolicy* policy,
-		size_type accelerationFactor, size_type bucketSize,
-		bool proximityNeighborSelection, bool pathSimplification)
+			   size_type accelerationFactor, size_type bucketSize,
+			   bool proximityNeighborSelection, bool pathSimplification, uint8_t discoveryRadius)
 {
 	ASSERT(this->myKey.isUnspecified());
 	ASSERT(not myKey.isUnspecified());
@@ -40,6 +40,7 @@ void KadRoutingTable::init(const OverlayKey& myKey, KadPolicy* policy,
 	this->policy = policy;
 	this->proximityNeighborSelection = proximityNeighborSelection;
 	this->pathSimplification = pathSimplification;
+	this->discoveryRadius= discoveryRadius;
 	ASSERT(buckets.size() == 0);
 	//TODO optimization: implement adaptively
 	buckets.reserve(5);
@@ -241,8 +242,13 @@ bool KadRoutingTable::addPath(const OverlayKey& key, const kad_path& path, const
 	if (key == myKey)
 		return false;
 
-	if (pathSimplification) { // concatenated paths are always indirect (TODO check)
-		return addPath(key, concatViaPath(viaPath, path), KadContact::PathProperty::indirect);
+	// if viaPath.size()+path.size()+1 hop (for contact) <= discoveryRadius we can assume that PathID is available there
+	KadContact::PathProperty pathPropHint= (viaPath.size()+path.size() < discoveryRadius) ?
+		                               KadContact::PathProperty::direct :
+		                               KadContact::PathProperty::indirect;
+
+	if (pathSimplification) { // concatenated paths are direct if learned from neighborhood within discovery radius
+		return addPath(key, concatViaPath(viaPath, path), pathPropHint);
 	}
 
 	KadContact *contact = getContactInternal(key);
@@ -276,7 +282,7 @@ bool KadRoutingTable::addPath(const OverlayKey& key, const kad_path& path, const
 		if (contact->isInvalid() or contact->getPathLength() > path.size() + viaPath.size()) {
 			updateCount++;
 			contact->setPath(concatViaPath(viaPath, path)); // will set contact automatically to valid
-			contact->setPathProperty(KadContact::PathProperty::indirect);
+			contact->setPathProperty(pathPropHint);
 
 			// do something on improved path according to policy
 			policy->onImprovement(*contact);
@@ -289,8 +295,8 @@ bool KadRoutingTable::addPath(const OverlayKey& key, const kad_path& path, const
 		return false;
 	}
 	else // contact is new
-	{ // concatenated paths are always indirect (TODO check)
-		return handleNewContact(key, concatViaPath(viaPath, path), KadContact::PathProperty::indirect);
+	{ // concatenated paths are direct if within discovery radius
+		return handleNewContact(key, concatViaPath(viaPath, path), pathPropHint);
 	}
 }
 

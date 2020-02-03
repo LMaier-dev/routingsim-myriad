@@ -77,7 +77,7 @@ std::string FwdTablePathID::str() const
 }
 
 
-
+// contact is sometimes a temporary variable, i.e., the contact may not be part of the routing table yet
 void FwdTablePathID::addEntry(KadContact_p contact, bool isForeignPID)
 {
        	if (contact == nullptr)
@@ -98,9 +98,13 @@ void FwdTablePathID::addEntry(KadContact_p contact, bool isForeignPID)
 	PathID incomingPathID(getPathID(*ownNodeID, currentpath));
 
 	// check for already existing PID
-	if (PIDFwdTable.find(incomingPathID) != PIDFwdTable.end())
+	auto pidentry= PIDFwdTable.find(incomingPathID);
+	if ( pidentry != PIDFwdTable.end() )
 	{
 		EV_WARN << "addEntry(): inPID entry " << incomingPathID << " exists already" << endl;
+		// set foreign flag
+		if (isForeignPID)
+			pidentry->second.setForeign();
 		return; // already there, fine
 	}
 
@@ -128,6 +132,9 @@ void FwdTablePathID::addEntry(KadContact_p contact, bool isForeignPID)
 	fwdentry.setValid();
 	if (isForeignPID)
 		fwdentry.setForeign();
+	else
+		fwdentry.setLocal();
+
 	fwdentry.fwdAction=
 		(currentpath.size()==1) // next hop is our physical neighbor
 		? FwdTableEntry::Action::fwdNextKadId : FwdTableEntry::Action::fwdNextPathID;
@@ -278,9 +285,12 @@ void FwdTablePathID::delPIDEntry(PathID pid)
 			delPIDEntry(it->second.prevPathID);
 			it->second.prevPathID= PathID::UndefinedPathID;
 		}
-		EV_TRACE << "FwdTablePathID::delEntry PathID " << pid << " deleted." << endl;
-		// delete this PID Entry
-		PIDFwdTable.erase(it);
+
+		if ( not it->second.isLocal() and not it->second.isForeign()) {
+			EV_TRACE << "FwdTablePathID::delEntry PathID " << pid << " deleted." << endl;
+			// delete this PID Entry
+			PIDFwdTable.erase(it);
+		}
 	}
 	else
 		EV_ERROR << "FwdTablePathID::delEntry PathID " << pid << " not found" << endl;
@@ -299,6 +309,8 @@ void FwdTablePathID::delEntry(KadContact_p contact)
 	{
 		// delete all PID entries related to this contact
 		PathID currentPathID= pidentry->second;
+		// get fwdentry and remove local flag
+		
 		delPIDEntry(currentPathID);
 		// delete anchor entry in NIDPIDTable
 		NIDPIDTable.erase(pidentry);

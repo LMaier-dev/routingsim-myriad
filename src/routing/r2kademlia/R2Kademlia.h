@@ -225,6 +225,8 @@ private:
 	void countDropped(KadDataPacket& packet, const OverlayKey& target, uint8_t reason);
 	/// try a shortcut route and modify source route of the packet
 	void applyShortcut(KadPacket& packet);
+	/// try to install path from response packet
+	void checkForPathInstallation(KadPacket& packet);
 
 	/**
 	 * sends an error packet to the sender of the given packet

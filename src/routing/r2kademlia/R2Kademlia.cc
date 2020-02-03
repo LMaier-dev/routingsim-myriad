@@ -40,15 +40,17 @@ void R2Kademlia::onInitialize() {
 
 	ASSERT(par("accelerationFactor").intValue() > 0);
 	ASSERT(par("bucketSize").intValue() > 1);
+	ASSERT(par("discoveryRadius").intValue() > 0);
+	discoveryRadius = (uint)par("discoveryRadius").intValue();
+
 	routingTable.init(
 		myOverlayKey, this,
 		par("accelerationFactor").intValue(),
 		par("bucketSize").intValue(),
 		par("proximityNeighborSelection").boolValue(),
-		par("pathSimplification").boolValue());
+		par("pathSimplification").boolValue(),
+		discoveryRadius);
 
-	ASSERT(par("discoveryRadius").intValue() > 0);
-	discoveryRadius = (uint)par("discoveryRadius").intValue();
 	ASSERT(par("findNodeNumber").intValue() > 0);
 	findNodeNumber = (size_type) par("findNodeNumber").intValue();
 	proximityRouting = par("proximityRouting").boolValue();
@@ -213,15 +215,10 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 				applyShortcut(*packet);
 				break;
 
-			case KAD_PathSetupRsp: // will install path in data forward direction
-				// use existing path from answer (must reverse path)
-				KadContact contact(packet->getSource(),
-						   packet->reversePath(packet->getSrcPath(1, packet->getProgress())));
+			case KAD_PathSetupRsp:
 				EV_TRACE << "forwarding PathSetupRsp, origin source path: <"
 					 << packet->reversePath(packet->getSrcPath()) << endl;
-
-				if (usePathIDs)
-					fwdTablePathID.addEntry(&contact, true);
+				checkForPathInstallation(*packet);
 				break;
 		} // end switch
 		forwardedPathSetup++;
@@ -253,6 +250,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 
 		};
 
+		// evaluate return path for routing table
 		routingTable.addPath(packet->getSource(), packet->reversePath(packet->getIntermediatePath()), pathproperty);
 
 		// these types may forward packets, so they count themselves
@@ -350,8 +348,11 @@ void R2Kademlia::handlePacket(KadAnswer_p packet) {
 		EV_TRACE << "answer packet: path to replier " << returnpath; 
 		laterpaths++;
 		if (routingTable.shortenPath(returnpath))
+		{
 			shortenedlaterpaths++;
-		EV_TRACE << " shortened " << returnpath << endl;
+			EV_TRACE << " shortened " << returnpath;
+		}
+		EV_TRACE << endl;
 		getKadObserver().sampleLaterPath(getOverlayKey(),returnpath);
 	        uint pathlen= returnpath.size();
 		// start from farthest node to find potential PID entry
@@ -1083,15 +1084,17 @@ void R2Kademlia::onBucketEmpty(KadBucket& bucket) {
 }
 
 
+// this is called before deletion of the contact
 void R2Kademlia::onContactRemoval(KadContact_p contact)
 {
 	//EV_TRACE << "onContactRemoval(" << ((contact != nullptr) ? contact->getKey().shortStr() : "nullptr") << ") called" << endl;
 	if (contact == nullptr)
 		return;
-	
+
 	// delete from Forwarding table PID
 	// TODO: this can be scheduled for happening later
-	if (usePathIDs) fwdTablePathID.delEntry(contact);
+	if (usePathIDs)
+		fwdTablePathID.delEntry(contact);
 }
 
 
@@ -1117,6 +1120,7 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 	// those contacts about their PNs which is even one hop further away
 	if (contact->getPathLength() > 0 and contact->getPathLength()+1 < discoveryRadius)
 	{
+		// sends a QueryRouteReq requesting their 1 hop neighborhood
 		sendGetPhysicalNeighbors(contact);
 	}
 
@@ -1129,11 +1133,12 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 			sendGetOverlayNeighbors(contact);
 		}
 
-		if (usePathIDs) fwdTablePathID.addEntry(contact, false);
+		if (usePathIDs)
+			fwdTablePathID.addEntry(contact, false);
 	}
 
 	if (usePathIDs and contact->isValid() and contact->getPathProperty() == KadContact::PathProperty::indirect
-	    and contact->getPathLength() > 1)
+	    and contact->getPathLength() > discoveryRadius)
 	{ // send a path setup request packet for installing PIDs in intermediate nodes for this indirectly learned route
 		// only do this for paths longer than two hops
 		EV_TRACE << "Triggering path setup to " << contact->getKey().shortStr() << endl;
@@ -1145,7 +1150,7 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 void R2Kademlia::onImprovement(const KadContact& contact) {
 	// path got improved for this contact -> potentially send UpdateRouteReq
 	EV_TRACE << "onImprovement(" << contact.getKey().shortStr() << ") called" << endl;
-	
+
 	if (contact.isValid())
 	{
 		if (usePathIDs) fwdTablePathID.modEntry(&contact, false);
@@ -1237,7 +1242,7 @@ void R2Kademlia::applyShortcut(KadPacket& packet)
 	auto knownContact= routingTable.getContact(packet.getTarget());
 
 	if (knownContact != nullptr)
-	{ // destination Contact is known, check for route shortcut
+	{ // final destination Contact is known, check for route shortcut
 		if (knownContact->isValid())
 		{
 			// getProgress() is currently pointing to my own node ID
@@ -1251,7 +1256,6 @@ void R2Kademlia::applyShortcut(KadPacket& packet)
 				// replace residual path with my known (shorter) route
 				EV_TRACE << "modifying route due to shortcut: old=" << packet.getSrcPath();
 
-
 				kad_path newpath(knownContact->getPath());
 				newpath.push_back(knownContact->getKey());
 				packet.modRoute(newpath);
@@ -1262,6 +1266,19 @@ void R2Kademlia::applyShortcut(KadPacket& packet)
 		else
 			EV_WARN << "Contact in non valid state: " << *knownContact;
 	}
+}
+
+
+void R2Kademlia::checkForPathInstallation(KadPacket& packet)
+{
+	if ( not(usePathIDs) )
+		return;
+	// will install path in data forward direction
+	// use existing path from answer (must reverse path)
+	KadContact tmpcontact(packet.getSource(),
+			      packet.reversePath(packet.getSrcPath(1, packet.getProgress())));
+
+	fwdTablePathID.addEntry(&tmpcontact, true);
 }
 
 
@@ -1426,11 +1443,15 @@ void R2Kademlia::readRTableRsp(std::unique_ptr<KadRTableRsp> packet) {
 
 	for (size_t i = 0; i < packet->getContactArraySize(); i++) {
 		// TODO optimization: isPathInteresting
-		routingTable.addPath(
-			packet->getContact(i),
-			std::move(packet->getPath(i)),
-			viaPath
-		);
+		if ( not(routingTable.addPath(packet->getContact(i), std::move(packet->getPath(i)), viaPath)) ) {
+			// even if contact was not interesting for RT, add it as PID entry if within discovery radius
+			if ( viaPath.size() + packet->getPath(i).size() < discoveryRadius )
+			{
+				KadContact neighborhoodContact(packet->getContact(i),
+							       routingTable.concatViaPath(viaPath, packet->getPath(i)));
+				fwdTablePathID.addEntry(&neighborhoodContact, false);
+			}
+		}
 	}
 }
 
