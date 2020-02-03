@@ -47,10 +47,12 @@ namespace routingsim {
 		void setValid() { fwdState |= State::valid; }
 		bool isValid() const { return fwdState & State::valid; }
 
+		void unsetForeign() { fwdState &= ~State::foreign; };
 		void setForeign() { fwdState = fwdState | State::foreign; };
 		bool isForeign() const { return fwdState & State::foreign; };
 
-		void setLocal() { fwdState = fwdState | State::local; };
+		void unsetLocal() { fwdState &= ~State::local; };
+		void setLocal() { fwdState |= State::local; };
 		bool isLocal() const { return fwdState & State::local; };
 
 		bool isUndefined() const { return fwdState == State::undefined; }

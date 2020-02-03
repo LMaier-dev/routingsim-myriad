@@ -123,13 +123,23 @@ packet KadProbeRsp extends KadAnswer {
 }
 
 
-// PROBE
+// PATHSETUP
 packet KadPathSetupReq extends KadPacket {
 	type = KAD_PathSetupReq;
 }
 
 packet KadPathSetupRsp extends KadAnswer {
 	type = KAD_PathSetupRsp;
+}
+
+
+// PATHTEARDOWN
+packet KadPathTeardownReq extends KadPacket {
+	type = KAD_PathTeardownReq;
+}
+
+packet KadPathTeardownRsp extends KadAnswer {
+	type = KAD_PathTeardownRsp;
 }
 
 

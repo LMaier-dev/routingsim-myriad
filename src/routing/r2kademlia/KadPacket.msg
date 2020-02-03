@@ -40,6 +40,9 @@ enum KadPDUType {
 	KAD_PathSetupReq = 	0x83;
 	KAD_PathSetupRsp = 	0x84;
 
+	KAD_PathTeardownReq = 	0x85;
+	KAD_PathTeardownRsp = 	0x86;
+
 	KAD_Data = 		0x10;
 }
 

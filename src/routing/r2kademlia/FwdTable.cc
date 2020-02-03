@@ -286,11 +286,13 @@ void FwdTablePathID::delPIDEntry(PathID pid)
 			it->second.prevPathID= PathID::UndefinedPathID;
 		}
 
-		if ( not it->second.isLocal() and not it->second.isForeign()) {
+		if ( not it->second.isLocal() and not it->second.isForeign() ) {
 			EV_TRACE << "FwdTablePathID::delEntry PathID " << pid << " deleted." << endl;
 			// delete this PID Entry
 			PIDFwdTable.erase(it);
 		}
+		else
+			EV_TRACE << "FwdTablePathID::delEntry PathID " << pid << " not yet deleted." << endl;
 	}
 	else
 		EV_ERROR << "FwdTablePathID::delEntry PathID " << pid << " not found" << endl;
@@ -309,8 +311,17 @@ void FwdTablePathID::delEntry(KadContact_p contact)
 	{
 		// delete all PID entries related to this contact
 		PathID currentPathID= pidentry->second;
-		// get fwdentry and remove local flag
-		
+
+		// get fwdentry and remove local flag for related PIDs because the local contact gets deleted
+		for (auto fwdentry_it= PIDFwdTable.find(currentPathID);
+		     fwdentry_it != PIDFwdTable.end();
+		     PIDFwdTable.find(fwdentry_it->second.prevPathID)) {
+			fwdentry_it->second.unsetLocal();
+			if (fwdentry_it->second.prevPathID == PathID::UndefinedPathID)
+				break;
+		}
+
+		// now try to delete the PID entries
 		delPIDEntry(currentPathID);
 		// delete anchor entry in NIDPIDTable
 		NIDPIDTable.erase(pidentry);
