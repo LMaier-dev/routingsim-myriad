@@ -86,6 +86,7 @@ class R2Kademlia : public RPCProtocol, public KadPolicy, public StatisticSample
 	/// responds to probe request
 	virtual void handlePacket(std::unique_ptr<KadProbeReq> packet);
 	virtual void handlePacket(std::unique_ptr<KadPathSetupReq> packet);
+	virtual void handlePacket(std::unique_ptr<KadPathTeardownReq> packet);
 	virtual void handlePacket(std::unique_ptr<KadPNDiscReq> packet);
 	virtual void handlePacket(std::unique_ptr<KadQueryRouteReq> packet);
 	virtual void handlePacket(std::unique_ptr<KadUpdateRouteReq> packet);
@@ -169,6 +170,7 @@ public:
  	uint getForwardedPathSetup() const { return forwardedPathSetup; }
 	uint getSentPathSetup() const { return sentPathSetup; }
 	uint getReceivedPathSetup() const { return receivedPathSetup; }
+	uint getReceivedPathTeardown() const { return receivedPathTeardown; }
 	
  	uint getForwardedDataPackets() const { return forwardedDataPackets; }
 	uint getDroppedDataPackets() const { return droppedDataPackets; }
@@ -346,6 +348,7 @@ private:
 	uint sentPathSetup = 0;
 	uint receivedPathSetup = 0;
 	uint forwardedPathSetup = 0;
+	uint receivedPathTeardown = 0;
 	//@}
 
 	unsigned long laterpaths = 0;

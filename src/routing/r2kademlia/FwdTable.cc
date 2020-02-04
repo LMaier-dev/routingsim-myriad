@@ -186,21 +186,19 @@ bool FwdTablePathID::modEntry(KadContact_p contact, bool isForeignPID)
 		{ // set old entry to obsolete state if local update
 			FwdTableEntry& priorfwdentry(PIDFwdTable[pidentry->second]);
 
-			if (isForeignPID)
-			{ // only accept better PIDs
-				if (newpath.size() > priorfwdentry.getPathLength())
-				{
-					EV_TRACE << "new path not better: len=" << newpath.size()
-						 << " prior len=" << priorfwdentry.getPathLength() << " newPID: " << getPathID(newpath) << endl;
-					return false;
-				}
-				else
-				if (newpath.size() == priorfwdentry.getPathLength())
-				{
-					EV_TRACE << "new path has equal length: len=" << newpath.size()
-						 << " prior len=" << priorfwdentry.getPathLength() << " newPID: " << getPathID(newpath) << endl;
-					additionalEntry= true;
-				}
+			// only accept better PIDs
+			if (newpath.size() > priorfwdentry.getPathLength())
+			{
+				EV_TRACE << "new path not better: len=" << newpath.size()
+					 << " prior len=" << priorfwdentry.getPathLength() << " newPID: " << getPathID(newpath) << endl;
+				return false;
+			}
+			else
+			if (newpath.size() == priorfwdentry.getPathLength())
+			{
+				EV_TRACE << "new path has equal length: len=" << newpath.size()
+					 << " prior len=" << priorfwdentry.getPathLength() << " newPID: " << getPathID(newpath) << endl;
+				additionalEntry= true;
 			}
 
 			if (not additionalEntry)

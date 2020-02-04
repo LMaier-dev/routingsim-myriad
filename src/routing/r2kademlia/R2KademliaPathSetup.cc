@@ -3,7 +3,7 @@
 //#include "FwdTable.h"
 
 /*********************************************************
- * This file contains PathSetup related code from the 
+ * This file contains PathSetup and PathTeardown related code from the 
  * R2Kademlia main class
  *********************************************************/
 
@@ -21,6 +21,7 @@ void R2Kademlia::sendPathSetup(KadContact_p contact) {
 		std::bind(&R2Kademlia::handlePathSetupResponse, this, ph::_1, ph::_2),
 		std::bind(&R2Kademlia::handleRPCTimeOut, this, ph::_1, ph::_2));
 }
+
 
 void R2Kademlia::handlePacket(std::unique_ptr<KadPathSetupReq> packet) {
 	EV_TRACE << "received PathSetupReq from " << packet->getSource().shortStr() << " to " << packet->getTarget().shortStr()
@@ -97,6 +98,14 @@ void R2Kademlia::sendScheduledPathSetups() {
 
 	// next call of this procedure will be scheduled on demand
 	pathSetupScheduled= false;
+}
+
+
+void R2Kademlia::handlePacket(std::unique_ptr<KadPathTeardownReq> packet) {
+	EV_TRACE << "received PathTeardownReq from " << packet->getSource().shortStr() << " to " << packet->getTarget().shortStr()
+		 << " sending back answer" << endl;
+	receivedPathTeardown++;
+	sendPacket(makeAnswer<KadPathTeardownRsp>(*packet));
 }
 
 } // end namespace

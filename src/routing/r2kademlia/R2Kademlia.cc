@@ -212,6 +212,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		switch (packet->getType())
 		{
 			case KAD_PathSetupReq: // allowed to take shortcuts
+				// TODO send back response if path ID already installed and still valid
 				applyShortcut(*packet);
 				break;
 
@@ -261,6 +262,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		if (handleIfFitting<KadUpdateRouteReq>(packet)) return;
 		if (handleIfFitting<KadAnswer>(packet)) return;
 		if (handleIfFitting<KadPathSetupReq>(packet)) return;
+		if (handleIfFitting<KadPathTeardownReq>(packet)) return;
 		if (handleIfFitting<KadProbeReq>(packet)) return;
 		EV_ERROR << "dropping unhandled packet of type " << (int)packet->getType() << endl;
 		countDropped(*packet, packet->getTarget(), unhandledType);
@@ -1010,7 +1012,7 @@ void R2Kademlia::onErrorPacket(KadError& error) {
 					ASSERT(it != originalPath.end());
 					// the next hop is the one that failed
 					auto failedNextHop = (++it != originalPath.end()) ? *it : reportingNode ; 
-					
+
 					scheduleRediscovery(affectedContact->getKey(), reportingNode, failedNextHop);
 				}
 				else
