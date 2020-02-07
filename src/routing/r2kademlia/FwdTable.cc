@@ -313,7 +313,7 @@ void FwdTablePathID::delEntry(KadContact_p contact)
 		// get fwdentry and remove local flag for related PIDs because the local contact gets deleted
 		for (auto fwdentry_it= PIDFwdTable.find(currentPathID);
 		     fwdentry_it != PIDFwdTable.end();
-		     PIDFwdTable.find(fwdentry_it->second.prevPathID)) {
+		     fwdentry_it= PIDFwdTable.find(fwdentry_it->second.prevPathID)) {
 			fwdentry_it->second.unsetLocal();
 			if (fwdentry_it->second.prevPathID == PathID::UndefinedPathID)
 				break;
