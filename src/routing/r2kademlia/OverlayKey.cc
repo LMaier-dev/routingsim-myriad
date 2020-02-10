@@ -424,14 +424,14 @@ OverlayKey& OverlayKey::setBit(uint32_t pos, bool value)
 // additional math
 //--------------------------------------------------------------------
 
-// returns a sub integer
-uint32_t OverlayKey::getBitRange(uint32_t p, uint32_t n) const
+// returns the digit at bitposition bitpos
+uint32_t OverlayKey::getBitRange(uint32_t bitpos, uint32_t bits_per_digit) const
 {
-	int i = p / GMP_LIMB_BITS,      // index of starting bit
-		f = p % GMP_LIMB_BITS,      // position of starting bit
-		f2 = f + n - GMP_LIMB_BITS; // how many bits to take from next index
+	int i = bitpos / GMP_LIMB_BITS,      // word index of starting bit
+	    f = bitpos % GMP_LIMB_BITS,      // position of starting bit  
+	    f2 = f + bits_per_digit - GMP_LIMB_BITS; // how many bits to take from next index
 
-	if ((p + n > OverlayKey::keyLength) || (n > 32)) {
+	if ((bitpos + bits_per_digit > OverlayKey::keyLength) || (bits_per_digit > 32)) {
 		throw cRuntimeError("OverlayKey::get:  Invalid range");
 	}
 	if (GMP_LIMB_BITS < 32) {
@@ -439,9 +439,10 @@ uint32_t OverlayKey::getBitRange(uint32_t p, uint32_t n) const
 	}
 
 	return ((key[i] >> f) |                                     // get the bits of key[i]
-			(f2 > 0 ? (key[i+1] << (GMP_LIMB_BITS - f)) : 0)) & // the extra bits from key[i+1]
-		(((uint32_t)(~0)) >> (GMP_LIMB_BITS - n));              // delete unused bits
+		(f2 > 0 ? (key[i+1] << (GMP_LIMB_BITS - f)) : 0)) & // the extra bits from key[i+1]
+		(((uint32_t)(~0)) >> (GMP_LIMB_BITS - bits_per_digit)); // delete unused bits
 }
+
 
 double OverlayKey::toDouble() const
 {
@@ -550,9 +551,10 @@ OverlayKey OverlayKey::randomPrefix(uint32_t pos, cRNG* rng) const
 	return newKey;
 }
 
-// calculate shared prefix length
+
+// calculate shared prefix length (in number of equal digits)
 uint32_t OverlayKey::sharedPrefixLength(const OverlayKey& compKey,
-				                        uint32_t bitsPerDigit) const
+				        uint32_t bitsPerDigit) const
 {
 	if (compareTo(compKey) == 0) return keyLength;
 
@@ -566,7 +568,9 @@ uint32_t OverlayKey::sharedPrefixLength(const OverlayKey& compKey,
 		if (this->key[i] != compKey.key[i]) {
 			// XOR first differing limb for easy counting of the bits:
 			mp_limb_t d = this->key[i] ^ compKey.key[i];
-			if (msb) d <<= ( GMP_LIMB_BITS - (keyLength % GMP_LIMB_BITS) );
+			if (msb) // if differs in MSB: shift away leading unused bits
+				d <<= ( GMP_LIMB_BITS - (keyLength % GMP_LIMB_BITS) );
+			// shift as long as the highest d bit is 0 (due to XOR, i.e., equal)
 			for (j = GMP_LIMB_BITS-1; d >>= 1; --j);
 			length += j;
 			break;
@@ -575,7 +579,8 @@ uint32_t OverlayKey::sharedPrefixLength(const OverlayKey& compKey,
 		length += (msb ? keyLength % GMP_LIMB_BITS : GMP_LIMB_BITS);
 		msb = false;
 	}
-
+	// length is number of matching bits
+	// return number of matching digits
 	return length / bitsPerDigit;
 }
 

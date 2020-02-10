@@ -80,11 +80,13 @@ std::string KadRoutingTable::str() const
 size_type KadRoutingTable::getBucketIndex(const OverlayKey& key) const
 {
 	OverlayKey delta = key ^ myKey;
+	// this returns the prefixlength as number of matching digits
+	// (each digit ranges from 0 to 2^accelerationfactor - 1
 	uint prefixLen = delta.sharedPrefixLength(0, accelerationFactor);
 
-	// i is now the index of the LSB of the first non zero sub integer in delta
-	int i = delta.getLength() - (prefixLen+1)*accelerationFactor;
-	if (i < 0) // this is my key
+	// bitindex is now the index of the LSB of the first non-zero digit in delta
+	int bitindex = delta.getLength() - (prefixLen+1)*accelerationFactor;
+	if (bitindex < 0) // this is my key
 		return buckets.size() - 1;
 
 	// bool debuginfo(false);
@@ -94,38 +96,41 @@ size_type KadRoutingTable::getBucketIndex(const OverlayKey& key) const
 	// 		<< key << " nodekey: " << myKey << " delta: " << delta << endl;
 	// 	debuginfo= true;
 	// }
-	ASSERT(delta.getBitRange(i, accelerationFactor) != 0);
+	// bitindex is the LSB of the first non-zero digit, so digit must not be zero
+	ASSERT(delta.getBitRange(bitindex, accelerationFactor) != 0);
 
-	// if (not (i + accelerationFactor >= delta.getLength() or
-	// 	 delta.getBitRange(i + accelerationFactor, accelerationFactor) == 0))
+	// if (not (bitindex + accelerationFactor >= delta.getLength() or
+	// 	 delta.getBitRange(bitindex + accelerationFactor, accelerationFactor) == 0))
 	// {
-	// 	EV_WARN << "i + accelerationFactor < delta.getLength() and delta.getBitRange(i + accelerationFactor, accelerationFactor) != 0), key: " << key << " nodekey: " << myKey << " delta: " << delta << endl;
+	// 	EV_WARN << "bitindex + accelerationFactor < delta.getLength() and delta.getBitRange(bitindex + accelerationFactor, accelerationFactor) != 0), key: " << key << " nodekey: " << myKey << " delta: " << delta << endl;
 	// 	debuginfo= true;
 	// }
-	ASSERT(i + accelerationFactor >= delta.getLength() or
-		delta.getBitRange(i + accelerationFactor, accelerationFactor) == 0);
+	ASSERT(bitindex + accelerationFactor >= delta.getLength() or
+		delta.getBitRange(bitindex + accelerationFactor, accelerationFactor) == 0);
 
-	// bucket 0 is the farthest one from my id.
+	// on each level we have levelWidth buckets:
+	// levelWidth = 2^accelerationfactor - 1
 	// the prefixLen denotes depth of the level
 	// levelId = prefixLen
+	// bucket 0 is the farthest one from my id.
 	// levelBaseIndex =  levelId * levelWidth
-	// levelOffset = levelWidth - subint
+	// levelOffset = levelWidth - digit
 	// index = levelBaseIndex + levelOffset
-	// => index = (prefixLen+1) * levelWidth - subint
-	size_type index = (prefixLen+1)*getLevelWidth() - delta.getBitRange(i, accelerationFactor);
+	// => index = (prefixLen+1) * levelWidth - digit
+	size_type index = (prefixLen+1)*getLevelWidth() - delta.getBitRange(bitindex, accelerationFactor);
 	ASSERT(index <= getMaxNumBuckets());
 
 	// if (debuginfo)
 	// {
 	// 	EV_TRACE << "getBucketIndex(" << key << ") len/acc=" << delta.getLength() << "/" << accelerationFactor
-	// 		 << " i=" << i
+	// 		 << " bitindex=" << bitindex
 	// 		 << " delta=" << delta << " plen=" << prefixLen
-	// 		 << " subint=" << (unsigned int) delta.getBitRange(i, accelerationFactor)
+	// 		 << " subint=" << (unsigned int) delta.getBitRange(bitindex, accelerationFactor)
 	// 		 << " index=" << index << " maxindex=" << buckets.size()-1 << endl;
 	// }
 
 	// old calculation formula, just for checking...
-	// ASSERT(index == (key.getLength() - i)/accelerationFactor * getLevelWidth()- delta.getBitRange(i, accelerationFactor));
+	// ASSERT(index == (key.getLength() - bitindex)/accelerationFactor * getLevelWidth()- delta.getBitRange(i, accelerationFactor));
 	return std::min(buckets.size()-1, index);
 }
 
