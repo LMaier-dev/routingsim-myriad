@@ -46,6 +46,9 @@ public:
 	/// Returns the network dynamics module
 	inline NetworkDynamics& getDynamics() { return *dynamics; }
 
+	/// Returns a list of currently failed or affected nodes
+	inline const std::list<nodeid_t>& getFailedNodes() const { return failedNodes; }
+
 	/// Returns the network manager singleton
 	static inline NetworkManager& getManager() { return *getNetworkManager(); }
 
@@ -63,6 +66,8 @@ protected:
 private:
 	NetworkTopology* topology;
 	NetworkDynamics* dynamics;
+
+        std::list<nodeid_t> failedNodes;
 
 	// Topology Statistics
 	bool evaluateStatistics;

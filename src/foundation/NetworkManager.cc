@@ -130,10 +130,12 @@ void NetworkManager::handleMessage(cMessage *msg) {
 		switch (di->type) {
 		case DynamicsInfo::nodeFailure:
 			topology->disableNode(di->source);
+			failedNodes.push_back(di->source);
 			topology->resetNode(di->source);
 			break;
 		case DynamicsInfo::nodeRecovery:
 			topology->enableNode(di->source);
+			failedNodes.remove(di->source);
 			break;
 		case DynamicsInfo::linkFailure:
 			// depending on bidirectional flag deactivate one or both directions
