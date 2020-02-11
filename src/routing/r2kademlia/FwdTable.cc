@@ -98,8 +98,7 @@ void FwdTablePathID::addEntry(KadContact_p contact, bool isForeignPID)
 	PathID incomingPathID(getPathID(*ownNodeID, currentpath));
 
 	// check for already existing PID
-	auto pidentry= PIDFwdTable.find(incomingPathID);
-	if ( pidentry != PIDFwdTable.end() )
+	if ( auto pidentry= PIDFwdTable.find(incomingPathID); pidentry != PIDFwdTable.end() )
 	{
 		EV_WARN << "addEntry(): inPID entry " << incomingPathID << " exists already" << endl;
 		// set foreign flag
@@ -110,8 +109,8 @@ void FwdTablePathID::addEntry(KadContact_p contact, bool isForeignPID)
 
 	FwdTableEntry fwdentry;
 	// Check for previous existing entry for this contact
-	auto it= NIDPIDTable.find(contact->getKey());
-	if (it != NIDPIDTable.end())
+
+	if ( auto it= NIDPIDTable.find(contact->getKey()); it != NIDPIDTable.end() )
 	{
 		EV_WARN << "addEntry(): PID entry for contact " << contact->getKey().shortStr() << " existed already with incoming PID " << it->second << endl;
 		if (it->second == incomingPathID)
@@ -156,9 +155,8 @@ bool FwdTablePathID::modEntry(KadContact_p contact, bool isForeignPID)
 	PathID priorPathID= PathID::UndefinedPathID;
 	bool additionalEntry= false;
 
-	auto pidentry= NIDPIDTable.find(contact->getKey());
 	// Lookup old entry if it exists
-	if ( pidentry != NIDPIDTable.end() )
+	if ( auto pidentry= NIDPIDTable.find(contact->getKey()); pidentry != NIDPIDTable.end() )
 	{
 		kad_path newpath(contact->getPath());
 
@@ -225,8 +223,7 @@ bool FwdTablePathID::modEntry(KadContact_p contact, bool isForeignPID)
 
 		FwdTableEntry fwdentry;
 		// PID already exists, just re-enable mapping
-		auto it= PIDFwdTable.find(incomingPathID);
-		if (it != PIDFwdTable.end())
+		if (auto it= PIDFwdTable.find(incomingPathID); it != PIDFwdTable.end())
 		{
 			EV_TRACE << "modEntry(): inPID " << incomingPathID << " already existed" << endl;
 			fwdentry= it->second;
@@ -273,9 +270,8 @@ void FwdTablePathID::delPIDEntry(PathID pid)
 {
 	if (pid == PathID::UndefinedPathID)
 		return;
-	
-	auto it= PIDFwdTable.find(pid);
-	if ( it != PIDFwdTable.end() )
+
+	if ( auto it= PIDFwdTable.find(pid); it != PIDFwdTable.end() )
 	{ // entry exists
 		// delete all related PID entries (prior entries)
 		if (it->second.prevPathID != PathID::UndefinedPathID)
@@ -297,15 +293,13 @@ void FwdTablePathID::delPIDEntry(PathID pid)
 }
 
 
-
 void FwdTablePathID::delEntry(KadContact_p contact)
 {
        	if (contact == nullptr)
 		return;
 
-	auto pidentry= NIDPIDTable.find(contact->getKey());
 	// Lookup entry
-	if ( pidentry != NIDPIDTable.end() )
+	if ( auto pidentry= NIDPIDTable.find(contact->getKey()); pidentry != NIDPIDTable.end() )
 	{
 		// delete all PID entries related to this contact
 		PathID currentPathID= pidentry->second;

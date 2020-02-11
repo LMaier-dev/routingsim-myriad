@@ -8,11 +8,14 @@ Singapore, SGP, December 14-16, 2011, 305–310, IEEE, Piscataway, NJ.
 doi:10.1109/ICON.2011.6168493 
 https://ieeexplore.ieee.org/document/6168493
 
-The current version has been tested with OMNeT++ 5.5.1 (and 5.4.1 as well).
+The current version has been tested with OMNeT++ 5.6 (5.5.1 and 5.4.1 as well).
 
 # Installation
 Get OMNeT++ from https://omnetpp.org/ and install it according to
-the manual. Once you have OMNeT++ in your PATH and LD_LIBRARY_PATH,
+the manual. You should make sure that CXXFLAGS=-std=c++17
+is set.
+
+Once you have OMNeT++ in your PATH and LD_LIBRARY_PATH,
 type
 `make makefiles`
 to generate the makefiles and
