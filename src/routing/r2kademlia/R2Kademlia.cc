@@ -16,6 +16,7 @@
 #include <BaseTypes.h>
 
 #include "Statistics.h"
+#include "TrickleTimer.h"
 
 #include "R2Kademlia.h"
 #include "KadRoutingTable.h"
