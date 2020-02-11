@@ -5,19 +5,20 @@ using namespace omnetpp;
 
 namespace routingsim {
 
-	
+/* Implementation of Trickle timer, see RFC 6202 https://tools.ietf.org/html/rfc6206 */
+
 class TrickleTimer {
 	SimTime Imin= SimTime(100,SIMTIME_MS); // minimum interval size
-	unsigned int Imax= 5; // maximum interval doubling
-	SimTime maxInterval= 0; // maximum interval size
-	unsigned int k= 1; // redundancy constant
+	unsigned int Imax= 11; // maximum interval doubling
+	SimTime maxInterval= 0; // maximum interval size = 2^Imax * Imin
+	unsigned int k= 1; // redundancy constant typically between 1 and 5, 0 has no useful meaning
 	
 	SimTime currentInterval= 0; // current interval
 	SimTime currentTime= 0;
 	unsigned int counter= 0;
 public:
         TrickleTimer(SimTime minInterval, unsigned int maxDoubling, unsigned int redundancy= 5)
-		: Imin(minInterval), Imax(maxDoubling), maxInterval(maxDoubling*minInterval), k(redundancy)
+		: Imin(minInterval), Imax(maxDoubling), maxInterval((1 << maxDoubling)*minInterval), k(redundancy)
 	{
 		currentInterval= getSimulation()->getContext()->uniform(Imin, maxInterval);
 	};
@@ -30,7 +31,7 @@ public:
 	inline void increment() { counter++; }
 	// If Trickle hears a transmission that is "inconsistent" and I is greater than Imin,
 	// it resets the Trickle timer.
-	void reset();
+	inline void reset();
 	// returns true if transmission is allowed
 	inline bool transmit() const { return counter < k; }
 	inline unsigned int getImax() const { return Imax; }
