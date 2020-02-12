@@ -18,7 +18,7 @@
 #define __ROUTINGSIM_NETWORKMANAGER_H_
 
 #include <omnetpp.h>
-#include <boost/unordered_map.hpp>
+#include <unordered_set>
 
 /// forward declarations
 namespace routingsim {
@@ -47,7 +47,7 @@ public:
 	inline NetworkDynamics& getDynamics() { return *dynamics; }
 
 	/// Returns a list of currently failed or affected nodes
-	inline const std::list<nodeid_t>& getFailedNodes() const { return failedNodes; }
+	inline const std::unordered_set<nodeid_t>& getFailedNodes() const { return failedNodes; }
 
 	/// Returns the network manager singleton
 	static inline NetworkManager& getManager() { return *getNetworkManager(); }
@@ -67,7 +67,7 @@ private:
 	NetworkTopology* topology;
 	NetworkDynamics* dynamics;
 
-        std::list<nodeid_t> failedNodes;
+        std::unordered_set<nodeid_t> failedNodes;
 
 	// Topology Statistics
 	bool evaluateStatistics;

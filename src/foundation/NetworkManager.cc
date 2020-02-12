@@ -130,16 +130,17 @@ void NetworkManager::handleMessage(cMessage *msg) {
 		switch (di->type) {
 		case DynamicsInfo::nodeFailure:
 			topology->disableNode(di->source);
-			failedNodes.push_back(di->source);
+			failedNodes.insert(di->source);
 			topology->resetNode(di->source);
 			break;
 		case DynamicsInfo::nodeRecovery:
 			topology->enableNode(di->source);
-			failedNodes.remove(di->source);
+			failedNodes.erase(di->source);
 			break;
 		case DynamicsInfo::linkFailure:
 			// depending on bidirectional flag deactivate one or both directions
 			topology->disableLink(di->source,di->destination);
+			failedNodes.insert(di->source);
 			if (di->bidirectionalLinkFailure) {
 				topology->disableLink(di->destination,di->source);
 			}
@@ -147,6 +148,7 @@ void NetworkManager::handleMessage(cMessage *msg) {
 		case DynamicsInfo::linkRecovery:
 			// depending on bidirectional flag deactivate one or both directions
 			topology->enableLink(di->source,di->destination);
+			failedNodes.erase(di->source);
 			if (di->bidirectionalLinkFailure) {
 				topology->enableLink(di->destination,di->source);
 			}
