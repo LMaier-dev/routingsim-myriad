@@ -13,15 +13,9 @@
 // along with this program.  If not, see http://www.gnu.org/licenses/.
 // 
 
-#include <BaseTypes.h>
-
-#include "Statistics.h"
 
 #include "R2Kademlia.h"
-#include "KadRoutingTable.h"
 #include "KadObserver.h"
-
-#include "FwdTable.h"
 
 namespace routingsim {
 // for std::bind with callback functions

@@ -305,6 +305,7 @@ private:
 	bool sendDataPackets;
 	bool usePathIDs;
 	uint8_t probeStrategy;
+	uint8_t rediscoveryFanOutFactor= 3;
 	simtime_t rediscoveryWaitTime;
 	simtime_t pathSetupWaitTime;
 	simtime_t updateWaitTime;
