@@ -715,11 +715,12 @@ bool R2Kademlia::handleQueryRouteResponse(KadPacket_p answer, RPCState& rpcState
 void R2Kademlia::sendFindNode(const OverlayKey& key, bool exact, const OverlayKey* notvia_unreachable_node, const OverlayKey* notvia_failednode_neighbor) {
 	EV_TRACE << "sendFindNode w/ " << key.shortStr() << (exact ? " (NID)" : (key == myOverlayKey ? " (JOIN)" :" (RID)")) // Node ID or Resource ID?
 		 << (notvia_unreachable_node ? " (Rediscovery)" : "") << endl;
-	auto contacts = routingTable.getClosestContacts(key, findNodeNumber);
+	
 	//ASSERT(contacts.size() > 0);
-	if (contacts.size() > 0)
+	if (auto contacts = routingTable.getClosestContacts(key, findNodeNumber); contacts.size() > 0)
 	{
 		// TODO: use several contacts to send multiple Rediscovery requests in parallel
+		
 		const KadContact& contact = chooseNextHop(contacts, key, myOverlayKey);
 		ASSERT(contact.isValid());
 		ASSERT(!contact.getKey().isUnspecified());

@@ -58,7 +58,18 @@ void R2Kademlia::doDataProbe(short timerID) {
 	if (neighborTable.size() == 0) return; // we are isolated
 	const OverlayKey* probeKey(nullptr);
 	do {
-		probeKey = &getKadObserver().getRandomNodeKey();
+		// if failed nodes or links exist use them
+		if (getNetworkManager()->getFailedNodes().size() > 0) {
+			auto nodeit= getNetworkManager()->getFailedNodes().cbegin();
+			for (unsigned int index= intuniform(0, getNetworkManager()->getFailedNodes().size()-1); index > 0; index--)
+				nodeit++;
+				
+			probeKey = &getKadObserver().getNodeKey(*nodeit);
+		}
+		else
+			probeKey = &getKadObserver().getRandomNodeKey();
+
+		
 	} while(*probeKey == myOverlayKey);
 	
 	sendData(*probeKey);
