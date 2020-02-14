@@ -38,11 +38,14 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadUpdateRouteReq> packet) {
 
 	// path to origin of this KadUpdateRouteReq (excluding myself)
 	kad_path source_path= packet->reversePath(packet->getSrcPath(0, packet->getRouteArraySize()-1));
+	/*
 	EV_TRACE << "path to origin: <";
 	for (const OverlayKey& k : source_path)
 		EV_TRACE << k.shortStr() << ' ';
 	EV_TRACE << '>' << endl;
+	*/
 
+	bool propagateUpdate(false);
 	// this is route update information only, no answer required
 	unsigned int numContacts= packet->getContactArraySize();
 	for (unsigned int i= 0; i < numContacts; i++)
@@ -57,12 +60,13 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadUpdateRouteReq> packet) {
 			EV_TRACE << "ignoring update about me" << endl;
 			continue;
 		}
-		
+
+		/* 
 		EV_TRACE << "reported path to contact " << contactkey.shortStr() << " <";
 		for (const auto& k : path)
 			EV_TRACE << k.shortStr() << ' ';
 		EV_TRACE << '>' << endl;
-
+		*/
 		switch (action) {
 			case KAD_Announce:
 				EV_TRACE << "UpdateReq Announce for contact " << contactkey.shortStr() << endl;
@@ -87,6 +91,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadUpdateRouteReq> packet) {
 					 << packet->getSource().shortStr() << ',' << contactkey.shortStr() << " >" << endl;
 				// now invalidate all contacts with this link
 				routingTable.invalidateContacts(contactkey, packet->getSource());
+				propagateUpdate= true;
 				break;
 
 			default:
@@ -94,6 +99,10 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadUpdateRouteReq> packet) {
 				break;
 		}
 	}
+
+	// forward UpdateReq closer towards destination
+	if (propagateUpdate)
+		propagateUpdateReq(std::move(packet));
 
 }
 
@@ -105,11 +114,17 @@ void R2Kademlia::scheduleUpdate(const KadContact& affectedContact, KadRouteUpdat
 	// send UpdateRouteReq to ID-wise closest Nodes
 	size_t contactsLen = std::max((size_t)findNodeNumber, routingTable.getSplitSize());
 	KadContactList closeContacts(routingTable.getClosestContacts(affectedContact.getKey(), contactsLen));
-	
+
+	const uint8_t maxNumberOfNotifiedContacts= 5;
+	uint8_t numberOfNotifiedContacts = 0;
 	if (closeContacts.size() > 0)
 	{ // if there are contacts left to notify
 		for (const auto& notifyContact : closeContacts)
 		{ // each ID-wise close contact gets an UpdateRouteReq from us
+			// if we reached the maximum fan out, exit the loop
+			if (numberOfNotifiedContacts == maxNumberOfNotifiedContacts)
+				break;
+			
 			//EV_TRACE << "scheduleUpdate for " << affectedContact.getKey().shortStr() << " (" << action
 			//	 << ") notify:" << notifyContact->getKey().shortStr() ;
 			// except when it is the contact itself
@@ -126,13 +141,13 @@ void R2Kademlia::scheduleUpdate(const KadContact& affectedContact, KadRouteUpdat
 				continue;
 			}
 
-			auto entry= updateQueue.find(notifyContact->getKey());
-			if ( entry == updateQueue.end() ) {
+			// create new entry or append update
+			if ( auto entry= updateQueue.find(notifyContact->getKey()); entry == updateQueue.end() ) {
 				// need to create new entry
 				updateQueue[notifyContact->getKey()]= { std::make_pair(affectedContact, action) };
 			}
 			else
-			{
+			{ // entry for contact exists, so append
 				auto newelem= std::make_pair(affectedContact, action);
 				// entry exists, so we need to append this update to the list
 				auto existelem= std::find_if(entry->second.rbegin(), entry->second.rend(),
@@ -145,7 +160,7 @@ void R2Kademlia::scheduleUpdate(const KadContact& affectedContact, KadRouteUpdat
 				}
 			}
 			//EV_TRACE << " done." << endl;
-
+			numberOfNotifiedContacts++;
 		} // end for each contact
 			
 	} // endif
@@ -159,7 +174,13 @@ void R2Kademlia::scheduleUpdate(const KadContact& affectedContact, KadRouteUpdat
 
 }
 
-	
+
+void R2Kademlia::propagateUpdateReq(std::unique_ptr<KadUpdateRouteReq> packet)
+{
+	/// TBD
+}
+
+
 /// send all updates
 void R2Kademlia::sendUpdates()
 {

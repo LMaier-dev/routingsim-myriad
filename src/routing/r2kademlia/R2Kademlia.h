@@ -251,6 +251,8 @@ private:
 	void rediscoverContacts();
 	/// adds routing table updates for contacts to an update queue
 	void scheduleUpdate(const KadContact& affectedcontact, KadRouteUpdateAction action);
+	/// send Update closer towards target contacts
+	void propagateUpdateReq(std::unique_ptr<KadUpdateRouteReq> packet);
 	/// sends all queued updates
 	void sendUpdates();
 	/// schedule a PathSetup
