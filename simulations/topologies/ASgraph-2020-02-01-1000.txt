@@ -1,9 +1,9 @@
 #Name: ASgraph 2020-02-01-1000
 #Type: Graph
 #Number of nodes: 67640
-#Number of edges: 17675
+#Number of edges: 176758
 #Average degree:   5.2264
-67640 17675
+67640 176758
 0 1
 0 2
 0 3
