@@ -27,7 +27,11 @@ Define_Module(LinkFailure);
 
 simtime_t LinkFailure::scheduleDynamics() {
 
-	unsigned int numLinksFail = par("numLinksFail").intValue();
+	NetworkTopology &ntop = getTopology();
+
+	double linkFraction = par("linkFraction").doubleValue();
+	size_t numLinks = ntop.getNumberLinks();
+	unsigned int numLinksFail = linkFraction > 0.0 ? (size_t) numLinks*linkFraction : par("numLinksFail").intValue();
 	double duration = par("duration").doubleValue();
 	double period = par("period").doubleValue();
 	string linkSelection = par("linkSelection").stdstringValue();
@@ -38,7 +42,6 @@ simtime_t LinkFailure::scheduleDynamics() {
 
 	if (linkSelection == "none") return simTime() + period;
 
-	NetworkTopology &ntop = getTopology();
 
 	// get the mapping from active nodes to active their degree
 	ntop.getNodeDegrees(nodeDegrees);
@@ -54,7 +57,7 @@ simtime_t LinkFailure::scheduleDynamics() {
 		// it can be the case that the graph is connected, but
 		// we cannot remove a single link without partitioning it
 		// therefore we have a maximum number of retries
-		while (max_retries > 0 && scheduledFailures == 0)
+		while (max_retries > 0 && scheduledFailures < numLinksFail)
 		{
 			max_retries--;
 			

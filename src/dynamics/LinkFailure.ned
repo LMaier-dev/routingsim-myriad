@@ -26,8 +26,12 @@ parameters:
 
     /// number of links that should be failed
     int numLinksFail = 3;
-   		
-   	/// periodic occurence of failure
+
+    /// fraction of links that fail at the beginning of each interval
+   double linkFraction = default(0.01);
+
+
+    /// periodic occurence of failure
     double period @unit(s) = default(200s);
     	
     /// duration of failure after period start

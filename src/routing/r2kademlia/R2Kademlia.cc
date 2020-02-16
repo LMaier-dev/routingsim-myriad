@@ -32,7 +32,7 @@ Define_Module(R2Kademlia);
 
 void R2Kademlia::onInitialize() {
 	EV << "R2Kademlia::onInitialize()" << endl;
-	OverlayKey::setKeyLength(112);
+	OverlayKey::setKeyLength(OverlayKeyLength);
 	myOverlayKey = OverlayKey::random(getRNG(0));
 	fwdTablePathID.setOwnNodeID(&myOverlayKey);
 	getKadObserver().registerUp(myOverlayKey, node().getNodeId());
@@ -68,6 +68,7 @@ void R2Kademlia::onInitialize() {
 	detailedRoutingTableStats = par("detailedRoutingTableStats").boolValue();
 	rediscoveryWaitTime = (simtime_t) (par("rediscoveryWaitTime").doubleValue() * 0.001); // given in ms
 	updateWaitTime = (simtime_t) (par("updateWaitTime").doubleValue() * 0.001);  // given in ms
+	updateWaitTimeFast = updateWaitTime / 10;
 	pathSetupWaitTime = (simtime_t) (par("pathSetupWaitTime").doubleValue() * 0.001);  // given in ms
 
 	getStatistics().addSample(this);
@@ -357,22 +358,23 @@ void R2Kademlia::handlePacket(KadAnswer_p packet) {
 		}
 		EV_TRACE << endl;
 		getKadObserver().sampleLaterPath(getOverlayKey(),returnpath);
-	        uint pathlen= returnpath.size();
-		// start from farthest node to find potential PID entry
-		for (auto keyit= returnpath.crbegin(); keyit != returnpath.crend(); keyit++) {
 
-			if ( fwdTablePathID.NIDPIDTable.find(*keyit) != fwdTablePathID.NIDPIDTable.end() )
-			{
-				EV_TRACE << "LaterPath: found a PID for " << pathlen << "/" << returnpath.size() << endl;
-				// the end of this path is only useful
-				if (routingTable.distance(*keyit,returnpath.back())<routingTable.distance(returnpath.back()))
-				{
-					viablePIDpaths++;
-					break;
-				}
-			}
-			pathlen--;
-		} // end for
+	        // uint pathlen= returnpath.size();
+		// // start from farthest node to find potential PID entry
+		// for (auto keyit= returnpath.crbegin(); keyit != returnpath.crend(); keyit++) {
+		// 	if ( fwdTablePathID.NIDPIDTable.find(*keyit) != fwdTablePathID.NIDPIDTable.end() )
+		// 	{
+		// 		EV_TRACE << "LaterPath: found a PID for " << pathlen << "/" << returnpath.size() << endl;
+		// 		// the end of this path is only useful
+		// 		if (routingTable.distance(*keyit,returnpath.back())<routingTable.distance(returnpath.back()))
+		// 		{
+		// 			viablePIDpaths++;
+		// 			break;
+		// 		}
+		// 	}
+		// 	pathlen--;
+		// } // end for
+
 	}
 
 	// the following call handles the RPC answer
@@ -642,9 +644,10 @@ bool R2Kademlia::handleQueryRouteResponse(KadPacket_p answer, RPCState& rpcState
 // FIND NODE
 void R2Kademlia::sendFindNode(const OverlayKey& key, bool exact, const OverlayKey* notvia_unreachable_node, const OverlayKey* notvia_failednode_neighbor) {
 	bool is_rediscovery(notvia_unreachable_node and  notvia_failednode_neighbor);
-	EV_TRACE << "sendFindNode w/ " << key.shortStr() << (exact ? " (NID)" : (key == myOverlayKey ? " (JOIN)" :" (RID)")) // Node ID or Resource ID?
-		 << (is_rediscovery ? " (Rediscovery)" : "") << endl;
-	
+	EV_TRACE << "sendFindNode w/ " << key.shortStr() << (exact ? " (NID)" : (key == myOverlayKey ? " (JOIN)" : " (RID)")) // Node ID or Resource ID?
+		 << (is_rediscovery ? " (Rediscovery)" : "") <<  endl;
+
+
 	//ASSERT(contacts.size() > 0);
 	if (auto contacts = routingTable.getClosestContacts(key, findNodeNumber); contacts.size() > 0)
 	{
@@ -1136,9 +1139,10 @@ void R2Kademlia::recordScalars() {
 	recordScalar("fwdTableSize", fwdTablePathID.getNumEntries());
 	recordScalar("fwdTableValid", fwdTablePathID.getNumValidEntries());
 	recordScalar("fwdTableForeign", fwdTablePathID.getNumForeignEntries());
-	EV_TRACE << (shortenedlaterpaths * 100.0) / (double) laterpaths << "% "
-		 << shortenedlaterpaths << "/" << laterpaths << " of later paths shortened. "
-		 << "Viable PIDs: " << viablePIDpaths << "(" << (viablePIDpaths*100.0)/(double) laterpaths << "%)" << endl;
+
+	// EV_TRACE << (shortenedlaterpaths * 100.0) / (double) laterpaths << "% "
+	// 	 << shortenedlaterpaths << "/" << laterpaths << " of later paths shortened. "
+	// 	 << "Viable PIDs: " << viablePIDpaths << "(" << (viablePIDpaths*100.0)/(double) laterpaths << "%)" << endl;
 }
 
 void R2Kademlia::recordRoutingTable() {
@@ -1338,8 +1342,21 @@ void R2Kademlia::doReachabilityTest(short timerID) {
 	if (neighborTable.size() == 0) return; // we are isolated
 	const OverlayKey* key;
 	do {
-		key = &getKadObserver().getRandomNodeKey();
-	} while(*key == myOverlayKey);
+		if (getNetworkManager()->getFailedNodes().size() > 0) {
+			auto nodeit= getNetworkManager()->getFailedNodes().cbegin();
+			for (unsigned int index= intuniform(0, getNetworkManager()->getFailedNodes().size()-1); index > 0; index--)
+				nodeit++;
+
+			key = &getKadObserver().getNodeKey(*nodeit);
+			// it does not make sense to use the own key if it is the only choice
+			if (*key == myOverlayKey and getNetworkManager()->getFailedNodes().size() == 1)
+				return;
+		}
+		else
+			key = &getKadObserver().getRandomNodeKey();
+
+	} while (*key == myOverlayKey);
+
 	sendFindNode(*key, true);
 }
 

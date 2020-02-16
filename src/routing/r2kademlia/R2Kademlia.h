@@ -52,7 +52,7 @@ enum reasoncode : uint8_t {
 	unhandledType= 128
 };
 
-
+constexpr uint8_t OverlayKeyLength= 112;
 
 /**
  * Implementation of R2Kademlia.
@@ -255,6 +255,8 @@ private:
 	void propagateUpdateReq(std::unique_ptr<KadUpdateRouteReq> packet);
 	/// sends all queued updates
 	void sendUpdates();
+	/// sends only KAD_Unreachable updates
+	void sendUrgentUpdates();
 	/// schedule a PathSetup
 	void schedulePathSetup(const OverlayKey& contactkey);
 	/// send all queue (valid) path setups
@@ -311,6 +313,7 @@ private:
 	simtime_t rediscoveryWaitTime;
 	simtime_t pathSetupWaitTime;
 	simtime_t updateWaitTime;
+	simtime_t updateWaitTimeFast;
 	bool detailedRoutingTableStats;
 	//@}
 
@@ -378,6 +381,7 @@ std::unique_ptr<T> R2Kademlia::makePacket(const KadContact* contact, const char 
 	packet->appendRoute(contact);
 	return packet;
 }
+
 
 template<typename T>
 std::unique_ptr<T> R2Kademlia::makeAnswer(KadPacket& original) {
