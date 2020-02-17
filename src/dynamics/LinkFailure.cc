@@ -50,10 +50,12 @@ simtime_t LinkFailure::scheduleDynamics() {
 	// neighboring nodes must not be isolated by choice of links (stay connected)
 	if (linkSelection == "randomAllButOne") {
 
-		unsigned int max_retries= ntop.getActiveNumberNodes();
+		unsigned long max_retries= (3 * ntop.getActiveNumberNodes())/2;
 		nodeid_t source = undefined_node;
 		nodeid_t destination = undefined_node;
-		
+
+		std::set<nodeid_t> selectedNodes;
+		EV_TRACE << "linkSelection randomAllButOne(): number of links to fail=" <<  numLinksFail << endl;
 		// it can be the case that the graph is connected, but
 		// we cannot remove a single link without partitioning it
 		// therefore we have a maximum number of retries
@@ -69,24 +71,48 @@ simtime_t LinkFailure::scheduleDynamics() {
 
 			// choose source node
 			source = getTopology().getRandomNode(getRNG(0));
+			// if source node already selected: skip
+			if (selectedNodes.find(source) != selectedNodes.end())
+				continue;
 
 			std::vector<nodeid_t> neighbors;
 			ntop.getNeighborNodeIDs(source, neighbors);
 
-			// single link only nodes are not eligible
-			if (neighbors.size() <= 1)
+			// single link only nodes are not eligible or if all links are more than required
+			if (neighbors.size() <= 1 or neighbors.size() > numLinksFail-scheduledFailures)
 				continue;
-		
-			for (unsigned int i= 0; i < neighbors.size()-1; i++)
+
+			// check for dependent nodes (those already selected) in the neigborhood:
+			// They are not eligible, otherwise we risk partioning
+			bool eligible= true;
+			for (unsigned int i= 0; i < neighbors.size(); i++)
+				if (selectedNodes.find(neighbors[i]) != selectedNodes.end())
+				{
+					eligible= false;
+					break;
+				}
+			if (not eligible)
+				continue;
+
+			unsigned int remaininglink= intuniform(0,neighbors.size()-1);
+			// it may be the case that some neighboring node already chose that link to be down
+			for (unsigned int i= 0; i < neighbors.size(); i++)
 			{
-				if ( nodeDegrees[neighbors[i]] > 1 )
+				// safety measures: remove all but one link from this node
+				// the neighboring node must have at least one more link
+				// (otherwise we may get two isolated nodes connected to each other)
+				if ( nodeDegrees[source] > 1 and nodeDegrees[neighbors[i]] > 2 and i != remaininglink )
 				{
 					destination = neighbors[i];
 					scheduleLinkFailure(source, destination, period, duration);
+					nodeDegrees[source]--;
+					nodeDegrees[neighbors[i]]--;
 					scheduledFailures++;
 				}
 			}
+			selectedNodes.insert(source);
 		} // end while
+		EV_TRACE << "linkSelection randomAllButOne(): scheduled link failures=" << scheduledFailures << endl;
 		return simTime() + period;
 	}
 
