@@ -205,8 +205,8 @@ void NetworkManager::sampleStatistics( Statistics& stats ) {
 	if (topologyStatistics== string("Heavy")) {
 		partitionCount->record(pc);
 	}
-
 }
+
 
 NetworkManager* getNetworkManager() {
 	if (mgr == NULL) {

@@ -341,15 +341,15 @@ void R2Kademlia::scheduleRediscovery(const OverlayKey& contactkey, const Overlay
 			<< " because it is already in rediscovering state" << endl;
 		return;
 	}
-	
+
 	EV_TRACE << "Rediscovery scheduled for contact " << contactkey.shortStr() << " <"
 		<< notvia_unreachable_node.shortStr() << ' '
 		<< notvia_failednode_neighbor.shortStr() << '>' << endl;
 
 	auto rediscoverContact=
 		std::make_unique<const KadContact>(contactkey, std::vector<OverlayKey>{notvia_unreachable_node, notvia_failednode_neighbor});
-	
-	rediscoverQueue.push_back(std::move(rediscoverContact));
+
+	rediscoverQueue.push(std::move(rediscoverContact));
 
 	if (!rediscoveryScheduled)
 	{
@@ -361,12 +361,13 @@ void R2Kademlia::scheduleRediscovery(const OverlayKey& contactkey, const Overlay
 
 void R2Kademlia::rediscoverContacts() {
 	// traverse list of scheduled contacts for rediscovery
+	// the list is sorted by ID-wise vicinity, because contacts in lower buckets are more important
 	// recheck status and set to rediscover
 	EV_TRACE << "rediscoverContacts called, Queued: " << rediscoverQueue.size() << endl;
 	
 	while (!rediscoverQueue.empty())
 	{
-		auto& contact= rediscoverQueue.front();
+		auto& contact= rediscoverQueue.top();
 		// check for current status of scheduled contact
 		auto rt_contact= routingTable.getContact(contact->getKey());
 		if (rt_contact) { // so contact still exists
@@ -381,7 +382,7 @@ void R2Kademlia::rediscoverContacts() {
 				sendFindNode(rt_contact->getKey(), true, &failedLink[0], &failedLink[1]);
 			}
 		}
-		rediscoverQueue.pop_front();
+		rediscoverQueue.pop();
 	}
 
 	// next call of this procedure will be scheduled on demand

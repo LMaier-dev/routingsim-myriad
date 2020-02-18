@@ -107,6 +107,10 @@ public:
 		type(undefined), source(undefined_node), destination(undefined_node),
 		bidirectionalLinkFailure(true), occurrence(0), duration(0) {
 	}
+	DynamicsInfo(const DynamicsInfo& other) :
+		type(other.type), source(other.source), destination(other.destination),
+		bidirectionalLinkFailure(other.bidirectionalLinkFailure), occurrence(other.occurrence), duration(other.duration) {
+	}
 };
 
 } //namespace

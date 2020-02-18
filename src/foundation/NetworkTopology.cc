@@ -903,6 +903,7 @@ void NetworkTopology::enableLink(nodeid_t f, nodeid_t t) {
 	Node::getNode(from)->enableLink(Node::getNode(to), "toNeighbors$o");
 }
 
+
 void NetworkTopology::disableNode(nodeid_t n) {
 	BGLOutEdgeIt oe_cur, oe_end;
 	BGLInEdgeIt ie_cur, ie_end;
