@@ -483,8 +483,10 @@ inline void copyValidContacts(const std::vector<std::unique_ptr<KadContact>>& so
 
 KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_type n) const
 {
+	ASSERT(not key.isUnspecified()); // calling this with unspecified key is considered useless and an error
 	KadContactList result{};
 	result.reserve(n);
+
 	size_type index = getBucketIndex(key);
 	auto bucket = buckets.begin() + index;
 	if (bucket->size() >= n)
@@ -498,8 +500,10 @@ KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_t
 		// and then we go down the tree
 		size_type firstOnLevelIndex = getFirstOnBucketLevel(index);
 		uint width = getLevelWidth();
-		auto level = buckets.begin() + firstOnLevelIndex;
-		for (; level < buckets.end() and result.size() < n; level+=width) {
+
+		for (auto level = buckets.begin() + firstOnLevelIndex;
+		     level < buckets.end() and result.size() < n;
+		     level+=width) {
 			if (level == buckets.end()-1)
 			{
 				copyValidContacts(level->contacts, result);
@@ -521,13 +525,6 @@ KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_t
 		}
 	}
 	// now we sort the contacts by their XOR metric
-	struct KadContactCompare {
-		const OverlayKey& key;
-		KadContactCompare(const OverlayKey& key) : key(key) {}
-		bool operator()(KadContact_p& a, KadContact_p& b) const {
-			return (a->getKey() ^ key) < (b->getKey() ^ key);
-		}
-	};
 	std::sort(result.begin(), result.end(), KadContactCompare(key));
 	// if we have found more than n contacts, we need to remove some
 	if (result.size() > n) {

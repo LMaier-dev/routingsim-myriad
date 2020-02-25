@@ -249,6 +249,7 @@ private:
 	uint8_t discoveryRadius = 1;
 };
 
+
 } //namespace
 
 #endif // __ROUTINGSIM_KadRoutingTalbe_H_

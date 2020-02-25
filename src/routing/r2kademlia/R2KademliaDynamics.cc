@@ -106,16 +106,16 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadUpdateRouteReq> packet) {
 
 }
 
-	
+
 void R2Kademlia::scheduleUpdate(const KadContact& affectedContact, KadRouteUpdateAction action)
 {
-
 	// we collect all update information for neighbors
 	// send UpdateRouteReq to ID-wise closest Nodes
 	size_t contactsLen = std::max((size_t)findNodeNumber, routingTable.getSplitSize());
-	KadContactList closeContacts(routingTable.getClosestContacts(affectedContact.getKey(), contactsLen));
+	//KadContactList closeContacts(routingTable.getClosestContacts(affectedContact.getKey(), contactsLen));
+	KadContactList closeContacts(routingTable.getClosestContacts(myOverlayKey, contactsLen));
 
-	const uint8_t maxNumberOfNotifiedContacts= 5;
+	const uint8_t maxNumberOfNotifiedContacts= 10;
 	uint8_t numberOfNotifiedContacts = 0;
 	if (closeContacts.size() > 0)
 	{ // if there are contacts left to notify
@@ -167,7 +167,7 @@ void R2Kademlia::scheduleUpdate(const KadContact& affectedContact, KadRouteUpdat
 			//EV_TRACE << " done." << endl;
 			numberOfNotifiedContacts++;
 		} // end for each contact
-			
+
 	} // endif
 
 	if (!updateScheduled)
@@ -184,35 +184,26 @@ void R2Kademlia::scheduleUpdate(const KadContact& affectedContact, KadRouteUpdat
 
 void R2Kademlia::propagateUpdateReq(std::unique_ptr<KadUpdateRouteReq> packet)
 {
-	OverlayKey affectedContactKey;
+	OverlayKey destContactKey= packet->getDstNodeID();
 	unsigned int numContacts= packet->getContactArraySize();
-	for (unsigned int i= 0; i < numContacts; i++)
-	{
-		// get contact and corresponding path info
-		affectedContactKey= packet->getContact(i);
-		auto action= packet->getAction(i);
-
-		if (affectedContactKey == myOverlayKey) {
-			continue;
-		}
-
-		if (action == KAD_Unreachable) {
-			break;
-		}
-	}
 	size_t contactsLen = std::max((size_t)findNodeNumber, routingTable.getSplitSize());
-	KadContactList closeContacts(routingTable.getClosestContacts(affectedContactKey, contactsLen));
-	const KadContact& contact = chooseNextHop(closeContacts, affectedContactKey, myOverlayKey);
+	KadContactList closeContacts(routingTable.getClosestContacts(destContactKey, contactsLen));
+	const KadContact& contact = chooseNextHop(closeContacts, destContactKey);
 	// check whether that contact is closer to the target than we
-	if ( (contact.getKey() ^ myOverlayKey) > (contact.getKey() ^ affectedContactKey) )
+	if ( (contact.getKey() ^ myOverlayKey) > (contact.getKey() ^ destContactKey) )
 	{
-		packet->setSource(myOverlayKey);
-		packet->setHopLimit(hopLimit);
+		packet->removeControlInfo();
 		// this will reset the route
 		packet->setRouteArraySize(0);
 		packet->setActiveArraySize(0);
+		packet->setSource(myOverlayKey);
+		packet->setProgress(0);
+		packet->setHopLimit(hopLimit);
 		packet->appendRoute(contact);
+		EV_TRACE << "propagateUpdateReq(): final dest: " << destContactKey.shortStr() << ", next dest: " << contact << endl;
+	        sendPacket(std::move(packet));
 	}
+	// if no chance of getting closer to the destination: UpdateReq will be deleted here
 }
 
 
@@ -245,7 +236,7 @@ void R2Kademlia::sendUrgentUpdates()
 			if (not urgentupdatelist.empty()) {
 				// UpdateRouteReqs are not expecting an answer, so no RPC call
 				auto packet = makePacket<KadUpdateRouteReq>(notify_target, "UpdateRoute");
-
+				packet->setDstNodeID(notify_target->getKey());
 				// write down all routing notifications for a specific contact
 				packet->setContactArraySize(urgentupdatelist.size());
 				packet->setPathArraySize(urgentupdatelist.size());
@@ -299,6 +290,7 @@ void R2Kademlia::sendUpdates()
 		{ // only notify contacts that we have a path to (i.e., that are valid)
 			// UpdateRouteReqs are not expecting an answer, so no RPC call
 			auto packet = makePacket<KadUpdateRouteReq>(notify_target, "UpdateRoute");
+			packet->setDstNodeID(notify_target->getKey());
 			//EV_TRACE << "UpdateRoute packet to " << notifyContact_it->first.shortStr() << " w/ ";
 			const auto& updatelist(notifyContact_it->second);
 			// write down all routing notifications for a specific contact

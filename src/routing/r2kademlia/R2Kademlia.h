@@ -116,7 +116,7 @@ class R2Kademlia : public RPCProtocol, public KadPolicy, public StatisticSample
 	/// routes a packet to a neighbor based on the  in the packet
 	void sendPacket(KadDataPacket_p packet);
 	/// chooses the contact to forward a request to according to the overlay metric.
-	const KadContact& chooseNextHop(const KadContactList&, const OverlayKey& target, const OverlayKey& source);
+	const KadContact& chooseNextHop(const KadContactList&, const OverlayKey& target);
 	/// sends a probe request to the given contact
 	void sendProbe(KadContact_p contact);
 	/// sends a path setup request to the given contact

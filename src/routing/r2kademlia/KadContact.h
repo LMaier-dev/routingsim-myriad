@@ -101,10 +101,18 @@ private:
 	bool physicalNeighbor= false; /// true if we have a direct physical link to this neighbor
 };
 
-
 // contact type definitions
 using KadContact_p = const KadContact*;
 using KadContactList = std::vector<KadContact_p>;
+
+// compare two contacts against given key
+struct KadContactCompare {
+	const OverlayKey& key;
+	KadContactCompare(const OverlayKey& key) : key(key) {}
+	bool operator()(KadContact_p& a, KadContact_p& b) const {
+		return (a->getKey() ^ key) < (b->getKey() ^ key);
+	}
+};
 
 /********************* inline methods *********************/
 

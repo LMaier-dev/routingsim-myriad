@@ -206,7 +206,7 @@ void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 			auto contacts = routingTable.getClosestContacts(packet->getDstNodeID(), findNodeNumber);
 			if (contacts.size() > 0)
 			{
-				const KadContact& contact = chooseNextHop(contacts, packet->getDstNodeID(), myOverlayKey);
+				const KadContact& contact = chooseNextHop(contacts, packet->getDstNodeID());
 				ASSERT(contact.isValid());
 				ASSERT(!contact.getKey().isUnspecified());
 				EV_TRACE << "next hop is " << contact.getKey().shortStr()
@@ -324,7 +324,7 @@ void R2Kademlia::sendData(const OverlayKey& finaldestkey) {
 	//ASSERT(contacts.size() > 0);
 	if (contacts.size() > 0)
 	{
-		const KadContact& contact = chooseNextHop(contacts, finaldestkey, myOverlayKey);
+		const KadContact& contact = chooseNextHop(contacts, finaldestkey);
 		ASSERT(contact.isValid());
 		ASSERT(!contact.getKey().isUnspecified());
 		if (contact.getKey() == myOverlayKey)

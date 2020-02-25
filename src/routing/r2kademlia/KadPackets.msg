@@ -73,10 +73,11 @@ packet KadRTableRsp extends KadAnswer {
 /// UpdateRouteReq (w/o response)
 packet KadUpdateRouteReq extends KadPacket {
        type = KAD_UpdateRouteReq;
+       OverlayKey dstNodeID;
 
-	OverlayKey contact[];
-	key_vector_t path[];
-        uint8_t action[] enum(KadRouteUpdateAction);
+       OverlayKey contact[];
+       key_vector_t path[];
+       uint8_t action[] enum(KadRouteUpdateAction);
 }
 
 // KadDataMsg
@@ -156,8 +157,8 @@ packet KadQueryRouteRsp extends KadRTableRsp {
 // FIND NODE
 packet KadFindNodeReq extends KadRTableReq {
 	type = KAD_FindNodeReq;
-	//TODO use destId for this
-	OverlayKey query;
+
+	OverlayKey dstNodeID;
 	bool exact = false;
 	bool notVia = false;
 	OverlayKey DetectingNode;
