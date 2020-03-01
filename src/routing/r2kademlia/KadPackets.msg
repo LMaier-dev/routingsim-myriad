@@ -21,6 +21,7 @@ cplusplus {{
 #include <vector>
 class KadPacket;
 typedef std::vector<OverlayKey> key_vector_t;
+typedef std::pair<OverlayKey,OverlayKey> link_t;
 }}
 
 namespace routingsim;
@@ -29,6 +30,7 @@ class KadDataPacket extends cPacket;
 class noncobject nodeid_t;
 class noncobject OverlayKey;
 class noncobject key_vector_t;
+class noncobject link_t;
 
 enum KadErrorType {
 	KAD_NoError = 0;
@@ -74,6 +76,8 @@ packet KadRTableRsp extends KadAnswer {
 packet KadUpdateRouteReq extends KadPacket {
        type = KAD_UpdateRouteReq;
        OverlayKey dstNodeID;
+
+       link_t failedLink[];
 
        OverlayKey contact[];
        key_vector_t path[];
@@ -161,9 +165,10 @@ packet KadFindNodeReq extends KadRTableReq {
 	OverlayKey dstNodeID;
 	bool exact = false;
 	bool notVia = false;
-	OverlayKey DetectingNode;
-	OverlayKey UnreachableNode;
+	link_t failedLink[];
 }
+
+
 packet KadFindNodeRsp extends KadRTableRsp {
 	type = KAD_FindNodeRsp;
 }

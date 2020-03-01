@@ -25,6 +25,7 @@ void KadPacket::setSource(const OverlayKey & source) {
 		setRoute(0, source);
 };
 
+
 void KadPacket::appendRoute(const kad_path& path) {
 	auto old_size = getRouteArraySize();
 	setRouteArraySize(old_size + path.size());
@@ -51,6 +52,8 @@ void KadPacket::modRoute(const kad_path& newpath) {
 		setRoute(progress + 1 + i, newpath[i]);
 		setActive(progress + 1 + i, false);
 	}
+	// last hop is next overlay node, so set active flag
+	setActive(getRouteArraySize() - 1, true);
 
 	if ( not(resize) )
 	{

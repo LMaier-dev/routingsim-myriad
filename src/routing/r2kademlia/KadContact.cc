@@ -22,6 +22,8 @@
 
 namespace routingsim {
 
+const KadContact KadContact::undefinedContact(OverlayKey::UNSPECIFIED_KEY);
+
 std::ostream& operator<<(std::ostream& os, const KadContact& c) {
 	os << c.getKey().shortStr();
 	// state is next V = valid, I = invalid, U = undefined

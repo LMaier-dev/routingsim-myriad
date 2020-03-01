@@ -28,7 +28,7 @@ namespace ph = std::placeholders;
 
 // UPDATEROUTEREQ
 void R2Kademlia::handlePacket(std::unique_ptr<KadUpdateRouteReq> packet) {
-	EV_TRACE << "received KadUpdateRouteReq from " << packet->getSource().shortStr() << endl;
+	EV_TRACE << "received KadUpdateRouteReq from " << packet->getSource().shortStr() << " final dest: " << packet->getDstNodeID().shortStr() << endl;
 
 	// check for malformed packet
 	ASSERT(packet->getContactArraySize() == packet->getPathArraySize());
@@ -69,17 +69,17 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadUpdateRouteReq> packet) {
 		*/
 		switch (action) {
 			case KAD_Announce:
-				EV_TRACE << "UpdateReq Announce for contact " << contactkey.shortStr() << endl;
+				EV_TRACE << "UpdateRouteReq Announce for contact " << contactkey.shortStr() << endl;
 			        routingTable.addPath(contactkey, path, source_path);
 				break;
 
 			case KAD_Withdraw:
-				EV_TRACE << "UpdateReq Withdraw for contact " << contactkey.shortStr() << endl;
+				EV_TRACE << "UpdateRouteReq Withdraw for contact " << contactkey.shortStr() << endl;
 				//TODO implement this
 				break;
 
 			case KAD_Change:
-				EV_TRACE << "UpdateReq Change for contact " << contactkey.shortStr() << endl;
+				EV_TRACE << "UpdateRouteReq Change for contact " << contactkey.shortStr() << endl;
 			        routingTable.addPath(contactkey, path, source_path);
 				break;
 
@@ -87,18 +87,19 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadUpdateRouteReq> packet) {
 				// unreachable node, path shows the failed link
 				ASSERT(path.size() == 1);
 
-				EV_TRACE << "Unreachable contact: " << contactkey.shortStr() << ", link: < "
+				EV_TRACE << "UpdateRouteReq UNREACHABLE contact: " << contactkey.shortStr() << ", link: < "
 					 << packet->getPath(0).front().shortStr() << ',' << contactkey.shortStr() << " >" << endl;
 				// now invalidate all contacts with this link
 				routingTable.invalidateContacts(contactkey, packet->getPath(0).front());
+
 				propagateUpdate= true;
 				break;
 
 			default:
 				EV_ERROR << "unknown action type: " << action << endl;
 				break;
-		}
-	}
+		} // end switch
+	} // end for
 
 	// forward UpdateReq closer towards destination
 	if (propagateUpdate)
@@ -113,7 +114,7 @@ void R2Kademlia::scheduleUpdate(const KadContact& affectedContact, KadRouteUpdat
 	// send UpdateRouteReq to ID-wise closest Nodes
 	size_t contactsLen = std::max((size_t)findNodeNumber, routingTable.getSplitSize());
 	//KadContactList closeContacts(routingTable.getClosestContacts(affectedContact.getKey(), contactsLen));
-	KadContactList closeContacts(routingTable.getClosestContacts(myOverlayKey, contactsLen));
+	KadContactList closeContacts(routingTable.getClosestContacts(myOverlayKey, contactsLen, false));
 
 	const uint8_t maxNumberOfNotifiedContacts= 10;
 	uint8_t numberOfNotifiedContacts = 0;
@@ -125,18 +126,18 @@ void R2Kademlia::scheduleUpdate(const KadContact& affectedContact, KadRouteUpdat
 			if (numberOfNotifiedContacts == maxNumberOfNotifiedContacts)
 				break;
 			
-			//EV_TRACE << "scheduleUpdate for " << affectedContact.getKey().shortStr() << " (" << action
-			//	 << ") notify:" << notifyContact->getKey().shortStr() ;
+			EV_TRACE << "scheduleUpdate for " << affectedContact.getKey().shortStr() << " (" << action
+				 << ") notify:" << notifyContact->getKey().shortStr() ;
 			// except when it is the contact itself
 			if ( affectedContact.getKey() == notifyContact->getKey() ) {
-				//EV_TRACE << " is the same - skipped." << endl;
+				EV_TRACE << " is the same - skipped." << endl;
 				continue;
 			}
 			// or it is a physical neighbor of the affected node (here the last hop in the path)
 			if ( affectedContact.getPathLength() > 0
 			     and
 			     affectedContact.getPath()[affectedContact.getPathLength()-1] == notifyContact->getKey() ) {
-				//EV_TRACE << " is the last hop - skipped." << endl;
+				EV_TRACE << " is the last hop - skipped." << endl;
 				
 				continue;
 			}
@@ -164,7 +165,7 @@ void R2Kademlia::scheduleUpdate(const KadContact& affectedContact, KadRouteUpdat
 					entry->second.emplace_back(newelem);
 				}
 			}
-			//EV_TRACE << " done." << endl;
+			EV_TRACE << " done." << endl;
 			numberOfNotifiedContacts++;
 		} // end for each contact
 
@@ -182,15 +183,50 @@ void R2Kademlia::scheduleUpdate(const KadContact& affectedContact, KadRouteUpdat
 }
 
 
+// inspects a RouteUpdateReq message for Unreachability information
+void R2Kademlia::evalUpdateReq(const KadUpdateRouteReq* packet)
+{
+	unsigned int numContacts= packet->getContactArraySize();
+	for (unsigned int i= 0; i < numContacts; i++)
+	{
+		// get contact and corresponding path info
+		const auto& contactkey= packet->getContact(i);
+		const auto& path= packet->getPath(i);
+		auto action= packet->getAction(i);
+
+		if (contactkey == myOverlayKey) {
+			// someone is telling me news about myself -> ignore
+			continue;
+		}
+
+		switch (action) {
+
+			case KAD_Unreachable:
+				// unreachable node, path shows the failed link
+				ASSERT(path.size() == 1);
+
+				EV_TRACE << "Unreachable contact: " << contactkey.shortStr() << ", link: < "
+					 << packet->getPath(0).front().shortStr() << ',' << contactkey.shortStr() << " >" << endl;
+				// now invalidate all contacts with this link
+				routingTable.invalidateContacts(contactkey, packet->getPath(0).front());
+				break;
+
+			default:
+				break;
+		} // end switch
+	} // end for
+}
+
+
 void R2Kademlia::propagateUpdateReq(std::unique_ptr<KadUpdateRouteReq> packet)
 {
 	OverlayKey destContactKey= packet->getDstNodeID();
 	unsigned int numContacts= packet->getContactArraySize();
 	size_t contactsLen = std::max((size_t)findNodeNumber, routingTable.getSplitSize());
-	KadContactList closeContacts(routingTable.getClosestContacts(destContactKey, contactsLen));
+	KadContactList closeContacts(routingTable.getClosestContacts(destContactKey, contactsLen, true));
 	const KadContact& contact = chooseNextHop(closeContacts, destContactKey);
 	// check whether that contact is closer to the target than we
-	if ( (contact.getKey() ^ myOverlayKey) > (contact.getKey() ^ destContactKey) )
+	if ( contact.isValid() and (contact.getKey() ^ myOverlayKey) > (contact.getKey() ^ destContactKey) )
 	{
 		packet->removeControlInfo();
 		// this will reset the route
@@ -212,6 +248,8 @@ void R2Kademlia::sendUrgentUpdates()
 {
 	// the queue (map) will be traversed
 	// std::unordered_map< OverlayKey, UpdateList_t > updateQueue;
+	EV_TRACE << "sendUrgentUpdates() enter. Queued Updates:" << updateQueue.size() << endl;
+
 	for ( auto notifyContact_it= updateQueue.begin();
 	      notifyContact_it != updateQueue.end();
 	      notifyContact_it= updateQueue.erase(notifyContact_it) )
@@ -232,6 +270,7 @@ void R2Kademlia::sendUrgentUpdates()
 				else
 					affectedcontact_it++;
 			}
+			EV_TRACE << "sendUrgentUpdates() - found urgent updates:" << urgentupdatelist.size() << endl;
 
 			if (not urgentupdatelist.empty()) {
 				// UpdateRouteReqs are not expecting an answer, so no RPC call

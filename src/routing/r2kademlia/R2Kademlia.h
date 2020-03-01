@@ -111,6 +111,8 @@ class R2Kademlia : public RPCProtocol, public KadPolicy, public StatisticSample
 	
 	/// sends a received packet again after the source route was manipulated
 	void resendPacket(KadPacket_p packet);
+	/// try to find alternative next overlay hop
+	void reroutePacket(const OverlayKey& finaldest, KadPacket_p packet, NodePkt_p nodePkt);
 	/// routes a packet to a neighbor based on the source route in the packet
 	void sendPacket(KadPacket_p packet) override;
 	/// routes a packet to a neighbor based on the  in the packet
@@ -262,6 +264,8 @@ private:
 	void schedulePathSetup(const OverlayKey& contactkey);
 	/// send all queue (valid) path setups
 	void sendScheduledPathSetups();
+	/// evaluate Updates while forwarding
+	void evalUpdateReq(const KadUpdateRouteReq* packet);
 
 	//@}
 

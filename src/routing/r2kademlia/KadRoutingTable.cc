@@ -180,7 +180,7 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, KadContact::
 	if (path.size() > 0 and not neighbortable.isNeighbor(path[0]))
 	{ // first hop must be found in neighbortable
 		EV_WARN << "Tried to use add path with invalid physical neighbor "
-			<< path[0] << " as next hop - ignoring";
+			<< path[0] << " as next hop - ignoring" << endl;
 		return false;
 	}
 
@@ -481,7 +481,7 @@ inline void copyValidContacts(const std::vector<std::unique_ptr<KadContact>>& so
  * is the closest to key
  */
 
-KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_type n) const
+KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_type n, bool validcontactsonly) const
 {
 	ASSERT(not key.isUnspecified()); // calling this with unspecified key is considered useless and an error
 	KadContactList result{};
@@ -491,8 +491,14 @@ KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_t
 	auto bucket = buckets.begin() + index;
 	if (bucket->size() >= n)
 	{
-		copyValidContacts(bucket->contacts, result);
-		copyValidContacts(bucket->PNContacts, result);
+		if (validcontactsonly) {
+			copyValidContacts(bucket->contacts, result);
+			copyValidContacts(bucket->PNContacts, result);
+		}
+		else {
+			copyContacts(bucket->contacts, result);
+			copyContacts(bucket->PNContacts, result);
+		}
 	}
 	else {
 		// not enough contacts in first bucket
@@ -506,22 +512,40 @@ KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_t
 		     level+=width) {
 			if (level == buckets.end()-1)
 			{
-				copyValidContacts(level->contacts, result);
-				copyValidContacts(level->PNContacts, result);
+				if (validcontactsonly) {
+					copyValidContacts(level->contacts, result);
+					copyValidContacts(level->PNContacts, result);
+				}
+				else {
+					copyContacts(level->contacts, result);
+					copyContacts(level->PNContacts, result);
+				}
 			}
 			else // always insert the whole level
 				for (uint i = 0; i < width and level+i < buckets.end(); i++)
 				{
-					copyValidContacts(level[i].contacts, result);
-					copyValidContacts(level[i].PNContacts, result);
+					if (validcontactsonly) {
+						copyValidContacts(level[i].contacts, result);
+						copyValidContacts(level[i].PNContacts, result);
+					}
+					else {
+						copyContacts(level[i].contacts, result);
+						copyContacts(level[i].PNContacts, result);
+					}
 				}
 		}
 		// if we still do not have enough contacts, we go up the tree
 		auto otherBucket = buckets.begin() + firstOnLevelIndex;
 		while(result.size() < n and otherBucket != buckets.begin()) {
 			otherBucket--;
-			copyValidContacts(otherBucket->contacts, result);
-			copyValidContacts(otherBucket->PNContacts, result);
+			if (validcontactsonly) {
+				copyValidContacts(otherBucket->contacts, result);
+				copyValidContacts(otherBucket->PNContacts, result);
+			}
+			else {
+				copyContacts(otherBucket->contacts, result);
+				copyContacts(otherBucket->PNContacts, result);
+			}
 		}
 	}
 	// now we sort the contacts by their XOR metric

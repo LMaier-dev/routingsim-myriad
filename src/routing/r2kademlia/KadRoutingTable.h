@@ -143,7 +143,7 @@ public:
 	 * Returns a list of n (valid) contacts that are closest to the given key if possible.
 	 * If there are not enough contacts found, the list is shorter.
 	 */
-	KadContactList getClosestContacts(const OverlayKey& key, size_type n) const;
+	KadContactList getClosestContacts(const OverlayKey& key, size_type n, bool validcontactsonly) const;
 	/// returns a list of all known contacts
 	KadContactList getAllContacts() const;
 	/// returns a list of all known valid contacts
