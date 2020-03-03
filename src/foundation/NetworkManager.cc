@@ -146,7 +146,7 @@ void NetworkManager::handleMessage(cMessage *msg) {
 			}
 			break;
 		case DynamicsInfo::linkRecovery:
-			// depending on bidirectional flag deactivate one or both directions
+			// depending on bidirectional flag restore one or both directions
 			topology->enableLink(di->source,di->destination);
 			failedNodes.erase(di->source);
 			if (di->bidirectionalLinkFailure) {
