@@ -105,7 +105,6 @@ private:
 };
 
 
-
 class KadDataPacket : public KadDataPacket_Base
 {
 public:

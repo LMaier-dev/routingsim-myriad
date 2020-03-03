@@ -186,6 +186,19 @@ void R2Kademlia::scheduleUpdate(const KadContact& affectedContact, KadRouteUpdat
 // inspects a RouteUpdateReq message for Unreachability information
 void R2Kademlia::evalUpdateReq(const KadUpdateRouteReq* packet)
 {
+	// first check the notvia information
+	if (packet->getNotVia())
+	{
+		EV_TRACE << "UpdateRouteReq contains not via ";
+		for (uint i= 0; i < packet->getFailedLinkArraySize(); i++) {
+			auto &[unreachablenode, detectingnode]= packet->getFailedLink(i);
+			EV_TRACE << " <" << unreachablenode.shortStr() << ',' << detectingnode.shortStr() << '>';
+			// we should invalidate all contacts with that link in the path to them before answering
+			routingTable.invalidateContacts(unreachablenode, detectingnode);
+		}
+		EV_TRACE <<  endl;
+	}
+
 	unsigned int numContacts= packet->getContactArraySize();
 	for (unsigned int i= 0; i < numContacts; i++)
 	{

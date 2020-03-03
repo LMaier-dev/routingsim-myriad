@@ -612,7 +612,7 @@ size_type KadRoutingTable::getNumIndirectPaths() const
 /** invalidate all contacts with paths that contain a failed link otherNodeKey <-> failedNodeKey */
 void KadRoutingTable::invalidateContacts(const OverlayKey& failedNodeKey, const OverlayKey& otherNodeKey)
 {
-	EV_TRACE << "invalidateContacts(" << failedNodeKey << ")" << endl;
+	//EV_TRACE << "invalidateContacts(" << failedNodeKey << ")" << endl;
 	// iterate over all buckets and contacts
 	for (KadBucket& b : buckets)
 		for (auto& contact : b.contacts) {
@@ -641,7 +641,7 @@ void KadRoutingTable::invalidateContacts(const OverlayKey& failedNodeKey, const 
 /** invalidate all contacts with paths that contain the physical neighbor failedNodeKey as next hop */
 void KadRoutingTable::invalidateContactsPN(const OverlayKey& failedNodeKey)
 {
-	EV_TRACE << "invalidateContactsPN(" << failedNodeKey << ")" << endl;
+	//EV_TRACE << "invalidateContactsPN(" << failedNodeKey << ")" << endl;
 	// iterate over all buckets and contacts
 	for (KadBucket& b : buckets)
 		for (auto& contact : b.contacts) {

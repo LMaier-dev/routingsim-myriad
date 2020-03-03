@@ -23,6 +23,7 @@
 #include "KadObserver.h"
 
 #include "FwdTable.h"
+#include "KadPacketsUtil.h"
 
 namespace routingsim {
 // for std::bind with callback functions
@@ -422,9 +423,17 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt) {
 			finaldestination= &static_cast<const KadFindNodeReq*>(packet.get())->getDstNodeID();
 
 		if (finaldestination) {
+			// add not via information before forwarding
+			if ( KadUpdateRouteReq* updatepacket= static_cast<KadUpdateRouteReq*>(packet.get()); updatepacket != nullptr )
+			{
+				addNotViaLink<KadUpdateRouteReq>(*updatepacket, std::make_pair(nextHop,myOverlayKey));
+			}
+			else
+			if ( KadFindNodeReq* findnodepacket= static_cast<KadFindNodeReq*>(packet.get()); findnodepacket != nullptr )
+			{
+				addNotViaLink<KadFindNodeReq>(*findnodepacket, std::make_pair(nextHop,myOverlayKey));
+			}
 
-			//if ( KadUpdateRouteReq* updatepacket= static_cast<KadUpdateRouteReq*>(packet.get()); updatepacket != nullptr )
-			// CONT HERE XXX	updatepacket->
 			reroutePacket(*finaldestination, std::move(packet), std::move(nodePkt));
 			return;
 		}
@@ -439,15 +448,15 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt) {
 
 void R2Kademlia::reroutePacket(const OverlayKey& finaldest, KadPacket_p packet, NodePkt_p nodePkt)
 {
-	//EV_TRACE << "reroutePacket() enter." << endl;
+	EV_TRACE << "reroutePacket() enter." << endl;
 	KadContactList ovlyneighbors= routingTable.getClosestContacts(finaldest, routingTable.getSplitSize(), true);
 	while (not ovlyneighbors.empty())
 	{
-		//EV_TRACE << "reroutePacket(): before chooseNextHop()" << endl;
+		EV_TRACE << "reroutePacket(): before chooseNextHop()" << endl;
 
 		const KadContact& contact= chooseNextHop(ovlyneighbors, finaldest);
 
-		//EV_TRACE << "reroutePacket(): after chooseNextHop()" << endl;
+		EV_TRACE << "reroutePacket(): after chooseNextHop()" << endl;
 
 		// if chooseNextHop() cannot find useful next hop: break
 		if (contact.isInvalid() or contact.getKey().isUnspecified())
@@ -807,10 +816,7 @@ void R2Kademlia::sendFindNode(const OverlayKey& key, bool exact, const OverlayKe
 			if (is_rediscovery)
 			{ // this is an immediate rediscovery packet
 				ASSERT(exact);
-				packet->setNotVia(true);
-				packet->setFailedLinkArraySize(packet->getFailedLinkArraySize()+1);
-				packet->setFailedLink(packet->getFailedLinkArraySize()-1,
-						      std::make_pair(*notvia_unreachable_node,*notvia_failednode_neighbor));
+				addNotViaLink<KadFindNodeReq>(*packet,std::make_pair(*notvia_unreachable_node,*notvia_failednode_neighbor));
 				sentRediscovery++;
 				EV_TRACE << "Rediscovery sending ... msg id=" << packet->getId()
 					 << " via " << contact << " fanout: " << fanout << endl;
@@ -842,14 +848,12 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 	// check for presence of "not via" setting
 	if (packet->getNotVia())
 	{
-		EV_TRACE << "FindNodeReq contains not via ";
 		for (uint i= 0; i < packet->getFailedLinkArraySize(); i++) {
 			auto &[unreachablenode, detectingnode]= packet->getFailedLink(i);
-			EV_TRACE << " <" << unreachablenode.shortStr() << ',' << detectingnode.shortStr() << '>';
+			EV_TRACE << "FindNodeReq contains not via  <" << unreachablenode.shortStr() << ',' << detectingnode.shortStr() << '>' << endl;
 			// we should invalidate all contacts with that link in the path to them before answering
 			routingTable.invalidateContacts(unreachablenode, detectingnode);
 		}
-		EV_TRACE <<  endl;
 		is_rediscovery= true;
 	}
 	

@@ -36,7 +36,7 @@ using std::vector;
 // ============================================================================
 
 NetworkTopology::NetworkTopology() :
-																			BGLtopology(0), topologyAltered(false), spath(0), spathMatrixSize(0), spathAvailable(false) { }
+	BGLtopology(0), topologyAltered(false), spath(0), spathMatrixSize(0), spathAvailable(false) { }
 
 /// destructor
 NetworkTopology::~NetworkTopology() {
@@ -224,7 +224,7 @@ void NetworkTopology::readTopology(string path, string topologytype, bool useOnl
 		}
 
 		if (numComponents > 1) {
-			std::cout << "Determining Largest Connected Component of overall " << numComponents << " components" << endl;
+			EV_INFO << "Determining Largest Connected Component of overall " << numComponents << " components" << endl;
 			vector<long long> partitionSizes(numComponents, 0);
 
 			// determine partition sizes
@@ -263,18 +263,18 @@ void NetworkTopology::readTopology(string path, string topologytype, bool useOnl
 				}
 			}
 		}
-		std::cout << "Disabled " << numDisabledNodes << " nodes to only work on largest connected/strong component!" << endl;
-		std::cout << "Disabled " << numDisabledEdges << " edges to only work on largest connected/strong component!" << endl;
+		EV_INFO << "Disabled " << numDisabledNodes << " nodes to only work on largest connected/strong component!" << endl;
+		EV_INFO << "Disabled " << numDisabledEdges << " edges to only work on largest connected/strong component!" << endl;
 	}
 
 
-	std::cout << "Unique Nodes read from file: " << nodeset.size() << endl;
-	std::cout << "Edges (not necessarily unique) read from file including possibly added bidirectional edges: " << edgesRead.size() << endl;
-	std::cout << "Active Nodes: " << getActiveNumberNodes() << endl;
-	std::cout << "Active Edges: " << getActiveNumberLinks() << endl;
+	EV_INFO << "Unique Nodes read from file: " << nodeset.size() << endl;
+	EV_INFO << "Edges (not necessarily unique) read from file including possibly added bidirectional edges: " << edgesRead.size() << endl;
+	EV_INFO << "Active Nodes: " << getActiveNumberNodes() << endl;
+	EV_INFO << "Active Edges: " << getActiveNumberLinks() << endl;
 
 	if (! isConnected()) {
-		std::cout << "Working on partitioned graph!" << endl;
+		EV_INFO << "Working on partitioned graph!" << endl;
 	}
 }
 
@@ -290,8 +290,8 @@ void NetworkTopology::readTopology(string path, string topologytype, bool useOnl
 //     description of the topology. An exemplary header looks as follows:
 //     ******************************************************************
 //     ###     Nodes:  8210    Edges:  19732   Bidirectional:  True
-//	   # GNM (10240, 10240), Largest connected component with 8210 nodes and 9866 edges, SEED=123
-// 	   # Nodes: 8210
+//     # GNM (10240, 10240), Largest connected component with 8210 nodes and 9866 edges, SEED=123
+//     # Nodes: 8210
 //     # Edges: 9866
 //     # (Global) Clustering Coefficient: 4.87210718636e-05
 //     # Local Density (value, node, radius): [315, 5924, 12]
@@ -315,7 +315,7 @@ void NetworkTopology::readSelfDefinedTopology(std::ifstream &topologyFile, std::
 		if(line.length() == 0 || line.front() == '#') continue;
 		int tokenNumber = 0;
 		lineNumber++;
-		// escape char: "\", seperator "\t" and " ", quote chars " and '
+		// escape char: "\", separator "\t" and " ", quote chars " and '
 		escaped_list_separator<char> sep("\\","\t ","\"'");
 		typedef boost::tokenizer<escaped_list_separator<char> > tokenizer_t;
 		tokenizer_t tok(line,sep);
@@ -507,8 +507,8 @@ vector<pair<nodeid_t, nodeid_t> > NetworkTopology::getRandomNodePairs( cRNG *rng
 	ActiveBGLVertexIt vi, ve;
 
 	if (k > n*(n-1)) {
-		std::cout << "Maximum   pairs: " << n*(n-1) << endl;
-		std::cout << "Requested pairs: " << k << endl;
+		EV_DEBUG << "Maximum   pairs: " << n*(n-1) << endl;
+		EV_DEBUG << "Requested pairs: " << k << endl;
 		throw cRuntimeError("Not enough node pairs in topology to fulfill request");
 	}
 
@@ -758,7 +758,7 @@ void NetworkTopology::createNetwork(cModule *parent) {
 		mod->par("nodeId") = *vi;
 		moduleMap[*vi] = mod;
 	}
-	EV << "Created node modules." << endl;
+	EV << "Created node modules (" << num_vertices(*BGLtopology) << ")." << endl;
 
 	// setup and connect gates
 	// vi = vertex iterator, ve = vertex end iterator
@@ -792,7 +792,7 @@ void NetworkTopology::createNetwork(cModule *parent) {
 			fromOut->connectTo(toIn);
 		}
 	}
-	EV << "Created links." << endl;
+	EV << "Created links (" << num_edges(*BGLtopology) << " unidirectional)." << endl;
 
 	// start simulation
 	boost::unordered_map<nodeid_t, cModule *>::iterator modMapIt;

@@ -19,6 +19,7 @@ cplusplus {{
 #include "KadPacket.h"
 #include <memory>
 #include <vector>
+#include <utility>
 class KadPacket;
 typedef std::vector<OverlayKey> key_vector_t;
 typedef std::pair<OverlayKey,OverlayKey> link_t;
@@ -75,6 +76,8 @@ packet KadRTableRsp extends KadAnswer {
 /// UpdateRouteReq (w/o response)
 packet KadUpdateRouteReq extends KadPacket {
        type = KAD_UpdateRouteReq;
+       bool notVia = false;
+
        OverlayKey dstNodeID;
 
        link_t failedLink[];
