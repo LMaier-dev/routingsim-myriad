@@ -416,22 +416,30 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt) {
 		EV_TRACE << " > progress=" << packet->getProgress() << endl;
 
 		const OverlayKey* finaldestination(nullptr);
-		if (packet->getType() == KAD_UpdateRouteReq)
-			finaldestination= &static_cast<const KadUpdateRouteReq*>(packet.get())->getDstNodeID();
+		KadUpdateRouteReq* updatepacket(nullptr);
+		KadFindNodeReq* findnodepacket(nullptr);
+		if (packet->getType() == KAD_UpdateRouteReq) {
+			updatepacket= static_cast<KadUpdateRouteReq*>(packet.get());
+			finaldestination= &updatepacket->getDstNodeID();
+		}
 		else
-		if (packet->getType() == KAD_FindNodeReq and static_cast<const KadFindNodeReq*>(packet.get())->getNotVia() == true)
-			finaldestination= &static_cast<const KadFindNodeReq*>(packet.get())->getDstNodeID();
-
+		if (packet->getType() == KAD_FindNodeReq) {
+			findnodepacket= static_cast<KadFindNodeReq*>(packet.get());
+			if (findnodepacket->getNotVia() == true) {
+				finaldestination= &findnodepacket->getDstNodeID();
+			}
+		}
+		// only reroute UpdateRouteReq and FindNodeReq for rediscovery
 		if (finaldestination) {
 			// add not via information before forwarding
-			if ( KadUpdateRouteReq* updatepacket= static_cast<KadUpdateRouteReq*>(packet.get()); updatepacket != nullptr )
+			if (  updatepacket != nullptr )
 			{
-				addNotViaLink<KadUpdateRouteReq>(*updatepacket, std::make_pair(nextHop,myOverlayKey));
+				addNotViaLink(*updatepacket, std::make_pair(nextHop,myOverlayKey));
 			}
 			else
-			if ( KadFindNodeReq* findnodepacket= static_cast<KadFindNodeReq*>(packet.get()); findnodepacket != nullptr )
+			if ( findnodepacket != nullptr )
 			{
-				addNotViaLink<KadFindNodeReq>(*findnodepacket, std::make_pair(nextHop,myOverlayKey));
+				addNotViaLink(*findnodepacket, std::make_pair(nextHop,myOverlayKey));
 			}
 
 			reroutePacket(*finaldestination, std::move(packet), std::move(nodePkt));
@@ -603,7 +611,7 @@ const KadContact& R2Kademlia::chooseNextHop(const KadContactList& contacts, cons
 		// no proximity routing or only single contact
 		//ASSERT(contacts.front()->getKey() != target); // this assertion seems to be wrong
 
-		if (contacts.front() != nullptr) {
+		if (not contacts.empty() and contacts.front() != nullptr) {
 			if (contacts.front()->getKey() == target)
 			{
 				EV_WARN << "Next hop is the target, number of contacts: " << contacts.size()
@@ -816,7 +824,7 @@ void R2Kademlia::sendFindNode(const OverlayKey& key, bool exact, const OverlayKe
 			if (is_rediscovery)
 			{ // this is an immediate rediscovery packet
 				ASSERT(exact);
-				addNotViaLink<KadFindNodeReq>(*packet,std::make_pair(*notvia_unreachable_node,*notvia_failednode_neighbor));
+				addNotViaLink(*packet,std::make_pair(*notvia_unreachable_node,*notvia_failednode_neighbor));
 				sentRediscovery++;
 				EV_TRACE << "Rediscovery sending ... msg id=" << packet->getId()
 					 << " via " << contact << " fanout: " << fanout << endl;

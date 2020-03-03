@@ -237,6 +237,9 @@ void R2Kademlia::propagateUpdateReq(std::unique_ptr<KadUpdateRouteReq> packet)
 	unsigned int numContacts= packet->getContactArraySize();
 	size_t contactsLen = std::max((size_t)findNodeNumber, routingTable.getSplitSize());
 	KadContactList closeContacts(routingTable.getClosestContacts(destContactKey, contactsLen, true));
+	if (closeContacts.empty())
+		return;
+
 	const KadContact& contact = chooseNextHop(closeContacts, destContactKey);
 	// check whether that contact is closer to the target than we
 	if ( contact.isValid() and (contact.getKey() ^ myOverlayKey) > (contact.getKey() ^ destContactKey) )
