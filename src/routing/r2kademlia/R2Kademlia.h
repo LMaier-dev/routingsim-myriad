@@ -18,6 +18,7 @@
 
 #include <omnetpp.h>
 #include <unordered_map>
+#include <queue>
 
 #include "foundation.h"
 #include "Protocol.h"
@@ -110,12 +111,14 @@ class R2Kademlia : public RPCProtocol, public KadPolicy, public StatisticSample
 	
 	/// sends a received packet again after the source route was manipulated
 	void resendPacket(KadPacket_p packet);
+	/// try to find alternative next overlay hop
+	void reroutePacket(const OverlayKey& finaldest, KadPacket_p packet, NodePkt_p nodePkt);
 	/// routes a packet to a neighbor based on the source route in the packet
 	void sendPacket(KadPacket_p packet) override;
 	/// routes a packet to a neighbor based on the  in the packet
 	void sendPacket(KadDataPacket_p packet);
 	/// chooses the contact to forward a request to according to the overlay metric.
-	const KadContact& chooseNextHop(const KadContactList&, const OverlayKey& target, const OverlayKey& source);
+	const KadContact& chooseNextHop(const KadContactList&, const OverlayKey& target);
 	/// sends a probe request to the given contact
 	void sendProbe(KadContact_p contact);
 	/// sends a path setup request to the given contact
@@ -141,7 +144,7 @@ class R2Kademlia : public RPCProtocol, public KadPolicy, public StatisticSample
 	//@}
 	virtual void sampleStatistics (Statistics &stats) override;
 public:
-        R2Kademlia() : routingTable(neighborTable) {};
+        R2Kademlia() : routingTable(neighborTable), cmp(myOverlayKey), rediscoverQueue(cmp) {};
 	/** @name policy functions called by routing table */
 	//@{
 	/** called when last contact is removed from a bucket*/
@@ -261,6 +264,8 @@ private:
 	void schedulePathSetup(const OverlayKey& contactkey);
 	/// send all queue (valid) path setups
 	void sendScheduledPathSetups();
+	/// evaluate Updates while forwarding
+	void evalUpdateReq(const KadUpdateRouteReq* packet);
 
 	//@}
 
@@ -322,8 +327,16 @@ private:
 	// selfMessage
 	bool updateScheduled= false;
 
-	// a list that is used to send rediscover messages
-	std::list<std::unique_ptr<const KadContact>> rediscoverQueue;
+
+	struct greatercmp {
+		const OverlayKey& ownkey;
+		greatercmp(const OverlayKey& key) : ownkey(key) {}
+		bool operator()(std::unique_ptr<const KadContact>& leftcontact, std::unique_ptr<const KadContact>& rightcontact) const
+			{ return (leftcontact.get()->getKey() ^ ownkey) > (rightcontact.get()->getKey() ^ ownkey);}
+	} cmp;
+
+	// a list that is used to send rediscover messages sorted by node ID vicinity
+	std::priority_queue<std::unique_ptr<const KadContact>, std::deque<std::unique_ptr<const KadContact>>, decltype(cmp)> rediscoverQueue;
 
 	// a list that is used to send pathsetup messages
 	std::list<OverlayKey> pathSetupQueue;

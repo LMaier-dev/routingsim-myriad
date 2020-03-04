@@ -93,6 +93,8 @@ public:
 
 	/// Common stdc++ console output method
 	friend std::ostream& operator<<(std::ostream& os, const KadContact& c);
+
+	static const KadContact undefinedContact;
 private:
 	OverlayKey key;	/// the OverlayKey of this contact
 	kad_path path;		/// the best known source routing path to reach this contact
@@ -101,10 +103,19 @@ private:
 	bool physicalNeighbor= false; /// true if we have a direct physical link to this neighbor
 };
 
-
 // contact type definitions
 using KadContact_p = const KadContact*;
 using KadContactList = std::vector<KadContact_p>;
+
+
+// compare two contacts against given key
+struct KadContactCompare {
+	const OverlayKey& key;
+	KadContactCompare(const OverlayKey& key) : key(key) {}
+	bool operator()(KadContact_p& a, KadContact_p& b) const {
+		return (a->getKey() ^ key) < (b->getKey() ^ key);
+	}
+};
 
 /********************* inline methods *********************/
 

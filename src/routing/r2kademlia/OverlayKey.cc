@@ -117,13 +117,13 @@ OverlayKey::OverlayKey(const std::string& str, uint32_t base)
 }
 
 // copy constructor
-OverlayKey::OverlayKey(const OverlayKey& rhs)
+OverlayKey::OverlayKey(const OverlayKey& rhs) : cObject(rhs), isUnspec(rhs.isUnspec)
 {
-	(*this) = rhs;
+	memcpy( key, rhs.key, aSize*sizeof(mp_limb_t) );
 }
 
 // default destructor
-OverlayKey::~OverlayKey() { }
+//OverlayKey::~OverlayKey() { }
 
 //--------------------------------------------------------------------
 // string representations & node key attributes

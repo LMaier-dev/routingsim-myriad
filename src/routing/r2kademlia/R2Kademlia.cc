@@ -23,6 +23,7 @@
 #include "KadObserver.h"
 
 #include "FwdTable.h"
+#include "KadPacketsUtil.h"
 
 namespace routingsim {
 // for std::bind with callback functions
@@ -209,8 +210,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		}
 		
 		//TODO ERROR OVERHEARING, more overhearing
-
-		// add potential pathID for destination at this intermediate node
+		// special actions while forwarding packets
 		switch (packet->getType())
 		{
 			case KAD_PathSetupReq: // allowed to take shortcuts
@@ -221,7 +221,12 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 			case KAD_PathSetupRsp:
 				EV_TRACE << "forwarding PathSetupRsp, origin source path: <"
 					 << packet->reversePath(packet->getSrcPath()) << endl;
+				// add potential pathID for destination at this intermediate node
 				checkForPathInstallation(*packet);
+				break;
+
+			case KAD_UpdateRouteReq: // check for unreachable info
+				evalUpdateReq(static_cast<const KadUpdateRouteReq*>(packet.get()));
 				break;
 		} // end switch
 		forwardedPathSetup++;
@@ -300,6 +305,7 @@ void R2Kademlia::onSelfMessage(cMessage_p msg) {
 		scheduleAt(simTime() + time, msg.release());
 	}
 }
+
 
 void R2Kademlia::reset() {
 	Enter_Method_Silent();
@@ -394,24 +400,142 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt) {
 	const OverlayKey& nextHop = packet->getNextHop();
 	nodeid_t nid = neighborTable.getNodeId(nextHop);
 
-	//EV_TRACE << "forwardPacket(): " << packet->getName() << " dest " << packet->getTarget().shortStr()
-	//	 << " next hop: " << nextHop.shortStr() << " (" << nid << ')' << endl;
+	EV_TRACE << "forwardPacket(): " << packet->getName() << " dest " << packet->getTarget().shortStr()
+		 << " next hop: " << nextHop.shortStr() << " (" << nid << ')' << endl;
 
 	if (nid != undefined_node) {
 		nodePkt->encapsulate(packet.release());
 		sendToNode(nid, std::move(nodePkt));
 		forwardedPackets++;
 	}
-	else {
+	else { // next hop not available
+		// for Routing Updates and Rediscovery messages try to use overlay-based forwarding
+		EV_TRACE << "forwardPacket(): path <";
+		for (unsigned int i= 0; i < packet->getRouteArraySize(); i++)
+			EV_TRACE << ' ' << packet->getRoute(i).shortStr();
+		EV_TRACE << " > progress=" << packet->getProgress() << endl;
+
+		const OverlayKey* finaldestination(nullptr);
+		KadUpdateRouteReq* updatepacket(nullptr);
+		KadFindNodeReq* findnodepacket(nullptr);
+		if (packet->getType() == KAD_UpdateRouteReq) {
+			updatepacket= static_cast<KadUpdateRouteReq*>(packet.get());
+			finaldestination= &updatepacket->getDstNodeID();
+		}
+		else
+		if (packet->getType() == KAD_FindNodeReq) {
+			findnodepacket= static_cast<KadFindNodeReq*>(packet.get());
+			if (findnodepacket->getNotVia() == true) {
+				finaldestination= &findnodepacket->getDstNodeID();
+			}
+		}
+		// only reroute UpdateRouteReq and FindNodeReq for rediscovery
+		if (finaldestination) {
+			// add not via information before forwarding
+			if (  updatepacket != nullptr )
+			{
+				addNotViaLink(*updatepacket, std::make_pair(nextHop,myOverlayKey));
+			}
+			else
+			if ( findnodepacket != nullptr )
+			{
+				addNotViaLink(*findnodepacket, std::make_pair(nextHop,myOverlayKey));
+			}
+
+			reroutePacket(*finaldestination, std::move(packet), std::move(nodePkt));
+			return;
+		}
+
 		// Trying to send to a next hop that is not a physical next hop
 		// That will not fly...
 		EV_ERROR << "forwardPacket(): could not find next hop!" << endl;
 		onMissingNeighbor(std::move(packet), std::move(nodePkt));
 	}
-
 }
 
-	
+
+void R2Kademlia::reroutePacket(const OverlayKey& finaldest, KadPacket_p packet, NodePkt_p nodePkt)
+{
+	EV_TRACE << "reroutePacket() enter." << endl;
+	KadContactList ovlyneighbors= routingTable.getClosestContacts(finaldest, routingTable.getSplitSize(), true);
+	while (not ovlyneighbors.empty())
+	{
+		EV_TRACE << "reroutePacket(): before chooseNextHop()" << endl;
+
+		const KadContact& contact= chooseNextHop(ovlyneighbors, finaldest);
+
+		EV_TRACE << "reroutePacket(): after chooseNextHop()" << endl;
+
+		// if chooseNextHop() cannot find useful next hop: break
+		if (contact.isInvalid() or contact.getKey().isUnspecified())
+			break;
+
+		if ((contact.getKey() ^ finaldest) < (myOverlayKey ^ finaldest))
+		{ // we know a contact that is closer
+			// it does not make sense to send a packet back to
+			// an already passed overlay hop because we will get a loop and
+			// it's more likely that we have outdated information
+			if ( packet->isOverlayHopInPath(contact.getKey()) or (not contact.getPath().empty() and packet->isOverlayHopInPath(contact.getPath().back())) )
+			{
+				// delete contact from list
+				if (auto it= std::find(ovlyneighbors.begin(), ovlyneighbors.end(), &contact); it != ovlyneighbors.end())
+				{
+					// since this pointer is a copy of the original bucket entry, we must not delete the object
+					// set to nullptr to ignore it
+					*it= nullptr;
+				}
+				else
+				{
+					EV_ERROR << "reroutePacket(): cannot find existing contact for deletion" << endl;
+					break;
+				}
+				// next try
+				continue;
+			}
+
+			// intermediate target must also be part of the path
+			kad_path newpath(contact.getPath());
+			newpath.push_back(contact.getKey());
+
+			// rerouting makes this intermediate node to overlay hop
+			packet->setActive(packet->getProgress(), true);
+			packet->modRoute(newpath);
+			EV_TRACE << "reroutePacket(): contact "
+				 << contact <<	" resulting path <";
+			for (unsigned int i= 0; i < packet->getRouteArraySize(); i++)
+				EV_TRACE << ' ' << packet->getRoute(i).shortStr();
+			EV_TRACE << " > progress=" << packet->getProgress() << endl;
+
+			const OverlayKey& nextHop = packet->getNextHop();
+			nodeid_t nid = neighborTable.getNodeId(nextHop);
+
+			if (nid != undefined_node) {
+				EV_TRACE << "reroutePacket(): " << packet->getName() << " dest " << packet->getTarget().shortStr()
+					 << " next hop: " << nextHop.shortStr() << " (" << nid << ')' << endl;
+				nodePkt->encapsulate(packet.release());
+				sendToNode(nid, std::move(nodePkt));
+				forwardedPackets++;
+				return;
+			}
+			else
+			{
+				EV_TRACE << "reroutePacket(): cannot find alternative next hop" << endl;
+				break;
+			}
+		}
+		else
+		{
+			EV_TRACE << "reroutePacket(): cannot find alternative route via overlay" << endl;
+			break;
+		}
+	} // end while
+
+	EV_ERROR << "reroutePacket(): no contacts found" << endl;
+
+	// if we get here: bad luck
+	onMissingNeighbor(std::move(packet), std::move(nodePkt));
+}
+
 void R2Kademlia::resendPacket(KadPacket_p packet) {
 	getKadObserver().registerPacketOverlayHop(*packet);
 	ASSERT(packet->getControlInfo() != nullptr);
@@ -438,37 +562,67 @@ void R2Kademlia::sendPacket(KadPacket_p packet) {
 
 /**
  * Assumption is that the contact list is sorted by XOR and distance to target  */
-const KadContact& R2Kademlia::chooseNextHop(const KadContactList& contacts, const OverlayKey& target, const OverlayKey& source) {
+const KadContact& R2Kademlia::chooseNextHop(const KadContactList& contacts, const OverlayKey& target) {
 	if (proximityRouting and contacts.size() > 1) {
-		const KadContact* contact = contacts.front();
-		int dprefix = (contact->getKey() ^ target).log_2();
-		size_t dproxMin = contact->getPathLength();
-		if ((myOverlayKey ^ target).log_2() == dprefix) {
-			// if we have no prefix progress,
-			// we take the closest contact by XOR
-			return *contact;
-		}
-		for (auto it = contacts.begin()+1; it != contacts.end(); it++) {
-			if (((*it)->getKey() ^ target).log_2() > dprefix) break;
-			if ((*it)->getPathLength() < dproxMin) {
-				dproxMin = (*it)->getPathLength();
-				contact = *it;
+		// dprefix is the number of non-matching bits with target: smaller dprefix is closer to target
+		int dprefix = target.getLength()+1; // keylength + 1
+		size_t dproxMin = hopLimit;
+
+		// look for first usable contact
+		const KadContact* contact(nullptr);
+		auto it = contacts.begin();
+		for (; it != contacts.end(); it++)
+		{
+			contact= *it;
+			if (contact != nullptr)
+			{
+				dprefix = (contact->getKey() ^ target).log_2();
+				dproxMin = contact->getPathLength();
+				if ((myOverlayKey ^ target).log_2() == dprefix) {
+					// if we have no prefix progress,
+					// we take the closest contact by XOR, which is this one (assumption of XOR-sorted contacts)
+					return *contact;
+				}
+				break;
 			}
 		}
-		return *contact;
+		// dprefix, dproxMin now initialized to first non-null contact (if any)
+		// continue with next contact
+		if (it != contacts.end())
+			it++;
+		// look for closest contact with shortest path
+	        for (; it != contacts.end(); it++) {
+			if ( (*it) != nullptr ) {
+				// stop at contact that is further away
+				if (((*it)->getKey() ^ target).log_2() > dprefix)
+					break;
+				// use contact with shortest path
+				if ((*it)->getPathLength() < dproxMin) {
+					dproxMin = (*it)->getPathLength();
+					contact = *it;
+				}
+			}
+		} // end for
+
+		if (contact != nullptr)
+			return *contact;
 	}
 	else {
 		// no proximity routing or only single contact
 		//ASSERT(contacts.front()->getKey() != target); // this assertion seems to be wrong
 
-		if (contacts.front()->getKey() == target)
-		{
-			EV_WARN << "Next hop is the target, number of contacts: " << contacts.size()
-				 << "contact: " << *(contacts.front()) << endl;
+		if (not contacts.empty() and contacts.front() != nullptr) {
+			if (contacts.front()->getKey() == target)
+			{
+				EV_WARN << "Next hop is the target, number of contacts: " << contacts.size()
+					<< "contact: " << *(contacts.front()) << endl;
+			}
+			return *(contacts.front());
 		}
-
-		return *(contacts.front());
 	}
+
+	// if everything else fails we return an empty contact
+	return KadContact::undefinedContact;
 }
 
 // -------------------- RPC methods ---------------------------
@@ -576,6 +730,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadPNDiscReq> packet) {
 }
 
 
+
 void R2Kademlia::handlePacket(std::unique_ptr<KadQueryRouteReq> packet) {
 	EV_TRACE << "received KadQueryRouteReq from " << packet->getSource().shortStr() << endl;
 
@@ -605,7 +760,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadQueryRouteReq> packet) {
 
 	if (packet->getOverlayNeighbors())
 	{
-		KadContactList ovlyneighbors= routingTable.getClosestContacts(myOverlayKey, routingTable.getSplitSize());
+		KadContactList ovlyneighbors= routingTable.getClosestContacts(myOverlayKey, routingTable.getSplitSize(), true);
 
 		response->setContactArraySize(ovlyneighbors.size());
 		response->setPathArraySize(ovlyneighbors.size());
@@ -649,13 +804,13 @@ void R2Kademlia::sendFindNode(const OverlayKey& key, bool exact, const OverlayKe
 
 
 	//ASSERT(contacts.size() > 0);
-	if (auto contacts = routingTable.getClosestContacts(key, findNodeNumber); contacts.size() > 0)
+	if (auto contacts = routingTable.getClosestContacts(key, findNodeNumber, true); contacts.size() > 0)
 	{
 		auto maxFanOut= is_rediscovery ? rediscoveryFanOutFactor : 1;
 		// use several contacts to send multiple Rediscovery requests in parallel
 		for (auto fanout= 0; fanout < maxFanOut and contacts.size() > 0; fanout++)
 		{
-			const KadContact& contact = chooseNextHop(contacts, key, myOverlayKey);
+			const KadContact& contact = chooseNextHop(contacts, key);
 			ASSERT(contact.isValid());
 			ASSERT(!contact.getKey().isUnspecified());
 			if (contact.getKey() == myOverlayKey)
@@ -664,14 +819,12 @@ void R2Kademlia::sendFindNode(const OverlayKey& key, bool exact, const OverlayKe
 				return;
 			}
 			auto packet = makePacket<KadFindNodeReq>(contact, "FindNode");
-			packet->setQuery(key);
+			packet->setDstNodeID(key);
 			packet->setExact(exact);
 			if (is_rediscovery)
 			{ // this is an immediate rediscovery packet
 				ASSERT(exact);
-				packet->setNotVia(true);
-				packet->setUnreachableNode(*notvia_unreachable_node);
-				packet->setDetectingNode(*notvia_failednode_neighbor);
+				addNotViaLink(*packet,std::make_pair(*notvia_unreachable_node,*notvia_failednode_neighbor));
 				sentRediscovery++;
 				EV_TRACE << "Rediscovery sending ... msg id=" << packet->getId()
 					 << " via " << contact << " fanout: " << fanout << endl;
@@ -686,7 +839,7 @@ void R2Kademlia::sendFindNode(const OverlayKey& key, bool exact, const OverlayKe
 			// remove the used element and try again (might not be very efficient, but the list is short)
 			contacts.erase(std::find(contacts.begin(),contacts.end(),&contact));
 		}
-		
+
 	}
 	else
 	{ // no contacts to choose from (usually only possible for isolated nodes)
@@ -696,23 +849,24 @@ void R2Kademlia::sendFindNode(const OverlayKey& key, bool exact, const OverlayKe
 
 
 void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
-	OverlayKey& query = packet->getQuery(); // query is the destination ID
+	OverlayKey& query = packet->getDstNodeID(); // get the destination ID
 
 	EV_TRACE << "KadFindNodeReq (id=" << packet->getId() << ", nonce=" << packet->getNonce() << ") received query for: " << query.shortStr() << " isTracked=" << packet->isTracked() << endl;
 	bool is_rediscovery= false;
 	// check for presence of "not via" setting
 	if (packet->getNotVia())
 	{
-		EV_TRACE << "FindNodeReq contains not via <"
-			 << packet->getUnreachableNode().shortStr() << ' '
-			 << packet->getDetectingNode().shortStr() << '>' << endl;
-		// we should invalidate all contacts with that link in the path to them before answering
-		routingTable.invalidateContacts(packet->getUnreachableNode(), packet->getDetectingNode());
+		for (uint i= 0; i < packet->getFailedLinkArraySize(); i++) {
+			auto &[unreachablenode, detectingnode]= packet->getFailedLink(i);
+			EV_TRACE << "FindNodeReq contains not via  <" << unreachablenode.shortStr() << ',' << detectingnode.shortStr() << '>' << endl;
+			// we should invalidate all contacts with that link in the path to them before answering
+			routingTable.invalidateContacts(unreachablenode, detectingnode);
+		}
 		is_rediscovery= true;
 	}
 	
 	size_t contactsLen = std::max((size_t)findNodeNumber, routingTable.getSplitSize());
-	KadContactList contacts = routingTable.getClosestContacts(query, contactsLen);
+	KadContactList contacts = routingTable.getClosestContacts(query, contactsLen, true);
 
 	if (contacts.size() == 0)
 	{
@@ -766,8 +920,8 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 				and contacts.front()->getPathLength() < packet->getHopLimit()) {
 			// we have found a closer contact that is close enough
 			// => forward request
-			const KadContact& contact = chooseNextHop(contacts, query, packet->getSource());
-			EV_TRACE << "KadFindNodeReq received query: " << packet->getQuery().shortStr() << endl << " next hop is " << contact << endl;
+			const KadContact& contact = chooseNextHop(contacts, query);
+			EV_TRACE << "KadFindNodeReq received query for: " << packet->getDstNodeID().shortStr() << endl << " next hop is " << contact << endl;
 			// note: the log_2 will be smaller for a longer common prefix
 			ASSERT((contact.getKey() ^ query).log_2() <= (myOverlayKey ^ query).log_2());
 			if((contact.getKey() ^ query).log_2() > (myOverlayKey ^ query).log_2()) {
@@ -788,7 +942,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 			// we should send back an error message
 			if (packet->getExact()) {
 
-				const KadContact& contact = chooseNextHop(contacts, query, packet->getSource());
+				const KadContact& contact = chooseNextHop(contacts, query);
 				EV_WARN << "best neighbor now: " << contact << endl;
 				EV_TRACE << "distance for contact=" << (contact.getKey() ^ query).log_2()
 					 << " own distance=" << (myOverlayKey ^ query).log_2() << endl;
@@ -827,7 +981,7 @@ bool R2Kademlia::handleFindNodeResponse(KadPacket_p answer_, RPCState& rpcState)
 	auto answer = safe_packet_cast<KadFindNodeRsp>(answer_);
 	ASSERT(answer->getContactArraySize() == answer->getPathArraySize());
 	ASSERT(rpcState.original_packet.get() != nullptr);
-	EV_TRACE << "received FindNodeRsp for " << check_and_cast<KadFindNodeReq *>(rpcState.original_packet.get())->getQuery().shortStr();
+	EV_TRACE << "received FindNodeRsp for " << check_and_cast<KadFindNodeReq *>(rpcState.original_packet.get())->getDstNodeID().shortStr();
 	EV_TRACE << " from " << answer->getSource().shortStr() << " with " << answer->getContactArraySize() << " contacts" << endl;
 	readRTableRsp(std::move(answer));
 	return true;

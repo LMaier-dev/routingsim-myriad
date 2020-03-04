@@ -96,14 +96,14 @@ public:
 	 */
 	OverlayKey( const OverlayKey& rhs );
 
-	OverlayKey* dup() const { return new OverlayKey(*this); };
+	virtual OverlayKey* dup() const { return new OverlayKey(*this); };
 
 	/**
 	 * Default destructor.
 	 *
 	 * Does nothing ATM.
 	 */
-	~OverlayKey();
+	//~OverlayKey();
 
 	//-------------------------------------------------------------------------
 	// string representations & node key attributes
@@ -116,6 +116,12 @@ public:
 	 */
 	std::string toString( uint32_t base = 16 ) const;
 
+	/**
+	 * Returns a string representation of this key (from cObject)
+	 *
+	 * @return String representation of this key
+	 */
+	virtual std::string str() const { return toString(); }
 	/**
 	 * Returns a short string representation of this key
 	 *

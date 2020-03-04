@@ -180,7 +180,7 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, KadContact::
 	if (path.size() > 0 and not neighbortable.isNeighbor(path[0]))
 	{ // first hop must be found in neighbortable
 		EV_WARN << "Tried to use add path with invalid physical neighbor "
-			<< path[0] << " as next hop - ignoring";
+			<< path[0] << " as next hop - ignoring" << endl;
 		return false;
 	}
 
@@ -481,16 +481,24 @@ inline void copyValidContacts(const std::vector<std::unique_ptr<KadContact>>& so
  * is the closest to key
  */
 
-KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_type n) const
+KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_type n, bool validcontactsonly) const
 {
+	ASSERT(not key.isUnspecified()); // calling this with unspecified key is considered useless and an error
 	KadContactList result{};
 	result.reserve(n);
+
 	size_type index = getBucketIndex(key);
 	auto bucket = buckets.begin() + index;
 	if (bucket->size() >= n)
 	{
-		copyValidContacts(bucket->contacts, result);
-		copyValidContacts(bucket->PNContacts, result);
+		if (validcontactsonly) {
+			copyValidContacts(bucket->contacts, result);
+			copyValidContacts(bucket->PNContacts, result);
+		}
+		else {
+			copyContacts(bucket->contacts, result);
+			copyContacts(bucket->PNContacts, result);
+		}
 	}
 	else {
 		// not enough contacts in first bucket
@@ -498,36 +506,49 @@ KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_t
 		// and then we go down the tree
 		size_type firstOnLevelIndex = getFirstOnBucketLevel(index);
 		uint width = getLevelWidth();
-		auto level = buckets.begin() + firstOnLevelIndex;
-		for (; level < buckets.end() and result.size() < n; level+=width) {
+
+		for (auto level = buckets.begin() + firstOnLevelIndex;
+		     level < buckets.end() and result.size() < n;
+		     level+=width) {
 			if (level == buckets.end()-1)
 			{
-				copyValidContacts(level->contacts, result);
-				copyValidContacts(level->PNContacts, result);
+				if (validcontactsonly) {
+					copyValidContacts(level->contacts, result);
+					copyValidContacts(level->PNContacts, result);
+				}
+				else {
+					copyContacts(level->contacts, result);
+					copyContacts(level->PNContacts, result);
+				}
 			}
 			else // always insert the whole level
 				for (uint i = 0; i < width and level+i < buckets.end(); i++)
 				{
-					copyValidContacts(level[i].contacts, result);
-					copyValidContacts(level[i].PNContacts, result);
+					if (validcontactsonly) {
+						copyValidContacts(level[i].contacts, result);
+						copyValidContacts(level[i].PNContacts, result);
+					}
+					else {
+						copyContacts(level[i].contacts, result);
+						copyContacts(level[i].PNContacts, result);
+					}
 				}
 		}
 		// if we still do not have enough contacts, we go up the tree
 		auto otherBucket = buckets.begin() + firstOnLevelIndex;
 		while(result.size() < n and otherBucket != buckets.begin()) {
 			otherBucket--;
-			copyValidContacts(otherBucket->contacts, result);
-			copyValidContacts(otherBucket->PNContacts, result);
+			if (validcontactsonly) {
+				copyValidContacts(otherBucket->contacts, result);
+				copyValidContacts(otherBucket->PNContacts, result);
+			}
+			else {
+				copyContacts(otherBucket->contacts, result);
+				copyContacts(otherBucket->PNContacts, result);
+			}
 		}
 	}
 	// now we sort the contacts by their XOR metric
-	struct KadContactCompare {
-		const OverlayKey& key;
-		KadContactCompare(const OverlayKey& key) : key(key) {}
-		bool operator()(KadContact_p& a, KadContact_p& b) const {
-			return (a->getKey() ^ key) < (b->getKey() ^ key);
-		}
-	};
 	std::sort(result.begin(), result.end(), KadContactCompare(key));
 	// if we have found more than n contacts, we need to remove some
 	if (result.size() > n) {
@@ -591,7 +612,7 @@ size_type KadRoutingTable::getNumIndirectPaths() const
 /** invalidate all contacts with paths that contain a failed link otherNodeKey <-> failedNodeKey */
 void KadRoutingTable::invalidateContacts(const OverlayKey& failedNodeKey, const OverlayKey& otherNodeKey)
 {
-	EV_TRACE << "invalidateContacts(" << failedNodeKey << ")" << endl;
+	//EV_TRACE << "invalidateContacts(" << failedNodeKey << ")" << endl;
 	// iterate over all buckets and contacts
 	for (KadBucket& b : buckets)
 		for (auto& contact : b.contacts) {
@@ -620,7 +641,7 @@ void KadRoutingTable::invalidateContacts(const OverlayKey& failedNodeKey, const 
 /** invalidate all contacts with paths that contain the physical neighbor failedNodeKey as next hop */
 void KadRoutingTable::invalidateContactsPN(const OverlayKey& failedNodeKey)
 {
-	EV_TRACE << "invalidateContactsPN(" << failedNodeKey << ")" << endl;
+	//EV_TRACE << "invalidateContactsPN(" << failedNodeKey << ")" << endl;
 	// iterate over all buckets and contacts
 	for (KadBucket& b : buckets)
 		for (auto& contact : b.contacts) {

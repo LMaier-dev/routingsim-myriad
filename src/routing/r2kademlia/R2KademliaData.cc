@@ -203,10 +203,10 @@ void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 		else
 		{ // we must find next overlay hop according to DStNodeID
 
-			auto contacts = routingTable.getClosestContacts(packet->getDstNodeID(), findNodeNumber);
+			auto contacts = routingTable.getClosestContacts(packet->getDstNodeID(), findNodeNumber, true);
 			if (contacts.size() > 0)
 			{
-				const KadContact& contact = chooseNextHop(contacts, packet->getDstNodeID(), myOverlayKey);
+				const KadContact& contact = chooseNextHop(contacts, packet->getDstNodeID());
 				ASSERT(contact.isValid());
 				ASSERT(!contact.getKey().isUnspecified());
 				EV_TRACE << "next hop is " << contact.getKey().shortStr()
@@ -320,11 +320,11 @@ void R2Kademlia::sendPacket(KadDataPacket_p packet) {
 
 void R2Kademlia::sendData(const OverlayKey& finaldestkey) {
 	EV_TRACE << "sendData to " << finaldestkey.shortStr() << endl;
-	auto contacts = routingTable.getClosestContacts(finaldestkey, findNodeNumber);
+	auto contacts = routingTable.getClosestContacts(finaldestkey, findNodeNumber, true);
 	//ASSERT(contacts.size() > 0);
 	if (contacts.size() > 0)
 	{
-		const KadContact& contact = chooseNextHop(contacts, finaldestkey, myOverlayKey);
+		const KadContact& contact = chooseNextHop(contacts, finaldestkey);
 		ASSERT(contact.isValid());
 		ASSERT(!contact.getKey().isUnspecified());
 		if (contact.getKey() == myOverlayKey)

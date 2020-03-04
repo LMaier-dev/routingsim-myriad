@@ -25,6 +25,7 @@ void KadPacket::setSource(const OverlayKey & source) {
 		setRoute(0, source);
 };
 
+
 void KadPacket::appendRoute(const kad_path& path) {
 	auto old_size = getRouteArraySize();
 	setRouteArraySize(old_size + path.size());
@@ -35,19 +36,30 @@ void KadPacket::appendRoute(const kad_path& path) {
 	}
 }
 
-// path should also contain target node
-void KadPacket::modRoute(const kad_path& path) {
-	auto tail_size = getRouteArraySize()-progress-1; // progress is index starting from 0
-	ASSERT(tail_size >= path.size());
 
-	size_t newsize= progress + 1 + path.size();
-	ASSERT(newsize <= getRouteArraySize());
-	for(size_t i = 0; i < path.size(); i++) {
-		setRoute(progress + 1 + i, path[i]);
+// replaces rest of path with newpath (starting from progress)
+// path should also contain target node
+void KadPacket::modRoute(const kad_path& newpath) {
+	size_t newsize= progress + 1 + newpath.size();
+	bool resize= newsize > getRouteArraySize(); // need to resize
+	if (resize)
+	{ // this creates an enlarged copy beforehand
+		setRouteArraySize(newsize);
+		setActiveArraySize(newsize);
+	}
+
+	for(size_t i = 0; i < newpath.size(); i++) {
+		setRoute(progress + 1 + i, newpath[i]);
 		setActive(progress + 1 + i, false);
 	}
-	setRouteArraySize(newsize);
-	setActiveArraySize(newsize);
+	// last hop is next overlay node, so set active flag
+	setActive(getRouteArraySize() - 1, true);
+
+	if ( not(resize) )
+	{
+		setRouteArraySize(newsize);
+		setActiveArraySize(newsize);
+	}
 }
 
 void KadPacket::appendHop(const OverlayKey& key) {
