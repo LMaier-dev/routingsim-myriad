@@ -179,8 +179,8 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, KadContact::
 	// sanity check: do not use paths that lead via an invalid neighbor as first hop
 	if (path.size() > 0 and not neighbortable.isNeighbor(path[0]))
 	{ // first hop must be found in neighbortable
-		EV_WARN << "Tried to use add path with invalid physical neighbor "
-			<< path[0] << " as next hop - ignoring" << endl;
+		//EV_WARN << "Tried to use add path with invalid physical neighbor "
+		//	<< path[0] << " as next hop - ignoring" << endl;
 		return false;
 	}
 

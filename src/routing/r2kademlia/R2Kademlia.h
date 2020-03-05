@@ -248,6 +248,8 @@ private:
 	 */
 	template<typename T>
 	bool handleIfFitting(KadPacket_p& packet);
+	template<typename T>
+	void processNotViaInformation(const T& packet);
 	kad_path concatViaPath(const kad_path& viaPath, const OverlayKey& viaKey, const kad_path& path);
 	/// adds contact and not via link for rediscovery queue
 	void scheduleRediscovery(const OverlayKey& contactkey, const OverlayKey& notvia_unreachable_node, const OverlayKey& notvia_failednode_neighbor);
@@ -279,6 +281,7 @@ private:
 	bool handleRPCTimeOut(KadPacket_p answer, RPCState& rpcState);
 	//@}
 private:
+	~R2Kademlia() { updateQueue.clear(); pathSetupQueue.clear(); }
 	/// the overlay key of this node
 	OverlayKey myOverlayKey;
 	/// Table of direct physical neighbors
@@ -314,7 +317,7 @@ private:
 	bool sendDataPackets;
 	bool usePathIDs;
 	uint8_t probeStrategy;
-	uint8_t rediscoveryFanOutFactor= 3;
+	uint8_t rediscoveryFanOutFactor= 10;
 	simtime_t rediscoveryWaitTime;
 	simtime_t pathSetupWaitTime;
 	simtime_t updateWaitTime;
@@ -382,7 +385,23 @@ private:
 	//@}
 };
 
+
 // template functions
+template<typename T>
+void R2Kademlia::processNotViaInformation(const T& packet)
+{
+	// first check the notvia information
+	if (packet->getNotVia())
+	{
+		for (uint i= 0; i < packet->getFailedLinkArraySize(); i++) {
+			auto &[unreachablenode, detectingnode]= packet->getFailedLink(i);
+			EV_TRACE << "UpdateRouteReq contains not via <" << unreachablenode.shortStr() << ',' << detectingnode.shortStr() << '>' << endl;
+			// we should invalidate all contacts with that link in the path to them before answering
+			routingTable.invalidateContacts(unreachablenode, detectingnode);
+		}
+	}
+}
+
 
 template<typename T>
 std::unique_ptr<T> R2Kademlia::makePacket(const KadContact* contact, const char *name) {

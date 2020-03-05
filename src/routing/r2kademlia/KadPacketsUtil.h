@@ -10,7 +10,6 @@ namespace routingsim {
 template <class T>
 void addNotViaLink(T& packet, const link_t& failedlink) {
 	// check whether link is already present
-	EV_TRACE << "entered addNotViaLink(), list size=" << packet.getFailedLinkArraySize() << endl;
 	unsigned int i= 0;
 	while(i < packet.getFailedLinkArraySize())
 	{
@@ -19,7 +18,6 @@ void addNotViaLink(T& packet, const link_t& failedlink) {
 		}
 		i++;
 	}
-	EV_TRACE << "addNotViaLink(): i=" << i << endl;
 
 	if (i == packet.getFailedLinkArraySize()) { // not found
 		// add failed link
@@ -28,7 +26,6 @@ void addNotViaLink(T& packet, const link_t& failedlink) {
 		if (i==0)
 			packet.setNotVia(true);
 	}
-	EV_TRACE << "Left addNotViaLink(), list size=" << packet.getFailedLinkArraySize() << endl;
 }
 
 } // end namespace

@@ -36,6 +36,9 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadUpdateRouteReq> packet) {
 
 	receivedRouteUpdates++;
 
+	// first check the notvia information
+	processNotViaInformation(packet);
+
 	// path to origin of this KadUpdateRouteReq (excluding myself)
 	kad_path source_path= packet->reversePath(packet->getSrcPath(0, packet->getRouteArraySize()-1));
 	/*
@@ -104,7 +107,6 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadUpdateRouteReq> packet) {
 	// forward UpdateReq closer towards destination
 	if (propagateUpdate)
 		propagateUpdateReq(std::move(packet));
-
 }
 
 
@@ -187,17 +189,7 @@ void R2Kademlia::scheduleUpdate(const KadContact& affectedContact, KadRouteUpdat
 void R2Kademlia::evalUpdateReq(const KadUpdateRouteReq* packet)
 {
 	// first check the notvia information
-	if (packet->getNotVia())
-	{
-		EV_TRACE << "UpdateRouteReq contains not via ";
-		for (uint i= 0; i < packet->getFailedLinkArraySize(); i++) {
-			auto &[unreachablenode, detectingnode]= packet->getFailedLink(i);
-			EV_TRACE << " <" << unreachablenode.shortStr() << ',' << detectingnode.shortStr() << '>';
-			// we should invalidate all contacts with that link in the path to them before answering
-			routingTable.invalidateContacts(unreachablenode, detectingnode);
-		}
-		EV_TRACE <<  endl;
-	}
+	processNotViaInformation(packet);
 
 	unsigned int numContacts= packet->getContactArraySize();
 	for (unsigned int i= 0; i < numContacts; i++)
@@ -290,7 +282,7 @@ void R2Kademlia::sendUrgentUpdates()
 
 			if (not urgentupdatelist.empty()) {
 				// UpdateRouteReqs are not expecting an answer, so no RPC call
-				auto packet = makePacket<KadUpdateRouteReq>(notify_target, "UpdateRoute");
+				auto packet = makePacket<KadUpdateRouteReq>(notify_target, "UpdateRouteReqURG");
 				packet->setDstNodeID(notify_target->getKey());
 				// write down all routing notifications for a specific contact
 				packet->setContactArraySize(urgentupdatelist.size());
@@ -320,6 +312,7 @@ void R2Kademlia::sendUrgentUpdates()
 
 	// non urgent entries still there
 	if (updateQueue.size() > 0) {
+		EV_TRACE << "left non-urgent updates: " << updateQueue.size() << endl;
 		addTimer(updateWaitTime - updateWaitTimeFast, 0, std::bind(&R2Kademlia::sendUpdates, this));
 		updateScheduled= true;
 	}
@@ -344,9 +337,9 @@ void R2Kademlia::sendUpdates()
 		if (notify_target and notify_target->isValid())
 		{ // only notify contacts that we have a path to (i.e., that are valid)
 			// UpdateRouteReqs are not expecting an answer, so no RPC call
-			auto packet = makePacket<KadUpdateRouteReq>(notify_target, "UpdateRoute");
+			auto packet = makePacket<KadUpdateRouteReq>(notify_target, "UpdateRouteReq");
 			packet->setDstNodeID(notify_target->getKey());
-			//EV_TRACE << "UpdateRoute packet to " << notifyContact_it->first.shortStr() << " w/ ";
+			EV_TRACE << "UpdateRoute packet to " << notifyContact_it->first.shortStr() << " w/ ";
 			const auto& updatelist(notifyContact_it->second);
 			// write down all routing notifications for a specific contact
 			packet->setContactArraySize(updatelist.size());
@@ -360,10 +353,10 @@ void R2Kademlia::sendUpdates()
 				packet->setContact(i, affectedContact.getKey());
 				packet->setPath(i, affectedContact.getPath());
 				packet->setAction(i, action);
-				//EV_TRACE << affectedContact << "; ";
+				EV_TRACE << affectedContact << "; ";
 				i++;
 			}
-			//EV_TRACE << endl;
+			EV_TRACE << endl;
 			// send UpdateRouteReq w/ failed link
 			sendPacket(std::move(packet));
 			sentRouteUpdates++;
