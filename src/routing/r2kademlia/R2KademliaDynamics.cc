@@ -229,14 +229,20 @@ void R2Kademlia::propagateUpdateReq(std::unique_ptr<KadUpdateRouteReq> packet)
 	unsigned int numContacts= packet->getContactArraySize();
 	size_t contactsLen = std::max((size_t)findNodeNumber, routingTable.getSplitSize());
 	KadContactList closeContacts(routingTable.getClosestContacts(destContactKey, contactsLen, true));
-	if (closeContacts.empty())
+
+	if (closeContacts.empty()) {
+		EV_TRACE << "propagateUpdateReq(): Update forwarding ends. No contact found" << endl;
 		return;
+	}
 
 	const KadContact& contact = chooseNextHop(closeContacts, destContactKey);
 	// check whether that contact is closer to the target than we
 	if ( contact.isValid() and (contact.getKey() ^ myOverlayKey) > (contact.getKey() ^ destContactKey) )
 	{
-		packet->removeControlInfo();
+		if (NodePkt *nodepkt= check_and_cast<NodePkt *>(packet->removeControlInfo()); nodepkt != nullptr) {
+			delete nodepkt;
+		}
+
 		// this will reset the route
 		packet->setRouteArraySize(0);
 		packet->setActiveArraySize(0);
@@ -246,6 +252,10 @@ void R2Kademlia::propagateUpdateReq(std::unique_ptr<KadUpdateRouteReq> packet)
 		packet->appendRoute(contact);
 		EV_TRACE << "propagateUpdateReq(): final dest: " << destContactKey.shortStr() << ", next dest: " << contact << endl;
 	        sendPacket(std::move(packet));
+	}
+	else
+	{
+		EV_TRACE << "propagateUpdateReq(): Update forwarding ends, final dest: " << destContactKey.shortStr() << ", next dest: " << contact << endl;
 	}
 	// if no chance of getting closer to the destination: UpdateReq will be deleted here
 }

@@ -58,9 +58,9 @@ public:
 	void modRoute(const kad_path& path);
 	/// returns the source route as a kad_path (std::vector) from the given position
 	/// until the given "to" position (excluding "to")
-	kad_path getSrcPath(uint from, uint to);
+	kad_path getSrcPath(uint from, uint to) const;
 	/// returns the source route as a kad_path (std::vector) from the given position
-	inline kad_path getSrcPath(uint from = 0) { return getSrcPath(from, route_arraysize); }
+	inline kad_path getSrcPath(uint from = 0) const { return getSrcPath(from, route_arraysize); }
 	/// sets the path of this packet to the reverse path of the other packet
 	/// taking into acount the progress of the other packet
 	void setReturnPathFrom(KadPacket& other);
@@ -91,9 +91,9 @@ public:
 	/// returns true if the packet still has hops to take
 	inline bool hasRemainingHops() const { return getNextHopIndex() < route_arraysize; }
 	/// reverses the given path, returns the result
-	inline kad_path reversePath(kad_path path) { std::reverse(path.begin(), path.end()); return path; }
+	inline kad_path reversePath(kad_path path) const { std::reverse(path.begin(), path.end()); return path; }
 	/// returns the source route as a kad_path (std::vector) only excluding target and source
-	inline kad_path getIntermediatePath() { return getSrcPath(1, route_arraysize - 1); }
+	inline kad_path getIntermediatePath() const { return getSrcPath(1, route_arraysize - 1); }
 	//@}
 	inline void countOverlayHop() { overlayHops++; }
 	inline uint16_t getOverlayHops() const { return overlayHops; }

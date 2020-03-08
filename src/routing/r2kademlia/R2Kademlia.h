@@ -205,7 +205,7 @@ private:
 	/// saves the contact list to the given packet.
 	void fillRTableRsp(KadRTableRsp& packet, const KadContactList& contacts, bool includePaths=true);
 	/// reads the contacts from the packet and adds the paths to the routing table
-	void readRTableRsp(std::unique_ptr<KadRTableRsp> packet);
+	void readRTableRsp(const KadRTableRsp& packet);
 	//@}
 
 	/** @name timer functions */
@@ -268,7 +268,8 @@ private:
 	void sendScheduledPathSetups();
 	/// evaluate Updates while forwarding
 	void evalUpdateReq(const KadUpdateRouteReq* packet);
-
+	/// evaluateQueryRouteRsp
+	void evalQueryRouteRsp(const KadQueryRouteRsp* packet) { readRTableRsp(*packet); }
 	//@}
 
 	/** @name callback functions for RPC calls */
