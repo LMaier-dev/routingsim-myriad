@@ -1018,7 +1018,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 			} // if exact flag is set
 
 			// otherwise it's ok to report what we know
-			EV_WARN << "Cannot get closer to the target, best neighbor now: " << contacts.front()->getKey() << endl;
+			EV_TRACE << "Cannot get closer to the target, best neighbor now: " << contacts.front()->getKey() << endl;
 			EV_TRACE << "Distance for contact=" << (contacts.front()->getKey() ^ query).log_2()
 				 << " own distance=" << (myOverlayKey ^ query).log_2() << " own ID: " << myOverlayKey.shortStr() << endl;
 		} // end else
