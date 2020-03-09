@@ -430,7 +430,7 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt) {
 	}
 	else { // next hop not available
 		// for Routing Updates and Rediscovery messages try to use overlay-based forwarding
-		EV_TRACE << "forwardPacket(): path <";
+		EV_TRACE << "forwardPacket(): next hop unavailable, path <";
 		for (unsigned int i= 0; i < packet->getRouteArraySize(); i++)
 			EV_TRACE << ' ' << packet->getRoute(i).shortStr();
 		EV_TRACE << " > progress=" << packet->getProgress() << endl;
@@ -468,7 +468,46 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt) {
 		}
 
 		// Trying to send to a next hop that is not a physical next hop
+		// or that is currently not available
 		// That will not fly...
+		if (KadContact_p contact= routingTable.getContact(nextHop); contact != nullptr and contact->isValid()) // and contact.isPhysicalNeighbor()
+		{
+			// modify route
+			kad_path newpath(contact->getPath());
+			newpath.push_back(contact->getKey());
+
+			EV_TRACE << "forwardPacket(): next hop contact " << *contact << endl;
+			// rerouting makes this intermediate node to overlay hop
+			//packet->setActive(packet->getProgress(), true);
+			packet->modRoute(newpath);
+
+			EV_TRACE << "forwardPacket(): reroute path <";
+			for (unsigned int i= 0; i < packet->getRouteArraySize(); i++)
+				EV_TRACE << ' ' << packet->getRoute(i).shortStr();
+			EV_TRACE << " > progress=" << packet->getProgress() << endl;
+
+			if (not newpath.empty()) {
+				// new next hop
+				nid = neighborTable.getNodeId(newpath.front());
+				if (nid != undefined_node) {
+					if ( findnodepacket != nullptr )
+					{
+						addNotViaLink(*findnodepacket, std::make_pair(nextHop,myOverlayKey));
+					}
+
+					nodePkt->encapsulate(packet.release());
+					sendToNode(nid, std::move(nodePkt));
+					forwardedPackets++;
+					return;
+				}
+				else {
+					EV_ERROR << "forwardPacket(): reroute to next hop failed" << endl;
+				}
+			}
+			else
+				EV_ERROR << "forwardPacket(): next hop is physical neighbor and valid, but not found in neighbor table?!" << endl;
+		}
+
 		EV_ERROR << "forwardPacket(): could not find next hop!" << endl;
 		onMissingNeighbor(std::move(packet), std::move(nodePkt));
 	}
@@ -847,7 +886,7 @@ void R2Kademlia::sendFindNode(const OverlayKey& key, bool exact, const OverlayKe
 				EV_TRACE << "Rediscovery sending ... msg id=" << packet->getId()
 					 << " via " << contact << " fanout: " << fanout << endl;
 			}
-			EV_TRACE << "sending KadFindNodeReq id=" << packet->getId() << endl;
+			EV_TRACE << "sending KadFindNodeReq nonce=" << packet->getNonce() << endl;
 			sendRpcCall(
 				std::move(packet),
 				std::bind(&R2Kademlia::handleFindNodeResponse, this, ph::_1, ph::_2),
@@ -1509,10 +1548,10 @@ void R2Kademlia::doProbeSelf(short timerId) {
 	{ // double waiting time for next call until maxDuration is reached
 		timerDuration[timerId] = std::min(2 * timerDuration[timerId], maxDuration);
 	}
-	
+
 	if (neighborTable.size() == 0) return; // we are isolated
 	bool exact= false;
-	
+
 	sendFindNode(myOverlayKey, exact);
 }
 
@@ -1535,7 +1574,7 @@ void R2Kademlia::doReachabilityTest(short timerID) {
 			key = &getKadObserver().getRandomNodeKey();
 
 	} while (*key == myOverlayKey);
-
+	EV_TRACE << "Reachability Test to " << key->shortStr() << endl;
 	sendFindNode(*key, true);
 }
 
