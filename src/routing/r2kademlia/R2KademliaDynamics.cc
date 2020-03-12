@@ -36,9 +36,6 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadUpdateRouteReq> packet) {
 
 	receivedRouteUpdates++;
 
-	// first check the notvia information
-	processNotViaInformation(packet);
-
 	// path to origin of this KadUpdateRouteReq (excluding myself)
 	kad_path source_path= packet->reversePath(packet->getSrcPath(0, packet->getRouteArraySize()-1));
 	/*
@@ -188,9 +185,6 @@ void R2Kademlia::scheduleUpdate(const KadContact& affectedContact, KadRouteUpdat
 // inspects a RouteUpdateReq message for Unreachability information
 void R2Kademlia::evalUpdateReq(const KadUpdateRouteReq* packet)
 {
-	// first check the notvia information
-	processNotViaInformation(packet);
-
 	unsigned int numContacts= packet->getContactArraySize();
 	for (unsigned int i= 0; i < numContacts; i++)
 	{
@@ -381,7 +375,7 @@ void R2Kademlia::sendUpdates()
 
 
 // send a find node request excluding paths that include the failed link
-void R2Kademlia::scheduleRediscovery(const OverlayKey& contactkey, const OverlayKey& notvia_unreachable_node, const OverlayKey& notvia_failednode_neighbor)
+void R2Kademlia::scheduleRediscovery(const OverlayKey& contactkey, const OverlayKey& notvia_unreachable_node, const OverlayKey& notvia_failednode_neighbor, bool immediate)
 {
 	KadContact_p rt_contact= routingTable.getContact(contactkey);
 	if (rt_contact and rt_contact->isRediscovering())
@@ -389,6 +383,16 @@ void R2Kademlia::scheduleRediscovery(const OverlayKey& contactkey, const Overlay
 		// do not schedule for rediscovery if there is something still in progress
 		EV_WARN << "Rediscovery not scheduled for contact " << contactkey.shortStr()
 			<< " because it is already in rediscovering state" << endl;
+		return;
+	}
+
+	if (immediate) // do not schedule: directly send rediscovery
+	{
+		EV_TRACE << "Sending immediate rediscovery for contact " << contactkey.shortStr() << " <"
+		<< notvia_unreachable_node.shortStr() << ' '
+		<< notvia_failednode_neighbor.shortStr() << '>' << endl;
+		sendFindNode(contactkey, true, &notvia_unreachable_node, &notvia_failednode_neighbor);
+
 		return;
 	}
 

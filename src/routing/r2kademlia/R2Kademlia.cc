@@ -23,7 +23,6 @@
 #include "KadObserver.h"
 
 #include "FwdTable.h"
-#include "KadPacketsUtil.h"
 
 namespace routingsim {
 // for std::bind with callback functions
@@ -189,6 +188,9 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	if (handleIfFitting<KadPNDiscReq>(packet))
 		return;
 
+	// check for presence of carried "not via" information
+	processNotViaInformation(*packet);
+
 	if (packet->hasRemainingHops()) {
 		// we are not the recipient
 
@@ -199,7 +201,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		{
 			case KAD_FindNodeReq:
 				// check for rediscovery packet
-				if (dynamic_cast<const KadFindNodeReq*>(packet.get())->getNotVia() == true) {
+				if (packet->getNotVia() == true) {
 					is_rediscovery= true;
 				}
 				break;
@@ -450,17 +452,12 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt) {
 				finaldestination= &findnodepacket->getDstNodeID();
 			}
 		}
-		// only reroute UpdateRouteReq and FindNodeReq for rediscovery
+		// only reroute UpdateRouteReq and FindNodeReq for rediscovery (TODO check)
 		if (finaldestination) {
 			// add not via information before forwarding
-			if (  updatepacket != nullptr )
+			if (  updatepacket != nullptr or findnodepacket != nullptr )
 			{
-				addNotViaLink(*updatepacket, std::make_pair(nextHop,myOverlayKey));
-			}
-			else
-			if ( findnodepacket != nullptr )
-			{
-				addNotViaLink(*findnodepacket, std::make_pair(nextHop,myOverlayKey));
+				packet->addNotViaLink(std::make_pair(nextHop,myOverlayKey));
 			}
 
 			reroutePacket(*finaldestination, std::move(packet), std::move(nodePkt));
@@ -469,8 +466,8 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt) {
 
 		// Trying to send to a next hop that is not a physical next hop
 		// or that is currently not available
-		// That will not fly...
-		if (KadContact_p contact= routingTable.getContact(nextHop); contact != nullptr and contact->isValid()) // and contact.isPhysicalNeighbor()
+		// That will not fly, unless we have a valid replacement route for this next hop/contact
+		if (KadContact_p contact= routingTable.getContact(nextHop); contact != nullptr and contact->isValid() and findnodepacket != nullptr) // and contact.isPhysicalNeighbor()
 		{
 			// modify route
 			kad_path newpath(contact->getPath());
@@ -490,10 +487,8 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt) {
 				// new next hop
 				nid = neighborTable.getNodeId(newpath.front());
 				if (nid != undefined_node) {
-					if ( findnodepacket != nullptr )
-					{
-						addNotViaLink(*findnodepacket, std::make_pair(nextHop,myOverlayKey));
-					}
+					// TODO check whether this actually makes sense for all packet types?
+					packet->addNotViaLink(std::make_pair(nextHop,myOverlayKey));
 
 					nodePkt->encapsulate(packet.release());
 					sendToNode(nid, std::move(nodePkt));
@@ -881,7 +876,7 @@ void R2Kademlia::sendFindNode(const OverlayKey& key, bool exact, const OverlayKe
 			if (is_rediscovery)
 			{ // this is an immediate rediscovery packet
 				ASSERT(exact);
-				addNotViaLink(*packet,std::make_pair(*notvia_unreachable_node,*notvia_failednode_neighbor));
+				packet->addNotViaLink(std::make_pair(*notvia_unreachable_node,*notvia_failednode_neighbor));
 				sentRediscovery++;
 				EV_TRACE << "Rediscovery sending ... msg id=" << packet->getId()
 					 << " via " << contact << " fanout: " << fanout << endl;
@@ -911,9 +906,6 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 
 	EV_TRACE << "KadFindNodeReq (id=" << packet->getId() << ", nonce=" << packet->getNonce() << ") received query for: " << query.shortStr()
 		 << " isTracked=" << packet->isTracked() << (packet->getSource() == query ? " (JOIN)" : "") << (is_rediscovery ? " Rediscovery" : "") << endl;
-
-	// check for presence of "not via" setting
-	processNotViaInformation(packet);
 	
 	size_t contactsLen = std::max((size_t)findNodeNumber, routingTable.getSplitSize());
 	KadContactList contacts = routingTable.getClosestContacts(query, contactsLen, true);

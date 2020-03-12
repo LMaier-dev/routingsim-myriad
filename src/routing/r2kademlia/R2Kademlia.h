@@ -248,11 +248,11 @@ private:
 	 */
 	template<typename T>
 	bool handleIfFitting(KadPacket_p& packet);
-	template<typename T>
-	void processNotViaInformation(const T& packet);
+
+	void processNotViaInformation(const KadPacket& packet);
 	kad_path concatViaPath(const kad_path& viaPath, const OverlayKey& viaKey, const kad_path& path);
-	/// adds contact and not via link for rediscovery queue
-	void scheduleRediscovery(const OverlayKey& contactkey, const OverlayKey& notvia_unreachable_node, const OverlayKey& notvia_failednode_neighbor);
+	/// adds contact and not via link for rediscovery queue (or send it immediately)
+	void scheduleRediscovery(const OverlayKey& contactkey, const OverlayKey& notvia_unreachable_node, const OverlayKey& notvia_failednode_neighbor, bool immediate= false);
 	void rediscoverContacts();
 	/// adds routing table updates for contacts to an update queue
 	void scheduleUpdate(const KadContact& affectedcontact, KadRouteUpdateAction action);
@@ -387,16 +387,15 @@ private:
 };
 
 
-// template functions
-template<typename T>
-void R2Kademlia::processNotViaInformation(const T& packet)
+inline
+void R2Kademlia::processNotViaInformation(const KadPacket& packet)
 {
 	// first check the notvia information
-	if (packet->getNotVia())
+	if (packet.getNotVia())
 	{
-		for (uint i= 0; i < packet->getFailedLinkArraySize(); i++) {
-			auto &[unreachablenode, detectingnode]= packet->getFailedLink(i);
-			EV_TRACE << "UpdateRouteReq contains not via <" << unreachablenode.shortStr() << ',' << detectingnode.shortStr() << '>' << endl;
+		for (uint i= 0; i < packet.getFailedLinkArraySize(); i++) {
+			auto &[unreachablenode, detectingnode]= packet.getFailedLink(i);
+			EV_TRACE << "Packet " << packet.getName() << " contains not via <" << unreachablenode.shortStr() << ',' << detectingnode.shortStr() << '>' << endl;
 			// we should invalidate all contacts with that link in the path to them before answering
 			routingTable.invalidateContacts(unreachablenode, detectingnode);
 		}
@@ -404,6 +403,7 @@ void R2Kademlia::processNotViaInformation(const T& packet)
 }
 
 
+// template functions
 template<typename T>
 std::unique_ptr<T> R2Kademlia::makePacket(const KadContact* contact, const char *name) {
 	auto packet = std::make_unique<T>();

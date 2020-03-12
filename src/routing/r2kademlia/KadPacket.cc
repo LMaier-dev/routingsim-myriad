@@ -19,7 +19,7 @@ namespace routingsim {
 Register_Class(KadPacket);
 
 void KadPacket::setSource(const OverlayKey & source) {
-	if(route_arraysize == 0)
+	if (route_arraysize == 0)
 		appendHop(source);
 	else
 		setRoute(0, source);
@@ -30,7 +30,7 @@ void KadPacket::appendRoute(const kad_path& path) {
 	auto old_size = getRouteArraySize();
 	setRouteArraySize(old_size + path.size());
 	setActiveArraySize(old_size + path.size());
-	for(size_t i = 0; i < path.size(); i++) {
+	for (size_t i = 0; i < path.size(); i++) {
 		setRoute(old_size + i, path[i]);
 		setActive(old_size + i, false);
 	}
@@ -48,7 +48,7 @@ void KadPacket::modRoute(const kad_path& newpath) {
 		setActiveArraySize(newsize);
 	}
 
-	for(size_t i = 0; i < newpath.size(); i++) {
+	for (size_t i = 0; i < newpath.size(); i++) {
 		setRoute(progress + 1 + i, newpath[i]);
 		setActive(progress + 1 + i, false);
 	}
@@ -75,7 +75,7 @@ void KadPacket::appendRoute(const KadContact& contact) {
 	auto old_size = getRouteArraySize();
 	setRouteArraySize(old_size + contact.getPathLength() + 1);
 	setActiveArraySize(getRouteArraySize());
-	for(size_t i = 0; i < contact.getPathLength(); i++) {
+	for (size_t i = 0; i < contact.getPathLength(); i++) {
 		setRoute(old_size + i, contact.getPath()[i]);
 		setActive(old_size + i, false);
 	}
@@ -89,7 +89,7 @@ kad_path KadPacket::getSrcPath(uint from, uint to) const {
 		throw cRuntimeError("from > to"); // TODO
 	kad_path result{};
 	result.reserve(to - from);
-	for(; from < to; from++)
+	for (; from < to; from++)
 		result.emplace_back(getHop(from));
 	return result;
 }
@@ -98,8 +98,12 @@ void KadPacket::setReturnPathFrom(KadPacket& other) {
 	// we include the current hop
 	ASSERT(route_arraysize == 0);
 	setRouteArraySize(other.progress + 1);
-	for (uint i= 0; i <= other.progress; i++)
+	setActiveArraySize(getRouteArraySize());
+
+	for (uint i= 0; i <= other.progress; i++) {
 		setRoute(i, other.getRoute(other.progress - i));
+		setActive(i, false);
+	}
 }
 
 
@@ -135,12 +139,33 @@ bool KadPacket::setSimplifiedReturnPathFrom(KadPacket& other) {
 	}  // end for
 
 	setRouteArraySize(index);
+	setActiveArraySize(index);
 	for (uint i= 0; i < index; i++)
 		setRoute(i, resultpath[i]);
 
 	return index < otherPathLen;
 }
 
+
+void KadPacket::addNotViaLink(const link_t& failedlink) {
+	// check whether link is already present
+	unsigned int i= 0;
+	while(i < getFailedLinkArraySize())
+	{
+		if ( (getFailedLink(i) == failedlink) or (getFailedLink(i) == std::make_pair(failedlink.second, failedlink.first)) ) {
+			break;
+		}
+		i++;
+	}
+
+	if (i == getFailedLinkArraySize()) { // not found
+		// add failed link
+		setFailedLinkArraySize(i+1); // since i == getFailedLinkArraySize()
+		setFailedLink(getFailedLinkArraySize()-1, failedlink);
+		if (i==0)
+			setNotVia(true);
+	}
+}
 
 Register_Class(KadDataPacket);
 

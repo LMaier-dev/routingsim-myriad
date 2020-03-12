@@ -79,7 +79,7 @@ public:
 	/** called when a contact is about to being removed */
 	virtual void onContactRemoval(KadContact_p contact) = 0;
 	/** called when a rediscovery needs to be performed for a contact */
-	virtual void scheduleRediscovery(const OverlayKey& contact, const OverlayKey& notvia_unreachable_node, const OverlayKey& notvia_failednode_neighbor) = 0;
+	virtual void scheduleRediscovery(const OverlayKey& contact, const OverlayKey& notvia_unreachable_node, const OverlayKey& notvia_failednode_neighbor, bool immediate= false) = 0;
 };
 
 /**

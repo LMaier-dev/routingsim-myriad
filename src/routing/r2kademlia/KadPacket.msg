@@ -18,6 +18,8 @@ cplusplus {{
 #include "PathID.h"
 #include "RPC.h"
 #include <memory>
+#include <utility>
+typedef std::pair<OverlayKey,OverlayKey> link_t;
 }}
 
 namespace routingsim;
@@ -49,6 +51,7 @@ enum KadPDUType {
 class noncobject OverlayKey;
 class noncobject nodeid_t;
 class noncobject nonce_t;
+class noncobject link_t;
 
 // a KAD control packet
 packet KadPacket {
@@ -58,6 +61,8 @@ packet KadPacket {
 	uint16_t progress = 0;
 	nonce_t nonce;
 	uint8_t type enum(KadPDUType);
+	bool notVia = false;
+	link_t failedLink[];
 	uint16_t hopLimit = 255;
 }
 

@@ -630,9 +630,16 @@ void KadRoutingTable::invalidateContacts(const OverlayKey& failedNodeKey, const 
 			    or // pen-ultimate hop is the failed node leading to the neighboring node => this link failed
 			    containsUndirectedLink(contact->getPath(), failedNodeKey, otherNodeKey))
 			{ // link somewhere in the path
+				if (contact->isValid()) {
+					EV_TRACE << "Set Contact to invalid due to failed link <"
+						 << failedNodeKey.shortStr() << "," << otherNodeKey.shortStr() << ">:"  << *contact << endl;
+					// if contact is important neighbor: send rediscovery immediately
+					// otherwise we are following a lazy strategy (maybe contact is not actively used)
+					if ( isInLastBucket(contact->getKey()) ) {
+						policy->scheduleRediscovery(contact->getKey(), failedNodeKey, otherNodeKey, true);
+					}
+				}
 				contact->setInvalid();
-				EV_TRACE << "Set Contact to invalid due to failed link <"
-					 << failedNodeKey.shortStr() << "," << otherNodeKey.shortStr() << ">:"  << *contact << endl;
 			}
 		} // end for inner loop over all contacts
 }
