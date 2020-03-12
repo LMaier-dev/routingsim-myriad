@@ -631,6 +631,8 @@ void KadRoutingTable::invalidateContacts(const OverlayKey& failedNodeKey, const 
 			    containsUndirectedLink(contact->getPath(), failedNodeKey, otherNodeKey))
 			{ // link somewhere in the path
 				if (contact->isValid()) {
+					contact->setInvalid();
+
 					EV_TRACE << "Set Contact to invalid due to failed link <"
 						 << failedNodeKey.shortStr() << "," << otherNodeKey.shortStr() << ">:"  << *contact << endl;
 					// if contact is important neighbor: send rediscovery immediately
@@ -639,7 +641,6 @@ void KadRoutingTable::invalidateContacts(const OverlayKey& failedNodeKey, const 
 						policy->scheduleRediscovery(contact->getKey(), failedNodeKey, otherNodeKey, true);
 					}
 				}
-				contact->setInvalid();
 			}
 		} // end for inner loop over all contacts
 }
