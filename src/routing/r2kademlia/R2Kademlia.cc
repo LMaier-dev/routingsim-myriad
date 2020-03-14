@@ -461,7 +461,8 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt) {
 		// that will not fly, unless we have a valid replacement route for this next hop/contact
 		// this is a rerouting just for the next hop
 		if (KadContact_p contact= routingTable.getContact(nextHop);
-		    contact != nullptr and contact->isValid() and (updatepacket != nullptr or findnodepacket != nullptr)) // and contact.isPhysicalNeighbor()
+		    contact != nullptr and contact->isValid()
+		    and (updatepacket != nullptr or findnodepacket != nullptr)) // and contact.isPhysicalNeighbor()
 		{
 			// modify route
 			kad_path newpath(contact->getPath());
@@ -507,13 +508,14 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt) {
 				packet->addNotViaLink(std::make_pair(nextHop,myOverlayKey));
 			}
 
+			// try to reroute
 			reroutePacket(*finaldestination, std::move(packet), std::move(nodePkt));
 			return;
 		}
 
 		EV_ERROR << "forwardPacket(): could not find next hop!" << endl;
 		onMissingNeighbor(std::move(packet), std::move(nodePkt));
-	}
+	} // end else (no next hop found)
 }
 
 

@@ -144,7 +144,7 @@ class R2Kademlia : public RPCProtocol, public KadPolicy, public StatisticSample
 	//@}
 	virtual void sampleStatistics (Statistics &stats) override;
 public:
-        R2Kademlia() : routingTable(neighborTable), cmp(myOverlayKey), rediscoverQueue(cmp) {};
+        R2Kademlia() : routingTable(neighborTable), cmp(myOverlayKey), rediscoverQueue(cmp), urgentRediscoverQueue(cmp) {};
 	/** @name policy functions called by routing table */
 	//@{
 	/** called when last contact is removed from a bucket*/
@@ -342,7 +342,9 @@ private:
 	} cmp;
 
 	// a list that is used to send rediscover messages sorted by node ID vicinity
-	std::priority_queue<std::unique_ptr<const KadContact>, std::deque<std::unique_ptr<const KadContact>>, decltype(cmp)> rediscoverQueue;
+	typedef std::priority_queue<std::unique_ptr<const KadContact>, std::deque<std::unique_ptr<const KadContact>>, decltype(cmp)> rediscoverQueueType;
+	rediscoverQueueType rediscoverQueue;
+	rediscoverQueueType urgentRediscoverQueue;
 
 	// a list that is used to send pathsetup messages
 	std::list<OverlayKey> pathSetupQueue;

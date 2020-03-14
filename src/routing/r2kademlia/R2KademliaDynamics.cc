@@ -386,28 +386,26 @@ void R2Kademlia::scheduleRediscovery(const OverlayKey& contactkey, const Overlay
 		return;
 	}
 
-	if (immediate) // do not schedule: directly send rediscovery
-	{
-		EV_TRACE << "Sending immediate rediscovery for contact " << contactkey.shortStr() << " <"
-		<< notvia_unreachable_node.shortStr() << ' '
-		<< notvia_failednode_neighbor.shortStr() << '>' << endl;
-		sendFindNode(contactkey, true, &notvia_unreachable_node, &notvia_failednode_neighbor);
-
-		return;
-	}
-
-	EV_TRACE << "Rediscovery scheduled for contact " << contactkey.shortStr() << " <"
+	EV_TRACE << (immediate ? "Urgent " : "") << "Rediscovery scheduled for contact " << contactkey.shortStr() << " <"
 		<< notvia_unreachable_node.shortStr() << ' '
 		<< notvia_failednode_neighbor.shortStr() << '>' << endl;
 
 	auto rediscoverContact=
 		std::make_unique<const KadContact>(contactkey, std::vector<OverlayKey>{notvia_unreachable_node, notvia_failednode_neighbor});
 
-	rediscoverQueue.push(std::move(rediscoverContact));
+	if (immediate)
+	        urgentRediscoverQueue.push(std::move(rediscoverContact));
+	else {
+		rediscoverQueue.push(std::move(rediscoverContact));
+	}
 
 	if (!rediscoveryScheduled)
 	{
-		addTimer(rediscoveryWaitTime, 0, std::bind(&R2Kademlia::rediscoverContacts, this));
+		if (not urgentRediscoverQueue.empty())
+			addTimer(SimTime(1,SIMTIME_MS), 0, std::bind(&R2Kademlia::rediscoverContacts, this));
+		else
+			addTimer(rediscoveryWaitTime, 0, std::bind(&R2Kademlia::rediscoverContacts, this));
+
 		rediscoveryScheduled= true;
 	}
 }
@@ -417,11 +415,11 @@ void R2Kademlia::rediscoverContacts() {
 	// traverse list of scheduled contacts for rediscovery
 	// the list is sorted by ID-wise vicinity, because contacts in lower buckets are more important
 	// recheck status and set to rediscover
-	EV_TRACE << "rediscoverContacts called, Queued: " << rediscoverQueue.size() << endl;
-	
-	while (!rediscoverQueue.empty())
+	EV_TRACE << "rediscoverContacts called, urgent queued: " << urgentRediscoverQueue.size() << " normal queued: " << rediscoverQueue.size() << endl;
+	rediscoverQueueType& rediscoverQ= urgentRediscoverQueue.empty() ? rediscoverQueue : urgentRediscoverQueue;
+	while (!rediscoverQ.empty())
 	{
-		auto& contact= rediscoverQueue.top();
+		auto& contact= rediscoverQ.top();
 		// check for current status of scheduled contact
 		auto rt_contact= routingTable.getContact(contact->getKey());
 		if (rt_contact) { // so contact still exists
@@ -436,9 +434,13 @@ void R2Kademlia::rediscoverContacts() {
 				sendFindNode(rt_contact->getKey(), true, &failedLink[0], &failedLink[1]);
 			}
 		}
-		rediscoverQueue.pop();
+		rediscoverQ.pop();
 	}
 
+	if (not rediscoverQueue.empty()) {
+		addTimer(rediscoveryWaitTime-SimTime(1,SIMTIME_MS), 0, std::bind(&R2Kademlia::rediscoverContacts, this));
+		return;
+	}
 	// next call of this procedure will be scheduled on demand
 	rediscoveryScheduled= false;
 }
