@@ -148,6 +148,8 @@ bool KadPacket::setSimplifiedReturnPathFrom(KadPacket& other) {
 
 
 void KadPacket::addNotViaLink(const link_t& failedlink) {
+	ASSERT(not failedlink.first.isUnspecified() and not failedlink.second.isUnspecified());
+
 	// check whether link is already present
 	unsigned int i= 0;
 	while(i < getFailedLinkArraySize())

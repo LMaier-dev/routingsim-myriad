@@ -90,7 +90,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadUpdateRouteReq> packet) {
 				EV_TRACE << "UpdateRouteReq UNREACHABLE contact: " << contactkey.shortStr() << ", link: < "
 					 << packet->getPath(0).front().shortStr() << ',' << contactkey.shortStr() << " >" << endl;
 				// now invalidate all contacts with this link
-				routingTable.invalidateContacts(contactkey, packet->getPath(0).front());
+				routingTable.invalidateContacts(std::make_pair(contactkey, packet->getPath(0).front()));
 
 				propagateUpdate= true;
 				break;
@@ -207,7 +207,7 @@ void R2Kademlia::evalUpdateReq(const KadUpdateRouteReq* packet)
 				EV_TRACE << "Unreachable contact: " << contactkey.shortStr() << ", link: < "
 					 << packet->getPath(0).front().shortStr() << ',' << contactkey.shortStr() << " >" << endl;
 				// now invalidate all contacts with this link
-				routingTable.invalidateContacts(contactkey, packet->getPath(0).front());
+				routingTable.invalidateContacts(std::make_pair(contactkey, packet->getPath(0).front()));
 				break;
 
 			default:

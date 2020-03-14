@@ -249,7 +249,9 @@ private:
 	template<typename T>
 	bool handleIfFitting(KadPacket_p& packet);
 
-	void processNotViaInformation(const KadPacket& packet);
+	// processes present Not Via information and returns true if own Node ID is already present
+	bool processNotViaInformation(const KadPacket& packet);
+
 	kad_path concatViaPath(const kad_path& viaPath, const OverlayKey& viaKey, const kad_path& path);
 	/// adds contact and not via link for rediscovery queue (or send it immediately)
 	void scheduleRediscovery(const OverlayKey& contactkey, const OverlayKey& notvia_unreachable_node, const OverlayKey& notvia_failednode_neighbor, bool immediate= false);
@@ -388,18 +390,26 @@ private:
 
 
 inline
-void R2Kademlia::processNotViaInformation(const KadPacket& packet)
+bool R2Kademlia::processNotViaInformation(const KadPacket& packet)
 {
+	bool ownIDFound(false);
+
 	// first check the notvia information
 	if (packet.getNotVia())
 	{
 		for (uint i= 0; i < packet.getFailedLinkArraySize(); i++) {
 			auto &[unreachablenode, detectingnode]= packet.getFailedLink(i);
+			ASSERT(not unreachablenode.isUnspecified() and not detectingnode.isUnspecified());
 			EV_TRACE << "Packet " << packet.getName() << " contains not via <" << unreachablenode.shortStr() << ',' << detectingnode.shortStr() << '>' << endl;
+			if (unreachablenode == myOverlayKey or detectingnode == myOverlayKey) {
+				ownIDFound= true;
+			}
 			// we should invalidate all contacts with that link in the path to them before answering
-			routingTable.invalidateContacts(unreachablenode, detectingnode);
+			routingTable.invalidateContacts(packet.getFailedLink(i));
 		}
 	}
+
+	return ownIDFound;
 }
 
 

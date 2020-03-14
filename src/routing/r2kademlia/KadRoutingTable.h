@@ -21,6 +21,7 @@
 #include <vector>
 #include <cmath>
 #include <algorithm>
+#include <utility>
 #include "KadContact.h"
 /**
  * @file KadRoutingTable.h
@@ -30,6 +31,8 @@
 namespace routingsim {
 class KadRoutingTable;
 class NeighborTable;
+
+typedef std::pair<OverlayKey,OverlayKey> link_t;
 
 class KadBucket
 {
@@ -137,8 +140,7 @@ public:
 		else
 			return false;
 	}
-	
-		
+
 	/**
 	 * Returns a list of n (valid) contacts that are closest to the given key if possible.
 	 * If there are not enough contacts found, the list is shorter.
@@ -155,9 +157,12 @@ public:
 	size_type getNumIndirectPaths() const;
 
 	/// invalidate all contacts with paths that contain a failed link otherNodeKey <-> failedNodeKey
-	void invalidateContacts(const OverlayKey& failedNodeKey, const OverlayKey& otherNodeKey);
+	void invalidateContacts(const link_t& failedLink);
 	/// invalidate all contacts with paths that contain the physical neighbor failedNodeKey as next hop 
 	void invalidateContactsPN(const OverlayKey& failedNodeKey);
+	/// invalidate individual contact if its path contains the failed_link
+	void invalidateContact(KadContact& contact, const link_t& failed_link);
+
 	/// returns the number of buckets currently held
 	inline size_type getNumBuckets() const { return buckets.size(); }
 	/// the position of the bit that defines the lowest bucket
