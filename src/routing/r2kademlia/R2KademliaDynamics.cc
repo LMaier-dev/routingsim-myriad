@@ -170,13 +170,16 @@ void R2Kademlia::scheduleUpdate(const KadContact& affectedContact, KadRouteUpdat
 
 	} // endif
 
-	if (!updateScheduled)
-	{
-		if (action == KAD_Unreachable)
+	if (action == KAD_Unreachable) {
+		if (not urgentUpdateScheduled) {
 			addTimer(updateWaitTimeFast, 0, std::bind(&R2Kademlia::sendUrgentUpdates, this));
-		else
-			addTimer(updateWaitTime, 0, std::bind(&R2Kademlia::sendUpdates, this));
-
+			urgentUpdateScheduled= true;
+		}
+	}
+	else
+	if (not updateScheduled)
+	{
+		addTimer(updateWaitTime, 0, std::bind(&R2Kademlia::sendUpdates, this));
 		updateScheduled= true;
 	}
 }
@@ -317,14 +320,9 @@ void R2Kademlia::sendUrgentUpdates()
 	// non urgent entries still there
 	if (updateQueue.size() > 0) {
 		EV_TRACE << "left non-urgent updates: " << updateQueue.size() << endl;
-		addTimer(updateWaitTime - updateWaitTimeFast, 0, std::bind(&R2Kademlia::sendUpdates, this));
-		updateScheduled= true;
 	}
-	else {
-		// the updateQueue map should is now empty again
-		// reset the updateScheduled variable
-		updateScheduled= false;
-	}
+
+	urgentUpdateScheduled= false;
 }
 
 
@@ -393,19 +391,21 @@ void R2Kademlia::scheduleRediscovery(const OverlayKey& contactkey, const Overlay
 	auto rediscoverContact=
 		std::make_unique<const KadContact>(contactkey, std::vector<OverlayKey>{notvia_unreachable_node, notvia_failednode_neighbor});
 
-	if (immediate)
+	if (immediate) {
 	        urgentRediscoverQueue.push(std::move(rediscoverContact));
+	}
 	else {
 		rediscoverQueue.push(std::move(rediscoverContact));
 	}
 
-	if (!rediscoveryScheduled)
-	{
-		if (not urgentRediscoverQueue.empty())
-			addTimer(SimTime(1,SIMTIME_MS), 0, std::bind(&R2Kademlia::rediscoverContacts, this));
-		else
-			addTimer(rediscoveryWaitTime, 0, std::bind(&R2Kademlia::rediscoverContacts, this));
 
+	if (not urgentRediscoveryScheduled and not urgentRediscoverQueue.empty()) {
+		addTimer(SimTime(1,SIMTIME_MS), 0, std::bind(&R2Kademlia::rediscoverContacts, this));
+		urgentRediscoveryScheduled= true;
+	}
+
+	if (not rediscoveryScheduled and not rediscoverQueue.empty()) {
+		addTimer(rediscoveryWaitTime, 0, std::bind(&R2Kademlia::rediscoverContacts, this));
 		rediscoveryScheduled= true;
 	}
 }
@@ -437,12 +437,13 @@ void R2Kademlia::rediscoverContacts() {
 		rediscoverQ.pop();
 	}
 
-	if (not rediscoverQueue.empty()) {
-		addTimer(rediscoveryWaitTime-SimTime(1,SIMTIME_MS), 0, std::bind(&R2Kademlia::rediscoverContacts, this));
-		return;
-	}
 	// next call of this procedure will be scheduled on demand
-	rediscoveryScheduled= false;
+	if (urgentRediscoverQueue.empty())
+		urgentRediscoveryScheduled= false;
+
+	if (rediscoverQueue.empty())
+		rediscoveryScheduled= false;
+
 }
 
 

@@ -536,7 +536,8 @@ void R2Kademlia::reroutePacket(const OverlayKey& finaldest, KadPacket_p packet, 
 			// an already passed overlay hop
 			// (note that the rerouting node is one before the destination),
 			// because we will get a loop and it's more likely that we have outdated information
-			if ( packet->isOverlayHopInPath(contact.getKey()) or (not contact.getPath().empty() and packet->isOverlayHopInPath(contact.getPath().back())) )
+			if ( packet->isOverlayHopInPath(contact.getKey()) or
+			     (not contact.getPath().empty() and packet->isOverlayHopInPath(contact.getPath().back())) )
 			{
 				// delete contact from list
 				if (auto it= std::find(ovlyneighbors.begin(), ovlyneighbors.end(), &contact); it != ovlyneighbors.end())

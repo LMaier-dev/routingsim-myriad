@@ -332,6 +332,7 @@ private:
 	std::unordered_map< OverlayKey, UpdateList_t > updateQueue;
 	// selfMessage
 	bool updateScheduled= false;
+	bool urgentUpdateScheduled= false;
 
 
 	struct greatercmp {
@@ -354,6 +355,7 @@ private:
 
 	// selfMessage
 	bool rediscoveryScheduled= false;
+	bool urgentRediscoveryScheduled= false;
 	
 	/** @name statistics */
 	//@{
