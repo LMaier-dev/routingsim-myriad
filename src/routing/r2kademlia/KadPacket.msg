@@ -59,7 +59,7 @@ packet KadPacket {
 	OverlayKey route[];
 	bool active[];
 	uint16_t progress = 0;
-	nonce_t nonce;
+	nonce_t nonce= 0;
 	uint8_t type enum(KadPDUType);
 	bool notVia = false;
 	link_t failedLink[];

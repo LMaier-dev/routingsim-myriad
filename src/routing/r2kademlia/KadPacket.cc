@@ -40,6 +40,7 @@ void KadPacket::appendRoute(const kad_path& path) {
 // replaces rest of path with newpath (starting from progress)
 // path should also contain target node
 void KadPacket::modRoute(const kad_path& newpath) {
+	// progress is an index so the size of the current path up to this node is progress + 1
 	size_t newsize= progress + 1 + newpath.size();
 	bool resize= newsize > getRouteArraySize(); // need to resize
 	if (resize)
@@ -55,7 +56,7 @@ void KadPacket::modRoute(const kad_path& newpath) {
 	// last hop is next overlay node, so set active flag
 	setActive(getRouteArraySize() - 1, true);
 
-	if ( not(resize) )
+	if ( not(resize) and newsize < getRouteArraySize())
 	{
 		setRouteArraySize(newsize);
 		setActiveArraySize(newsize);
@@ -149,12 +150,13 @@ bool KadPacket::setSimplifiedReturnPathFrom(KadPacket& other) {
 
 void KadPacket::addNotViaLink(const link_t& failedlink) {
 	ASSERT(not failedlink.first.isUnspecified() and not failedlink.second.isUnspecified());
+	ASSERT(failedlink.first != failedlink.second);
 
 	// check whether link is already present
 	unsigned int i= 0;
 	while(i < getFailedLinkArraySize())
 	{
-		if ( (getFailedLink(i) == failedlink) or (getFailedLink(i) == std::make_pair(failedlink.second, failedlink.first)) ) {
+		if ( (getFailedLink(i) == failedlink) or (getFailedLink(i) == link_t(failedlink.second, failedlink.first)) ) {
 			break;
 		}
 		i++;
@@ -163,8 +165,8 @@ void KadPacket::addNotViaLink(const link_t& failedlink) {
 	if (i == getFailedLinkArraySize()) { // not found
 		// add failed link
 		setFailedLinkArraySize(i+1); // since i == getFailedLinkArraySize()
-		setFailedLink(getFailedLinkArraySize()-1, failedlink);
-		if (i==0)
+		setFailedLink(i, failedlink);
+		if (i==0) // indicate NotVia for the first added link
 			setNotVia(true);
 	}
 }

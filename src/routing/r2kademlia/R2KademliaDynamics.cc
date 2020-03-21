@@ -90,7 +90,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadUpdateRouteReq> packet) {
 				EV_TRACE << "UpdateRouteReq UNREACHABLE contact: " << contactkey.shortStr() << ", link: < "
 					 << packet->getPath(0).front().shortStr() << ',' << contactkey.shortStr() << " >" << endl;
 				// now invalidate all contacts with this link
-				routingTable.invalidateContacts(std::make_pair(contactkey, packet->getPath(0).front()));
+				routingTable.invalidateContacts({contactkey, packet->getPath(0).front()});
 
 				propagateUpdate= true;
 				break;
@@ -145,15 +145,16 @@ void R2Kademlia::scheduleUpdate(const KadContact& affectedContact, KadRouteUpdat
 			if ( auto entry= updateQueue.find(notifyContact->getKey()); entry == updateQueue.end() ) {
 				// need to create new entry
 				// in case of KAD_Unreachable we want to report also the failed link
-				updateQueue[notifyContact->getKey()]= { std::make_pair((action == KAD_Unreachable) ?
-										       KadContact(affectedContact.getKey(), { myOverlayKey }) :
-										       affectedContact, action) };
+				updateQueue[notifyContact->getKey()]= { { (action == KAD_Unreachable) ?
+									  KadContact(affectedContact.getKey(), { myOverlayKey }) :
+									  affectedContact, action } };
 			}
 			else
 			{ // entry for contact exists, so append
 				// in case of KAD_Unreachable we want to report also the failed link
-				auto newelem= std::make_pair((action == KAD_Unreachable) ?
-							     KadContact(affectedContact.getKey(), { myOverlayKey }) : affectedContact, action);
+				std::pair<KadContact, KadRouteUpdateAction> newelem=
+					{ (action == KAD_Unreachable) ? KadContact(affectedContact.getKey(), { myOverlayKey }) : affectedContact,
+					  action };
 				// entry exists, so we need to append this update to the list
 				auto existelem= std::find_if(entry->second.rbegin(), entry->second.rend(),
 							     [&](const auto& p1) { return p1.first.getKey() == newelem.first.getKey(); });

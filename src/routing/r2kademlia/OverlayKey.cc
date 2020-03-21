@@ -119,7 +119,8 @@ OverlayKey::OverlayKey(const std::string& str, uint32_t base)
 // copy constructor
 OverlayKey::OverlayKey(const OverlayKey& rhs) : cObject(rhs), isUnspec(rhs.isUnspec)
 {
-	memcpy( key, rhs.key, aSize*sizeof(mp_limb_t) );
+	if (this != &rhs) // do not copy into itself
+		memcpy( &key, &rhs.key, aSize*sizeof(mp_limb_t) );
 }
 
 // default destructor
@@ -218,10 +219,11 @@ std::string OverlayKey::toString(uint32_t base) const
 // assignment operator
 OverlayKey& OverlayKey::operator=(const OverlayKey& rhs)
 {
-	if (this == &rhs) return *this; //TODO
-	//assert(this != &rhs);
+	if (this == &rhs) // exclude assignment to itself, mempcy doesn't work then
+		return *this;
+
 	isUnspec = rhs.isUnspec;
-	memcpy( key, rhs.key, aSize*sizeof(mp_limb_t) );
+	memcpy( &key, &rhs.key, aSize*sizeof(mp_limb_t) );
 	return *this;
 }
 

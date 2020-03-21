@@ -422,8 +422,8 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt) {
 	//TODO optimization: potential shortcut - we check if the target is a already neighbor
 	// only allowed for exact and not strict routing
 
-	const OverlayKey& nextHop = packet->getNextHop();
-	nodeid_t nid = neighborTable.getNodeId(nextHop);
+	const OverlayKey& nextHop(packet->getNextHop());
+	nodeid_t nid(neighborTable.getNodeId(nextHop));
 
 	EV_TRACE << "forwardPacket(): " << packet->getName() << " dest " << packet->getTarget().shortStr()
 		 << " next hop: " << nextHop.shortStr() << " (" << nid << ')' << endl;
@@ -460,13 +460,17 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt) {
 		// or that was a  physical next hop, but is currently not available:
 		// that will not fly, unless we have a valid replacement route for this next hop/contact
 		// this is a rerouting just for the next hop
-		if (KadContact_p contact= routingTable.getContact(nextHop);
+		if (KadContact_p contact(routingTable.getContact(nextHop));
 		    contact != nullptr and contact->isValid()
 		    and (updatepacket != nullptr or findnodepacket != nullptr)) // and contact.isPhysicalNeighbor()
 		{
 			// modify route
 			kad_path newpath(contact->getPath());
 			newpath.push_back(contact->getKey());
+			bool detour= newpath.size() > 1;
+			// put the rest of the path
+			for (unsigned int i= packet->getProgress() + 2; i < packet->getRouteArraySize(); i++)
+				newpath.push_back(packet->getRoute(i));
 
 			EV_TRACE << "forwardPacket(): reroute PN, contact " << *contact << endl;
 			// rerouting makes this intermediate node to overlay hop
@@ -478,12 +482,13 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt) {
 				EV_TRACE << ' ' << packet->getRoute(i).shortStr();
 			EV_TRACE << " > progress=" << packet->getProgress() << endl;
 
-			if (not newpath.empty()) {
+			if (detour) {
 				// new next hop
 				nid = neighborTable.getNodeId(newpath.front());
 				if (nid != undefined_node) {
 					// TODO check whether this actually makes sense for all packet types?
-					packet->addNotViaLink(std::make_pair(nextHop,myOverlayKey));
+					packet->addNotViaLink({nextHop,myOverlayKey});
+					EV_TRACE << "forwardPacket(): forwarding to next hop (" << nid << ")" << endl;
 
 					nodePkt->encapsulate(packet.release());
 					sendToNode(nid, std::move(nodePkt));
@@ -491,12 +496,14 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt) {
 					return;
 				}
 				else {
-					EV_ERROR << "forwardPacket(): reroute to next hop failed" << endl;
+					EV_ERROR << "forwardPacket(): next hop " << newpath.front().shortStr() << " also not valid" << endl;
 				}
 			}
 			else
-				EV_ERROR << "forwardPacket(): next hop is physical neighbor and valid, but not found in neighbor table?!" << endl;
+				EV_TRACE << "forwardPacket(): no alternative route found" << endl;
 		}
+		else
+			EV_ERROR << "forwardPacket(): next hop is physical neighbor and valid, but not found in neighbor table?!" << endl;
 
 		// only reroute UpdateRouteReq and FindNodeReq for rediscovery (TODO check)
 		// try to find alternative route to final destination
@@ -505,7 +512,7 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt) {
 			// add not via information before forwarding
 			if (  updatepacket != nullptr or findnodepacket != nullptr )
 			{
-				packet->addNotViaLink(std::make_pair(nextHop,myOverlayKey));
+				packet->addNotViaLink({nextHop,myOverlayKey});
 			}
 
 			// try to reroute
@@ -887,7 +894,7 @@ void R2Kademlia::sendFindNode(const OverlayKey& key, bool exact, const OverlayKe
 			if (is_rediscovery)
 			{ // this is an immediate rediscovery packet
 				ASSERT(exact);
-				packet->addNotViaLink(std::make_pair(*notvia_unreachable_node,*notvia_failednode_neighbor));
+				packet->addNotViaLink({*notvia_unreachable_node,*notvia_failednode_neighbor});
 				sentRediscovery++;
 				EV_TRACE << "Rediscovery sending ... msg id=" << packet->getId()
 					 << " via " << contact << " fanout: " << fanout << endl;
