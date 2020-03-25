@@ -76,8 +76,8 @@ public:
 	/// increments the progress counter, advances it to the next hop
 	inline void advanceProgress()
 	{ ASSERT(progress < route_arraysize); progress++; ASSERT(hopLimit > 0); hopLimit--;}
-	/// returns true if key is contained in path and is an overlay hop
-	inline bool isOverlayHopInPath(const OverlayKey& key) const { for (uint i=0; i<route_arraysize; i++) { if (getRoute(i) == key and getActive(i)) return true; } return false; }
+	/// returns true if key is contained in path (up to progress-1) and is an overlay hop
+	inline bool isOverlayHopInPath(const OverlayKey& key) const { for (uint i=0; i<progress; i++) { if (getRoute(i) == key and getActive(i)) return true; } return false; }
 	/// returns the specified part of the source route
 	inline const OverlayKey& getHop(uint index) const { return getRoute(index); }
 	/// returns the key of the next hop

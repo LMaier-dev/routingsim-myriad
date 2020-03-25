@@ -33,6 +33,7 @@ uint32_t OverlayKey::keyLength = MAX_KEYLENGTH;
 //#define ROUND_NEXT(n, div) (((n) + (div) - 1) / (div))
 //uint OverlayKey::aSize = ROUND_NEXT(OverlayKey::keyLength, 8*sizeof(mp_limb_t));
 
+// aSize is the number of 8*sizeof(mp_limb_t)-bit words, e.g., 2 64 bit words for a 112 bit identifier
 uint32_t OverlayKey::aSize = OverlayKey::keyLength / (8*sizeof(mp_limb_t)) +
 	(OverlayKey::keyLength % (8*sizeof(mp_limb_t))
 	 != 0 ? 1 : 0);
@@ -58,7 +59,7 @@ const char* HEX = "0123456789abcdef";
 // construction and destruction
 //--------------------------------------------------------------------
 
-// default construction: create a unspecified node key
+// default construction: create an unspecified node key
 OverlayKey::OverlayKey()
 {
 	isUnspec = true;
@@ -120,11 +121,14 @@ OverlayKey::OverlayKey(const std::string& str, uint32_t base)
 OverlayKey::OverlayKey(const OverlayKey& rhs) : cObject(rhs), isUnspec(rhs.isUnspec)
 {
 	if (this != &rhs) // do not copy into itself
-		memcpy( &key, &rhs.key, aSize*sizeof(mp_limb_t) );
+		memcpy( &key, &rhs.key, sizeof(key) );
 }
 
 // default destructor
-//OverlayKey::~OverlayKey() { }
+// OverlayKey::~OverlayKey() {
+// 	EV_STATICCONTEXT;
+// 	EV_TRACE << "OverlayKey: " << shortStr() << " destructor called, addr:" << static_cast<void*>(this) << endl;
+// }
 
 //--------------------------------------------------------------------
 // string representations & node key attributes
@@ -132,7 +136,7 @@ OverlayKey::OverlayKey(const OverlayKey& rhs) : cObject(rhs), isUnspec(rhs.isUns
 
 void OverlayKey::setKeyLength(uint32_t length)
 {
-	if ((length < 1) || (length > OverlayKey::keyLength)) {
+	if ((length < 1) or (length > OverlayKey::keyLength) or (length > MAX_KEYLENGTH)) {
 		throw cRuntimeError(
 				"OverlayKey::setKeyLength(): length must be <= %i "
 				"and setKeyLength() must not be called twice "
@@ -147,6 +151,11 @@ void OverlayKey::setKeyLength(uint32_t length)
 	GMP_MSB_MASK = (keyLength % GMP_LIMB_BITS)
 	!= 0 ? (((mp_limb_t)1 << (keyLength % GMP_LIMB_BITS))-1)
 	: (mp_limb_t)-1;
+
+	// EV_STATICCONTEXT;
+	// EV_TRACE << "keylength: " << keyLength << " sizeof(mp_limb_t): " << sizeof(mp_limb_t)
+	// 	 << " aSize: " << aSize << " sizeof(key): " << sizeof(key)
+	// 	 << " MSB_MASK: " << std::hex << OverlayKey::GMP_MSB_MASK << std::dec << endl;
 }
 
 
@@ -222,10 +231,12 @@ OverlayKey& OverlayKey::operator=(const OverlayKey& rhs)
 	if (this == &rhs) // exclude assignment to itself, mempcy doesn't work then
 		return *this;
 
+	cObject::operator=(rhs);
 	isUnspec = rhs.isUnspec;
-	memcpy( &key, &rhs.key, aSize*sizeof(mp_limb_t) );
+	memcpy( &key, &rhs.key, sizeof(key) );
 	return *this;
 }
+
 
 // sub one prefix operator
 OverlayKey& OverlayKey::operator--()
@@ -752,7 +763,7 @@ int OverlayKey::compareTo( const OverlayKey& compKey ) const
 // sets key to zero and clears unspecified bit
 inline void OverlayKey::clear()
 {
-	memset( key, 0, aSize * sizeof(mp_limb_t) );
+	memset( key, 0, sizeof(key) );
 	isUnspec = false;
 }
 

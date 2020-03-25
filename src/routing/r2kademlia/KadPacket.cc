@@ -37,13 +37,15 @@ void KadPacket::appendRoute(const kad_path& path) {
 }
 
 
-// replaces rest of path with newpath (starting from progress)
+// replaces rest of path with newpath (starting from progress + 1)
 // path should also contain target node
 void KadPacket::modRoute(const kad_path& newpath) {
+	auto old_size = getRouteArraySize();
 	// progress is an index so the size of the current path up to this node is progress + 1
 	size_t newsize= progress + 1 + newpath.size();
-	bool resize= newsize > getRouteArraySize(); // need to resize
-	if (resize)
+	EV_TRACE << "modRoute(): oldsize=" << old_size << " newsize=" << newsize
+		 << " route=" << static_cast<void *>(route) <<   endl;
+	if (newsize > old_size) // need to resize
 	{ // this creates an enlarged copy beforehand
 		setRouteArraySize(newsize);
 		setActiveArraySize(newsize);
@@ -53,15 +55,18 @@ void KadPacket::modRoute(const kad_path& newpath) {
 		setRoute(progress + 1 + i, newpath[i]);
 		setActive(progress + 1 + i, false);
 	}
-	// last hop is next overlay node, so set active flag
-	setActive(getRouteArraySize() - 1, true);
 
-	if ( not(resize) and newsize < getRouteArraySize())
+	// last hop is next overlay node, so set active flag
+	setActive(newsize - 1, true);
+
+	if ( newsize < old_size )
 	{
 		setRouteArraySize(newsize);
 		setActiveArraySize(newsize);
 	}
+	EV_TRACE << "modRoute(): route=" << static_cast<void *>(route) <<   endl;
 }
+
 
 void KadPacket::appendHop(const OverlayKey& key) {
 	auto index = getRouteArraySize();

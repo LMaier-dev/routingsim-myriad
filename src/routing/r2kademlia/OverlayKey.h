@@ -96,7 +96,10 @@ public:
 	 */
 	OverlayKey( const OverlayKey& rhs );
 
-	virtual OverlayKey* dup() const { return new OverlayKey(*this); };
+	/**
+	 * override dup() function from cObject base class
+	 */
+	virtual OverlayKey* dup() const override { return new OverlayKey(*this); };
 
 	/**
 	 * Default destructor.
