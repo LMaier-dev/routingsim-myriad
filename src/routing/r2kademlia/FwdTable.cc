@@ -100,7 +100,7 @@ void FwdTablePathID::addEntry(KadContact_p contact, bool isForeignPID)
 	// check for already existing PID
 	if ( auto pidentry= PIDFwdTable.find(incomingPathID); pidentry != PIDFwdTable.end() )
 	{
-		EV_WARN << "addEntry(): inPID entry " << incomingPathID << " exists already" << endl;
+		//EV_TRACE << "addEntry(): inPID entry " << incomingPathID << " exists already" << endl;
 		// set foreign flag
 		if (isForeignPID)
 			pidentry->second.setForeign();
@@ -112,10 +112,10 @@ void FwdTablePathID::addEntry(KadContact_p contact, bool isForeignPID)
 
 	if ( auto it= NIDPIDTable.find(contact->getKey()); it != NIDPIDTable.end() )
 	{
-		EV_WARN << "addEntry(): PID entry for contact " << contact->getKey().shortStr() << " existed already with incoming PID " << it->second << endl;
+		//EV_TRACE << "addEntry(): PID entry for contact " << contact->getKey().shortStr() << " existed already with incoming PID " << it->second << endl;
 		if (it->second == incomingPathID)
 		{
-			EV_WARN << "addEntry(): same PID entry for contact already existed - ignored" << endl;
+			//EV_TRACE << "addEntry(): same PID entry for contact already existed - ignored" << endl;
 			return;
 		}
 
