@@ -48,7 +48,7 @@ enum KadPDUType {
 	KAD_Data = 		0x10;
 }
 
-class OverlayKey extends cObject; // was: class noncobject OverlayKey;
+class noncobject OverlayKey;
 class noncobject nodeid_t;
 class noncobject nonce_t;
 class noncobject link_t;

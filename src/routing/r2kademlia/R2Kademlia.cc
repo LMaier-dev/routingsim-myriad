@@ -903,7 +903,7 @@ void R2Kademlia::sendFindNode(const OverlayKey& key, bool exact, const OverlayKe
 				EV_TRACE << "Rediscovery sending ... msg id=" << packet->getId()
 					 << " via " << contact << " fanout: " << fanout << endl;
 			}
-			EV_TRACE << "sending KadFindNodeReq nonce=" << packet->getNonce() << endl;
+			EV_TRACE << "sending KadFindNodeReq" << endl;
 			sendRpcCall(
 				std::move(packet),
 				std::bind(&R2Kademlia::handleFindNodeResponse, this, ph::_1, ph::_2),

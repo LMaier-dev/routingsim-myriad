@@ -43,8 +43,6 @@ void KadPacket::modRoute(const kad_path& newpath) {
 	auto old_size = getRouteArraySize();
 	// progress is an index so the size of the current path up to this node is progress + 1
 	size_t newsize= progress + 1 + newpath.size();
-	EV_TRACE << "modRoute(): oldsize=" << old_size << " newsize=" << newsize
-		 << " route=" << static_cast<void *>(route) <<   endl;
 	if (newsize > old_size) // need to resize
 	{ // this creates an enlarged copy beforehand
 		setRouteArraySize(newsize);
@@ -64,7 +62,6 @@ void KadPacket::modRoute(const kad_path& newpath) {
 		setRouteArraySize(newsize);
 		setActiveArraySize(newsize);
 	}
-	EV_TRACE << "modRoute(): route=" << static_cast<void *>(route) <<   endl;
 }
 
 
