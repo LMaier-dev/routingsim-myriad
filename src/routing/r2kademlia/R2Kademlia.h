@@ -214,6 +214,7 @@ private:
 	void addTimer(simtime_t initialOffset, simtime_t duration, std::function<void(short timerId)> callback);
 	void doProbe(short timerId);
 	void doProbeSelf(short timerId);
+	void doProbeNeighbors(short timerId);
 	void doDataProbe(short timerId);
 	void doReachabilityTest(short timerId);
 	//@}
@@ -350,6 +351,9 @@ private:
 	// a list that is used to send pathsetup messages
 	std::list<OverlayKey> pathSetupQueue;
 
+	// a list that is used to periodically probe neighbors
+	std::list<OverlayKey> probeNeighborQueue;
+
 	// selfMessage
 	bool pathSetupScheduled= false;
 
@@ -383,7 +387,7 @@ private:
 	unsigned long laterpaths = 0;
 	unsigned long shortenedlaterpaths = 0;
 	unsigned long viablePIDpaths = 0;
-	
+
 	/** @name timer things */
 	//@{
 	std::vector<simtime_t> timerDuration;

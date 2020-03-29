@@ -77,6 +77,8 @@ void R2Kademlia::onInitialize() {
 	// calculation for first timer is: initialOffset - duration/2 + random([0..duration])
 	// start after 100ms, use 250ms, 500ms, 1s, 2s, 4s, 8s, 16s, 32s, 64s, 128s, 256s, 300s as intervals
 	addTimer(SimTime(225,SIMTIME_MS), SimTime(250,SIMTIME_MS), std::bind(&R2Kademlia::doProbeSelf, this, ph::_1));
+	// regularly probe for closest neighbors
+	addTimer(SimTime(1000,SIMTIME_MS), probeInterval, std::bind(&R2Kademlia::doProbeNeighbors, this, ph::_1));
 	// regularly send FindNodeReq to randomly chosen NodeIDs
 	addTimer(probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doProbe, this, ph::_1));
 	// check whether other existing nodes can be reached (uses KadObserver)
@@ -189,6 +191,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		return;
 
 	// check for presence of carried "not via" information
+	// and evaluate it (invalidate affected contacts)
 	processNotViaInformation(*packet);
 
 	if (packet->hasRemainingHops()) {
@@ -1511,6 +1514,26 @@ void R2Kademlia::addTimer(simtime_t initialOffset, simtime_t duration, std::func
 }
 
 
+// probe for closest neighbors
+void R2Kademlia::doProbeNeighbors(short timerId) {
+	if (neighborTable.size() == 0)
+		return; // node is isolated
+
+	if ( probeNeighborQueue.empty() )
+	{
+		// fill queue with current neighbors
+		auto contacts= routingTable.getClosestContacts(myOverlayKey, routingTable.getSplitSize(), false);
+		for (auto contactp : contacts)
+			probeNeighborQueue.push_back(contactp->getKey());
+	}
+
+	// check for reachability of neighbors
+	if (probeNeighborQueue.size()) {
+		EV_TRACE << "probing for neighbor: " << probeNeighborQueue.front() << endl;
+		sendFindNode(probeNeighborQueue.front(), true);
+		probeNeighborQueue.pop_front();
+	}
+}
 
 
 void R2Kademlia::doProbe(short timerId) {
