@@ -284,10 +284,14 @@ private:
 	bool handleFindNodeResponse(KadPacket_p answer, RPCState& rpcState);
 	bool handleRPCTimeOut(KadPacket_p answer, RPCState& rpcState);
 	//@}
+	void incGLSSeqNo() { glsseqno++; }
+	pathseqno_t getGLSSeqNo() const { return glsseqno; }
 private:
 	~R2Kademlia() { updateQueue.clear(); pathSetupQueue.clear(); }
 	/// the overlay key of this node
 	OverlayKey myOverlayKey;
+	/// Node Global Link State Sequence Number
+	pathseqno_t glsseqno= 0;
 	/// Table of direct physical neighbors
 	NeighborTable neighborTable;
 	/// Kademlia-like Routing Table containing Paths to contacts
@@ -430,6 +434,8 @@ std::unique_ptr<T> R2Kademlia::makePacket(const KadContact* contact, const char 
 	packet->setSource(myOverlayKey);
 	packet->setHopLimit(hopLimit);
 	packet->appendRoute(contact);
+	packet->setTargetSeqNo(contact->getPathSeqNo());
+	packet->setStateSeqNo(getGLSSeqNo());
 	return packet;
 }
 
@@ -448,6 +454,8 @@ std::unique_ptr<T> R2Kademlia::makeAnswer(KadPacket& original) {
 
 	ASSERT(answer->getSource() == myOverlayKey);
 	answer->setNonce(original.getNonce());
+	answer->setStateSeqNo(getGLSSeqNo());
+	answer->setTargetSeqNo(original.getStateSeqNo());
 	return answer;
 }
 

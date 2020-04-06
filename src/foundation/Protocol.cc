@@ -62,10 +62,15 @@ void Protocol::unbind(int type) {
 }
 
 /// sends a packet
-void Protocol::sendToNode( nodeid_t nid, NodePkt* pkt) {
+void Protocol::sendToNode( nodeid_t nid, NodePkt* pkt, simtime_t delay) {
 	pkt->getHop().to = nid;
-	cSimpleModule::send(pkt, "toNode$o");
+
+	if (delay == 0)
+		cSimpleModule::send(pkt, "toNode$o");
+	else
+		cSimpleModule::sendDelayed(pkt, delay, "toNode$o");
 }
+
 
 /// sends a packet
 void Protocol::sendToNeighbors( NodePkt* pkt) {

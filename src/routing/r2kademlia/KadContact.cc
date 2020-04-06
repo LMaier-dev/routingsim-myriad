@@ -42,13 +42,13 @@ std::ostream& operator<<(std::ostream& os, const KadContact& c) {
 			break;
 		case KadContact::PathProperty::indirect: os << 'i';
 			break;
-		case KadContact::PathProperty::invalid: os << '#';
+		case KadContact::PathProperty::invalid: os << '*';
 			break;
 		default:
 			os << '?';
 			break;
 	} // end switch
-
+	os << " #" << c.getPathSeqNo() << ' ';
 	os << c.getPath();
 	return os;
 }

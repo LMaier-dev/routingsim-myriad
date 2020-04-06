@@ -20,6 +20,8 @@ cplusplus {{
 #include <memory>
 #include <utility>
 typedef std::pair<OverlayKey,OverlayKey> link_t;
+typedef uint16_t pathseqno_t;
+constexpr pathseqno_t invalidSeqNo= 0xffff;
 }}
 
 namespace routingsim;
@@ -52,6 +54,7 @@ class noncobject OverlayKey;
 class noncobject nodeid_t;
 class noncobject nonce_t;
 class noncobject link_t;
+class noncobject pathseqno_t;
 
 // a KAD control packet
 packet KadPacket {
@@ -59,6 +62,8 @@ packet KadPacket {
 	OverlayKey route[];
 	bool active[];
 	uint16_t progress = 0;
+	pathseqno_t stateSeqNo= invalidSeqNo;
+	pathseqno_t targetSeqNo= invalidSeqNo;
 	nonce_t nonce= 0;
 	uint8_t type enum(KadPDUType);
 	bool notVia = false;

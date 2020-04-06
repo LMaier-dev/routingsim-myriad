@@ -52,9 +52,9 @@ protected:
 	void unbind(int type);
 
 	/// sends a packet
-	inline void sendToNode( nodeid_t nid, NodePkt_p pkt ){ sendToNode(nid, pkt.release());};
+	inline void sendToNode( nodeid_t nid, NodePkt_p pkt, simtime_t delay= 0){ sendToNode(nid, pkt.release(), delay);};
 	/// sends a packet
-	void sendToNode( nodeid_t nid, NodePkt* pkt );
+	void sendToNode( nodeid_t nid, NodePkt* pkt, simtime_t delay= 0);
 
 	/// sends a packet to all neighbors
 	inline void sendToNeighbors( NodePkt_p pkt ){ sendToNeighbors(pkt.release());};

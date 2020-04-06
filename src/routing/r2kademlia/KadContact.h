@@ -32,12 +32,13 @@ namespace routingsim {
 // type definitions
 
 using size_type = std::size_t;
-
+using pathseqno_t = uint16_t;
+constexpr pathseqno_t invalidSeqNo= 0xffff;
 
 class KadContact
 {
 public:
-	enum class State {
+	enum class State : uint8_t {
 		undefined     = 0,
 		valid         = 1,
 		rediscovering = 2,
@@ -61,43 +62,50 @@ public:
         KadContact& operator=(const KadContact &other); // copy assignment
 	KadContact& operator=(KadContact &&other); // move assignement
 	/// returns the current state of the contact
-	inline State getState() const { return state; }
-	inline bool isInvalid() const { return (state != State::valid); }
-	inline bool isValid() const { return (state == State::valid) ; }
-	inline bool isRediscovering() const { return (state == State::rediscovering) ; }
+	State getState() const { return state; }
+	bool isInvalid() const { return (state != State::valid); }
+	bool isValid() const { return (state == State::valid) ; }
+	bool isRediscovering() const { return (state == State::rediscovering) ; }
 
 	/// this will be kept being true, even if the link goes down
-	inline bool isPhysicalNeighbor() const { return physicalNeighbor; }
+	bool isPhysicalNeighbor() const { return physicalNeighbor; }
 
 	/// set contact state
-	inline void setInvalid() { state= State::invalid; }
-	inline void setValid() { state= State::valid; }
-	inline void setRediscovering() { state= State::rediscovering; }
-	inline void setState(State newstate) { state= newstate; }
+	void setInvalid() { state= State::invalid; }
+	void setValid() { state= State::valid; }
+	void setRediscovering() { state= State::rediscovering; }
+	void setState(State newstate) { state= newstate; }
 
 
-	inline void setPhysicalNeighbor() { physicalNeighbor= true; }
+	void setPhysicalNeighbor() { physicalNeighbor= true; }
 	
 	/// returns the key of this contact
-	inline const OverlayKey& getKey() const { return key; }
+	const OverlayKey& getKey() const { return key; }
 	/// compares the given overlay key to the contacts overlay key
-	inline bool hasKey(const OverlayKey& other) const { return other == key; }
+	bool hasKey(const OverlayKey& other) const { return other == key; }
 	/// returns the length of the path
 	/// i.e. the intermediate hops between me and this contact
-	inline size_t getPathLength() const { return path.size(); }
+	size_t getPathLength() const { return path.size(); }
 	/// sets the path to reach this contact (will implicitly set status to valid)
-	inline void setPath(kad_path path) { this->path = std::move(path); setValid(); }
-	inline const kad_path& getPath() const { return path; }
-	inline PathProperty getPathProperty() const { return pathproperty; } 
-	inline void setPathProperty(PathProperty newprop) { pathproperty= newprop; } 
+	void setPath(kad_path path) { this->path = std::move(path); setValid(); }
+	const kad_path& getPath() const { return path; }
+	PathProperty getPathProperty() const { return pathproperty; } 
+	void setPathProperty(PathProperty newprop) { pathproperty= newprop; }
+	pathseqno_t getPathSeqNo() const { return seqno; }
+	void setPathSeqNo(pathseqno_t newseqno) {
+		if (not (seqno == invalidSeqNo or (seqno != invalidSeqNo and newseqno >= seqno)))
+			EV_ERROR << "Contact: " << key.shortStr() << " setPathSeqNo: old=" << seqno << " new=" << newseqno << endl;
+		ASSERT(newseqno != invalidSeqNo); ASSERT(seqno == invalidSeqNo or (seqno != invalidSeqNo and newseqno >= seqno));
+		seqno= newseqno; }
 
 	/// Common stdc++ console output method
 	friend std::ostream& operator<<(std::ostream& os, const KadContact& c);
 
 	static const KadContact undefinedContact;
 private:
-	OverlayKey key;	/// the OverlayKey of this contact
-	kad_path path;		/// the best known source routing path to reach this contact
+	OverlayKey key;	   /// the OverlayKey of this contact
+	kad_path path;	   /// the best known source routing path to reach this contact
+	pathseqno_t seqno= invalidSeqNo; /// sequence number for the path state (announced by origin)
 	State state= State::undefined; /// the state of the contact
 	PathProperty pathproperty= PathProperty::undefined; /// the path property
 	bool physicalNeighbor= false; /// true if we have a direct physical link to this neighbor

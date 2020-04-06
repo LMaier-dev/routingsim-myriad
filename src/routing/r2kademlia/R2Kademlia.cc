@@ -90,6 +90,7 @@ void R2Kademlia::onInitialize() {
 	}
 
 	WATCH(myOverlayKey);
+	WATCH(glsseqno);
 	WATCH(neighborTable);
 	WATCH_OBJ(routingTable);
 	WATCH_OBJ(fwdTablePathID);
@@ -100,7 +101,8 @@ void R2Kademlia::onInitialize() {
 
 
 void R2Kademlia::onConnect( nodeid_t nid ) {
-	sendToNode(nid, makeHelloPacket());
+	incGLSSeqNo();
+	sendToNode(nid, makeHelloPacket(), SimTime(10,SIMTIME_US));
 }
 
 
@@ -112,6 +114,7 @@ void R2Kademlia::onDisconnect( nodeid_t nid ) {
 	ASSERT(not key.isUnspecified());
 	ASSERT(neighborTable.getNodeId(key) == nid );
 
+	incGLSSeqNo();
 	neighborTable.removeNeighbor(nid);
 	ASSERT(neighborTable.getNodeId(key) == undefined_node);
 	// set contact invalid (was routingTable.removeContact(key))
@@ -241,7 +244,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 			kad_path path_of_interest(packet->reversePath(packet->getSrcPath(1, packet->getProgress())));
 			if (path_of_interest.size() > 0)
 			{
-				routingTable.addPath(packet->getSource(), path_of_interest, KadContact::PathProperty::indirect);
+				routingTable.addPath(packet->getSource(), path_of_interest, packet->getStateSeqNo(), KadContact::PathProperty::indirect);
 			}
 
 			// see comment above: rediscovery messages cannot be used for improving routing information
@@ -250,7 +253,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 				path_of_interest= packet->getSrcPath(packet->getProgress()+1, packet->getRouteArraySize()-1);
 				if (path_of_interest.size() > 0)
 				{
-					routingTable.addPath(packet->getTarget(), path_of_interest, KadContact::PathProperty::indirect);
+					routingTable.addPath(packet->getTarget(), path_of_interest, packet->getTargetSeqNo(), KadContact::PathProperty::indirect);
 				}
 			}
 		}
@@ -284,7 +287,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		};
 
 		// evaluate return path for routing table
-		routingTable.addPath(packet->getSource(), packet->reversePath(packet->getIntermediatePath()), pathproperty);
+		routingTable.addPath(packet->getSource(), packet->reversePath(packet->getIntermediatePath()), packet->getStateSeqNo(), pathproperty);
 
 		// these types may forward packets, so they count themselves
 		if (handleIfFitting<KadFindNodeReq>(packet)) return;
@@ -353,16 +356,16 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 	neighborTable.addNeighbor(packet->getSourceId(), packet->getSource());
 	//EV_TRACE << "neighbor table: "<< neighborTable << endl;
 
-	// PNDiscovery should be send before any further messages to avoid missing neighbors
+	// PNDiscovery should be sent before any further messages to avoid missing neighbors
 	KadContact neighborcontact(packet->getSource(), kad_path());
 	sendDiscoveryReq(&neighborcontact);
 
 	// try to add neighbor to routing table
-	if (routingTable.addPath(packet->getSource(), kad_path(), KadContact::PathProperty::direct))
+	if (routingTable.addPath(packet->getSource(), kad_path(), packet->getStateSeqNo(), KadContact::PathProperty::direct))
 	{
 		// send back PNDiscReq to get contacts from physical neighbor
 		//TODO wait random time
-		EV_TRACE << "adding neighbor successful" << endl;
+		EV_TRACE << "adding neighbor successful, seq#" << packet->getStateSeqNo() << endl;
 	}
 	else
 		EV_TRACE << "adding neighbor failed (maybe was already there)" << endl;
@@ -792,7 +795,8 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadPNDiscReq> packet) {
 	neighborTable.addNeighbor(packet->getSourceId(), packet->getSource());
 	EV_TRACE << "neighbor table: "<< neighborTable << endl;
 
-	routingTable.addPath(packet->getSource(), kad_path(), KadContact::PathProperty::direct);
+	// add physical contact to routing table
+	routingTable.addPath(packet->getSource(), kad_path(), packet->getStateSeqNo(), KadContact::PathProperty::direct);
 
 	// TODO currently only getting physical neighbors is implemented
 	ASSERT(packet->getNeighborhood() == 1);
@@ -801,8 +805,11 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadPNDiscReq> packet) {
 	std::vector<OverlayKey> neighbors = neighborTable.getNeighbors();
 	response->setContactArraySize(neighbors.size());
 	response->setPathArraySize(neighbors.size());
-	for (uint i = 0; i < neighbors.size(); i++)
+	response->setSeqNoArraySize(neighbors.size());
+	for (uint i = 0; i < neighbors.size(); i++) {
 		response->setContact(i, neighbors[i]);
+		response->setSeqNo(i, routingTable.getContact(neighbors[i])->getPathSeqNo());
+	}
 	sendPacket(std::move(response));
 }
 
@@ -819,8 +826,11 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadQueryRouteReq> packet) {
 		std::vector<OverlayKey> neighbors(neighborTable.getNeighbors());
 		response->setContactArraySize(neighbors.size());
 		response->setPathArraySize(neighbors.size());
-		for (uint i = 0; i < neighbors.size(); i++)
+		response->setSeqNoArraySize(neighbors.size());
+		for (uint i = 0; i < neighbors.size(); i++) {
 			response->setContact(i, neighbors[i]);
+			response->setSeqNo(i, routingTable.getContact(neighbors[i])->getPathSeqNo());
+		}
 	}
 	else
 	if (packet->getNeighborhood() == 63) // means to get full routing table
@@ -828,10 +838,12 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadQueryRouteReq> packet) {
 		KadContactList allcontacts= routingTable.getAllContacts();
 		response->setContactArraySize(allcontacts.size());
 		response->setPathArraySize(allcontacts.size());
+		response->setSeqNoArraySize(allcontacts.size());
 		for (uint i = 0; i < allcontacts.size(); i++)
 		{
 			response->setContact(i, allcontacts[i]->getKey());
 			response->setPath(i, allcontacts[i]->getPath());
+			response->setSeqNo(i, allcontacts[i]->getPathSeqNo());
 		}
 	}
 
@@ -841,12 +853,14 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadQueryRouteReq> packet) {
 
 		response->setContactArraySize(ovlyneighbors.size());
 		response->setPathArraySize(ovlyneighbors.size());
+		response->setSeqNoArraySize(ovlyneighbors.size());
+
 		for (uint i = 0; i < ovlyneighbors.size(); i++)
 		{
 			response->setContact(i, ovlyneighbors[i]->getKey());
 			response->setPath(i, ovlyneighbors[i]->getPath());
+			response->setSeqNo(i, ovlyneighbors[i]->getPathSeqNo());
 		}
-
 	}
 
 	sendPacket(std::move(response));
@@ -995,7 +1009,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 			// we have found a contact that is closer than us to target (query)
 			// => forward request
 			const KadContact& contact = chooseNextHop(contacts, query);
-			EV_TRACE << "KadFindNodeReq received query for: " << packet->getDstNodeID().shortStr() << endl << " next hop is " << contact << endl;
+			EV_TRACE << "KadFindNodeReq received query for: " << packet->getDstNodeID().shortStr() << " next overlay hop is " << contact << endl;
 			// note: the log_2 will be smaller for a longer common prefix
 			ASSERT((contact.getKey() ^ query).log_2() <= (myOverlayKey ^ query).log_2());
 			if((contact.getKey() ^ query).log_2() > (myOverlayKey ^ query).log_2()) {
@@ -1003,6 +1017,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 			}
 			ASSERT((contact.getKey() ^ query) < (myOverlayKey ^ query));
 			packet->appendRoute(contact);
+			packet->setTargetSeqNo(contact.getPathSeqNo());
 			ASSERT(packet->getRouteArraySize() - packet->getProgress() <= packet->getHopLimit());
 			resendPacket(std::move(packet));
 			if (is_rediscovery)
@@ -1269,7 +1284,7 @@ void R2Kademlia::onContactRemoval(KadContact_p contact)
 
 void R2Kademlia::onNewContact(KadContact_p contact) {
 
-	EV_TRACE << "onNewContact(" << contact->getKey().shortStr() << ") called" << endl;
+	EV_TRACE << "onNewContact(" << contact->getKey().shortStr() << ") called, SeqNo #" << contact->getPathSeqNo() << endl;
 
 	// physical neighbor, may have been heard of its existence by some third node!
 	// avoid further actions until we hear a HELLO
@@ -1318,7 +1333,7 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 
 void R2Kademlia::onImprovement(const KadContact& contact) {
 	// path got improved for this contact -> potentially send UpdateRouteReq
-	EV_TRACE << "onImprovement(" << contact.getKey().shortStr() << ") called" << endl;
+	EV_TRACE << "onImprovement(" << contact.getKey().shortStr() << ") called, SeqNo #" << contact.getPathSeqNo() << endl;
 
 	if (contact.isValid())
 	{
@@ -1334,6 +1349,9 @@ void R2Kademlia::onImprovement(const KadContact& contact) {
 	// TODO: wait grace period
 	if ( neighborTable.isNeighbor(contact.getKey()) )
 	{ // this is true after re-enabling a physical neighbor
+		if (not contact.isPhysicalNeighbor())
+			EV_WARN << "reenabling physical contact is not flagged as being neighbor" << endl;
+
 		scheduleUpdate(contact, KAD_Announce);
 	}
 	else
@@ -1400,6 +1418,7 @@ NodePkt_p R2Kademlia::makeHelloPacket()
 	hello->setHopLimit(hopLimit);
 	hello->setSourceId(node().getNodeId());
 	hello->setNonce(0);
+	hello->setStateSeqNo(getGLSSeqNo());
 	NodePkt_p nodePkt = std::make_unique<NodePkt>(hello->getName());
 	nodePkt->setType(KAD_CTRL_PACKET_TYPE);
 	nodePkt->encapsulate(hello.release());
@@ -1461,11 +1480,13 @@ void R2Kademlia::fillRTableRsp(KadRTableRsp& packet, const KadContactList& conta
 	packet.setContactArraySize(contacts.size());
 	if (includePaths) {
 		packet.setPathArraySize(contacts.size());
+		packet.setSeqNoArraySize(contacts.size());
 	}
 	for (size_t i = 0; i < contacts.size(); i++) {
 		packet.setContact(i, contacts[i]->getKey());
 		if (includePaths) {
 			packet.setPath(i, contacts[i]->getPath());
+			packet.setSeqNo(i, contacts[i]->getPathSeqNo());
 		}
 	}
 }
@@ -1483,7 +1504,7 @@ void R2Kademlia::readRTableRsp(const KadRTableRsp& packet) {
 		// Examples: contact 0779b9 via path < ee2741 0de89c > + <->
                 //           contact 06cc5e via path < ee2741 0de89c > + < d9c74f >
 
-		if ( not(routingTable.addPath(packet.getContact(i), std::move(packet.getPath(i)), viaPath)) ) {
+		if ( not(routingTable.addPath(packet.getContact(i), std::move(packet.getPath(i)), packet.getSeqNo(i), viaPath)) ) {
 			// even if contact was not interesting for RT, add it as PID entry if within discovery radius
 			// the following condition is correct because the target contact 
 			// is not contained in (viaPath + packet.getPath(i))

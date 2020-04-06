@@ -18,6 +18,7 @@
 #include "KadPacket.h"
 
 namespace routingsim {
+
 void RPCProtocol::sendRpcCall(packet_p rpcCall, rpc_callback_t callback)
 {
 	sendRpcCall(std::move(rpcCall), callback, callback, callback);

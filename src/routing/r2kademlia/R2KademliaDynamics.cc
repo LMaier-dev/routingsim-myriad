@@ -70,7 +70,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadUpdateRouteReq> packet) {
 		switch (action) {
 			case KAD_Announce:
 				EV_TRACE << "UpdateRouteReq Announce for contact " << contactkey.shortStr() << endl;
-			        routingTable.addPath(contactkey, path, source_path);
+			        routingTable.addPath(contactkey, path, packet->getSeqNo(i), source_path);
 				break;
 
 			case KAD_Withdraw:
@@ -80,7 +80,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadUpdateRouteReq> packet) {
 
 			case KAD_Change:
 				EV_TRACE << "UpdateRouteReq Change for contact " << contactkey.shortStr() << endl;
-			        routingTable.addPath(contactkey, path, source_path);
+			        routingTable.addPath(contactkey, path, packet->getSeqNo(i), source_path);
 				break;
 
 			case KAD_Unreachable:
@@ -296,6 +296,7 @@ void R2Kademlia::sendUrgentUpdates()
 				packet->setContactArraySize(urgentupdatelist.size());
 				packet->setPathArraySize(urgentupdatelist.size());
 				packet->setActionArraySize(urgentupdatelist.size());
+				packet->setSeqNoArraySize(urgentupdatelist.size());
 
 				EV_TRACE << "UrgentUpdateRoute packet to " << notifyContact_it->first.shortStr() << " w/ ";
 
@@ -305,6 +306,7 @@ void R2Kademlia::sendUrgentUpdates()
 				{ // affectedcontactentry is std::pair<KadContact, KadRouteUpdateAction>
 					packet->setContact(i, affectedContact.getKey());
 					packet->setPath(i, affectedContact.getPath());
+					packet->setSeqNo(i, affectedContact.getPathSeqNo());
 					packet->setAction(i, action);
 					EV_TRACE << affectedContact << "; ";
 					i++;
@@ -348,6 +350,7 @@ void R2Kademlia::sendUpdates()
 			packet->setContactArraySize(updatelist.size());
 			packet->setPathArraySize(updatelist.size());
 			packet->setActionArraySize(updatelist.size());
+			packet->setSeqNoArraySize(updatelist.size());
 			
 			// now construct the routing information by the information from updatelist
 			std::size_t i= 0;
@@ -355,6 +358,7 @@ void R2Kademlia::sendUpdates()
 			{ // affectedcontactentry is std::pair<KadContact, KadRouteUpdateAction>
 				packet->setContact(i, affectedContact.getKey());
 				packet->setPath(i, affectedContact.getPath());
+				packet->setSeqNo(i, affectedContact.getPathSeqNo());
 				packet->setAction(i, action);
 				EV_TRACE << affectedContact << "; ";
 				i++;
