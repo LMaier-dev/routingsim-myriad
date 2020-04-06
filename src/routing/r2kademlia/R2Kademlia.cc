@@ -947,29 +947,15 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 		 << " isTracked=" << packet->isTracked() << (packet->getSource() == query ? " (JOIN)" : "") << (is_rediscovery ? " Rediscovery" : "") << endl;
 	
 	size_t contactsLen = std::max((size_t)findNodeNumber, routingTable.getSplitSize());
-	KadContactList contacts = routingTable.getClosestContacts(query, contactsLen, true);
 	// ContactList is sorted according to XOR metric with respect to key
-	if (contacts.size() == 0)
-	{
-		// send back Route Failure: no route toward destination known
-		// the only contact we know is the source
-		EV_TRACE << "no contacts closer to destination found" << endl;
-		countDropped(*packet, query, routeFailureDeadEnd);
-		returnToSender(KAD_RouteFailureDeadEnd, std::move(packet));
+	KadContactList contacts = routingTable.getClosestContacts(query, contactsLen, true);
 
-		if (is_rediscovery)
-			droppedRediscovery++;
-
-		return;
-	}
-
-	// precondition here: routing table has at least one entry
 	if (query != myOverlayKey) { // someone else routing via us
 
 		// the first contact is closest to query key
 		// if it is the source, we would route it back in a loop
 		// (may be also the case if a node tries to join and looks up its own node ID)
-		if (contacts.front()->getKey() == packet->getSource()) {
+		if (contacts.empty() == false and contacts.front()->getKey() == packet->getSource()) {
 			if (contacts.size() == 1) {
 				// the only contact we know is the source
 				EV_TRACE << "only one contact known: the source" << endl;
@@ -993,6 +979,10 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 			// since we need an exact match and cannot make any progress, we are lost here
 			countDropped(*packet, query, routeFailureDeadEnd);
 			returnToSender(KAD_RouteFailureDeadEnd, std::move(packet));
+
+			if (is_rediscovery)
+				droppedRediscovery++;
+
 			return;
 		}
 
@@ -1002,7 +992,8 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 		// 	EV_TRACE << thiscontact->getKey().shortStr() << " ";
 		// }
 		// EV_TRACE << endl;
-		
+
+		// precondition here: !contacts.empty(), i.e., we have a contact as potential next hop
 		// if next contact is closer to destination than us, it's ok
 		if ((contacts.front()->getKey() ^ query) < (myOverlayKey ^ query)
 				and contacts.front()->getPathLength() < packet->getHopLimit()) {
@@ -1054,7 +1045,12 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 			EV_TRACE << "Distance for contact=" << (contacts.front()->getKey() ^ query).log_2()
 				 << " own distance=" << (myOverlayKey ^ query).log_2() << " own ID: " << myOverlayKey.shortStr() << endl;
 		} // end else
-	}
+	} // end if query!= myOverlayKey
+
+	// if we get here:
+	// either we are the query destination and thus should answer
+	// or we cannot get closer to the destination and report what we have
+
 	// answer request
 	auto answer = makeAnswer<KadFindNodeRsp>(*packet);
 	fillRTableRsp(*answer, contacts);
