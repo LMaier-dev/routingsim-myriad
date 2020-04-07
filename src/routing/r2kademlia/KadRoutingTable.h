@@ -193,10 +193,10 @@ public:
 	bool shortenPath(kad_path& path) const;
 	/// concatenates the two paths
 	kad_path concatViaPath(const kad_path& viaPath, const kad_path& path) const;
-
-protected:
 	/// removes duplicates and loops from a path
 	bool simplifyPath(kad_path& path) const;
+
+protected:
 	/// adds a new contact, called by addPath, returns true if contact was added
 	virtual bool handleNewContact(const OverlayKey& key, kad_path path, pathseqno_t pathseqno, KadContact::PathProperty prop);
 	/** @name bucket access */

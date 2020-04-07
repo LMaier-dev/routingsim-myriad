@@ -483,7 +483,11 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt) {
 			for (unsigned int i= packet->getProgress() + 2; i < packet->getRouteArraySize(); i++) {
 				newpath.push_back(packet->getRoute(i));
 			}
-
+			// newpath may now contain a cycle, try to cut this
+			// example: path <49d984 b20388 d65e04 2550d> is modified to
+			//               < 49d984 b20388 f8d1e5 2550d5 d65e04 2550d5 4f5cc2 >
+			// due to broken link < b20388 d65e04 > substituted by <f8d1e5 2550d5 d65e04>
+			routingTable.simplifyPath(newpath);
 			EV_TRACE << "forwardPacket(): reroute PN, contact " << *contact << endl;
 			// rerouting makes this intermediate node to overlay hop
 			packet->setActive(packet->getProgress(), true);
@@ -1467,22 +1471,23 @@ void R2Kademlia::checkForPathInstallation(KadPacket& packet)
 }
 
 
-
-
 void R2Kademlia::fillRTableRsp(KadRTableRsp& packet, const KadContactList& contacts, bool includePaths){
 	ASSERT(packet.getContactArraySize() == 0);
 	ASSERT(packet.getPathArraySize() == 0);
-	ASSERT(contacts.size() > 0);
-	packet.setContactArraySize(contacts.size());
-	if (includePaths) {
-		packet.setPathArraySize(contacts.size());
-		packet.setSeqNoArraySize(contacts.size());
-	}
-	for (size_t i = 0; i < contacts.size(); i++) {
-		packet.setContact(i, contacts[i]->getKey());
+	// in rare cases contact list may be empty
+	if (contacts.size() > 0)
+	{
+		packet.setContactArraySize(contacts.size());
 		if (includePaths) {
-			packet.setPath(i, contacts[i]->getPath());
-			packet.setSeqNo(i, contacts[i]->getPathSeqNo());
+			packet.setPathArraySize(contacts.size());
+			packet.setSeqNoArraySize(contacts.size());
+		}
+		for (size_t i = 0; i < contacts.size(); i++) {
+			packet.setContact(i, contacts[i]->getKey());
+			if (includePaths) {
+				packet.setPath(i, contacts[i]->getPath());
+				packet.setSeqNo(i, contacts[i]->getPathSeqNo());
+			}
 		}
 	}
 }

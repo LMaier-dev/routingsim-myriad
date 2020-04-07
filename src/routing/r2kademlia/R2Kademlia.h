@@ -456,6 +456,14 @@ std::unique_ptr<T> R2Kademlia::makeAnswer(KadPacket& original) {
 	answer->setNonce(original.getNonce());
 	answer->setStateSeqNo(getGLSSeqNo());
 	answer->setTargetSeqNo(original.getStateSeqNo());
+	// now copy the notvia information to let the source update its obsolete routes, too
+	if (original.getNotVia()) {
+		answer->setNotVia(true);
+		answer->setFailedLinkArraySize(original.getFailedLinkArraySize());
+		for (uint i= 0; i < original.getFailedLinkArraySize(); i++) {
+			answer->setFailedLink(i,original.getFailedLink(i));
+		}
+	}
 	return answer;
 }
 
