@@ -134,7 +134,7 @@ public:
 	bool setContactInvalid(const OverlayKey& key) {
 		if (auto contactp= getContactInternal(key))
 		{
-			contactp->setInvalid();
+			contactp->setInvalid({myKey, contactp->getKey()});
 			return true;
 		}
 		else

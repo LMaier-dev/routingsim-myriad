@@ -78,7 +78,7 @@ void R2Kademlia::onInitialize() {
 	// start after 100ms, use 250ms, 500ms, 1s, 2s, 4s, 8s, 16s, 32s, 64s, 128s, 256s, 300s as intervals
 	addTimer(SimTime(225,SIMTIME_MS), SimTime(250,SIMTIME_MS), std::bind(&R2Kademlia::doProbeSelf, this, ph::_1));
 	// regularly probe for closest neighbors
-	addTimer(SimTime(1000,SIMTIME_MS), probeInterval, std::bind(&R2Kademlia::doProbeNeighbors, this, ph::_1));
+	addTimer(SimTime(1000,SIMTIME_MS), probeInterval*2, std::bind(&R2Kademlia::doProbeNeighbors, this, ph::_1));
 	// regularly send FindNodeReq to randomly chosen NodeIDs
 	addTimer(probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doProbe, this, ph::_1));
 	// check whether other existing nodes can be reached (uses KadObserver)
@@ -962,7 +962,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 		if (contacts.empty() == false and contacts.front()->getKey() == packet->getSource()) {
 			if (contacts.size() == 1) {
 				// the only contact we know is the source
-				EV_TRACE << "only one contact known: the source" << endl;
+				EV_ERROR << "only one contact known: the source" << endl;
 				countDropped(*packet, query, routeFailureDeadEnd);
 				returnToSender(KAD_RouteFailureDeadEnd, std::move(packet));
 
@@ -979,7 +979,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 
 		if (contacts.empty() or contacts.front()->getKey().isUnspecified())
 		{
-			EV_TRACE << "no contacts left, dead end." << endl;
+			EV_ERROR << "no contacts left, dead end." << endl;
 			// since we need an exact match and cannot make any progress, we are lost here
 			countDropped(*packet, query, routeFailureDeadEnd);
 			returnToSender(KAD_RouteFailureDeadEnd, std::move(packet));
@@ -1034,6 +1034,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 					EV_WARN << "no prefix progress made - dropping request" << endl;
 				}
 				// since we need an exact match and cannot make any progress, we are lost here
+				EV_ERROR << "cannot reach final destination " << query.shortStr() << " (dead end)" << endl;
 				countDropped(*packet, query, routeFailureDeadEnd);
 				//TODO: if we find a closer contact too far away, we should send HOP LIMIT EXCEEDED
 				returnToSender(KAD_RouteFailureDeadEnd, std::move(packet));
@@ -1328,6 +1329,8 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 		EV_TRACE << "Triggering path setup to " << contact->getKey().shortStr() << endl;
 		schedulePathSetup(contact->getKey());
 	}
+
+	scheduleUpdate(*contact, KAD_Announce);
 }
 
 

@@ -24,6 +24,12 @@ namespace routingsim {
 
 const KadContact KadContact::undefinedContact(OverlayKey::UNSPECIFIED_KEY);
 
+bool KadContact::isContainedinPath(const OverlayKey& myOverlayKey, const link_t& link) const
+{
+	return containsUndirectedLink(myOverlayKey, getKey(), path, link);
+}
+
+
 std::ostream& operator<<(std::ostream& os, const KadContact& c) {
 	os << c.getKey().shortStr();
 	// state is next V = valid, I = invalid, U = undefined

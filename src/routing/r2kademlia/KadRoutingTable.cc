@@ -24,9 +24,6 @@
 #include "BaseTypes.h"
 
 namespace routingsim {
-
-bool containsUndirectedLink(const kad_path& path, const OverlayKey& firstNodeKey, const OverlayKey& secondNodeKey);
-
 	
 void KadRoutingTable::init(const OverlayKey& myKey, KadPolicy* policy,
 			   size_type accelerationFactor, size_type bucketSize,
@@ -214,22 +211,27 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, pathseqno_t 
 			//EV_TRACE << "Contact existed already, but seems to be a PN now: " << *contact << endl;
 		}
 		
-		// update path if we have newer information (higher sequence number)
+		// update path if contact is invalid:
+		// either we have newer information (higher sequence number)
+		// or the same (the path may have changed though and reenabling the contact is important)
 		// or: we learn a shorter path -> update anyways
-		// note: contact may be valid, invalid or rediscovering, we don't care here
 		// TODO: it seems to make a difference whether contact->isInvalid() is present or not
-		if ( (contact->isInvalid() and contact->getPathSeqNo() < pathseqno)
+		if ( (contact->isInvalid() and contact->getPathSeqNo() <= pathseqno)
 		     or (contact->getPathSeqNo() == pathseqno and path.size() < contact->getPathLength()) ) {
-			contact->setPath(std::move(path)); // will set contact automatically to valid
-			contact->setPathSeqNo(pathseqno);
+			// in case the path had a failure, check whether the supposed new path actually avoids the broken link
+			if (contact->isRediscovering() and not containsUndirectedLink(myKey, contact->getKey(), path, contact->getRDS().failedLink))
+			{
+				contact->setPath(std::move(path)); // will set contact automatically to valid
+				contact->setPathSeqNo(pathseqno);
 
-			contact->setPathProperty(pathprop);
-			updateCount++;
+				contact->setPathProperty(pathprop);
+				updateCount++;
 
-			// do something on improved path according to policy
-			policy->onImprovement(*contact);
+				// do something on improved path according to policy
+				policy->onImprovement(*contact);
 
-			return true;
+				return true;
+			}
 		}
 		// else contact exists, but new path is not interesting
 
@@ -285,7 +287,7 @@ bool KadRoutingTable::addPath(const OverlayKey& key, const kad_path& path, paths
 		// it does not make sense to check for equalness of the paths: it may be the same,
 		// but re-enabled
 		// or: we learn a shorter path -> update anyways
-		if (contact->isInvalid()
+		if ((contact->isInvalid() and contact->getPathSeqNo() <= pathseqno)
 		    or
 		    contact->getPathSeqNo() < pathseqno
 		    or
@@ -343,7 +345,8 @@ bool KadRoutingTable::shortenPath(kad_path& path) const
 	// check for each pathelement from the far end whether the known path is shorter
 	for (auto pathit = path.crbegin(); pathit != path.crend(); pathit++) {
 		if ( (knowncontactp= getContact(*pathit)) != nullptr ) {
-			if ( knowncontactp->getPathLength()+1 < currentlength )
+			// caveat: contact must be valid and the resulting path must be actually shorter
+			if ( knowncontactp->isValid() and knowncontactp->getPathLength()+1 < currentlength )
 			{
 				// we know a shorter replacement path, use it
 				path= knowncontactp->getPath();
@@ -622,17 +625,12 @@ void KadRoutingTable::invalidateContact(KadContact& contact, const link_t& faile
 	if (path.size() > 0)
 	{
 		const auto &[failedNodeKey, otherNodeKey]= failed_link;
-		if ((contact.getKey() == failedNodeKey and
-		     path[path.size()-1] == otherNodeKey) // pen-ultimate hop is neighbor node of failed contact => this link failed
-		    or
-		    (contact.getKey() == otherNodeKey
-		     and path[path.size()-1] == failedNodeKey
-			    )
-		    or // pen-ultimate hop is the failed node leading to the neighboring node => this link failed
-		    containsUndirectedLink(contact.getPath(), failedNodeKey, otherNodeKey))
+		if (contact.isContainedinPath(myKey, failed_link))
 		{ // link somewhere in the path
+			// TODO: handle the case when there is another failed link in an already failed path
 			if (contact.isValid()) {
-				contact.setInvalid();
+
+				contact.setInvalid(failed_link);
 
 				EV_TRACE << "Set Contact to invalid due to failed link <"
 					 << failedNodeKey.shortStr() << "," << otherNodeKey.shortStr() << ">:"  << contact << endl;
@@ -677,7 +675,7 @@ void KadRoutingTable::invalidateContactsPN(const OverlayKey& failedNodeKey)
 			{
 				if (path[0] == failedNodeKey) // failed node is first hop
 				{
-					contact->setInvalid();
+					contact->setInvalid({failedNodeKey, myKey});
 					EV_TRACE << "Set Contact to invalid due to PN first hop failure: "  << *contact << endl;
 					// will schedule this for rediscovery later
 					policy->scheduleRediscovery(contact->getKey(), failedNodeKey, myKey, isInLastBucket(contact->getKey()));
@@ -692,7 +690,7 @@ void KadRoutingTable::invalidateContactsPN(const OverlayKey& failedNodeKey)
 			{
 				if (path[0] == failedNodeKey) // failed node is first hop
 				{
-					contact->setInvalid();
+					contact->setInvalid({failedNodeKey, myKey});
 					EV_TRACE << "Set Contact to invalid due to PN first hop failure: "  << *contact << endl;
 					// will schedule this for rediscovery later
 					policy->scheduleRediscovery(contact->getKey(), failedNodeKey, myKey, isInLastBucket(contact->getKey()));
@@ -835,44 +833,5 @@ std::vector<std::unique_ptr<KadContact>>::iterator KadBucket::findPNContact(cons
 
 // ---------------- other class independent methods ----------------
 
-/// searches for undirected link in given path, returns true if found, false if not found
-bool containsUndirectedLink(const kad_path& path, const OverlayKey& firstNodeKey, const OverlayKey& secondNodeKey)
-{
-	if (path.size() >= 2) // only for path that contain links
-	{
-		const OverlayKey* prev_node= &path[0];
-		// now loop over all nodes contained in the path
-		for (unsigned int i= 0; i != path.size(); i++)
-		{
-			if (path[i] == firstNodeKey) 
-			{ // one end of the link detected
-				if (*prev_node == secondNodeKey)
-				{ // previous node is the other end of the link
-					return true;
-				}
-				else
-				{ // check if next hop is other end of the link
-					if ((i+1) < path.size())
-					{ // next hop available
-						if (path[i+1] == secondNodeKey) // next hop is second node
-							return true;
-					}
-					else
-					{ // current node is last hop -> no link found
-						return false;
-					}
-				}
-			}
-			// current node will be prev_node in next iteration
-			prev_node= &path[i];
-		} // end for
-		// if here: for loop is finished, but not found so far
-		return false;
-	}
-	else
-	{
-		return false;
-	}
-}
 
 } // namespace
