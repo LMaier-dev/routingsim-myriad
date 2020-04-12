@@ -32,7 +32,6 @@ namespace routingsim {
 class KadRoutingTable;
 class NeighborTable;
 
-typedef std::pair<OverlayKey,OverlayKey> link_t;
 
 class KadBucket
 {

@@ -165,6 +165,7 @@ packet KadFindNodeReq extends KadRTableReq {
 
 	OverlayKey dstNodeID;
 	bool exact = false;
+	bool rediscovery = false;
 }
 
 

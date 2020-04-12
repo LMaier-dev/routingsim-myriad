@@ -38,8 +38,8 @@ constexpr pathseqno_t invalidSeqNo= 0xffff;
 class RediscoveryState {
 public:
 	RediscoveryState(const link_t& failedlink) : failedLink(failedlink) {};
-	link_t failedLink; // one of the currently failedlinks
-	std::list<OverlayKey> excludeContacts; // these nodes should not be considered for rediscovery actions for this contact anymore
+	link_t failedLink; // one of the currently failedlinks (TODO turn into list to handle multiple failures in path)
+	std::list<OverlayKey> viaContacts; // these nodes should be considered for rediscovery actions for this contact
 };
 
 
@@ -92,7 +92,8 @@ public:
 	void setState(State newstate) { state= newstate; }
 
 	const RediscoveryState& getRDS() const { ASSERT(rds_p != nullptr); return *rds_p; }
-
+	RediscoveryState& getRDS() { ASSERT(rds_p != nullptr); return *rds_p; }
+	void addRediscoverVia(const OverlayKey& nodeid) { ASSERT(rds_p != nullptr); rds_p->viaContacts.push_back(nodeid); };
 	void setPhysicalNeighbor() { physicalNeighbor= true; }
 	
 	/// returns the key of this contact

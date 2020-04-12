@@ -28,12 +28,12 @@ bool containsUndirectedLink(const OverlayKey& source, const OverlayKey& target, 
 	else
 	{
 		// check for first link (PN)
-		if ( (link.first == target and link.second == path[0]) or (link.first == path[0] and link.second == target) )
+		if ( (link.first == source and link.second == path[0]) or (link.first == path[0] and link.second == source) )
 			return true;
 	        else
-			return (source == link.first and path[path.size()-1] == link.second) // pen-ultimate hop is neighbor node of failed contact => this link failed
+			return (target == link.first and path[path.size()-1] == link.second) // pen-ultimate hop is neighbor node of failed contact => this link failed
 				or
-				(source == link.second and path[path.size()-1] == link.first) // pen-ultimate hop is the failed node leading to the neighboring node => this link failed
+				(target == link.second and path[path.size()-1] == link.first) // pen-ultimate hop is the failed node leading to the neighboring node => this link failed
 				or
 				containsUndirectedLink(path, link.first, link.second);
 	}

@@ -292,15 +292,18 @@ bool KadRoutingTable::addPath(const OverlayKey& key, const kad_path& path, paths
 		    contact->getPathSeqNo() < pathseqno
 		    or
 		    (contact->getPathSeqNo() == pathseqno and contact->getPathLength() > path.size() + viaPath.size())) {
-			updateCount++;
-			contact->setPath(concatViaPath(viaPath, path)); // will set contact automatically to valid
-			contact->setPathProperty(pathPropHint);
-			contact->setPathSeqNo(pathseqno);
+			if (contact->isRediscovering() and not containsUndirectedLink(myKey, contact->getKey(), path, contact->getRDS().failedLink))
+			{
+				updateCount++;
+				contact->setPath(concatViaPath(viaPath, path)); // will set contact automatically to valid
+				contact->setPathProperty(pathPropHint);
+				contact->setPathSeqNo(pathseqno);
 
-			// do something on improved path according to policy
-			policy->onImprovement(*contact);
+				// do something on improved path according to policy
+				policy->onImprovement(*contact);
 			
-			return true;
+				return true;
+			}
 		}
 		// else contact exists, but new path is not interesting
 		//EV_TRACE << "Contact known, but new path not added " << *contact << endl;

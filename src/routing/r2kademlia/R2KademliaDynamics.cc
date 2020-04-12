@@ -462,17 +462,42 @@ void R2Kademlia::rediscoverContacts() {
 	{
 		auto& contact= rediscoverQ.top();
 		// check for current status of scheduled contact
-		auto rt_contact= routingTable.getContact(contact->getKey());
+		KadContact* rt_contact= const_cast<KadContact*>(routingTable.getContact(contact->getKey()));
 		if (rt_contact) { // so contact still exists
 			// contact may have been recovered meanwhile
 			// do not rediscover contact which is already Rediscovering
 			if (rt_contact->isInvalid() and not rt_contact->isRediscovering())
 			{
 				// set contact state to rediscovering
-				const_cast<KadContact*>(rt_contact)->setRediscovering();
+				rt_contact->setRediscovering();
+
+				// it is only useful to store node ids, because later on, those contacts may have been gone already
+				// collect still valid closest contacts to the failed contact
+				auto contacts = routingTable.getClosestContacts(contact->getKey(), findNodeNumber, true);
+				//auto myclosecontacts = routingTable.getClosestContacts(myOverlayKey, findNodeNumber, true);
+				//auto myclosecontacts_it= myclosecontacts.begin();
+				for (auto c : contacts) {
+					if (c != nullptr) {
+						rt_contact->addRediscoverVia(c->getKey());
+						//if (myclosecontacts_it != myclosecontacts.end() and *myclosecontacts_it != nullptr) {
+						//	rt_contact->addRediscoverVia((*myclosecontacts_it)->getKey());
+						//	myclosecontacts_it++;
+						//}
+					}
+				}
+
+				// while (myclosecontacts_it != myclosecontacts.end()) {
+				// 	if (*myclosecontacts_it != nullptr) {
+				// 		rt_contact->addRediscoverVia((*myclosecontacts_it)->getKey());
+				// 	}
+				// 	myclosecontacts_it++;
+				// }
+
+				EV_TRACE << "rediscoverContacts(): number of via contacts: " << contacts.size() << endl;
+				// the following is somewhat redundant as the failed link is also stored in RediscoveryState
 			        const kad_path& failedLink(contact->getPath());
 				ASSERT(failedLink.size() == 2);
-				sendFindNode(rt_contact->getKey(), true, &failedLink[0], &failedLink[1]);
+				sendRediscovery(rt_contact, {failedLink[0], failedLink[1]}, rediscoveryFanOutFactor);
 			}
 		}
 		rediscoverQ.pop();
@@ -487,5 +512,47 @@ void R2Kademlia::rediscoverContacts() {
 
 }
 
+
+// send a FindNodeReq message for rediscovery
+void R2Kademlia::sendRediscovery(KadContact* failedcontact, const link_t& failedLink, uint8_t maxFanOut) {
+	EV_TRACE << "sendRediscovery w/ " << failedcontact->getKey().shortStr() << endl;
+
+	if (auto& contacts= failedcontact->getRDS().viaContacts; contacts.size() > 0)
+	{
+		// use several contacts to send multiple Rediscovery requests in parallel
+		for (auto fanout= 0; fanout < maxFanOut and contacts.size() > 0; fanout++)
+		{
+			// must check for existence and validity of contact
+			if (auto contact= routingTable.getContact(contacts.front()); contact != nullptr and contact->isValid())
+			{
+				if (contact->getKey() == myOverlayKey)
+				{
+					EV_ERROR << "I'm the next hop for the destination. Will not send anything." << endl;
+					return;
+				}
+				auto packet = makePacket<KadFindNodeReq>(contact, "FindNode");
+				packet->setDstNodeID(failedcontact->getKey());
+				packet->setExact(true);
+				packet->setRediscovery(true);
+				packet->addNotViaLink(failedLink);
+				sentRediscovery++;
+				EV_TRACE << "Rediscovery sending ... msg id=" << packet->getId() << " via " << contact->getKey().shortStr() << " fanout: " << fanout << endl;
+				EV_TRACE << "sending KadFindNodeReq" << endl;
+				sendRpcCall(
+					std::move(packet),
+					std::bind(&R2Kademlia::handleFindNodeResponse, this, ph::_1, ph::_2),
+					std::bind(&R2Kademlia::handleFindNodeResponse, this, ph::_1, ph::_2),
+					std::bind(&R2Kademlia::handleRPCTimeOut, this, ph::_1, ph::_2)
+					);
+			}
+			// remove the used element from the list
+			contacts.pop_front();
+		}
+	}
+	else
+	{ // no contacts to choose from (usually only possible for isolated nodes)
+		EV_WARN << "no contacts found, cannot send FindNodeReq" << endl;
+	}
+}
 
 } // end namespace
