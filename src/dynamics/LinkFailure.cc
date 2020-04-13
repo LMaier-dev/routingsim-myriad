@@ -30,8 +30,8 @@ simtime_t LinkFailure::scheduleDynamics() {
 	NetworkTopology &ntop = getTopology();
 
 	double linkFraction = par("linkFraction").doubleValue();
-	size_t numLinks = ntop.getNumberLinks();
-	unsigned int numLinksFail = linkFraction > 0.0 ? (size_t) numLinks*linkFraction : par("numLinksFail").intValue();
+	size_t numLinks = ntop.getNumberLinks() / 2; // note: getNumberLinks() returns unidirectional links, we always disable both
+	unsigned int numLinksFail = linkFraction > 0.0 ? (size_t) ceil(numLinks*linkFraction + 0.5) : par("numLinksFail").intValue();
 	double duration = par("duration").doubleValue();
 	double period = par("period").doubleValue();
 	string linkSelection = par("linkSelection").stdstringValue();
@@ -55,7 +55,7 @@ simtime_t LinkFailure::scheduleDynamics() {
 		nodeid_t destination = undefined_node;
 
 		std::set<nodeid_t> selectedNodes;
-		EV_TRACE << "linkSelection randomAllButOne(): number of links to fail=" <<  numLinksFail << endl;
+		EV_TRACE << "linkSelection randomAllButOne(): number of bidirectional links to fail=" <<  numLinksFail << endl;
 		// it can be the case that the graph is connected, but
 		// we cannot remove a single link without partitioning it
 		// therefore we have a maximum number of retries
@@ -112,7 +112,7 @@ simtime_t LinkFailure::scheduleDynamics() {
 			}
 			selectedNodes.insert(source);
 		} // end while
-		EV_TRACE << "linkSelection randomAllButOne(): scheduled link failures=" << scheduledFailures << endl;
+		EV_TRACE << "linkSelection randomAllButOne(): scheduled bidirectional link failures=" << scheduledFailures << endl;
 		return simTime() + period;
 	}
 
