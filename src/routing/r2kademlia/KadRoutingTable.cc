@@ -211,27 +211,27 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, pathseqno_t 
 			//EV_TRACE << "Contact existed already, but seems to be a PN now: " << *contact << endl;
 		}
 		
-		// update path if contact is invalid:
-		// either we have newer information (higher sequence number)
-		// or the same (the path may have changed though and reenabling the contact is important)
-		// or: we learn a shorter path -> update anyways
-		// TODO: it seems to make a difference whether contact->isInvalid() is present or not
+		// update path if:
+		// contact is invalid: only if we have newer information (higher sequence number)
+		//                     or the same seq# (the path may have changed though and reenabling the contact is important)
+		// or: we learn a shorter path (seq# no must be same or newer) -> update anyways
 		if ( (contact->isInvalid() and contact->getPathSeqNo() <= pathseqno)
-		     or (contact->getPathSeqNo() == pathseqno and path.size() < contact->getPathLength()) ) {
+		     or (contact->getPathSeqNo() <= pathseqno and path.size() < contact->getPathLength()) ) {
 			// in case the path had a failure, check whether the supposed new path actually avoids the broken link
-			if (contact->isRediscovering() and not containsUndirectedLink(myKey, contact->getKey(), path, contact->getRDS().failedLink))
+			if (contact->isRediscovering() and containsUndirectedLink(myKey, contact->getKey(), path, contact->getRDS().failedLink))
 			{
-				contact->setPath(std::move(path)); // will set contact automatically to valid
-				contact->setPathSeqNo(pathseqno);
-
-				contact->setPathProperty(pathprop);
-				updateCount++;
-
-				// do something on improved path according to policy
-				policy->onImprovement(*contact);
-
-				return true;
+				return false;
 			}
+			contact->setPath(std::move(path)); // will set contact automatically to valid
+			contact->setPathSeqNo(pathseqno);
+
+			contact->setPathProperty(pathprop);
+			updateCount++;
+
+			// do something on improved path according to policy
+			policy->onImprovement(*contact);
+
+			return true;
 		}
 		// else contact exists, but new path is not interesting
 

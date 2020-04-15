@@ -352,7 +352,7 @@ void R2Kademlia::reset() {
 
 
 void R2Kademlia::handlePacket(KadHello_p packet) {
-	EV << "received hello packet from " << packet->getSource().shortStr() << endl;
+	EV << "received hello packet from " << packet->getSource().shortStr() << " StateSeq#" << packet->getStateSeqNo() << endl;
 
 	neighborTable.addNeighbor(packet->getSourceId(), packet->getSource());
 	//EV_TRACE << "neighbor table: "<< neighborTable << endl;
