@@ -2,6 +2,12 @@
 
 namespace routingsim {
 
+std::ostream& operator<<(std::ostream& os, const link_t& l)
+{
+	os << '<' << l.first << ',' << l.second << '>';
+}
+
+
 // print a path using abbreviated key ids
 std::ostream& operator<<(std::ostream& os, const kad_path& p)
 {

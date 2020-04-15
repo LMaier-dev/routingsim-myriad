@@ -18,6 +18,8 @@ bool containsUndirectedLink(const OverlayKey& source, const OverlayKey& target, 
 bool containsUndirectedLink(const kad_path& path, const OverlayKey& firstNodeKey, const OverlayKey& secondNodeKey);
 
 std::ostream& operator<<(std::ostream& os, const kad_path& c);
+
+std::ostream& operator<<(std::ostream& os, const link_t& l);
 }
 
 #endif // __ROUTINGSIM_KadPath_H_

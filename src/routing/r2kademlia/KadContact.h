@@ -189,8 +189,8 @@ inline void KadContact::setInvalid(const link_t& failed_link)
 	}
 	else
 	{
-		if (failed_link != rds_p->failedLink)
-			EV_WARN << "Unhandled case of multiple concurrent link failures within the same path! Contact:" << getKey().shortStr() << ", path:" << getPath() << endl;
+		if (failed_link != rds_p->failedLink and link_t(failed_link.second,failed_link.first) != rds_p->failedLink)
+			EV_WARN << "Unhandled case of multiple concurrent link failures within the same path! Contact:" << getKey().shortStr() << ", path:" << getPath() << "failed: " << rds_p->failedLink << " new: " << failed_link << endl;
 	}
 }
 
