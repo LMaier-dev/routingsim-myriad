@@ -5,6 +5,7 @@ namespace routingsim {
 std::ostream& operator<<(std::ostream& os, const link_t& l)
 {
 	os << '<' << l.first << ',' << l.second << '>';
+	return os;
 }
 
 
@@ -21,7 +22,6 @@ std::ostream& operator<<(std::ostream& os, const kad_path& p)
 	}
 	os << '>';
 	return os;
-
 }
 
 
