@@ -215,11 +215,15 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, pathseqno_t 
 		// contact is invalid: only if we have newer information (higher sequence number)
 		//                     or the same seq# (the path may have changed though and reenabling the contact is important)
 		// or: we learn a shorter path (seq# no must be same or newer) -> update anyways
-		if ( (contact->isInvalid() and contact->getPathSeqNo() <= pathseqno)
-		     or (contact->getPathSeqNo() <= pathseqno and path.size() < contact->getPathLength()) ) {
+
+		if (bool seqno_is_ok(contact->getPathSeqNo() <= pathseqno);
+		    (contact->isInvalid() and seqno_is_ok)
+		    or
+		    (seqno_is_ok and path.size() < contact->getPathLength()) )
+		{
 			// in case the path had a failure, check whether the supposed new path actually avoids the broken link
-			if (contact->isRediscovering() and containsUndirectedLink(myKey, contact->getKey(), path, contact->getRDS().failedLink))
-			{
+			if (contact->isInvalid() and containsUndirectedLink(myKey, contact->getKey(), path, contact->getRDS().failedLink))
+			{ // provided path does not repair broken link
 				return false;
 			}
 			contact->setPath(std::move(path)); // will set contact automatically to valid
@@ -282,28 +286,27 @@ bool KadRoutingTable::addPath(const OverlayKey& key, const kad_path& path, paths
 			//EV_TRACE << "Contact existed already, but seems to be a PN now: " << *contact << endl;
 		}
 		
-		// if contact was marked invalid, update path and status:
-		// since this information is hopefully more current, path should be valid (again)
-		// it does not make sense to check for equalness of the paths: it may be the same,
-		// but re-enabled
-		// or: we learn a shorter path -> update anyways
-		if ((contact->isInvalid() and contact->getPathSeqNo() <= pathseqno)
+		// if contact was marked invalid, update path and status if seqno is not older and path repairs failure
+		// or: seqno is not older and we learn a shorter path -> update anyways
+		if (bool seqno_is_ok(contact->getPathSeqNo() <= pathseqno);
+		    (contact->isInvalid() and seqno_is_ok)
 		    or
-		    contact->getPathSeqNo() < pathseqno
-		    or
-		    (contact->getPathSeqNo() == pathseqno and contact->getPathLength() > path.size() + viaPath.size())) {
-			if (contact->isRediscovering() and not containsUndirectedLink(myKey, contact->getKey(), path, contact->getRDS().failedLink))
-			{
-				updateCount++;
-				contact->setPath(concatViaPath(viaPath, path)); // will set contact automatically to valid
-				contact->setPathProperty(pathPropHint);
-				contact->setPathSeqNo(pathseqno);
-
-				// do something on improved path according to policy
-				policy->onImprovement(*contact);
-			
-				return true;
+		    (seqno_is_ok and (path.size() + viaPath.size()) < contact->getPathLength()) )
+		{
+			if (contact->isInvalid() and containsUndirectedLink(myKey, contact->getKey(), concatViaPath(viaPath, path), contact->getRDS().failedLink))
+			{ // provided path does not repair broken link
+				return false;
 			}
+			contact->setPath(concatViaPath(viaPath, path)); // will set contact automatically to valid
+			contact->setPathSeqNo(pathseqno);
+
+			contact->setPathProperty(pathPropHint);
+			updateCount++;
+
+			// do something on improved path according to policy
+			policy->onImprovement(*contact);
+
+			return true;
 		}
 		// else contact exists, but new path is not interesting
 		//EV_TRACE << "Contact known, but new path not added " << *contact << endl;
