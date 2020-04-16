@@ -214,7 +214,9 @@ private:
 	/** @name timer functions */
 	//@{
 	/// adds a timer to the timer vectors, sends a timer packet
-	void addTimer(simtime_t initialOffset, simtime_t duration, std::function<void(short timerId)> callback);
+	short addTimer(simtime_t initialOffset, simtime_t duration, std::function<void(short timerId)> callback);
+	void stopTimer(short timerId);
+	void stopAllTimers() { for (short timerId= 0; (size_type) timerId < timerMsg.size(); timerId++) { stopTimer(timerId); } };
 	void doProbe(short timerId);
 	void doProbeSelf(short timerId);
 	void doProbeNeighbors(short timerId);
@@ -290,7 +292,7 @@ private:
 	void incGLSSeqNo() { glsseqno++; }
 	pathseqno_t getGLSSeqNo() const { return glsseqno; }
 private:
-	~R2Kademlia() { updateQueue.clear(); pathSetupQueue.clear(); }
+	~R2Kademlia() { updateQueue.clear(); pathSetupQueue.clear(); stopAllTimers(); }
 	/// the overlay key of this node
 	OverlayKey myOverlayKey;
 	/// Node Global Link State Sequence Number
@@ -395,10 +397,9 @@ private:
 	unsigned long shortenedlaterpaths = 0;
 	unsigned long viablePIDpaths = 0;
 
-	/** @name timer things */
+	/** @name periodic timer things */
 	//@{
 	std::vector<simtime_t> timerDuration;
-	std::vector<std::function<void(short)>> timerCallback;
 	std::vector<cMessage *> timerMsg;
 	//@}
 };

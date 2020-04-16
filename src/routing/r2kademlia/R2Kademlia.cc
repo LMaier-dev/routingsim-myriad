@@ -28,6 +28,9 @@ namespace routingsim {
 // for std::bind with callback functions
 namespace ph = std::placeholders;
 
+// callback function type
+using cbfunc_t = std::function<void(short timerId)>;
+
 Define_Module(R2Kademlia);
 
 void R2Kademlia::onInitialize() {
@@ -306,12 +309,13 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 }
 
 
+
 void R2Kademlia::onSelfMessage(cMessage_p msg) {
 	std::unique_ptr<RPCtimeoutMsg> rpctimeout(dynamic_cast<RPCtimeoutMsg *>(msg.get()));
 	if (rpctimeout)
 	{
 		msg.release(); 		// no double deletion
-		
+
 		//EV_TRACE << "RPC Timeout Message for nonce " << rpctimeout->nonce << endl;
 
 		handleTimeOut(rpctimeout->nonce);
@@ -320,18 +324,32 @@ void R2Kademlia::onSelfMessage(cMessage_p msg) {
 		return;
 	}
 
-
 	// handle timer
+	// timerId == -1 is a one shot timer
 	short timerId = msg->getKind();
-	ASSERT(timerId >= 0);
-	ASSERT((size_t)timerId < timerDuration.size());
-	ASSERT(timerMsg[timerId] == msg.get());
-	timerCallback[timerId](timerId);
-	// reschedule timer if duration > 0, otherwise it was a one shot timer
-	if (timerDuration[timerId] > 0)
+
+	if (cbfunc_t* timerCallback(static_cast<cbfunc_t *>(msg->getContextPointer()));
+	    timerCallback != nullptr) {
+		// now call the callback function
+		(*timerCallback)(timerId);
+
+		// delete the callback function for one shot messages
+		if (timerId == -1) {
+			delete timerCallback;
+			msg->setContextPointer(nullptr);
+		}
+	}
+
+	// reschedule timer message if duration > 0, otherwise it was a one shot timer
+	if (timerId  >= 0)
 	{
-		simtime_t time = uniform(timerDuration[timerId]/2, timerDuration[timerId]/2*3);
-		scheduleAt(simTime() + time, msg.release());
+		ASSERT((size_t)timerId < timerDuration.size());
+		ASSERT(timerMsg[timerId] == msg.get());
+		if (timerDuration[timerId] > 0)
+		{
+			simtime_t time = uniform(timerDuration[timerId]/2, timerDuration[timerId]/2*3);
+			scheduleAt(simTime() + time, msg.release());
+		}
 	}
 }
 
@@ -1524,18 +1542,41 @@ void R2Kademlia::readRTableRsp(const KadRTableRsp& packet) {
 
 
 /* if duration is 0, this is a one shot timer */
-void R2Kademlia::addTimer(simtime_t initialOffset, simtime_t duration, std::function<void(short timerId)> callback) {
-	ASSERT(timerDuration.size() == timerCallback.size());
-	ASSERT(timerDuration.size() < std::numeric_limits<long unsigned int>::max());
+short R2Kademlia::addTimer(simtime_t initialOffset, simtime_t duration, std::function<void(short timerId)> callback) {
+	ASSERT(timerDuration.size() == timerMsg.size());
+	ASSERT(timerDuration.size() < (size_type) std::numeric_limits<short int>::max());
 	ASSERT(duration >= 0);
-	timerDuration.push_back(duration);
-	timerCallback.push_back(callback);
-	cMessage *msg = new cMessage("TimerMsg", timerDuration.size()-1);
-	timerMsg.push_back(msg);
+	if (duration > 0)
+		timerDuration.push_back(duration);
+
+	short int ntimerId(duration == 0 ? -1 : timerDuration.size()-1);
+	cMessage *msg = new cMessage("TimerMsg", ntimerId);
+	msg->setContextPointer( reinterpret_cast<void *>( new auto(callback) ) );
+
+	if (duration > 0)
+		timerMsg.push_back(msg);
+
 	simtime_t scatter = uniform(0, duration);
 	scheduleAt(simTime() + initialOffset - duration/2 + scatter, msg);
 	//EV_TRACE << "scheduled timer message " << msg << ( (duration != 0) ? " with duration " : " after ")
 	//	 <<   ((duration != 0) ? duration : initialOffset) <<  endl;
+	return ntimerId;
+}
+
+
+void R2Kademlia::stopTimer(short timerId)
+{
+	if (timerId > 0 and (size_type) timerId < timerMsg.size()) {
+		cMessage* timermsg= timerMsg[timerId];
+		timerMsg[timerId]= nullptr;
+		// cancel potentially scheduled message (nothing happens if it was not)
+		cancelEvent(timermsg);
+		// remove callback function
+		cbfunc_t* cbfunc_p(static_cast<cbfunc_t*>(timermsg->getContextPointer()));
+		delete(cbfunc_p);
+		timermsg->setContextPointer(nullptr);
+		delete timermsg;
+	}
 }
 
 
@@ -1603,6 +1644,7 @@ void R2Kademlia::doProbe(short timerId) {
 
 
 void R2Kademlia::doProbeSelf(short timerId) {
+	ASSERT(timerId >= 0);
 	static const simtime_t maxDuration(300); // check every 5 minutes
 
 	// exponential backoff double duration until we reached maxDuration
