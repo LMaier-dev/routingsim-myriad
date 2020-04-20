@@ -1354,7 +1354,7 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 
 void R2Kademlia::onImprovement(const KadContact& contact) {
 	// path got improved for this contact -> potentially send UpdateRouteReq
-	EV_TRACE << "onImprovement(" << contact.getKey().shortStr() << ") called, SeqNo #" << contact.getPathSeqNo() << endl;
+	EV_TRACE << "onImprovement(" << contact.getKey().shortStr() << ") called, SeqNo #" << contact.getPathSeqNo() << ' ' << contact.getPath() << endl;
 
 	if (contact.isValid())
 	{
