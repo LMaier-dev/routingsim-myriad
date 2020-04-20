@@ -418,10 +418,13 @@ bool R2Kademlia::processNotViaInformation(const KadPacket& packet)
 			ASSERT(not unreachablenode.isUnspecified() and not detectingnode.isUnspecified());
 			EV_TRACE << "Packet " << packet.getName() << " contains not via <" << unreachablenode.shortStr() << ',' << detectingnode.shortStr() << '>' << endl;
 			if (unreachablenode == myOverlayKey or detectingnode == myOverlayKey) {
+				// we should never trust notVia information about our own physical links
 				ownIDFound= true;
 			}
-			// we should invalidate all contacts with that link in the path to them before answering
-			routingTable.invalidateContacts(packet.getFailedLink(i));
+			else {
+				// we should invalidate all contacts with that link in the path to them before answering
+				routingTable.invalidateContacts(packet.getFailedLink(i));
+			}
 		}
 	}
 
