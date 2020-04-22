@@ -497,6 +497,7 @@ void R2Kademlia::rediscoverContacts() {
 				// the following is somewhat redundant as the failed link is also stored in RediscoveryState
 			        const kad_path& failedLink(contact->getPath());
 				ASSERT(failedLink.size() == 2);
+				ASSERT(failedLink[0] != failedLink[1]);
 				sendRediscovery(rt_contact, {failedLink[0], failedLink[1]}, rediscoveryFanOutFactor);
 			}
 		}
