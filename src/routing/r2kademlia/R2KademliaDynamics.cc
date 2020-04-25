@@ -86,11 +86,18 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadUpdateRouteReq> packet) {
 			case KAD_Unreachable:
 				// unreachable node, path shows the failed link
 				ASSERT(path.size() == 1);
+				ASSERT(path[0] != contactkey);
 
 				EV_TRACE << "UpdateRouteReq UNREACHABLE contact: " << contactkey.shortStr() << ", link: < "
-					 << packet->getPath(0).front().shortStr() << ',' << contactkey.shortStr() << " >" << endl;
-				// now invalidate all contacts with this link
-				routingTable.invalidateContacts({contactkey, packet->getPath(0).front()});
+					 << path[0].shortStr() << ',' << contactkey.shortStr() << " >" << endl;
+
+				if (path[0] != myOverlayKey) {
+					// now invalidate all contacts with this link
+					routingTable.invalidateContacts({contactkey, path[0]});
+				}
+				else { // if I'm part of the failed link, it's a PN link, so ignore this
+					EV_TRACE << "ignored news about me or my PN" << endl;
+				}
 
 				propagateUpdate= true;
 				break;
@@ -109,6 +116,10 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadUpdateRouteReq> packet) {
 
 void R2Kademlia::scheduleUpdate(const KadContact& affectedContact, KadRouteUpdateAction action)
 {
+	// do not schedule updates for myself
+	if (affectedContact.getKey() == myOverlayKey)
+		return;
+
 	// we collect all update information for neighbors
 	// send UpdateRouteReq to ID-wise closest Nodes
 	size_t contactsLen = std::max((size_t)findNodeNumber, routingTable.getSplitSize());
@@ -209,11 +220,17 @@ void R2Kademlia::evalUpdateReq(const KadUpdateRouteReq* packet)
 			case KAD_Unreachable:
 				// unreachable node, path shows the failed link
 				ASSERT(path.size() == 1);
+				ASSERT(path[0] != contactkey);
 
-				EV_TRACE << "Unreachable contact: " << contactkey.shortStr() << ", link: < "
-					 << packet->getPath(0).front().shortStr() << ',' << contactkey.shortStr() << " >" << endl;
-				// now invalidate all contacts with this link
-				routingTable.invalidateContacts({contactkey, packet->getPath(0).front()});
+				EV_TRACE << "Overheard unreachable contact: " << contactkey.shortStr() << ", link: < "
+					 << path[0].shortStr() << ',' << contactkey.shortStr() << " >" << endl;
+				if (path[0] != myOverlayKey) {
+					// now invalidate all contacts with this link
+					routingTable.invalidateContacts({contactkey, path[0]});
+				}
+				else { // if I'm part of the failed link, it's a PN link, so ignore this
+					EV_TRACE << "ignored news about me" << endl;
+				}
 				break;
 
 			default:
