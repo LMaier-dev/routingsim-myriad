@@ -129,7 +129,7 @@ void R2Kademlia::onDisconnect( nodeid_t nid ) {
 	
 	// Try to rediscover that contact
 	// after grace period (otherwise more links may fail immediately after this)
-	scheduleRediscovery(key, key, myOverlayKey);
+	scheduleRediscovery(key, key, myOverlayKey, routingTable.isInLastBucket(key));
 
 	// contacts from routing table with this neighbor as next hop are not usable until rediscovered
 	routingTable.invalidateContactsPN(key);
