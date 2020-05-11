@@ -24,6 +24,8 @@
 #include "BaseTypes.h"
 
 namespace routingsim {
+
+namespace ph = std::placeholders;
 	
 void KadRoutingTable::init(const OverlayKey& myKey, KadPolicy* policy,
 			   size_type accelerationFactor, size_type bucketSize,
@@ -212,6 +214,7 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, pathseqno_t 
 		}
 		
 		// update path if:
+		// always when sequence number is actually higher
 		// contact is invalid: only if we have newer information (higher sequence number)
 		//                     or the same seq# (the path may have changed though and reenabling the contact is important)
 		// or: we learn a shorter path (seq# no must be same or newer) -> update anyways
@@ -219,7 +222,9 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, pathseqno_t 
 		if (bool seqno_is_ok(contact->getPathSeqNo() <= pathseqno);
 		    (contact->isInvalid() and seqno_is_ok)
 		    or
-		    (seqno_is_ok and path.size() < contact->getPathLength()) )
+		    (seqno_is_ok and path.size() < contact->getPathLength())
+		    or
+		    (contact->getPathSeqNo() < pathseqno) )
 		{
 			// in case the path had a failure, check whether the supposed new path actually avoids the broken link
 			if (contact->isInvalid() and containsUndirectedLink(myKey, contact->getKey(), path, contact->getRDS().failedLink))
@@ -503,18 +508,15 @@ KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_t
 	KadContactList result{};
 	result.reserve(n);
 
+	std::function<void(const std::vector<std::unique_ptr<KadContact>>& source, KadContactList& target)> copyContactsFn =
+		validcontactsonly ? copyValidContacts : copyContacts;
+
 	size_type index = getBucketIndex(key);
 	auto bucket = buckets.begin() + index;
 	if (bucket->size() >= n)
 	{
-		if (validcontactsonly) {
-			copyValidContacts(bucket->contacts, result);
-			copyValidContacts(bucket->PNContacts, result);
-		}
-		else {
-			copyContacts(bucket->contacts, result);
-			copyContacts(bucket->PNContacts, result);
-		}
+		copyContactsFn(bucket->contacts, result);
+		copyContactsFn(bucket->PNContacts, result);
 	}
 	else {
 		// not enough contacts in first bucket
@@ -528,40 +530,22 @@ KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_t
 		     level+=width) {
 			if (level == buckets.end()-1)
 			{
-				if (validcontactsonly) {
-					copyValidContacts(level->contacts, result);
-					copyValidContacts(level->PNContacts, result);
-				}
-				else {
-					copyContacts(level->contacts, result);
-					copyContacts(level->PNContacts, result);
-				}
+				copyContactsFn(level->contacts, result);
+				copyContactsFn(level->PNContacts, result);
 			}
 			else // always insert the whole level
 				for (uint i = 0; i < width and level+i < buckets.end(); i++)
 				{
-					if (validcontactsonly) {
-						copyValidContacts(level[i].contacts, result);
-						copyValidContacts(level[i].PNContacts, result);
-					}
-					else {
-						copyContacts(level[i].contacts, result);
-						copyContacts(level[i].PNContacts, result);
-					}
+					copyContactsFn(level[i].contacts, result);
+					copyContactsFn(level[i].PNContacts, result);
 				}
 		}
 		// if we still do not have enough contacts, we go up the tree
 		auto otherBucket = buckets.begin() + firstOnLevelIndex;
 		while(result.size() < n and otherBucket != buckets.begin()) {
 			otherBucket--;
-			if (validcontactsonly) {
-				copyValidContacts(otherBucket->contacts, result);
-				copyValidContacts(otherBucket->PNContacts, result);
-			}
-			else {
-				copyContacts(otherBucket->contacts, result);
-				copyContacts(otherBucket->PNContacts, result);
-			}
+			copyContactsFn(otherBucket->contacts, result);
+			copyContactsFn(otherBucket->PNContacts, result);
 		}
 	}
 	// now we sort the contacts by their XOR metric

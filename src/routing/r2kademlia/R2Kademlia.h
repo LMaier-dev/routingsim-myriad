@@ -421,11 +421,12 @@ bool R2Kademlia::processNotViaInformation(const KadPacket& packet)
 				// we should never trust notVia information about our own physical links
 				ownIDFound= true;
 			}
-			else {
+			else if ( packet.getSource() == detectingnode or packet.getSource() == unreachablenode ) {
+				// we only trust notvia to be current from nodes that indicate physical neighbor failure
 				// we should invalidate all contacts with that link in the path to them before answering
 				routingTable.invalidateContacts(packet.getFailedLink(i));
 			}
-		}
+		} // end for
 	}
 
 	return ownIDFound;

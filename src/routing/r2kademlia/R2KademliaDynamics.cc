@@ -264,6 +264,8 @@ void R2Kademlia::propagateUpdateReq(std::unique_ptr<KadUpdateRouteReq> packet)
 		packet->setRouteArraySize(0);
 		packet->setActiveArraySize(0);
 		packet->setSource(myOverlayKey);
+		packet->setStateSeqNo(getGLSSeqNo());
+		packet->setTargetSeqNo(contact.getPathSeqNo());
 		packet->setProgress(0);
 		packet->setHopLimit(hopLimit);
 		packet->appendRoute(contact);

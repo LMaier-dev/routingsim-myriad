@@ -1087,8 +1087,8 @@ bool R2Kademlia::handleFindNodeResponse(KadPacket_p answer_, RPCState& rpcState)
 	// if this was a rediscovery packet, check for its success
 	if (findnodereq->getRediscovery() == true) {
 		if (auto contactp= routingTable.getContact(findnodereq->getDstNodeID()); contactp != nullptr) {
-			EV_TRACE << "Rediscovery not successful for contact " << *contactp << ", next try." << endl;
 			if (contactp->isRediscovering()) { // not successful yet
+				EV_TRACE << "Rediscovery not successful for contact " << *contactp << ", next try." << endl;
 				// send a new find node req
 				sendRediscovery(const_cast<KadContact*>(contactp), contactp->getRDS().failedLink, 1);
 			}
@@ -1697,6 +1697,9 @@ void R2Kademlia::countReceived(KadPacket& packet) {
 
 void R2Kademlia::countDropped(KadPacket& packet, const OverlayKey& target, uint8_t reason) {
 	droppedPackets++;
+	if (packet.isTracked())
+		EV_TRACE << "+DROPPED+ nonce:" << packet.getNonce() << " reason:" << (unsigned int) reason << endl;
+
 	getKadObserver().registerPacketDropped(packet, myOverlayKey, target, reason);
 	nodeid_t nid = undefined_node;
 	if (getKadObserver().exists(target))
