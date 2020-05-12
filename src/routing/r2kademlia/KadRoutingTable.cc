@@ -477,39 +477,55 @@ void KadRoutingTable::splitLastBucket()
 }
 
 
-/** copies all contacts from one contact list to the end of the other contact list */
-inline void copyContacts(const std::vector<std::unique_ptr<KadContact>>& source, KadContactList& target) {
+/** copies all selected contacts from one contact list to the end of the other contact list */
+inline void copySelectedContacts(const std::vector<std::unique_ptr<KadContact>>& source, KadContactList& target,
+				 std::function<bool(const KadContact& contact)> selectorFn) {
 	target.reserve(target.size() + source.size());
-	for (auto it = source.begin(); it != source.end(); it++)
-		target.push_back(it->get());
-}
-
-
-/** copies all valid contacts from one contact list to the end of the other contact list */
-inline void copyValidContacts(const std::vector<std::unique_ptr<KadContact>>& source, KadContactList& target) {
-	target.reserve(target.size() + source.size());
-	for (auto it = source.begin(); it != source.end(); it++)
-	{
-		if (it->get()->isValid())
+	for (auto it = source.begin(); it != source.end(); it++) {
+		if ( it->get() and selectorFn(*(it->get())) )
 			target.push_back(it->get());
 	}
 }
 
+// simply selects all contacts (valid and invalid) to copy
+auto copyAllContacts = std::bind( &copySelectedContacts,ph::_1,ph::_2, [](const KadContact& contact) -> bool { return true; } );
+// selects all valid contacts to copy
+auto copyValidContacts = std::bind( &copySelectedContacts,ph::_1,ph::_2, [](const KadContact& contact) -> bool { return contact.isValid(); } );
+
 
 /** 
  * returns at most n contacts closest to key
- * ContactList is sorted according to XOR metric with respect to key, i.e., the first returned contact
- * is the closest to key
+ * ContactList is sorted according to XOR metric with respect to key, i.e.,
+ * the first returned contact is the closest to key.
+ * if the notvialist is not empty, it will be considered for validcontactsonly==true
  */
-
-KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_type n, bool validcontactsonly) const
+KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_type n, bool validcontactsonly, const std::list<link_t>& notvialist) const
 {
 	ASSERT(not key.isUnspecified()); // calling this with unspecified key is considered useless and an error
 	KadContactList result{};
 	result.reserve(n);
 
-	std::function<void(const std::vector<std::unique_ptr<KadContact>>& source, KadContactList& target)> copyContactsFn =
-		validcontactsonly ? copyValidContacts : copyContacts;
+	// the following function excludes contacts that are affected by a notvia link list
+	auto selectorValidNotViaSafeFn = [&](const KadContact& contact) -> bool {
+					     if (contact.isValid()) {
+						     for ( const auto& failedLink : notvialist) {
+							     if (containsUndirectedLink(myKey,contact.getKey(),contact.getPath(),failedLink))
+								     return false;
+						     };
+						     return true;
+					     }
+					     return false;
+				     };
+	// selects all valid and "not via safe" contacts, i.e., contacts are excluded if occuring in the notvialist
+	auto copyValidNotViaSafeContacts = std::bind( &copySelectedContacts,ph::_1,ph::_2, selectorValidNotViaSafeFn );
+
+	std::function<void(const std::vector<std::unique_ptr<KadContact>>& source, KadContactList& target)> copyContactsFn(copyAllContacts);
+	if (validcontactsonly) {
+		if ( notvialist.empty() )
+			copyContactsFn = copyValidContacts;
+		else
+			copyContactsFn = copyValidNotViaSafeContacts;
+	}
 
 	size_type index = getBucketIndex(key);
 	auto bucket = buckets.begin() + index;
@@ -565,8 +581,8 @@ KadContactList KadRoutingTable::getAllContacts() const
 	result.reserve(bucketSize * buckets.size());
 	for (auto& bucket : buckets)
 	{
-		copyContacts(bucket.contacts, result);
-		copyContacts(bucket.PNContacts, result);
+		copyAllContacts(bucket.contacts, result);
+		copyAllContacts(bucket.PNContacts, result);
 	}
 	return result;
 }

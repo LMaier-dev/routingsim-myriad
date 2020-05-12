@@ -240,12 +240,21 @@ void R2Kademlia::evalUpdateReq(const KadUpdateRouteReq* packet)
 }
 
 
+// this functions tries to send an UpdateReq closer to the destination (ID-wise) neighborhood
 void R2Kademlia::propagateUpdateReq(std::unique_ptr<KadUpdateRouteReq> packet)
 {
 	OverlayKey destContactKey= packet->getDstNodeID();
 	unsigned int numContacts= packet->getContactArraySize();
+
 	size_t contactsLen = std::max((size_t)findNodeNumber, routingTable.getSplitSize());
-	KadContactList closeContacts(routingTable.getClosestContacts(destContactKey, contactsLen, true));
+	std::list<link_t> notvialist;
+	if (packet->getNotVia())
+	{
+		for (uint i= 0; i < packet->getFailedLinkArraySize(); i++) {
+			notvialist.push_back(packet->getFailedLink(i));
+		}
+	}
+	KadContactList closeContacts(routingTable.getClosestContacts(destContactKey, contactsLen, true, notvialist));
 
 	if (closeContacts.empty()) {
 		EV_TRACE << "propagateUpdateReq(): Update forwarding ends. No contact found" << endl;
