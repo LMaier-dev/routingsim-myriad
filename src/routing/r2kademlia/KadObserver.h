@@ -107,8 +107,11 @@ private:
 	simtime_t simTimeLimit= SIMTIME_MAX;
 private:
 	R2Kademlia& getR2Kademlia(Node* nodeMod);
+	const R2Kademlia& getR2Kademlia(const Node* nodeMod) const;
 	inline R2Kademlia& getR2Kademlia(nodeid_t nid) { return getR2Kademlia(getNetworkManager()->getTopology().getNodeModule(nid)); }
+	inline const R2Kademlia& getR2Kademlia(nodeid_t nid) const { return getR2Kademlia(getNetworkManager()->getTopology().getNodeModule(nid)); }
 	inline R2Kademlia& getR2Kademlia(const OverlayKey& key) { return getR2Kademlia(getNodeId(key)); }
+	inline const R2Kademlia& getR2Kademlia(const OverlayKey& key) const { return getR2Kademlia(getNodeId(key)); }
 	std::set<nodeid_t> sampleNodes(int n);
 
 public:
@@ -119,23 +122,25 @@ public:
 	void registerDown(const OverlayKey& key, nodeid_t owner);
 
 	/// returns the key of a given node id, if it is unknown std::out_of_range is thrown
-	inline const OverlayKey& getNodeKey(nodeid_t owner) { return nodes.right.at(owner); };
+	inline const OverlayKey& getNodeKey(nodeid_t owner) const { return nodes.right.at(owner); };
 	/// returns the node id of a given overlay key, if it is unknown std::out_of_range is thrown
-	inline nodeid_t getNodeId(const OverlayKey& key) { return nodes.left.at(key); };
+	inline nodeid_t getNodeId(const OverlayKey& key) const { return nodes.left.at(key); };
 	/// returns true if a node with the given key is known
-	inline bool exists(const OverlayKey& key) { return nodes.left.count(key) > 0; };
+	inline bool exists(const OverlayKey& key) const { return nodes.left.count(key) > 0; };
+
+	inline bool checkSeqNo(const OverlayKey& key, uint8_t seqno) const { return seqno <= getR2Kademlia(key).getGLSSeqNo();  };
 
 	/// returns the closest key that is assigned to a node
-	const OverlayKey& getClosestExistingKey(const OverlayKey& key);
+	const OverlayKey& getClosestExistingKey(const OverlayKey& key) const;
 	/// returns the key of a random node (chosen uniformly at random)
-	const OverlayKey& getRandomNodeKey();
+	const OverlayKey& getRandomNodeKey() const;
 	/// returns chooses a key at random and returns the closest existing key.
 	/// note that this is not uniform over the nodes.
-	const OverlayKey& getRandomExistingKey() { return getClosestExistingKey(OverlayKey::random(getRNG(0))); };
+	const OverlayKey& getRandomExistingKey() const { return getClosestExistingKey(OverlayKey::random(getRNG(0))); };
 	/// returns the physical distance between the to nodes with the keys. the keys MUST exist!
-	uint getPhysicalDistance(const OverlayKey& from, const OverlayKey& to);
+	uint getPhysicalDistance(const OverlayKey& from, const OverlayKey& to) const;
 	/// returns the number of other nodes that have this key in their routing table
-	uint getPopularity(const OverlayKey& key);
+	uint getPopularity(const OverlayKey& key) const;
 
 	void registerPacket(KadPacket&);
 	void registerPacketDropped(KadPacket&, const OverlayKey& current, const OverlayKey& target=OverlayKey::UNSPECIFIED_KEY, uint8_t reason= 0);

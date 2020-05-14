@@ -157,10 +157,11 @@ public:
 	/** called when a contact is going to be deleted from routing table*/
 	virtual void onContactRemoval(KadContact_p contact) override;
 
-	/** Called when a route got improved */
+	/** called when a route got improved */
 	virtual void onImprovement(const KadContact& contact) override;
+	/** called when physical neighbors may be out of synch with their sequence numbers **/
+	virtual void reSyncPN(const KadContact& contact) override;
 	//@}
-
 
 	uint getHopLimitDefault() const { return hopLimit; };
 
@@ -186,6 +187,7 @@ public:
 	void recordRoutingTable();
 
 	//@}
+	pathseqno_t getGLSSeqNo() const { return glsseqno; }
 
 private:
 	/** @name message generation */
@@ -290,7 +292,6 @@ private:
 	bool handleRPCTimeOut(KadPacket_p answer, RPCState& rpcState);
 	//@}
 	void incGLSSeqNo() { glsseqno++; }
-	pathseqno_t getGLSSeqNo() const { return glsseqno; }
 private:
 	~R2Kademlia() { updateQueue.clear(); pathSetupQueue.clear(); stopAllTimers(); }
 	/// the overlay key of this node

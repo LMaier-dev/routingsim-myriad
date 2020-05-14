@@ -274,10 +274,10 @@ void R2Kademlia::propagateUpdateReq(std::unique_ptr<KadUpdateRouteReq> packet)
 		packet->setActiveArraySize(0);
 		packet->setSource(myOverlayKey);
 		packet->setStateSeqNo(getGLSSeqNo());
-		packet->setTargetSeqNo(contact.getPathSeqNo());
 		packet->setProgress(0);
 		packet->setHopLimit(hopLimit);
 		packet->appendRoute(contact);
+		packet->setTargetSeqNo(contact.getPathSeqNo());
 		EV_TRACE << "propagateUpdateReq(): final dest: " << destContactKey.shortStr() << ", next dest: " << contact << endl;
 	        sendPacket(std::move(packet));
 	}

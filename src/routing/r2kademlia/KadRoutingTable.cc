@@ -144,7 +144,7 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, pathseqno_t 
 
 	const bool pathWasNotEmpty(path.size() > 0);
 	// find my key -> this is a poisonous path via me, simply ignore this
-	if (std::find(path.begin(), path.end(), myKey) != path.end())
+	if (pathWasNotEmpty and std::find(path.begin(), path.end(), myKey) != path.end())
 	{
 		//EV_TRACE << "not adding poisonous path to " << key.shortStr() << " leading via me (" << myKey.shortStr() << "): ";
 		//for (const auto& node : path)
@@ -229,6 +229,21 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, pathseqno_t 
 			// in case the path had a failure, check whether the supposed new path actually avoids the broken link
 			if (contact->isInvalid() and containsUndirectedLink(myKey, contact->getKey(), path, contact->getRDS().failedLink))
 			{ // provided path does not repair broken link
+				return false;
+			}
+
+			// sometimes updates may be received that carry a newer sequence number
+			// from physical neighbors (and also a longer path);
+			// but if PN link is still up, we ignore this for now and initiate a resynch
+			if ( contact->isPhysicalNeighbor() and
+			     (contact->getPathSeqNo() < pathseqno) and
+			     neighbortable.isNeighbor(contact->getKey()) and
+			     contact->getPathLength() == 0 and
+			     path.size() > 0) {
+				// try to resynchronize with physical neighbor
+				EV_TRACE << "resync required for " << contact->getKey().shortStr() << " new: "
+					 << pathseqno << " old: " << contact->getPathSeqNo() << endl;
+				policy->reSyncPN(*contact);
 				return false;
 			}
 			contact->setPath(std::move(path)); // will set contact automatically to valid

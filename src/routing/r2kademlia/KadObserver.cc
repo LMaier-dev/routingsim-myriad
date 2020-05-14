@@ -227,6 +227,13 @@ R2Kademlia& KadObserver::getR2Kademlia(Node* nodeMod) {
 	return *check_and_cast<R2Kademlia *>(gate->getPathEndGate()->getOwnerModule());
 }
 
+
+const R2Kademlia& KadObserver::getR2Kademlia(const Node* nodeMod) const {
+	const cGate* gate = nodeMod->gate("toProtocols$o", 0);
+	ASSERT(gate->isConnected());
+	return *check_and_cast<const R2Kademlia *>(gate->getPathEndGate()->getOwnerModule());
+}
+
 void KadObserver::registerUp(const OverlayKey& key, nodeid_t owner) {
 	ASSERT(not key.isUnspecified());
 	ASSERT(owner != undefined_node);
@@ -243,14 +250,14 @@ void KadObserver::registerDown(const OverlayKey& key, nodeid_t owner) {
 	nodes.right.erase(it);
 }
 
-const OverlayKey& KadObserver::getRandomNodeKey() {
+const OverlayKey& KadObserver::getRandomNodeKey() const {
 	auto it = nodes.left.begin();
 	//TODO optimization: this is O(n), find something better!
 	std::advance(it, intuniform(0, nodes.size() - 1));
 	return it->first;
 }
 
-const OverlayKey& KadObserver::getClosestExistingKey(const OverlayKey& key) {
+const OverlayKey& KadObserver::getClosestExistingKey(const OverlayKey& key) const {
 	ASSERT(nodes.size() > 0);
 	auto itLower = nodes.left.lower_bound(key);
 	if (itLower == nodes.left.end()) return (++itLower)->first;
@@ -259,14 +266,14 @@ const OverlayKey& KadObserver::getClosestExistingKey(const OverlayKey& key) {
 	return ((itLower->first ^ key) < (itUpper->first ^ key)) ? itLower->first : itUpper->first;
 }
 
-uint KadObserver::getPhysicalDistance(const OverlayKey& from, const OverlayKey& to) {
+uint KadObserver::getPhysicalDistance(const OverlayKey& from, const OverlayKey& to) const {
 	ASSERT(exists(from));
 	ASSERT(exists(to));
 	return (uint) getNetworkManager()->getDistance(getNodeId(from), getNodeId(to));
 }
 
 
-uint KadObserver::getPopularity(const OverlayKey& key) {
+uint KadObserver::getPopularity(const OverlayKey& key) const {
 	uint pop = 0;
 	for (auto pair : nodes.right)
 		if (getR2Kademlia(pair.first).getRoutingTable().getContact(key) != nullptr)

@@ -512,6 +512,7 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt) {
 			// rerouting makes this intermediate node to overlay hop
 			packet->setActive(packet->getProgress(), true);
 			packet->modRoute(newpath);
+			// note: targetSeqNo does not need to be adapted as the final hop is not modified
 
 			EV_TRACE << "forwardPacket(): reroute path <";
 			for (unsigned int i= 0; i < packet->getRouteArraySize(); i++)
@@ -611,6 +612,7 @@ void R2Kademlia::reroutePacket(const OverlayKey& finaldest, KadPacket_p packet, 
 			// rerouting makes this intermediate node to overlay hop
 			packet->setActive(packet->getProgress(), true);
 			packet->modRoute(newpath);
+			packet->setTargetSeqNo(contact.getPathSeqNo());
 			EV_TRACE << "reroutePacket(): contact "
 				 << contact <<	" resulting path <";
 			for (unsigned int i= 0; i < packet->getRouteArraySize(); i++)
@@ -827,7 +829,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadPNDiscReq> packet) {
 	neighborTable.addNeighbor(packet->getSourceId(), packet->getSource());
 	EV_TRACE << "neighbor table: "<< neighborTable << endl;
 
-	// add physical contact to routing table
+	// add physical contact to routing table or update sequence number
 	routingTable.addPath(packet->getSource(), kad_path(), packet->getStateSeqNo(), KadContact::PathProperty::direct);
 
 	// TODO currently only getting physical neighbors is implemented
@@ -903,7 +905,11 @@ bool R2Kademlia::handlePNDiscResponse(KadPacket_p answer, RPCState& rpcState)
 {
 	if (rpcState.status != RPC_SUCCESS) return true;
 	auto response = safe_packet_cast<KadPNDiscRsp>(answer);
-	EV_TRACE << "PNDiscRsp received " << response->getContactArraySize() << " neighbors from " << response->getSource().shortStr() << endl;
+	EV_TRACE << "PNDiscRsp received " << response->getContactArraySize() << " neighbors from " << response->getSource().shortStr()
+		 << " SeqNo#" << response->getStateSeqNo() << endl;
+	// update sequence number or restore direct link
+	routingTable.addPath(response->getSource(), kad_path(), response->getStateSeqNo(), KadContact::PathProperty::direct);
+
 	readRTableRsp(*response);
 	return true;
 }
@@ -1320,6 +1326,7 @@ void R2Kademlia::onContactRemoval(KadContact_p contact)
 void R2Kademlia::onNewContact(KadContact_p contact) {
 
 	EV_TRACE << "onNewContact(" << contact->getKey().shortStr() << ") called, SeqNo #" << contact->getPathSeqNo() << endl;
+	//ASSERT( getKadObserver().checkSeqNo(contact->getKey(),contact->getPathSeqNo()) == true );
 
 	// physical neighbor, may have been heard of its existence by some third node!
 	// avoid further actions until we hear a HELLO
@@ -1372,6 +1379,7 @@ void R2Kademlia::onImprovement(const KadContact& contact) {
 	// path got improved for this contact -> potentially send UpdateRouteReq
 	EV_TRACE << "onImprovement(" << contact.getKey().shortStr() << ") called, SeqNo #" << contact.getPathSeqNo() << ' ' << contact.getPath() << endl;
 
+	//ASSERT( getKadObserver().checkSeqNo(contact.getKey(),contact.getPathSeqNo()) == true );
 	if (contact.isValid())
 	{
 		if (usePathIDs) fwdTablePathID.modEntry(&contact, false);
@@ -1393,6 +1401,13 @@ void R2Kademlia::onImprovement(const KadContact& contact) {
 	}
 	else
 		scheduleUpdate(contact, KAD_Change);
+}
+
+
+void R2Kademlia::reSyncPN(const KadContact& contact) {
+	// simply trigger a PNDiscReq to update any sequence number
+	EV_TRACE << "reSyncPN triggered for " << contact.getKey().shortStr() << endl;
+	sendDiscoveryReq(&contact);
 }
 
 
@@ -1485,6 +1500,8 @@ void R2Kademlia::applyShortcut(KadPacket& packet)
 				kad_path newpath(knownContact->getPath());
 				newpath.push_back(knownContact->getKey());
 				packet.modRoute(newpath);
+				packet.setTargetSeqNo(knownContact->getPathSeqNo());
+
 
 				EV_TRACE << " new=" << packet.getSrcPath() << endl;
 			}
