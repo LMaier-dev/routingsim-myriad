@@ -98,7 +98,7 @@ public:
 	inline void countOverlayHop() { overlayHops++; }
 	inline uint16_t getOverlayHops() const { return overlayHops; }
 	// add Not Via Link information
-	void addNotViaLink(const link_t& failedlink);
+	void addNotViaLink(const link_t& failedlink, bool authoritative);
 	inline void markTracked() { tracked = true; }
 	inline bool isTracked() const { return tracked; }
 private:

@@ -417,12 +417,12 @@ bool R2Kademlia::processNotViaInformation(const KadPacket& packet)
 		for (uint i= 0; i < packet.getFailedLinkArraySize(); i++) {
 			auto &[unreachablenode, detectingnode]= packet.getFailedLink(i);
 			ASSERT(not unreachablenode.isUnspecified() and not detectingnode.isUnspecified());
-			EV_TRACE << "Packet " << packet.getName() << " contains not via <" << unreachablenode.shortStr() << ',' << detectingnode.shortStr() << '>' << endl;
+			EV_TRACE << "Packet " << packet.getName() << " contains not via <" << unreachablenode.shortStr() << ',' << detectingnode.shortStr() << '>' << (packet.getFailedLinkAuth(i) ? " AUTH" : "") << endl;
 			if (unreachablenode == myOverlayKey or detectingnode == myOverlayKey) {
 				// we should never trust notVia information about our own physical links
 				ownIDFound= true;
 			}
-			else if ( packet.getSource() == detectingnode or packet.getSource() == unreachablenode ) {
+			else if ( packet.getFailedLinkAuth(i) ) {
 				// we only trust notvia to be current from nodes that indicate physical neighbor failure
 				// we should invalidate all contacts with that link in the path to them before answering
 				routingTable.invalidateContacts(packet.getFailedLink(i));
@@ -472,6 +472,11 @@ std::unique_ptr<T> R2Kademlia::makeAnswer(KadPacket& original) {
 		for (uint i= 0; i < original.getFailedLinkArraySize(); i++) {
 			answer->setFailedLink(i,original.getFailedLink(i));
 		}
+		answer->setFailedLinkAuthArraySize(original.getFailedLinkAuthArraySize());
+		for (uint i= 0; i < original.getFailedLinkAuthArraySize(); i++) {
+			answer->setFailedLinkAuth(i,original.getFailedLinkAuth(i));
+		}
+
 	}
 	return answer;
 }

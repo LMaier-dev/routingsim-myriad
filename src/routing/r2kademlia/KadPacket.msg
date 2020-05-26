@@ -68,6 +68,7 @@ packet KadPacket {
 	uint8_t type enum(KadPDUType);
 	bool notVia = false;
 	link_t failedLink[];
+	bool failedLinkAuth[];
 	uint16_t hopLimit = 255;
 }
 
