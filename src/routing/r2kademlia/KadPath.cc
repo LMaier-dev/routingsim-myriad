@@ -4,7 +4,7 @@ namespace routingsim {
 
 std::ostream& operator<<(std::ostream& os, const link_t& l)
 {
-	os << '<' << l.first << ',' << l.second << '>';
+	os << '<' << l.first.shortStr() << ',' << l.second.shortStr() << '>';
 	return os;
 }
 

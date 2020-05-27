@@ -135,19 +135,20 @@ void R2Kademlia::scheduleUpdate(const KadContact& affectedContact, KadRouteUpdat
 			// if we reached the maximum fan out, exit the loop
 			if (numberOfNotifiedContacts == maxNumberOfNotifiedContacts)
 				break;
-			
-			EV_TRACE << "scheduleUpdate for " << affectedContact.getKey().shortStr() << " (" << action
-				 << ") notify:" << notifyContact->getKey().shortStr() ;
+
+			//EV_TRACE << "scheduleUpdate for " << affectedContact.getKey().shortStr() << " (" << action
+			//	 << ") notify:" << notifyContact->getKey().shortStr() ;
+
 			// except when it is the contact itself
 			if ( affectedContact.getKey() == notifyContact->getKey() ) {
-				EV_TRACE << " is the same - skipped." << endl;
+				//EV_TRACE << " is the same - skipped." << endl;
 				continue;
 			}
 			// or it is a physical neighbor of the affected node (here the last hop in the path)
 			if ( affectedContact.getPathLength() > 0
 			     and
 			     affectedContact.getPath()[affectedContact.getPathLength()-1] == notifyContact->getKey() ) {
-				EV_TRACE << " is the last hop - skipped." << endl;
+				//EV_TRACE << " is the last hop - skipped." << endl;
 				
 				continue;
 			}
@@ -178,7 +179,7 @@ void R2Kademlia::scheduleUpdate(const KadContact& affectedContact, KadRouteUpdat
 					entry->second.emplace_back(newelem);
 				}
 			}
-			EV_TRACE << " done." << endl;
+			//EV_TRACE << " done." << endl;
 			numberOfNotifiedContacts++;
 		} // end for each contact
 
@@ -580,7 +581,10 @@ void R2Kademlia::sendRediscovery(KadContact* failedcontact, const link_t& failed
 	}
 	else
 	{ // no contacts to choose from (usually only possible for isolated nodes)
-		EV_WARN << "no contacts found, cannot send FindNodeReq" << endl;
+		EV_WARN << "no (more) contacts found, cannot send rediscovery" << endl;
+		// TODO: maybe a second round of rediscovery for contacts in the deepest bucket?
+		if (failedcontact->isInvalid())
+			routingTable.removeContact(failedcontact);
 	}
 }
 
