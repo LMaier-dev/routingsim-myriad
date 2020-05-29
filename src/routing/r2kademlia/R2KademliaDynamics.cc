@@ -580,10 +580,11 @@ void R2Kademlia::sendRediscovery(KadContact* failedcontact, const link_t& failed
 		}
 	}
 	else
-	{ // no contacts to choose from (usually only possible for isolated nodes)
+	{ // no (more) contacts to choose from (initially only possible for isolated nodes)
 		EV_WARN << "no (more) contacts found, cannot send rediscovery" << endl;
 		// TODO: maybe a second round of rediscovery for contacts in the deepest bucket?
-		if (failedcontact->isInvalid())
+		// do not remove physical contacts
+		if (failedcontact->isInvalid() and failedcontact->isPhysicalNeighbor() == false)
 			routingTable.removeContact(failedcontact);
 	}
 }

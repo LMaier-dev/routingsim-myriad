@@ -868,8 +868,13 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadQueryRouteReq> packet) {
 		response->setPathArraySize(neighbors.size());
 		response->setSeqNoArraySize(neighbors.size());
 		for (uint i = 0; i < neighbors.size(); i++) {
-			response->setContact(i, neighbors[i]);
-			response->setSeqNo(i, routingTable.getContact(neighbors[i])->getPathSeqNo());
+			if (routingTable.getContact(neighbors[i]) != nullptr)
+			{
+				response->setContact(i, neighbors[i]);
+				response->setSeqNo(i, routingTable.getContact(neighbors[i])->getPathSeqNo());
+			}
+			else
+				EV_ERROR << "Physical neighbor " << neighbors[i].shortStr() << " not present in routing table!" << endl;
 		}
 	}
 	else
