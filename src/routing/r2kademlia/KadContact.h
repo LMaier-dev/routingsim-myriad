@@ -20,6 +20,7 @@
 #include <omnetpp.h>
 #include <memory>
 #include <vector>
+#include <algorithm>
 #include "KadPath.h"
 
 /**
@@ -37,8 +38,8 @@ constexpr pathseqno_t invalidSeqNo= 0xffff;
 
 class RediscoveryState {
 public:
-	RediscoveryState(const link_t& failedlink) : failedLink(failedlink) {};
-	link_t failedLink; // one of the currently failedlinks (TODO turn into list to handle multiple failures in path)
+	RediscoveryState(const link_t& failedlink) : failedLinkList({failedlink}) {};
+	std::list<link_t> failedLinkList; // the currently failed links
 	std::list<OverlayKey> viaContacts; // these nodes should be considered for rediscovery actions for this contact
 };
 
@@ -181,16 +182,23 @@ inline KadContact& KadContact::operator=(KadContact&& other)
 
 inline void KadContact::setInvalid(const link_t& failed_link)
 {
-	// TODO? the current logic does not handle multiple failed links within a path
-	// simply ignores subsequent ones for now
-	if (state != State::invalid) {
+	if (state == State::valid) {
 		state= State::invalid;
 		rds_p= std::make_unique<RediscoveryState>(failed_link);
 	}
-	else
+	else // already invalid or rediscovering
 	{
-		if (failed_link != rds_p->failedLink and link_t(failed_link.second,failed_link.first) != rds_p->failedLink)
-			EV_WARN << "Unhandled case of multiple concurrent link failures within the same path! Contact:" << getKey().shortStr() << ", path:" << getPath() << "failed: " << rds_p->failedLink << " new: " << failed_link << endl;
+		ASSERT(rds_p != nullptr);
+		if (rds_p != nullptr) {
+			if (std::find_if(rds_p->failedLinkList.begin(),
+					 rds_p->failedLinkList.end(),
+					 [&](const auto& link) { return link == failed_link or (link.first == failed_link.second and link.second == failed_link.first); })
+			    == rds_p->failedLinkList.end())
+			{ // link not present yet, so add it to the list
+				EV_TRACE << "Adding another failed link " << failed_link << " to RDS for contact " << key.shortStr() << endl;
+				rds_p->failedLinkList.push_back(failed_link);
+			}
+		}
 	}
 }
 

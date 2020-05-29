@@ -227,9 +227,14 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, pathseqno_t 
 		    (contact->getPathSeqNo() < pathseqno) )
 		{
 			// in case the path had a failure, check whether the supposed new path actually avoids the broken link
-			if (contact->isInvalid() and containsUndirectedLink(myKey, contact->getKey(), path, contact->getRDS().failedLink))
-			{ // provided path does not repair broken link
-				return false;
+			if (contact->isInvalid())
+			{
+				for (const auto& failedlink : contact->getRDS().failedLinkList) {
+					if (containsUndirectedLink(myKey, contact->getKey(), path, failedlink)) {
+						// provided path does not repair broken link
+						return false;
+					}
+				} // end for
 			}
 
 			// sometimes updates may be received that carry a newer sequence number
@@ -313,9 +318,15 @@ bool KadRoutingTable::addPath(const OverlayKey& key, const kad_path& path, paths
 		    or
 		    (seqno_is_ok and (path.size() + viaPath.size()) < contact->getPathLength()) )
 		{
-			if (contact->isInvalid() and containsUndirectedLink(myKey, contact->getKey(), concatViaPath(viaPath, path), contact->getRDS().failedLink))
-			{ // provided path does not repair broken link
-				return false;
+			// in case the path had a failure, check whether the supposed new path actually avoids the broken link
+			if (contact->isInvalid())
+			{
+				for (const auto& failedlink : contact->getRDS().failedLinkList) {
+					if (containsUndirectedLink(myKey, contact->getKey(), concatViaPath(viaPath, path), failedlink)) {
+						// provided path does not repair broken link
+						return false;
+					}
+				} // end for
 			}
 			contact->setPath(concatViaPath(viaPath, path)); // will set contact automatically to valid
 			contact->setPathSeqNo(pathseqno);
@@ -648,7 +659,7 @@ void KadRoutingTable::invalidateContact(KadContact& contact, const link_t& faile
 		const auto &[failedNodeKey, otherNodeKey]= failed_link;
 		if (contact.isContainedinPath(myKey, failed_link))
 		{ // link somewhere in the path
-			// TODO: handle the case when there is another failed link in an already failed path
+
 			if (contact.isValid()) {
 
 				contact.setInvalid(failed_link);
@@ -658,6 +669,11 @@ void KadRoutingTable::invalidateContact(KadContact& contact, const link_t& faile
 				// if contact is important neighbor: send rediscovery immediately
 				// otherwise schedule normal rediscovery
 				policy->scheduleRediscovery(contact.getKey(), failedNodeKey, otherNodeKey, isInLastBucket(contact.getKey()));
+			}
+			else
+			if (contact.isInvalid()) { // contact already invalid or rediscovering
+				// add potentially further failed link
+					contact.setInvalid(failed_link);
 			}
 		}
 	}
@@ -694,10 +710,17 @@ void KadRoutingTable::invalidateContactsPN(const OverlayKey& failedNodeKey)
 			{
 				if (path[0] == failedNodeKey) // failed node is first hop
 				{
-					contact->setInvalid({failedNodeKey, myKey});
-					EV_TRACE << "Set Contact to invalid due to PN first hop failure: "  << *contact << endl;
-					// will schedule this for rediscovery later
-					policy->scheduleRediscovery(contact->getKey(), failedNodeKey, myKey, isInLastBucket(contact->getKey()));
+					if (contact->isValid()) {
+						contact->setInvalid({failedNodeKey, myKey});
+						EV_TRACE << "Set Contact to invalid due to PN first hop failure: "  << *contact << endl;
+						// will schedule this for rediscovery later
+						policy->scheduleRediscovery(contact->getKey(), failedNodeKey, myKey, isInLastBucket(contact->getKey()));
+					}
+					else
+					if (contact->isInvalid()) { // contact already invalid or rediscovering
+						// add potentially further failed link
+						contact->setInvalid({failedNodeKey, myKey});
+					}
 				}
 			}
 		} // end for inner loop over all contacts
@@ -709,10 +732,17 @@ void KadRoutingTable::invalidateContactsPN(const OverlayKey& failedNodeKey)
 			{
 				if (path[0] == failedNodeKey) // failed node is first hop
 				{
-					contact->setInvalid({failedNodeKey, myKey});
-					EV_TRACE << "Set Contact to invalid due to PN first hop failure: "  << *contact << endl;
-					// will schedule this for rediscovery later
-					policy->scheduleRediscovery(contact->getKey(), failedNodeKey, myKey, isInLastBucket(contact->getKey()));
+					if (contact->isValid()) {
+						contact->setInvalid({failedNodeKey, myKey});
+						EV_TRACE << "Set Contact to invalid due to PN first hop failure: "  << *contact << endl;
+						// will schedule this for rediscovery later
+						policy->scheduleRediscovery(contact->getKey(), failedNodeKey, myKey, isInLastBucket(contact->getKey()));
+					}
+					else
+					if (contact->isInvalid()) { // contact already invalid or rediscovering
+						// add potentially further failed link
+						contact->setInvalid({failedNodeKey, myKey});
+					}
 				}
 			}
 		} // end for inner loop over all contacts

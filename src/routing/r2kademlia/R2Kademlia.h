@@ -131,8 +131,8 @@ class R2Kademlia : public RPCProtocol, public KadPolicy, public StatisticSample
 	void sendDiscoveryReq(KadContact_p contact);
 	/// sends a find node call to find this node
 	void sendFindNode(const OverlayKey& key, bool exact=false);
-	/// sends a find node call for rediscovery, using a "not via" failed link)
-	void sendRediscovery(KadContact* failedcontact, const link_t& failedLink, uint8_t maxFanOut);
+	/// sends a find node call for rediscovery, possibly using "not via" failed link
+	void sendRediscovery(KadContact* failedcontact, uint8_t maxFanOut);
 
 	/// sends a data packet
 	void sendData(const OverlayKey& key);

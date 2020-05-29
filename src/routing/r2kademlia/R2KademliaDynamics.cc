@@ -523,11 +523,7 @@ void R2Kademlia::rediscoverContacts() {
 				// }
 
 				EV_TRACE << "rediscoverContacts(): number of via contacts: " << contacts.size() << endl;
-				// the following is somewhat redundant as the failed link is also stored in RediscoveryState
-			        const kad_path& failedLink(contact->getPath());
-				ASSERT(failedLink.size() == 2);
-				ASSERT(failedLink[0] != failedLink[1]);
-				sendRediscovery(rt_contact, {failedLink[0], failedLink[1]}, rediscoveryFanOutFactor);
+				sendRediscovery(rt_contact, rediscoveryFanOutFactor);
 			}
 		}
 		rediscoverQ.pop();
@@ -544,7 +540,7 @@ void R2Kademlia::rediscoverContacts() {
 
 
 // send a FindNodeReq message for rediscovery
-void R2Kademlia::sendRediscovery(KadContact* failedcontact, const link_t& failedLink, uint8_t maxFanOut) {
+void R2Kademlia::sendRediscovery(KadContact* failedcontact, uint8_t maxFanOut) {
 	EV_TRACE << "sendRediscovery w/ " << failedcontact->getKey().shortStr() << endl;
 
 	if (auto& contacts= failedcontact->getRDS().viaContacts; contacts.size() > 0)
@@ -564,7 +560,8 @@ void R2Kademlia::sendRediscovery(KadContact* failedcontact, const link_t& failed
 				packet->setDstNodeID(failedcontact->getKey());
 				packet->setExact(true);
 				packet->setRediscovery(true);
-				packet->addNotViaLink(failedLink, failedLink.first == myOverlayKey or failedLink.second == myOverlayKey);
+				for (auto& failedLink : failedcontact->getRDS().failedLinkList)
+					packet->addNotViaLink(failedLink, failedLink.first == myOverlayKey or failedLink.second == myOverlayKey);
 				sentRediscovery++;
 				EV_TRACE << "Rediscovery sending ... msg id=" << packet->getId() << " via " << contact->getKey().shortStr() << " fanout: " << fanout << endl;
 				EV_TRACE << "sending KadFindNodeReq" << endl;
@@ -582,7 +579,7 @@ void R2Kademlia::sendRediscovery(KadContact* failedcontact, const link_t& failed
 	else
 	{ // no (more) contacts to choose from (initially only possible for isolated nodes)
 		EV_WARN << "no (more) contacts found, cannot send rediscovery" << endl;
-		// TODO: maybe a second round of rediscovery for contacts in the deepest bucket?
+		// TODO maybe a second round of rediscovery for contacts in the deepest bucket?
 		// do not remove physical contacts
 		if (failedcontact->isInvalid() and failedcontact->isPhysicalNeighbor() == false)
 			routingTable.removeContact(failedcontact);
