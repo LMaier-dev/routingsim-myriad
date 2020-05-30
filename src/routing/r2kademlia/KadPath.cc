@@ -49,33 +49,27 @@ bool containsUndirectedLink(const OverlayKey& source, const OverlayKey& target, 
 /// searches for undirected link in given path, returns true if found, false if not found
 bool containsUndirectedLink(const kad_path& path, const OverlayKey& firstNodeKey, const OverlayKey& secondNodeKey)
 {
-	if (path.size() >= 2) // only for path that contain links
-	{
-		const OverlayKey* prev_node= &path[0];
-		// now loop over all nodes contained in the path
+	if (path.size() >= 2) // only for paths that contain links
+	{ // now loop over all nodes contained in the path
 		for (unsigned int i= 0; i != path.size(); i++)
 		{
-			if (path[i] == firstNodeKey)
-			{ // one end of the link detected
-				if (*prev_node == secondNodeKey)
-				{ // previous node is the other end of the link
-					return true;
+			// need at least one more node in the path for link testing
+			if ((i+1) < path.size())
+			{
+				if ( path[i+1] == secondNodeKey ) {
+					if (path[i] == firstNodeKey)
+						return true;
 				}
 				else
-				{ // check if next hop is other end of the link
-					if ((i+1) < path.size())
-					{ // next hop available
-						if (path[i+1] == secondNodeKey) // next hop is second node
-							return true;
-					}
-					else
-					{ // current node is last hop -> no link found
-						return false;
-					}
+				if ( path[i+1] == firstNodeKey ) {
+					if (path[i] == secondNodeKey)
+						return true;
 				}
+				else // the node i+1 cannot be part of the link, advance one more
+					i++; // so now i < path.size() still holds
 			}
-			// current node will be prev_node in next iteration
-			prev_node= &path[i];
+			else
+				return false;
 		} // end for
 		// if here: for loop is finished, but not found so far
 		return false;
