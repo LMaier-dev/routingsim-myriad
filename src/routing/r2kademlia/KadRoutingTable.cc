@@ -536,7 +536,10 @@ KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_t
 					     if (contact.isValid()) {
 						     for ( const auto& failedLink : notvialist) {
 							     if (containsUndirectedLink(myKey,contact.getKey(),contact.getPath(),failedLink))
+							     {
+								     EV_TRACE << "Contact " << contact << " matches not via " << failedLink << endl;
 								     return false;
+							     }
 						     };
 						     return true;
 					     }
@@ -652,7 +655,7 @@ size_type KadRoutingTable::getNumIndirectPaths() const
 
 void KadRoutingTable::invalidateContact(KadContact& contact, const link_t& failed_link)
 {
-	// if we find a failed link in the path, mark contact invalid
+	// if we find a failed link in the path, contact should schedule a rediscovery
 	const auto& path= contact.getPath();
 	if (path.size() > 0)
 	{
@@ -664,8 +667,7 @@ void KadRoutingTable::invalidateContact(KadContact& contact, const link_t& faile
 
 				contact.setInvalid(failed_link);
 
-				EV_TRACE << "Set Contact to invalid due to failed link <"
-					 << failedNodeKey.shortStr() << "," << otherNodeKey.shortStr() << ">:"  << contact << endl;
+				EV_TRACE << "Set Contact to invalid due to failed link " << failed_link << ":"  << contact << endl;
 				// if contact is important neighbor: send rediscovery immediately
 				// otherwise schedule normal rediscovery
 				policy->scheduleRediscovery(contact.getKey(), failedNodeKey, otherNodeKey, isInLastBucket(contact.getKey()));
@@ -677,6 +679,43 @@ void KadRoutingTable::invalidateContact(KadContact& contact, const link_t& faile
 			}
 		}
 	}
+}
+
+
+void KadRoutingTable::checkContact(KadContact& contact, const link_t& failed_link)
+{
+	// if we find a failed link in the path, send a ProbeReq to check for path validity
+	// if the path has actually failed, we'll get back a segment failure and rediscovery will start
+	const auto& path= contact.getPath();
+	if (path.size() > 0)
+	{
+		if (contact.isContainedinPath(myKey, failed_link))
+		{ // link somewhere in the path
+
+			if (contact.isValid()) {
+				EV_TRACE << "Will probe contact " << contact << " due to potentially failed link " << failed_link << ":" << endl;
+				policy->onContactCheck(contact);
+			}
+		}
+	}
+}
+
+
+/** check all contacts with paths that contain a failed link **/
+void KadRoutingTable::checkContacts(const link_t& failedlink)
+{
+	// iterate over all buckets and contacts (even PNcontacts, because they may use redirected paths)
+	for (KadBucket& b : buckets) {
+		for (auto& contact : b.contacts) {
+			if (contact->isValid())
+				checkContact(*contact, failedlink);
+		} // end for inner loop over all contacts
+
+		for (auto& contact : b.PNContacts) {
+			if (contact->isValid())
+				checkContact(*contact, failedlink);
+		} // end for inner loop over all PN contacts
+	} // end for over all buckets
 }
 
 

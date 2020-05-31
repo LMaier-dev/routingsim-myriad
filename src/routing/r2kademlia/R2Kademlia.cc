@@ -1407,6 +1407,12 @@ void R2Kademlia::reSyncPN(const KadContact& contact) {
 }
 
 
+void R2Kademlia::onContactCheck(const KadContact& contact) {
+	EV_TRACE << "contact check triggered for " << contact.getKey().shortStr() << endl;
+	sendProbe(&contact);
+}
+
+
 void R2Kademlia::recordScalars() {
 	recordScalar("forwardedPackets", forwardedPackets);
 	recordScalar("droppedPackets", droppedPackets);

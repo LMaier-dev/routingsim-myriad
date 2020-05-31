@@ -84,6 +84,8 @@ public:
 	virtual void reSyncPN(const KadContact& contact) = 0;
 	/** called when a rediscovery needs to be performed for a contact */
 	virtual void scheduleRediscovery(const OverlayKey& contact, const OverlayKey& notvia_unreachable_node, const OverlayKey& notvia_failednode_neighbor, bool immediate= false) = 0;
+	/** called when the path of a contact is probably broken and needs to be checked */
+	virtual void onContactCheck(const KadContact& contact) = 0;
 };
 
 /**
@@ -156,6 +158,11 @@ public:
 	
 	/// returns the number of paths in buckets
 	size_type getNumIndirectPaths() const;
+
+	/// if failed link is in contact's path send a ProbeReq to check for path validity
+	void checkContact(KadContact& contact, const link_t& failed_link);
+	/// do not invalidate valid contacts, but test path validity
+	void checkContacts(const link_t& failedlink);
 
 	/// invalidate all contacts with paths that contain a failed link otherNodeKey <-> failedNodeKey
 	void invalidateContacts(const link_t& failedLink);

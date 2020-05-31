@@ -161,6 +161,9 @@ public:
 	virtual void onImprovement(const KadContact& contact) override;
 	/** called when physical neighbors may be out of synch with their sequence numbers **/
 	virtual void reSyncPN(const KadContact& contact) override;
+	/** called when supposed failed link detected **/
+	virtual void onContactCheck(const KadContact& contact) override;
+
 	//@}
 
 	uint getHopLimitDefault() const { return hopLimit; };
@@ -426,6 +429,9 @@ bool R2Kademlia::processNotViaInformation(const KadPacket& packet)
 				// we only trust notvia to be current from nodes that indicate physical neighbor failure
 				// we should invalidate all contacts with that link in the path to them before answering
 				routingTable.invalidateContacts(packet.getFailedLink(i));
+			}
+			else {
+				routingTable.checkContacts(packet.getFailedLink(i));
 			}
 		} // end for
 	}
