@@ -449,7 +449,7 @@ std::unique_ptr<T> R2Kademlia::makePacket(const KadContact* contact, const char 
 	packet->setSource(myOverlayKey);
 	packet->setHopLimit(hopLimit);
 	packet->appendRoute(contact);
-	packet->setTargetSeqNo(contact->getPathSeqNo());
+	packet->setTargetSeqNo(contact->getStateSeqNo());
 	packet->setStateSeqNo(getGLSSeqNo());
 	return packet;
 }

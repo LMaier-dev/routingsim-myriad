@@ -32,6 +32,8 @@ namespace routingsim {
 class KadRoutingTable;
 class NeighborTable;
 
+typedef uint32_t age_t;
+
 
 class KadBucket
 {
@@ -111,12 +113,12 @@ public:
 	 * add a potentially new path, adds a contacts or updates an existing one
 	 * @returns true if path was added
 	 */
-	bool addPath(const OverlayKey& key, kad_path path, pathseqno_t pathseqno, KadContact::PathProperty prop);
+	bool addPath(const OverlayKey& key, kad_path path, stateseqno_t pathseqno, age_t contact_age, KadContact::PathProperty prop);
 	/**
 	 * add a potentially new path, adds a contact or updates an existing one
 	 * @returns true if path was added
 	 */
-	bool addPath(const OverlayKey& key, const kad_path& path, pathseqno_t pathseqno, const kad_path& via);
+	bool addPath(const OverlayKey& key, const kad_path& path, stateseqno_t pathseqno, age_t contact_age, const kad_path& via);
 	/**
 	 * Removes the contact with the given key from the routing table.
 	 * @returns true if the contact was removed, false if it was not present
@@ -206,7 +208,7 @@ public:
 
 protected:
 	/// adds a new contact, called by addPath, returns true if contact was added
-	virtual bool handleNewContact(const OverlayKey& key, kad_path path, pathseqno_t pathseqno, KadContact::PathProperty prop);
+	virtual bool handleNewContact(const OverlayKey& key, kad_path path, stateseqno_t pathseqno, age_t contact_age, KadContact::PathProperty prop);
 	/** @name bucket access */
 	//@{
 	/** returns the index of the bucket corresponding to the given overlay key. */

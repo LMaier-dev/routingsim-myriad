@@ -54,7 +54,7 @@ std::ostream& operator<<(std::ostream& os, const KadContact& c) {
 			os << '?';
 			break;
 	} // end switch
-	os << " #" << c.getPathSeqNo() << ' ';
+	os << " #" << c.getStateSeqNo() << " t=" << c.lastseen.trunc(SIMTIME_MS) << ' ';
 	os << c.getPath();
 	return os;
 }
