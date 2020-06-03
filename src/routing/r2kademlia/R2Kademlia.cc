@@ -812,6 +812,7 @@ void R2Kademlia::sendGetPhysicalNeighbors(KadContact_p contact)
 		std::bind(&R2Kademlia::handleQueryRouteResponse, this, ph::_1, ph::_2),
 		std::bind(&R2Kademlia::handleRPCTimeOut, this, ph::_1, ph::_2)
 	);
+	queriedNeighbors.insert(contact->getKey());
 }
 
 
@@ -848,6 +849,7 @@ void R2Kademlia::sendDiscoveryReq(KadContact_p contact)
 		std::bind(&R2Kademlia::handlePNDiscResponse, this, ph::_1, ph::_2),
 		std::bind(&R2Kademlia::handleRPCTimeOut, this, ph::_1, ph::_2)
 	);
+	queriedNeighbors.insert(contact->getKey());
 }
 
 
@@ -1477,6 +1479,7 @@ void R2Kademlia::recordScalars() {
 	recordScalar("routingTableUpdates", routingTable.getUpdateCount());
 	recordScalar("routingTableReplacements", routingTable.getReplacementCount());
 	recordScalar("routingTableIndirectPaths", routingTable.getNumIndirectPaths());
+	recordScalar("discoveredNeighborhood", queriedNeighbors.size());
 	nodeid_t nid =  Node::getNode(this)->getNodeId();
 	recordScalar("nodeId", nid);
 	recordScalar("degree", getNetworkManager()->getTopology().getNodeDegree(nid));
@@ -1611,10 +1614,18 @@ void R2Kademlia::readRTableRsp(const KadRTableRsp& packet) {
 			// even if contact was not interesting for RT, add it as PID entry if within discovery radius
 			// the following condition is correct because the target contact 
 			// is not contained in (viaPath + packet.getPath(i))
-			if ( viaPath.size() + packet.getPath(i).size() < discoveryRadius )
+			if ( packet.getContact(i)!= myOverlayKey and ((viaPath.size() + packet.getPath(i).size()) < discoveryRadius) )
 			{
 				KadContact neighborhoodContact(packet.getContact(i),
 							       routingTable.concatViaPath(viaPath, packet.getPath(i)));
+				// still room for one more hop in neighborhood exploration
+				// the same is done for new contacts in RT (see onNewContact)
+				if (viaPath.size() + packet.getPath(i).size() + 1  < discoveryRadius) {
+					// first check for already queried neighbors to avoid unnecessary QueryRouteReq
+					if (queriedNeighbors.find(neighborhoodContact.getKey()) == queriedNeighbors.end())
+						sendGetPhysicalNeighbors(&neighborhoodContact);
+				}
+
 				fwdTablePathID.addEntry(&neighborhoodContact, false);
 			}
 		}
