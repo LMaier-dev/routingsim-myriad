@@ -635,14 +635,15 @@ KadContactList KadRoutingTable::getAllContacts() const
 }
 
 
-KadContactList KadRoutingTable::getAllValidContacts() const
+KadContactList KadRoutingTable::getAllValidContacts(bool noPN) const
 {
 	KadContactList result{};
 	result.reserve(bucketSize * buckets.size());
 	for (auto& bucket : buckets)
 	{
 		copyValidContacts(bucket.contacts, result);
-		copyValidContacts(bucket.PNContacts, result);
+		if (noPN == false)
+			copyValidContacts(bucket.PNContacts, result);
 	}
 
 	return result;

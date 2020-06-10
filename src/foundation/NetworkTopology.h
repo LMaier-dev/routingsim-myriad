@@ -242,6 +242,9 @@ public:
 	/// active neighbors are also! re-enabled
 	void enableNode(nodeid_t node);
 
+	/// returns status of node
+	bool isActive(nodeid_t node) const { return (*BGLtopology)[node].active; }
+
 	// are the two nodes directly connected with an active link
 	bool isConnected(nodeid_t node1, nodeid_t node2);
 

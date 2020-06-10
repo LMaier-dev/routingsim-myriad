@@ -225,6 +225,7 @@ private:
 	void doProbe(short timerId);
 	void doProbeSelf(short timerId);
 	void doProbeNeighbors(short timerId);
+	void doProbeContacts(short timerId);
 	void doDataProbe(short timerId);
 	void doReachabilityTest(short timerId);
 	//@}
@@ -368,6 +369,9 @@ private:
 
 	// a list that is used to periodically probe neighbors
 	std::list<OverlayKey> probeNeighborQueue;
+
+	// a list that is used to periodically probe contacts
+	std::list<OverlayKey> probeContactQueue;
 
 	// selfMessage
 	bool pathSetupScheduled= false;

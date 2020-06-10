@@ -153,8 +153,8 @@ public:
 	KadContactList getClosestContacts(const OverlayKey& key, size_type n, bool validcontactsonly, const std::list<link_t>& notvialist= {}) const;
 	/// returns a list of all known contacts
 	KadContactList getAllContacts() const;
-	/// returns a list of all known valid contacts
-	KadContactList getAllValidContacts() const;
+	/// returns a list of all known valid contacts (if noPN true, PNs are not returned)
+	KadContactList getAllValidContacts(bool noPN) const;
 	/// returns the number of contacts in buckets
 	size_type getNumContacts() const;
 	

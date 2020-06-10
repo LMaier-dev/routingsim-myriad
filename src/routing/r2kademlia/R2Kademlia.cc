@@ -82,7 +82,9 @@ void R2Kademlia::onInitialize() {
 	addTimer(SimTime(225,SIMTIME_MS), SimTime(250,SIMTIME_MS), std::bind(&R2Kademlia::doProbeSelf, this, ph::_1));
 	// regularly probe for closest neighbors
 	addTimer(SimTime(1000,SIMTIME_MS), probeInterval*2, std::bind(&R2Kademlia::doProbeNeighbors, this, ph::_1));
-	// regularly send FindNodeReq to randomly chosen NodeIDs
+	// regularly probe for non PN contacts to test path liveliness
+	addTimer(SimTime(1000,SIMTIME_MS), probeInterval, std::bind(&R2Kademlia::doProbeContacts, this, ph::_1));
+	// regularly send FindNodeReq to randomly chosen IDs
 	addTimer(probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doProbe, this, ph::_1));
 	// check whether other existing nodes can be reached (uses KadObserver)
 	addTimer(probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doReachabilityTest, this, ph::_1));
@@ -1694,6 +1696,29 @@ void R2Kademlia::doProbeNeighbors(short timerId) {
 }
 
 
+// check for path validity
+void R2Kademlia::doProbeContacts(short timerId) {
+	if (neighborTable.size() == 0)
+		return; // node is isolated
+
+	if ( probeContactQueue.empty() )
+	{
+		// fill queue with current neighbors
+		auto contacts= routingTable.getAllValidContacts(true);
+		for (auto contactp : contacts)
+			probeContactQueue.push_back(contactp->getKey());
+	}
+
+	// check for reachability of neighbors
+	if (probeContactQueue.size()) {
+		EV_TRACE << "probing for contact: " << probeContactQueue.front() << endl;
+		sendFindNode(probeContactQueue.front(), true);
+		probeContactQueue.pop_front();
+	}
+}
+
+
+
 void R2Kademlia::doProbe(short timerId) {
 	if (neighborTable.size() == 0) return; // we are isolated
 	OverlayKey probeKey;
@@ -1754,12 +1779,28 @@ void R2Kademlia::doProbeSelf(short timerId) {
 
 void R2Kademlia::doReachabilityTest(short timerID) {
 	if (neighborTable.size() == 0) return; // we are isolated
-	const OverlayKey* key;
+	const OverlayKey* key(nullptr);
 	do {
+		// during periods of failed links we want to test reachability for affected nodes
 		if (getNetworkManager()->getFailedNodes().size() > 0) {
 			auto nodeit= getNetworkManager()->getFailedNodes().cbegin();
 			for (unsigned int index= intuniform(0, getNetworkManager()->getFailedNodes().size()-1); index > 0; index--)
 				nodeit++;
+
+			if (nodeit == getNetworkManager()->getFailedNodes().end())
+				return;
+
+			if (getNetworkManager()->getTopology().isActive(*nodeit) == false or
+			    getNetworkManager()->getTopology().getNodeDegree(*nodeit) == 0) {
+				if (getNetworkManager()->getFailedNodes().size() == 1) { // no other choice
+					return;
+				}
+				else { // next try
+					key= &myOverlayKey;
+					continue;
+				}
+			}
+
 
 			key = &getKadObserver().getNodeKey(*nodeit);
 			// it does not make sense to use the own key if it is the only choice
