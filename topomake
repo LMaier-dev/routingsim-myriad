@@ -155,3 +155,18 @@ wattsStrogatz10000: \
  $(TOPODIR)/watts_strogatz_graph_n10000_k6_p0.2_seed0.txt\
  $(TOPODIR)/watts_strogatz_graph_n10000_k6_p0.3_seed0.txt\
  $(TOPODIR)/watts_strogatz_graph_n10000_k6_p1.0_seed0.txt
+
+# random geometric graphs with avg degree 8
+rg: \
+ $(TOPODIR)./random_geometric_n100_r0.1692_seed0.txt \
+ $(TOPODIR)./random_geometric_n200_r0.118_seed0.txt \
+ $(TOPODIR)./random_geometric_n500_r0.07395_seed0.txt \
+ $(TOPODIR)./random_geometric_n1000_r0.0521_seed0.txt \
+ $(TOPODIR)./random_geometric_n2000_r0.0362_seed0.txt \
+ $(TOPODIR)./random_geometric_n5000_r0.02277_seed0.txt \
+ $(TOPODIR)./random_geometric_n10000_r0.0161_seed0.txt \
+ $(TOPODIR)./random_geometric_n20000_r0.011385_seed0.txt \
+ $(TOPODIR)./random_geometric_n50000_r0.0072_seed0.txt
+
+$(TOPODIR)/random_geometric_%.txt:
+	echo $* | sed -E "s#n([0-9]+)_r([0-1]+\.?[0-9]*)_seed([0-9]+)#./scripts/graphgen.py --seed \3 -d $(TOPODIR) rg \1 \2#" | bash

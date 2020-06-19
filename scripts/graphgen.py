@@ -32,6 +32,10 @@ def main():
     parser_plc.add_argument('K', type=int, help='each node is joined with its k nearest neighbors in a ring topology.')
     parser_plc.add_argument('P', type=float, help='The probability of rewiring each edge')
 
+    parser_rg = subparsers.add_parser('rg', help='random geometric graph')
+    parser_rg.add_argument('N', type=int, help='network size')
+    parser_rg.add_argument('R', type=float, help='radius')
+
     parser_cft = subparsers.add_parser('cft', help='clos network fat tree')
     parser_cft.add_argument('K', type=int, help='node degree')
     parser_cft.add_argument('--hosts', help='include hosts (degree 1)', action='store_true')
@@ -76,6 +80,18 @@ def main():
             ["", f"n = {opt.N}; k = {opt.K}; p = {opt.P}; seed = {opt.seed}"],
             ["time", datetime.now()]]
         G.graph['filename'] = f"watts_strogatz_graph_n{opt.N}_k{opt.K}_p{opt.P}_seed{opt.seed}.txt"
+    elif(opt.type == 'rg'):
+        G = networkx.random_geometric_graph(opt.N, opt.R, seed=opt.seed)
+        if (networkx.is_connected(G) == False):
+            complement = list(networkx.k_edge_augmentation(G,k=1))
+            if (len(complement) > 0):
+                G.add_edges_from(complement)
+                print(f"augmenting graph by {len(complement)} edges to let it be connected")
+        G.graph['info'] = [
+            ["", f"generated with NetworkX {networkx.__version__}, networkx.random_geometric_graph"],
+            ["", f"n = {opt.N}; r = {opt.R}; seed = {opt.seed}"],
+            ["time", datetime.now()]]
+        G.graph['filename'] = f"random_geometric_n{opt.N}_r{opt.R}_seed{opt.seed}.txt"
     elif(opt.type == 'gnp'):
         G = networkx.fast_gnp_random_graph(opt.N, opt.P, seed=opt.seed)
         G.graph['info'] = [
@@ -203,6 +219,8 @@ def clos_fat_tree(k, hosts=False):
     # pod node id is: pod*k + node
     # core node id is (with x,y core coordinates): k**2 + x*k//2 + y
     core_offset = k**2
+    # nodetypedict
+    node_type_attrs= dict()
 
     # initialize connections inside pods
     for i in range(0, k**2, k):
@@ -214,6 +232,17 @@ def clos_fat_tree(k, hosts=False):
         G.add_edges_from(itertools.product(
             my_range(core_offset + k//2*i, k//2),
             range(i, k**2, k)))
+
+    node_type_attrs[i]={"type" : "core"}
+    for pod in range(k):
+            for node in range(k):
+                    node_type_attrs[pod*k + node]={"type" : "pod"}
+    for i in range(k//2):
+        for j in range(i, k**2, k):
+            node_type_attrs[j]={"type" : "core"}
+
+    networkx.set_node_attributes(G,node_type_attrs)
+
     if hosts:
         # initialize host components
         host_offset = G.size()
