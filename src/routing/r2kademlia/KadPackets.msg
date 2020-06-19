@@ -61,6 +61,7 @@ packet KadRTableReq extends KadPacket {
 	// reserved flag is omitted
 	bool contactsOnly = false; // return contacts only
 	bool overlayNeighbors = false; // return k nearest overlay neighbors of the node
+	bool overlayNeighborsSource = false; // return k nearest overlay neighbors known for the source node
 	uint8_t neighborhood = 63; // physical l-hop neighborhood, 63 means full table
 }
 

@@ -163,7 +163,7 @@ rg: \
  $(TOPODIR)./random_geometric_n500_r0.07395_seed0.txt \
  $(TOPODIR)./random_geometric_n1000_r0.0521_seed0.txt \
  $(TOPODIR)./random_geometric_n2000_r0.0362_seed0.txt \
- $(TOPODIR)./random_geometric_n5000_r0.02277_seed0.txt \
+ $(TOPODIR)./random_geometric_n5000_r0.022762_seed0.txt \
  $(TOPODIR)./random_geometric_n10000_r0.0161_seed0.txt \
  $(TOPODIR)./random_geometric_n20000_r0.011385_seed0.txt \
  $(TOPODIR)./random_geometric_n50000_r0.0072_seed0.txt

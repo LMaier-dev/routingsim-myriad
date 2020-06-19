@@ -84,7 +84,7 @@ void FwdTablePathID::addEntry(KadContact_p contact, bool isForeignPID)
 		return;
 
 	// Routingtable entry on node 4: Dest 5: < 3 2 >
-	EV_TRACE << "addEntry(): called for contact " << *contact << " with path ";
+	//EV_TRACE << "addEntry(): called for contact " << *contact << " with path ";
 
 	// note: this path may be empty for physical neighbors
 	// Incoming PathIDs are required for physical neighbors, outgoing PathIDs not
@@ -92,7 +92,7 @@ void FwdTablePathID::addEntry(KadContact_p contact, bool isForeignPID)
 	// add destination node ID to end of the path (will never be empty then)
 	currentpath.push_back(contact->getKey());
 
-	EV_TRACE << currentpath << endl;
+	//EV_TRACE << currentpath << endl;
 
 	// prepend own nodeID for incoming PathID
 	PathID incomingPathID(getPathID(*ownNodeID, currentpath));

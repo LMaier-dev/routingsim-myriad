@@ -487,7 +487,7 @@ bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, sta
 			return true;
 		}
 		else {
-			//EV_DEBUG << "dropping new contact " << *contact << endl;
+			//EV_DEBUG << "bucket full - dropping new contact " << *contact << endl;
 			return false;
 		}
 	}

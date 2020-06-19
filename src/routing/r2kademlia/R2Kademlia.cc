@@ -824,7 +824,7 @@ void R2Kademlia::sendGetOverlayNeighbors(KadContact_p contact)
 	EV_TRACE << "sending query route request (ON) to " << *contact << endl;
 	auto req = makePacket<KadQueryRouteReq>(contact, "KadQueryRouteReq");
 	req->setNeighborhood(0); // no physical neighbors
-	req->setOverlayNeighbors(true); // get only overlay neighbors
+	req->setOverlayNeighborsSource(true); // get known overlay neighbors for my ID
 	req->setContactsOnly(false); // get also the routes
 	sendRpcCall(
 		std::move(req),
@@ -937,9 +937,9 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadQueryRouteReq> packet) {
 		}
 	}
 
-	if (packet->getOverlayNeighbors())
+	if (packet->getOverlayNeighbors() or packet->getOverlayNeighborsSource())
 	{
-		KadContactList ovlyneighbors= routingTable.getClosestContacts(myOverlayKey, routingTable.getSplitSize(), true);
+		KadContactList ovlyneighbors= routingTable.getClosestContacts(packet->getOverlayNeighbors() ? myOverlayKey : packet->getSource(), routingTable.getSplitSize(), true);
 
 		response->setContactArraySize(ovlyneighbors.size());
 		response->setPathArraySize(ovlyneighbors.size());
@@ -1396,10 +1396,10 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 
 	if (contact->isValid())
 	{
-		// request info about overlay neighbors of nodes in our deepest bucket
+		// request info about overlay neighbors near my node ID from nodes in our deepest bucket
 		if (routingTable.isInLastBucket(contact->getKey()))
 		{
-			//EV_TRACE << "New contact is in deepest bucket, will ask for its routing table" << endl;
+			//EV_TRACE << "New contact is in deepest bucket, will ask for contacts close to me" << endl;
 			sendGetOverlayNeighbors(contact);
 		}
 
