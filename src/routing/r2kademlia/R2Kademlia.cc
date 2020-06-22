@@ -1565,7 +1565,7 @@ void R2Kademlia::applyShortcut(KadPacket& packet)
 
 void R2Kademlia::checkForPathInstallation(KadPacket& packet)
 {
-	if ( not(usePathIDs) )
+	if ( usePathIDs == false )
 		return;
 	// will install path in data forward direction
 	// use existing path from answer (must reverse path)
@@ -1628,7 +1628,8 @@ void R2Kademlia::readRTableRsp(const KadRTableRsp& packet) {
 						sendGetPhysicalNeighbors(&neighborhoodContact);
 				}
 
-				fwdTablePathID.addEntry(&neighborhoodContact, false);
+				if (usePathIDs)
+					fwdTablePathID.addEntry(&neighborhoodContact, false);
 			}
 		}
 	}
