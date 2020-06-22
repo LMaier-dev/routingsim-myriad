@@ -94,6 +94,11 @@ def main():
         G.graph['filename'] = f"random_geometric_n{opt.N}_r{opt.R}_seed{opt.seed}.txt"
     elif(opt.type == 'gnp'):
         G = networkx.fast_gnp_random_graph(opt.N, opt.P, seed=opt.seed)
+        if (networkx.is_connected(G) == False):
+            complement = list(networkx.k_edge_augmentation(G,k=1))
+            if (len(complement) > 0):
+                G.add_edges_from(complement)
+                print(f"augmenting graph by {len(complement)} edges to let it be connected")
         G.graph['info'] = [
             ["", f"generated with NetworkX {networkx.__version__}, networkx.fast_gnp_random_graph"],
             ["", f"n = {opt.N}; p = {opt.P}; seed = {opt.seed}"],
@@ -101,6 +106,11 @@ def main():
         G.graph['filename'] = f"gnp_n{opt.N}_m{opt.P}_seed{opt.seed}.txt"
     elif(opt.type == 'gnm'):
         G = networkx.gnm_random_graph(opt.N, opt.M, seed=opt.seed)
+        if (networkx.is_connected(G) == False):
+            complement = list(networkx.k_edge_augmentation(G,k=1))
+            if (len(complement) > 0):
+                G.add_edges_from(complement)
+                print(f"augmenting graph by {len(complement)} edges to let it be connected")
         G.graph['info'] = [
             ["", f"generated with NetworkX {networkx.__version__}, networkx.gnm_random_graph"],
             ["", f"n = {opt.N}; m = {opt.M}; seed = {opt.seed}"],
@@ -108,6 +118,11 @@ def main():
         G.graph['filename'] = f"gnm_n{opt.N}_m{opt.M}_seed{opt.seed}.txt"
     elif(opt.type == 'gnd'):
         G = networkx.gnm_random_graph(opt.N, opt.D * opt.N/2, seed=opt.seed)
+        if (networkx.is_connected(G) == False):
+            complement = list(networkx.k_edge_augmentation(G,k=1))
+            if (len(complement) > 0):
+                G.add_edges_from(complement)
+                print(f"augmenting graph by {len(complement)} edges to let it be connected")
         G.graph['info'] = [
             ["", f"generated with NetworkX {networkx.__version__}, networkx.gnm_random_graph"],
             ["", f"n = {opt.N}; m = {opt.D * opt.N/2}; seed = {opt.seed}"],
