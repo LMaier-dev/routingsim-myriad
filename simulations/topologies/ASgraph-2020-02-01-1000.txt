@@ -1,8 +1,17 @@
 #Name: ASgraph 2020-02-01-1000
-#Type: Graph
+#Type: Graph of Autonomous Systems in the Internet extracted from BGP routingtables (routeviews) 2020/02/01 10:00
 #Number of nodes: 67640
 #Number of edges: 157325
 #Average degree:  4.6518
+# size: 67640
+# edges: 157325
+# connected: True
+# average degree: 4.651833234772324
+# density: 6.877442355404905e-05
+# radius: 7
+# diameter: 13
+# average clustering: 0.19447336931932954
+# average shortest path length (sampled): 3.877
 67640 157325
 0 1
 0 10
