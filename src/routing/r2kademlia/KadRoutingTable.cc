@@ -650,6 +650,35 @@ KadContactList KadRoutingTable::getAllValidContacts(bool noPN) const
 }
 
 
+// returns the two oldest entries from each bucket
+// However, contacts that have recent information <1s will not be selected
+void KadRoutingTable::getOldestValidContacts(std::list<OverlayKey>& result) const
+{
+	constexpr unsigned long ageThreshold= 1000UL; // do not consider contacts younger than 1s
+
+	for (auto& bucket : buckets)
+	{
+		KadContact_p oldest(nullptr);
+		KadContact_p secondoldest(nullptr);
+		for (auto it = bucket.contacts.begin(); it != bucket.contacts.end(); it++) {
+			if ( *it != nullptr and it->get()!= nullptr and it->get()->getAge() >= ageThreshold ) {
+				if (oldest != nullptr and oldest->getAge() < it->get()->getAge()) {
+					secondoldest= oldest; oldest= it->get();
+				}
+				else {
+					oldest= it->get();
+				}
+			}
+		}
+		if (oldest != nullptr) {
+			result.push_back(oldest->getKey());
+			if (secondoldest!= nullptr)
+				result.push_back(secondoldest->getKey());
+		}
+	} // end for iterate over all buckets
+}
+
+
 size_type KadRoutingTable::getNumContacts() const
 {
 	size_type sum = 0;

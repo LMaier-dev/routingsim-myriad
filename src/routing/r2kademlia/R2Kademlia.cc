@@ -1704,10 +1704,8 @@ void R2Kademlia::doProbeContacts(short timerId) {
 
 	if ( probeContactQueue.empty() )
 	{
-		// fill queue with current neighbors
-		auto contacts= routingTable.getAllValidContacts(true);
-		for (auto contactp : contacts)
-			probeContactQueue.push_back(contactp->getKey());
+		// fill queue with current oldest neighbors (2 for each bucket)
+		routingTable.getOldestValidContacts(probeContactQueue);
 	}
 
 	// check for reachability of neighbors

@@ -155,6 +155,9 @@ public:
 	KadContactList getAllContacts() const;
 	/// returns a list of all known valid contacts (if noPN true, PNs are not returned)
 	KadContactList getAllValidContacts(bool noPN) const;
+	/// returns a list of two oldest valid contacts per bucket
+	void getOldestValidContacts(std::list<OverlayKey>& result) const;
+
 	/// returns the number of contacts in buckets
 	size_type getNumContacts() const;
 	
