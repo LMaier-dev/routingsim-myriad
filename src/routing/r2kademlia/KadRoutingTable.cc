@@ -650,30 +650,47 @@ KadContactList KadRoutingTable::getAllValidContacts(bool noPN) const
 }
 
 
-// returns the two oldest entries from each bucket
+// returns the two oldest entries from each bucket, deepest contacts first and oldest before newer (per bucket)
 // However, contacts that have recent information <1s will not be selected
 void KadRoutingTable::getOldestValidContacts(std::list<OverlayKey>& result) const
 {
-	constexpr unsigned long ageThreshold= 1000UL; // do not consider contacts younger than 1s
+	constexpr unsigned long ageThreshold= 2000UL; // do not consider contacts younger than 2s
 
 	for (auto& bucket : buckets)
 	{
 		KadContact_p oldest(nullptr);
 		KadContact_p secondoldest(nullptr);
 		for (auto it = bucket.contacts.begin(); it != bucket.contacts.end(); it++) {
-			if ( *it != nullptr and it->get()!= nullptr and it->get()->getAge() >= ageThreshold ) {
-				if (oldest != nullptr and oldest->getAge() < it->get()->getAge()) {
-					secondoldest= oldest; oldest= it->get();
+			if ( *it != nullptr and it->get()!= nullptr and it->get()->getAge() > ageThreshold ) {
+				if (oldest != nullptr) {
+					// older entry? then replace oldest
+					if (oldest->getAge() < it->get()->getAge()) {
+						secondoldest= oldest; oldest= it->get();
+					}
+					else if (secondoldest != nullptr and secondoldest->getAge() < it->get()->getAge()) {
+						// replace second oldest
+						secondoldest= it->get();
+					}
 				}
-				else {
+				else { // initialize
 					oldest= it->get();
 				}
 			}
 		}
+
 		if (oldest != nullptr) {
-			result.push_back(oldest->getKey());
-			if (secondoldest!= nullptr)
-				result.push_back(secondoldest->getKey());
+			if (secondoldest!= nullptr) {
+				result.push_front(secondoldest->getKey());
+				//EV_TRACE << "Contacts to refresh: "
+				//	 << oldest->getKey().shortStr() << " (age: " << oldest->getAge() << ") "
+				//	 << secondoldest->getKey().shortStr() << " (age: " << secondoldest->getAge() << ")" << endl;
+			}
+			//else {
+				//EV_TRACE << "Contact to refresh: "
+				//	 << oldest->getKey().shortStr() << " (age: " << oldest->getAge() << ")" << endl;
+			//}
+			// push older entry first
+			result.push_front(oldest->getKey());
 		}
 	} // end for iterate over all buckets
 }
