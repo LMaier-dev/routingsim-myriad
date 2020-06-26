@@ -1688,12 +1688,18 @@ void R2Kademlia::doProbeNeighbors(short timerId) {
 			probeNeighborQueue.push_back(contactp->getKey());
 	}
 
-	// check for reachability of neighbors
-	if (probeNeighborQueue.size()) {
-		EV_TRACE << "probing for neighbor: " << probeNeighborQueue.front() << endl;
-		sendFindNode(probeNeighborQueue.front(), true);
+	bool probed(false);
+	while (probeNeighborQueue.size() > 0 and !probed) {
+		// check for reachability of neighbors
+		// do not probe in case contact not found or too young
+		if (auto contactp= routingTable.getContact(probeNeighborQueue.front());
+		    contactp != nullptr and contactp->getAge() > R2Kademlia::ContactAgeThreshold) {
+			EV_TRACE << "probing for neighbor: " << probeNeighborQueue.front() << endl;
+			sendFindNode(probeNeighborQueue.front(), true);
+			probed= true;
+		}
 		probeNeighborQueue.pop_front();
-	}
+	} // end while
 }
 
 
@@ -1709,11 +1715,21 @@ void R2Kademlia::doProbeContacts(short timerId) {
 	}
 
 	// check for reachability of neighbors
-	if (probeContactQueue.size()) {
-		EV_TRACE << "probing for contact: " << probeContactQueue.front() << endl;
-		sendFindNode(probeContactQueue.front(), true);
+	bool probed(false);
+	while (probeContactQueue.size() > 0 and !probed)
+	{
+		// do not probe in case contact not found or too young
+		if (auto contactp= routingTable.getContact(probeContactQueue.front());
+		    contactp != nullptr and contactp->getAge() > R2Kademlia::ContactAgeThreshold) {
+			EV_TRACE << "probing for contact: " << probeContactQueue.front() << endl;
+			sendFindNode(probeContactQueue.front(), true);
+			probed= true;
+		}
+		else
+			EV_TRACE << "skipped contact: " << probeContactQueue.front() << endl; 
+
 		probeContactQueue.pop_front();
-	}
+	};
 }
 
 

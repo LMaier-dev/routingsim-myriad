@@ -192,6 +192,8 @@ public:
 	//@}
 	pathseqno_t getGLSSeqNo() const { return glsseqno; }
 
+	static constexpr unsigned long ContactAgeThreshold = 2000UL;
+
 private:
 	/** @name message generation */
 	//@{
