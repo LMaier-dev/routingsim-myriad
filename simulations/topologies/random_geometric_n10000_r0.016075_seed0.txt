@@ -1,11 +1,15 @@
 # : generated with NetworkX 2.4, networkx.random_geometric_graph
 # : n = 10000; r = 0.016075; seed = 0
-# time: 2020-07-08 15:41:28.081833
+# time: 2020-07-09 07:56:42.371042
 # size: 10000
 # edges: 40007
 # connected: True
 # average degree: 8.0014
 # density: 0.0008002200220022002
+# radius: 62
+# diameter: 121
+# average clustering: 0.5907753366980529
+# average shortest path length (sampled): 46.568
 10000	40007
 0	2115
 2115	0
