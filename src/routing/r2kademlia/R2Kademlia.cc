@@ -220,7 +220,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 
 			case KAD_PathSetupReq: // allowed to take shortcuts
 				// TODO send back response if path ID already installed and still valid
-				applyShortcut(*packet);
+				// applyShortcut(*packet);
 				forwardedPathSetup++;
 				break;
 

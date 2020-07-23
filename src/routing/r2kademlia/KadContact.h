@@ -106,8 +106,8 @@ public:
 	const OverlayKey& getKey() const { return key; }
 	/// compares the given overlay key to the contacts overlay key
 	bool hasKey(const OverlayKey& other) const { return other == key; }
-	/// returns the length of the path
-	/// i.e. the intermediate hops between me and this contact
+	/// returns the length of the path (here: number of hops-1)
+	/// i.e., the _intermediate hops_ between me and this contact
 	size_t getPathLength() const { return path.size(); }
 	/// sets the path to reach this contact (will implicitly set status to valid)
 	void setPath(kad_path path) { this->path = std::move(path); setValid(); }
