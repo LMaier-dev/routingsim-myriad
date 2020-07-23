@@ -161,7 +161,7 @@ def main():
         p = pathlib.Path(opt.PATH)
         G.graph['info'] = [
             ["", f"converted with NetworkX {networkx.__version__}, networkx.read_graphml"],
-            ["", f"imput file: {p}"],
+            ["", f"input file: {p}"],
             ["time", datetime.now()]]
         G.graph['filename'] = f"{p.name}.txt"
     else:
@@ -248,12 +248,11 @@ def clos_fat_tree(k, hosts=False):
             my_range(core_offset + k//2*i, k//2),
             range(i, k**2, k)))
 
-    node_type_attrs[i]={"type" : "core"}
     for pod in range(k):
             for node in range(k):
                     node_type_attrs[pod*k + node]={"type" : "pod"}
     for i in range(k//2):
-        for j in range(i, k**2, k):
+        for j in my_range(core_offset + k//2*i, k//2):
             node_type_attrs[j]={"type" : "core"}
 
     networkx.set_node_attributes(G,node_type_attrs)
