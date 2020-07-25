@@ -13,8 +13,8 @@
 // along with this program.  If not, see http://www.gnu.org/licenses/.
 // 
 
-#ifndef __ROUTINGSIM_KadRoutingTalbe_H_
-#define __ROUTINGSIM_KadRoutingTalbe_H_
+#ifndef __ROUTINGSIM_KadRoutingTable_H_
+#define __ROUTINGSIM_KadRoutingTable_H_
 
 #include <omnetpp.h>
 #include <memory>
