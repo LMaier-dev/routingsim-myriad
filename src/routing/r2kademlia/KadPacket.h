@@ -63,9 +63,9 @@ public:
 	inline kad_path getSrcPath(uint from = 0) const { return getSrcPath(from, route_arraysize); }
 	/// sets the path of this packet to the reverse path of the other packet
 	/// taking into acount the progress of the other packet
-	void setReturnPathFrom(KadPacket& other);
+	void setReturnPathFrom(const KadPacket& other);
 	/// same as setReturnPathFrom, but shortens the path if possible (returns true if it was)
-	bool setSimplifiedReturnPathFrom(KadPacket& other);
+	bool setSimplifiedReturnPathFrom(const KadPacket& other);
 	//@}
 
 	/** @name inline utility functions */

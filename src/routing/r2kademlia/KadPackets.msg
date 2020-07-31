@@ -141,6 +141,7 @@ packet KadPathSetupReq extends KadPacket {
 
 packet KadPathSetupRsp extends KadAnswer {
 	type = KAD_PathSetupRsp;
+	OverlayKey fwdSourcePath[];
 }
 
 

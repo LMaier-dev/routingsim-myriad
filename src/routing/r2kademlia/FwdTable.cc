@@ -77,11 +77,40 @@ std::string FwdTablePathID::str() const
 }
 
 
-// contact is sometimes a temporary variable, i.e., the contact may not be part of the routing table yet
-void FwdTablePathID::addEntry(KadContact_p contact, bool isForeignPID)
+
+// checks whether path to contact already exists as PID
+bool FwdTablePathID::existsEntry(KadContact_p contact)
 {
        	if (contact == nullptr)
-		return;
+		return false;
+
+	// Routingtable entry on node 4: Dest 5: < 3 2 >
+	//EV_TRACE << "existsEntry(): called for contact " << *contact << " with path ";
+
+	// note: this path may be empty for physical neighbors
+	// Incoming PathIDs are required for physical neighbors, outgoing PathIDs not
+	kad_path currentpath(contact->getPath());
+	// add destination node ID to end of the path (will never be empty then)
+	currentpath.push_back(contact->getKey());
+
+	//EV_TRACE << currentpath << endl;
+
+	// prepend own nodeID for incoming PathID
+	PathID incomingPathID(getPathID(*ownNodeID, currentpath));
+
+	// check for already existing PID
+	return PIDFwdTable.find(incomingPathID) != PIDFwdTable.end();
+}
+
+
+// contact is sometimes a temporary variable, i.e., the contact may not be part of the routing table yet
+// precalc is set for contacts within the discovery range
+// @returns incoming PathID if entry was added or already present, otherwise (already existed etc.) PathID::undefined
+PathID
+FwdTablePathID::addEntry(KadContact_p contact, bool isForeignPID, bool precalc)
+{
+       	if (contact == nullptr)
+		return PathID::UndefinedPathID;
 
 	// Routingtable entry on node 4: Dest 5: < 3 2 >
 	//EV_TRACE << "addEntry(): called for contact " << *contact << " with path ";
@@ -104,26 +133,13 @@ void FwdTablePathID::addEntry(KadContact_p contact, bool isForeignPID)
 		// set foreign flag
 		if (isForeignPID)
 			pidentry->second.setForeign();
-		return; // already there, fine
+		if (precalc)
+			pidentry->second.setPrecalc();
+
+		return incomingPathID; // already there, fine
 	}
 
 	FwdTableEntry fwdentry;
-	// Check for previous existing entry for this contact
-
-	if ( auto it= NIDPIDTable.find(contact->getKey()); it != NIDPIDTable.end() )
-	{
-		//EV_TRACE << "addEntry(): PID entry for contact " << contact->getKey().shortStr() << " existed already with incoming PID " << it->second << endl;
-		if (it->second == incomingPathID)
-		{
-			//EV_TRACE << "addEntry(): same PID entry for contact already existed - ignored" << endl;
-			return;
-		}
-
-		// do the right thing now and call modEntry
-		// will probably add an additional entry
-		modEntry(contact, isForeignPID);
-		return;
-	}
 
 	fwdentry.outgoingPathID= (currentpath.size() > 1) ? getPathID(currentpath) : PathID::UndefinedPathID;
 	fwdentry.setPathLength(currentpath.size());
@@ -134,15 +150,19 @@ void FwdTablePathID::addEntry(KadContact_p contact, bool isForeignPID)
 	else
 		fwdentry.setLocal();
 
+	if (precalc)
+		fwdentry.setPrecalc();
+
 	fwdentry.fwdAction=
 		(currentpath.size()==1) // next hop is our physical neighbor
 		? FwdTableEntry::Action::fwdNextKadId : FwdTableEntry::Action::fwdNextPathID;
-	
+
 	PIDFwdTable[incomingPathID]= fwdentry;
-	NIDPIDTable[contact->getKey()]= incomingPathID;
 
 	EV_TRACE << "addEntry(): inPID: " << incomingPathID << " outPID: "
 		 << fwdentry.outgoingPathID << " path: " << currentpath << endl;
+
+	return incomingPathID;
 }
 
 
@@ -155,7 +175,7 @@ bool FwdTablePathID::modEntry(KadContact_p contact, bool isForeignPID)
 	PathID priorPathID= PathID::UndefinedPathID;
 	bool additionalEntry= false;
 
-	// Lookup old entry if it exists
+	// Lookup old entry if it exists (which should be the case!)
 	if ( auto pidentry= NIDPIDTable.find(contact->getKey()); pidentry != NIDPIDTable.end() )
 	{
 		kad_path newpath(contact->getPath());
@@ -280,7 +300,7 @@ void FwdTablePathID::delPIDEntry(PathID pid)
 			it->second.prevPathID= PathID::UndefinedPathID;
 		}
 
-		if ( not it->second.isLocal() and not it->second.isForeign() ) {
+		if ( not it->second.isLocal() and not it->second.isForeign() and not it->second.isPrecalc()) {
 			EV_TRACE << "FwdTablePathID::delEntry PathID " << pid << " deleted." << endl;
 			// delete this PID Entry
 			PIDFwdTable.erase(it);
@@ -301,7 +321,7 @@ void FwdTablePathID::delEntry(KadContact_p contact)
 	// Lookup entry
 	if ( auto pidentry= NIDPIDTable.find(contact->getKey()); pidentry != NIDPIDTable.end() )
 	{
-		// delete all PID entries related to this contact
+		// delete all PID entries related to this contact except when they were precalculated
 		PathID currentPathID= pidentry->second;
 
 		// get fwdentry and remove local flag for related PIDs because the local contact gets deleted

@@ -218,17 +218,24 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 			        }
 				break;
 
-			case KAD_PathSetupReq: // allowed to take shortcuts
-				// TODO send back response if path ID already installed and still valid
-				// applyShortcut(*packet);
-				forwardedPathSetup++;
+			case KAD_PathSetupReq:
+				// as intermediate node I need to check to path ID installation
+				// returns true if path was installed: forward to next hop
+				if ( checkForPathInstallation(*packet) ) {
+					forwardedPathSetup++;
+				}
+				else { // send back response if path ID already present/installed
+					EV_TRACE << "KadPathSetupReq: PID for path " << packet->getSrcPath(packet->getProgress())
+						 << " already present" << endl;
+
+					sendPacket(makeAnswerKadPathSetupRsp(*packet));
+					return; // this will delete the original packet
+				}
 				break;
 
 			case KAD_PathSetupRsp:
 				EV_TRACE << "forwarding PathSetupRsp, origin source path: <"
 					 << packet->reversePath(packet->getSrcPath()) << endl;
-				// add potential pathID for destination at this intermediate node
-				checkForPathInstallation(*packet);
 				break;
 
 			case KAD_UpdateRouteReq: // check for unreachable info
@@ -473,7 +480,8 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt) {
 
 	EV_TRACE << "forwardPacket(): " << packet->getName() << " dest " << packet->getTarget().shortStr()
 		 << " next hop: " << nextHop.shortStr() << " (" << nid << ')'
-		 << " nonce=" << packet->getNonce() << endl;
+		 << " nonce=" << packet->getNonce()
+		 << " path " << packet->getSrcPath() << " progress=" << packet->getProgress() << endl;
 
 	if (nid != undefined_node) {
 		nodePkt->encapsulate(packet.release());
@@ -485,10 +493,7 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt) {
 	}
 	else { // next hop not available
 		// for Routing Updates and Rediscovery messages try to use overlay-based forwarding
-		EV_TRACE << "forwardPacket(): next hop unavailable, path <";
-		for (unsigned int i= 0; i < packet->getRouteArraySize(); i++)
-			EV_TRACE << ' ' << packet->getRoute(i).shortStr();
-		EV_TRACE << " > progress=" << packet->getProgress() << endl;
+		EV_TRACE << "forwardPacket(): next hop " << nextHop.shortStr() << " unavailable" << endl;
 
 		const OverlayKey* finaldestination(nullptr);
 		KadUpdateRouteReq* updatepacket(nullptr);
@@ -1306,7 +1311,7 @@ void R2Kademlia::onErrorPacket(KadError& error) {
 		case KAD_PathIDUnknown:
 		{ // KAD_PathIDUnknown: we should try to resetup the path
 			auto affectedContact= routingTable.getContact(original->getTarget());
-			if (affectedContact and affectedContact->isValid())
+			if (affectedContact and affectedContact->isValid() and affectedContact->getPathLength() > (discoveryRadius+1U))
 			{
 				schedulePathSetup(affectedContact->getKey());
 			}
@@ -1403,15 +1408,22 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 			sendGetOverlayNeighbors(contact);
 		}
 
-		if (usePathIDs)
-			fwdTablePathID.addEntry(contact, false);
+		if (usePathIDs and contact->getPathLength() < discoveryRadius) {
+			// it is required to add all PIDs to nodes within the discovery radius
+			// since the contact path excludes the contact itself the above condition includes nodes <= discoveryRadius
+			if (auto incomingPID= fwdTablePathID.addEntry(contact, false, true); incomingPID != PathID::UndefinedPathID)
+				fwdTablePathID.setNIDtoPIDmapping(contact->getKey(), incomingPID);
+		}
 	}
 
-	if (usePathIDs and contact->isValid() and contact->getPathProperty() == KadContact::PathProperty::indirect
-	    and contact->getPathLength() > discoveryRadius)
-	{ // send a path setup request packet for installing PIDs in intermediate nodes for this indirectly learned route
-		// only do this for paths longer than two hops
-		EV_TRACE << "Triggering path setup to " << contact->getKey().shortStr() << endl;
+	// send a path setup request packet for installing PIDs in intermediate nodes for this route
+	if (usePathIDs and contact->isValid() and contact->getPathLength() > (discoveryRadius+1U))
+	{ 
+		// only do this for paths longer than (discovery radius+1) (e.g., three+1) hops:
+		// the next node precalculated already all path IDs within its own discovery radius and
+		// we are just one hop away, so only required setup for paths longer than (discovery radius+1)
+		// note that the contact->getPath() excludes the contact itself
+		EV_TRACE << "Triggering path setup to " << contact->getKey().shortStr() << ": " << contact->getPath() << endl;
 		schedulePathSetup(contact->getKey());
 	}
 
@@ -1426,13 +1438,18 @@ void R2Kademlia::onImprovement(const KadContact& contact) {
 	//ASSERT( getKadObserver().checkSeqNo(contact.getKey(),contact.getStateSeqNo()) == true );
 	if (contact.isValid())
 	{
-		if (usePathIDs) fwdTablePathID.modEntry(&contact, false);
+		if (usePathIDs) {
+			fwdTablePathID.modEntry(&contact, false);
+		}
 	}
 
 	if (usePathIDs and contact.isValid() and contact.getPathProperty() == KadContact::PathProperty::indirect)
 	{ // send a path setup request packet for installing PIDs in intermediate nodes for this indirectly learned route
 		//EV_TRACE << "Triggering path setup to " << contact.getKey().shortStr() << endl;
-		schedulePathSetup(contact.getKey());
+		// no need to setup routes within discovery radius + 1 distance
+		// (note/remember: getPathLength() does not include the last hop)
+		if ( contact.getPathLength() > (discoveryRadius+1U) )
+			schedulePathSetup(contact.getKey());
 	}
 
 	// TODO: wait grace period
@@ -1563,16 +1580,16 @@ void R2Kademlia::applyShortcut(KadPacket& packet)
 }
 
 
-void R2Kademlia::checkForPathInstallation(KadPacket& packet)
+// returns false if path already exists, returns true if path was installed
+bool R2Kademlia::checkForPathInstallation(KadPacket& packet)
 {
 	if ( usePathIDs == false )
-		return;
+		return false;
 	// will install path in data forward direction
-	// use existing path from answer (must reverse path)
-	KadContact tmpcontact(packet.getSource(),
-			      packet.reversePath(packet.getSrcPath(1, packet.getProgress())));
+	KadContact tmpcontact(packet.getTarget(),
+			      packet.getSrcPath(1, packet.getProgress()));
 
-	fwdTablePathID.addEntry(&tmpcontact, true);
+	return fwdTablePathID.addEntry(&tmpcontact, true, tmpcontact.getPathLength() < discoveryRadius);
 }
 
 
@@ -1629,7 +1646,7 @@ void R2Kademlia::readRTableRsp(const KadRTableRsp& packet) {
 				}
 
 				if (usePathIDs)
-					fwdTablePathID.addEntry(&neighborhoodContact, false);
+					fwdTablePathID.addEntry(&neighborhoodContact, false, true);
 			}
 		}
 	}

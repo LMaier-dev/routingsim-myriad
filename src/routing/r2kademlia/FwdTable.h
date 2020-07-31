@@ -28,7 +28,8 @@ namespace routingsim {
 			valid         = 1, // path intact so far
 			local         = 2, // locally wanted (contact or neighbor)
 			foreign       = 4, // PID wanted by KadPathSetup
-			obsolete      = 8
+			obsolete      = 8,
+			precalc       = 16 // typically all paths in the discovery radius
 		};
 
 		enum class Action {
@@ -48,12 +49,17 @@ namespace routingsim {
 		bool isValid() const { return fwdState & State::valid; }
 
 		void unsetForeign() { fwdState &= ~State::foreign; };
-		void setForeign() { fwdState = fwdState | State::foreign; };
+
+		void setForeign() { if (not isPrecalc()) fwdState = fwdState | State::foreign; };
 		bool isForeign() const { return fwdState & State::foreign; };
 
 		void unsetLocal() { fwdState &= ~State::local; };
 		void setLocal() { fwdState |= State::local; };
 		bool isLocal() const { return fwdState & State::local; };
+
+		void unsetPrecalc() { fwdState &= ~State::precalc; };
+		void setPrecalc() { fwdState |= State::precalc; unsetForeign(); };
+		bool isPrecalc() const { return fwdState & State::precalc; };
 
 		bool isUndefined() const { return fwdState == State::undefined; }
 
@@ -68,7 +74,7 @@ namespace routingsim {
 		std::unordered_map<OverlayKey,FwdTableEntry> NIDFwdTable;
 	};
 	*/
-
+	
 	class FwdTablePathID : public cObject {
 	public:
 		// This stores incoming PathID -> PathID/NextHop mappings plus state and action
@@ -78,7 +84,14 @@ namespace routingsim {
 		std::unordered_map<OverlayKey,PathID> NIDPIDTable;
 		// cannot use constructor to set ID, because OnInitialize generates the Node ID
 	        void setOwnNodeID(const OverlayKey* myownNodeID) { ownNodeID= myownNodeID; };
-		void addEntry(KadContact_p contact, bool foreignPID);
+		// returns true if exactly this PID exists for path to contact
+		bool existsEntry(KadContact_p contact);
+
+		inline void setNIDtoPIDmapping(const OverlayKey& nid, const PathID incomingPathID);
+
+		// try to add PID for path to contact, returns incomingPID or undefined on failure
+		PathID addEntry(KadContact_p contact, bool foreignPID, bool precalc);
+		// modify PID for path to contact
 		bool modEntry(KadContact_p contact, bool foreignPID);
 		void delEntry(KadContact_p contact);
 		void delPIDEntry(PathID pid);
@@ -94,7 +107,14 @@ namespace routingsim {
 	private:
 		const OverlayKey* ownNodeID = nullptr;
 	};
-	
+
+
+inline
+void
+FwdTablePathID::setNIDtoPIDmapping(const OverlayKey& nid, const PathID incomingPathID) {
+	NIDPIDTable[nid]= incomingPathID;
+}
+
 } // end namespace
 
 #endif // __ROUTINGSIM_FwdTable_H_

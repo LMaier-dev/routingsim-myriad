@@ -27,23 +27,49 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadPathSetupReq> packet) {
 	EV_TRACE << "received PathSetupReq from " << packet->getSource().shortStr() << " to " << packet->getTarget().shortStr()
 		 << " sending back answer" << endl;
 	receivedPathSetup++;
-	sendPacket(makeAnswer<KadPathSetupRsp>(*packet));
+	sendPacket(makeAnswerKadPathSetupRsp(*packet));
 }
 
 
 bool R2Kademlia::handlePathSetupResponse(KadPacket_p answer, RPCState& rpcState) {
 	if (rpcState.status != RPC_SUCCESS) return true;
-	ASSERT(answer->getSource() == rpcState.original_packet->getTarget());
+
 	std::unique_ptr<KadPathSetupRsp> pathSetupRsp = safe_packet_cast<KadPathSetupRsp>(answer);
 
-	// must check for modified path in Response, because it may have taken a shortcut
-	KadContact contact(pathSetupRsp->getSource(), pathSetupRsp->reversePath(pathSetupRsp->getIntermediatePath()));
-	EV_TRACE << "Received PathSetupRsp, source path: <";
-	for (auto& k : pathSetupRsp->getSrcPath())
-		EV_TRACE << ' ' << k.shortStr();
-	EV_TRACE << " >" << endl;
+	// original intended path for setup should be set in answer
+	ASSERT(pathSetupRsp->getFwdSourcePathArraySize()>0);
 
-	fwdTablePathID.addEntry(&contact, true);
+	kad_path setuppath;
+	OverlayKey target(pathSetupRsp->getFwdSourcePath(pathSetupRsp->getFwdSourcePathArraySize()-1));
+	// note that FwdSourcePath includes the target node
+	if (pathSetupRsp->getFwdSourcePathArraySize() > 1) {
+		setuppath.resize(pathSetupRsp->getFwdSourcePathArraySize()-1);
+		for (unsigned int i= 0; i<pathSetupRsp->getFwdSourcePathArraySize()-1; i++)
+			setuppath[i]= pathSetupRsp->getFwdSourcePath(i);
+
+	}
+	KadContact contact(target, setuppath);
+
+	EV_TRACE << "Received PathSetupRsp, source path: " << setuppath << " to " << target.shortStr() << endl;
+
+	// meanwhile the contact may have been replaced or deleted etc.
+	// also the pathID may have been updated for the contact in the meantime
+	// otherwise actually install the path
+	if (routingTable.getContact(contact.getKey()) != nullptr) {
+		// TODO: correction action in case the PathID was already installed meanwhile
+		// e.g., maybe without path setup as precalc
+		if (auto pidentry= fwdTablePathID.NIDPIDTable.find(contact.getKey()); pidentry != fwdTablePathID.NIDPIDTable.end()) {
+			// contact to PID mapping exists already, then call modEntry()
+			fwdTablePathID.modEntry(&contact, false);
+		}
+		else {
+			if (auto incomingPID= fwdTablePathID.addEntry(&contact, false, false); incomingPID != PathID::UndefinedPathID) {
+				fwdTablePathID.setNIDtoPIDmapping(contact.getKey(),incomingPID);
+			}
+		}
+	}
+	else
+		EV_TRACE << "PathSetupRsp: ignoring, because contact " << target.shortStr() << " does not exist anymore";
 
 	return true;
 }
@@ -55,12 +81,12 @@ void R2Kademlia::schedulePathSetup(const OverlayKey& contactkey)
 	KadContact_p rt_contact= routingTable.getContact(contactkey);
 	if (rt_contact and rt_contact->isInvalid())
 	{
-		// do not schedule for path setup if contact not 
+		// do not schedule for path setup if contact not valid
 		EV_WARN << "Path Setup not scheduled for contact " << contactkey.shortStr()
 			<< " because it is in invalid state" << endl;
 		return;
 	}
-	
+
 	EV_TRACE << "PathSetup scheduled for contact " << contactkey.shortStr() << endl;
 
 	// do not insert the same contact key twice
@@ -84,8 +110,7 @@ void R2Kademlia::sendScheduledPathSetups() {
 	{
 		auto& contactkey= pathSetupQueue.front();
 		// check for current status of scheduled contact
-		auto rt_contact= routingTable.getContact(contactkey);
-		if (rt_contact) { // so contact still exists
+		if (auto rt_contact= routingTable.getContact(contactkey); rt_contact != nullptr) { // so contact still exists
 			// contact may have been invalidated meanwhile
 			if (rt_contact->isValid())
 			{
@@ -108,4 +133,17 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadPathTeardownReq> packet) {
 	sendPacket(makeAnswer<KadPathTeardownRsp>(*packet));
 }
 
+
+std::unique_ptr<KadPathSetupRsp>
+R2Kademlia::makeAnswerKadPathSetupRsp(const KadPacket& original)
+{
+	auto responsepacket= makeAnswer<KadPathSetupRsp>(original);
+	responsepacket->setFwdSourcePathArraySize(original.getRouteArraySize());
+	for (unsigned int i= 0; i < original.getRouteArraySize(); i++)
+		responsepacket->setFwdSourcePath(i, original.getRoute(i));
+
+	return responsepacket;
+}
+	
+	
 } // end namespace

@@ -211,7 +211,10 @@ private:
 	std::unique_ptr<T>makeDataPacket(const OverlayKey& dstNodeID, const KadContact* viacontact, const char *name);
 	/// crafts a packet of type T, sets the route and nonce according to original
 	template<typename T>
-	std::unique_ptr<T> makeAnswer(KadPacket& original);
+	std::unique_ptr<T> makeAnswer(const KadPacket& original);
+	/// specialized version, calls also makeAnswer
+	std::unique_ptr<KadPathSetupRsp> makeAnswerKadPathSetupRsp(const KadPacket& original);
+
 	/// saves the contact list to the given packet.
 	void fillRTableRsp(KadRTableRsp& packet, const KadContactList& contacts, bool includePaths=true);
 	/// reads the contacts from the packet and adds the paths to the routing table
@@ -245,7 +248,7 @@ private:
 	/// try a shortcut route and modify source route of the packet
 	void applyShortcut(KadPacket& packet);
 	/// try to install path from response packet
-	void checkForPathInstallation(KadPacket& packet);
+	bool checkForPathInstallation(KadPacket& packet);
 
 	/**
 	 * sends an error packet to the sender of the given packet
@@ -464,7 +467,7 @@ std::unique_ptr<T> R2Kademlia::makePacket(const KadContact* contact, const char 
 
 
 template<typename T>
-std::unique_ptr<T> R2Kademlia::makeAnswer(KadPacket& original) {
+std::unique_ptr<T> R2Kademlia::makeAnswer(const KadPacket& original) {
 	auto answer = std::make_unique<T>();
 	answer->setName((std::string(original.getName()) + std::string("Answer")).c_str());
 	if (routingTable.usePathSimplification())
