@@ -94,6 +94,7 @@ public:
 
 	/// return age of this entry
 	unsigned long getAge() const { return (simTime() - lastseen).inUnit(SIMTIME_MS); }
+	simtime_t getLastSeen() const { return lastseen; }
 	void updateLastSeen() { lastseen= simTime(); }
 	void updateLastSeenTo(const simtime_t &new_time_stamp) { lastseen= new_time_stamp; }
 

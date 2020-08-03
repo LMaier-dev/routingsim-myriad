@@ -15,8 +15,9 @@ namespace ph = std::placeholders;
 void R2Kademlia::sendPathSetup(KadContact_p contact) {
 	EV_TRACE << "sending PathSetupReq from " << myOverlayKey.shortStr() << " to " << contact->getKey().shortStr() << endl;
 	sentPathSetup++;
-	sendRpcCall(
-		makePacket<KadPathSetupReq>(contact, "KadPathSetupReq"),
+	std::unique_ptr<KadPathSetupReq> packet(makePacket<KadPathSetupReq>(contact, "KadPathSetupReq"));
+	packet->setContactLastSeen(contact->getLastSeen());
+	sendRpcCall(std::move(packet),
 		std::bind(&R2Kademlia::handlePathSetupResponse, this, ph::_1, ph::_2),
 		std::bind(&R2Kademlia::handlePathSetupResponse, this, ph::_1, ph::_2),
 		std::bind(&R2Kademlia::handleRPCTimeOut, this, ph::_1, ph::_2));
@@ -41,11 +42,11 @@ bool R2Kademlia::handlePathSetupResponse(KadPacket_p answer, RPCState& rpcState)
 
 	kad_path setuppath;
 	OverlayKey target(pathSetupRsp->getFwdSourcePath(pathSetupRsp->getFwdSourcePathArraySize()-1));
-	// note that FwdSourcePath includes the target node
-	if (pathSetupRsp->getFwdSourcePathArraySize() > 1) {
-		setuppath.resize(pathSetupRsp->getFwdSourcePathArraySize()-1);
-		for (unsigned int i= 0; i<pathSetupRsp->getFwdSourcePathArraySize()-1; i++)
-			setuppath[i]= pathSetupRsp->getFwdSourcePath(i);
+	// note that FwdSourcePath includes the source and the target node
+	if (pathSetupRsp->getFwdSourcePathArraySize() > 2) {
+		setuppath.resize(pathSetupRsp->getFwdSourcePathArraySize()-2);
+		for (unsigned int i= 1; i<pathSetupRsp->getFwdSourcePathArraySize()-1; i++)
+			setuppath[i-1]= pathSetupRsp->getFwdSourcePath(i);
 
 	}
 	KadContact contact(target, setuppath);
@@ -56,17 +57,21 @@ bool R2Kademlia::handlePathSetupResponse(KadPacket_p answer, RPCState& rpcState)
 	// also the pathID may have been updated for the contact in the meantime
 	// otherwise actually install the path
 	if (routingTable.getContact(contact.getKey()) != nullptr) {
-		// TODO: correction action in case the PathID was already installed meanwhile
-		// e.g., maybe without path setup as precalc
-		if (auto pidentry= fwdTablePathID.NIDPIDTable.find(contact.getKey()); pidentry != fwdTablePathID.NIDPIDTable.end()) {
-			// contact to PID mapping exists already, then call modEntry()
-			fwdTablePathID.modEntry(&contact, false);
-		}
-		else {
-			if (auto incomingPID= fwdTablePathID.addEntry(&contact, false, false); incomingPID != PathID::UndefinedPathID) {
-				fwdTablePathID.setNIDtoPIDmapping(contact.getKey(),incomingPID);
+		// check if contact has been changed meanwhile
+		// e.g., maybe without path setup as precalc, so this action would override the correct better path...
+		if (contact.getLastSeen() < pathSetupRsp->getContactLastSeen()) {
+			if (auto pidentry= fwdTablePathID.NIDPIDTable.find(contact.getKey()); pidentry != fwdTablePathID.NIDPIDTable.end()) {
+				// contact to PID mapping exists already, then call modEntry()
+				fwdTablePathID.modEntry(&contact, false);
+			}
+			else {
+				if (auto incomingPID= fwdTablePathID.addEntry(&contact, false, false); incomingPID != PathID::UndefinedPathID) {
+					fwdTablePathID.setNIDtoPIDmapping(contact.getKey(),incomingPID);
+				}
 			}
 		}
+		else
+			EV_WARN << "PathSetupRsp: ignoring, because Last Seen of current contact is more recent:" << contact.getLastSeen() << endl;
 	}
 	else
 		EV_TRACE << "PathSetupRsp: ignoring, because contact " << target.shortStr() << " does not exist anymore";
@@ -135,15 +140,17 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadPathTeardownReq> packet) {
 
 
 std::unique_ptr<KadPathSetupRsp>
-R2Kademlia::makeAnswerKadPathSetupRsp(const KadPacket& original)
+R2Kademlia::makeAnswerKadPathSetupRsp(const KadPathSetupReq& original)
 {
 	auto responsepacket= makeAnswer<KadPathSetupRsp>(original);
+	// copy source path from KadPathSetupReq
 	responsepacket->setFwdSourcePathArraySize(original.getRouteArraySize());
 	for (unsigned int i= 0; i < original.getRouteArraySize(); i++)
 		responsepacket->setFwdSourcePath(i, original.getRoute(i));
-
+	// just reflect the time stamp
+	responsepacket->setContactLastSeen(original.getContactLastSeen());
 	return responsepacket;
 }
-	
-	
+
+
 } // end namespace

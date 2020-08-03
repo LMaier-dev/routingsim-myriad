@@ -227,8 +227,8 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 				else { // send back response if path ID already present/installed
 					EV_TRACE << "KadPathSetupReq: PID for path " << packet->getSrcPath(packet->getProgress())
 						 << " already present" << endl;
-
-					sendPacket(makeAnswerKadPathSetupRsp(*packet));
+					const KadPathSetupReq* setupreq = static_cast<const KadPathSetupReq *>(packet.get());
+					sendPacket(makeAnswerKadPathSetupRsp(*setupreq));
 					return; // this will delete the original packet
 				}
 				break;
@@ -1408,24 +1408,28 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 			sendGetOverlayNeighbors(contact);
 		}
 
-		if (usePathIDs and contact->getPathLength() < discoveryRadius) {
-			// it is required to add all PIDs to nodes within the discovery radius
-			// since the contact path excludes the contact itself the above condition includes nodes <= discoveryRadius
-			if (auto incomingPID= fwdTablePathID.addEntry(contact, false, true); incomingPID != PathID::UndefinedPathID)
-				fwdTablePathID.setNIDtoPIDmapping(contact->getKey(), incomingPID);
+		if (usePathIDs) {
+			if (contact->getPathLength() <= discoveryRadius) {
+				// it is required to add all PIDs to nodes within the discovery radius
+				// (and without signaling one can extend this by one hop)
+				// since the contact path excludes the contact itself the above condition includes nodes <= discoveryRadius+1
+				if (auto incomingPID= fwdTablePathID.addEntry(contact, false, true); incomingPID != PathID::UndefinedPathID) {
+					fwdTablePathID.setNIDtoPIDmapping(contact->getKey(), incomingPID);
+				}
+			}
+			else
+			if (contact->getPathLength() > discoveryRadius)
+			{  // send a path setup request packet for installing PIDs in intermediate nodes for this route
+				// only do this for paths longer than (discovery radius+1) (e.g., for dr=3 -> contacts 5 hops away) hops:
+				// the next node precalculated already all path IDs within its own discovery radius and
+				// we are just one hop away, so only required setup for paths longer than (discovery radius+1)
+				// note that the contact->getPath() excludes the contact itself
+				EV_TRACE << "Triggering path setup to " << contact->getKey().shortStr() << ": " << contact->getPath() << endl;
+				schedulePathSetup(contact->getKey());
+			}
 		}
 	}
 
-	// send a path setup request packet for installing PIDs in intermediate nodes for this route
-	if (usePathIDs and contact->isValid() and contact->getPathLength() > (discoveryRadius+1U))
-	{ 
-		// only do this for paths longer than (discovery radius+1) (e.g., three+1) hops:
-		// the next node precalculated already all path IDs within its own discovery radius and
-		// we are just one hop away, so only required setup for paths longer than (discovery radius+1)
-		// note that the contact->getPath() excludes the contact itself
-		EV_TRACE << "Triggering path setup to " << contact->getKey().shortStr() << ": " << contact->getPath() << endl;
-		schedulePathSetup(contact->getKey());
-	}
 
 	scheduleUpdate(*contact, KAD_Announce);
 }
@@ -1589,7 +1593,15 @@ bool R2Kademlia::checkForPathInstallation(KadPacket& packet)
 	KadContact tmpcontact(packet.getTarget(),
 			      packet.getSrcPath(1, packet.getProgress()));
 
-	return fwdTablePathID.addEntry(&tmpcontact, true, tmpcontact.getPathLength() < discoveryRadius);
+	if (auto incomingPID= fwdTablePathID.addEntry(&tmpcontact, true, tmpcontact.getPathLength() <= discoveryRadius);
+	    incomingPID != PathID::UndefinedPathID) {
+		// no need to install NId to PID mapping as this is no local contact
+		//fwdTablePathID.setNIDtoPIDmapping(tmpcontact.getKey(), incomingPID); 
+		return true;
+	}
+	else
+		return false;
+
 }
 
 
@@ -1645,9 +1657,14 @@ void R2Kademlia::readRTableRsp(const KadRTableRsp& packet) {
 						sendGetPhysicalNeighbors(&neighborhoodContact);
 				}
 
-				if (usePathIDs)
+				// add PID entry
+				if (usePathIDs) {
 					fwdTablePathID.addEntry(&neighborhoodContact, false, true);
+				}
+
 			}
+
+
 		}
 	}
 }

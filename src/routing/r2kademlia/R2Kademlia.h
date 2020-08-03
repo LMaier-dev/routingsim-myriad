@@ -213,7 +213,7 @@ private:
 	template<typename T>
 	std::unique_ptr<T> makeAnswer(const KadPacket& original);
 	/// specialized version, calls also makeAnswer
-	std::unique_ptr<KadPathSetupRsp> makeAnswerKadPathSetupRsp(const KadPacket& original);
+	std::unique_ptr<KadPathSetupRsp> makeAnswerKadPathSetupRsp(const KadPathSetupReq& original);
 
 	/// saves the contact list to the given packet.
 	void fillRTableRsp(KadRTableRsp& packet, const KadContactList& contacts, bool includePaths=true);
