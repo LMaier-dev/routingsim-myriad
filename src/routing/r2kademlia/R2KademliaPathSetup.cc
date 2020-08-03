@@ -116,10 +116,10 @@ void R2Kademlia::sendScheduledPathSetups() {
 		auto& contactkey= pathSetupQueue.front();
 		// check for current status of scheduled contact
 		if (auto rt_contact= routingTable.getContact(contactkey); rt_contact != nullptr) { // so contact still exists
-			// contact may have been invalidated meanwhile
-			if (rt_contact->isValid())
+			// note: contact may have been invalidated or changed meanwhile
+			if (rt_contact->isValid() and rt_contact->getPathLength() > discoveryRadius)
 			{
-				// send PathSetupReq to this contact
+				// send PathSetupReq to this contact unless it falls under the limit
 				sendPathSetup(rt_contact);
 			}
 		}

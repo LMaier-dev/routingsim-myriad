@@ -234,7 +234,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 				break;
 
 			case KAD_PathSetupRsp:
-				EV_TRACE << "forwarding PathSetupRsp, origin source path: <"
+				EV_TRACE << "forwarding PathSetupRsp, origin source path: "
 					 << packet->reversePath(packet->getSrcPath()) << endl;
 				break;
 
@@ -1311,7 +1311,7 @@ void R2Kademlia::onErrorPacket(KadError& error) {
 		case KAD_PathIDUnknown:
 		{ // KAD_PathIDUnknown: we should try to resetup the path
 			auto affectedContact= routingTable.getContact(original->getTarget());
-			if (affectedContact and affectedContact->isValid() and affectedContact->getPathLength() > (discoveryRadius+1U))
+			if (affectedContact and affectedContact->isValid() and affectedContact->getPathLength() > discoveryRadius)
 			{
 				schedulePathSetup(affectedContact->getKey());
 			}
@@ -1452,7 +1452,7 @@ void R2Kademlia::onImprovement(const KadContact& contact) {
 		//EV_TRACE << "Triggering path setup to " << contact.getKey().shortStr() << endl;
 		// no need to setup routes within discovery radius + 1 distance
 		// (note/remember: getPathLength() does not include the last hop)
-		if ( contact.getPathLength() > (discoveryRadius+1U) )
+		if ( contact.getPathLength() > discoveryRadius )
 			schedulePathSetup(contact.getKey());
 	}
 
@@ -1590,8 +1590,9 @@ bool R2Kademlia::checkForPathInstallation(KadPacket& packet)
 	if ( usePathIDs == false )
 		return false;
 	// will install path in data forward direction
+	// ASSERT(packet.hasRemainingHops()); // this will be true because checkForPathInstallation() is called only then
 	KadContact tmpcontact(packet.getTarget(),
-			      packet.getSrcPath(1, packet.getProgress()));
+			      packet.getSrcPath(packet.getProgress()+1, packet.getRouteArraySize()-1));
 
 	if (auto incomingPID= fwdTablePathID.addEntry(&tmpcontact, true, tmpcontact.getPathLength() <= discoveryRadius);
 	    incomingPID != PathID::UndefinedPathID) {

@@ -174,18 +174,18 @@ bool FwdTablePathID::modEntry(KadContact_p contact, bool isForeignPID)
 
 	PathID priorPathID= PathID::UndefinedPathID;
 	bool additionalEntry= false;
+	kad_path newpath(contact->getPath());
+	// add destination node ID to path (will never be empty then)
+	newpath.push_back(contact->getKey());
+	// calculate incomingPathID
+	PathID incomingPathID(getPathID(*ownNodeID, newpath));
 
-	// Lookup old entry if it exists (which should be the case!)
-	if ( auto pidentry= NIDPIDTable.find(contact->getKey()); pidentry != NIDPIDTable.end() )
+	// Lookup old entry if it exists
+	// (which should be mostly the case, however in case a PathSetupReq is ongoing it may be missing)
+	auto pidentry= NIDPIDTable.find(contact->getKey());
+	if ( pidentry != NIDPIDTable.end() )
 	{
-		kad_path newpath(contact->getPath());
-
 		EV_TRACE << "modEntry(): Dest NodeID " << contact->getKey().shortStr() << newpath << endl;
-
-		// add destination node ID to path (will never be empty then)
-		newpath.push_back(contact->getKey());
-		// calculate incomingPathID
-		PathID incomingPathID(getPathID(*ownNodeID, newpath));
 
 		// Routingtable entry on node 4: Dest 5: < 3 2 >
 		priorPathID= pidentry->second;
@@ -240,48 +240,41 @@ bool FwdTablePathID::modEntry(KadContact_p contact, bool isForeignPID)
 				}
 			}
 		}
+	}
 
-		FwdTableEntry fwdentry;
-		// PID already exists, just re-enable mapping
-		if (auto it= PIDFwdTable.find(incomingPathID); it != PIDFwdTable.end())
-		{
-			EV_TRACE << "modEntry(): inPID " << incomingPathID << " already existed" << endl;
-			fwdentry= it->second;
-		}
-		else
-		{ // create new entry in FwdTable
-
-			fwdentry.outgoingPathID= getPathID(newpath);
-			fwdentry.nextHopNode= newpath[0];
-			fwdentry.setValid();
-			if (isForeignPID)
-				fwdentry.setForeign();
-			fwdentry.setPathLength(newpath.size());
-			fwdentry.fwdAction=
-				(newpath.size()==1) // next hop is our physical neighbor
-				? FwdTableEntry::Action::fwdNextKadId : FwdTableEntry::Action::fwdNextPathID;
-			fwdentry.prevPathID= priorPathID;
-			PIDFwdTable[incomingPathID]= fwdentry;
-		}
-
-		// activate new mapping for replacements
-		if (not additionalEntry)
-			NIDPIDTable[contact->getKey()]= incomingPathID;
-
-		EV_TRACE << "modEntry(): inPID:" << incomingPathID << " outPID:"
-			 << fwdentry.outgoingPathID
-			 << (additionalEntry ? " additional entry" : " replacement")
-			 << " path: " << newpath << endl;
-
-		return true;
+	FwdTableEntry fwdentry;
+	// if PID already exists, just re-enable mapping
+	if (auto it= PIDFwdTable.find(incomingPathID); it != PIDFwdTable.end())
+	{
+		EV_TRACE << "modEntry(): inPID " << incomingPathID << " already existed" << endl;
+		fwdentry= it->second;
 	}
 	else
-	{
-		EV_WARN << "FwdTablePathID::modEntry() no prior entry found" << endl;
-		return false;
+	{ // create new entry in FwdTable
+
+		fwdentry.outgoingPathID= getPathID(newpath);
+		fwdentry.nextHopNode= newpath[0];
+		fwdentry.setValid();
+		if (isForeignPID)
+			fwdentry.setForeign();
+		fwdentry.setPathLength(newpath.size());
+		fwdentry.fwdAction=
+			(newpath.size()==1) // next hop is our physical neighbor
+			? FwdTableEntry::Action::fwdNextKadId : FwdTableEntry::Action::fwdNextPathID;
+		fwdentry.prevPathID= priorPathID;
+		PIDFwdTable[incomingPathID]= fwdentry;
 	}
 
-	return false;
+	// activate new mapping for replacements (or new entries)
+	if (not additionalEntry)
+		NIDPIDTable[contact->getKey()]= incomingPathID;
+
+	EV_TRACE << "modEntry(): inPID:" << incomingPathID << " outPID:"
+		 << fwdentry.outgoingPathID
+		 << (additionalEntry ? " additional entry" : ((pidentry != NIDPIDTable.end()) ? " replacement" : " new"))
+		 << " path: " << newpath << endl;
+
+	return true;
 }
 
 
