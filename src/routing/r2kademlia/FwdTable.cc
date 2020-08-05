@@ -204,39 +204,21 @@ bool FwdTablePathID::modEntry(KadContact_p contact, bool isForeignPID)
 		{ // set old entry to obsolete state if local update
 			FwdTableEntry& priorfwdentry(PIDFwdTable[pidentry->second]);
 
-			// only accept better PIDs
-			if (newpath.size() > priorfwdentry.getPathLength())
+			priorfwdentry.setObsolete();
+			// delete the entry before priorPathID (i.e., the one before the penultimate entry)
+			//TODO make this configurable in depth
+			if (priorfwdentry.prevPathID != PathID::UndefinedPathID)
 			{
-				EV_TRACE << "new path not better: len=" << newpath.size()
-					 << " prior len=" << priorfwdentry.getPathLength() << " newPID: " << getPathID(newpath) << endl;
-				return false;
-			}
-			else
-			if (newpath.size() == priorfwdentry.getPathLength())
-			{
-				EV_TRACE << "new path has equal length: len=" << newpath.size()
-					 << " prior len=" << priorfwdentry.getPathLength() << " newPID: " << getPathID(newpath) << endl;
-				additionalEntry= true;
-			}
-
-			if (not additionalEntry)
-			{
-				priorfwdentry.setObsolete();
-				// delete the entry before priorPathID (i.e., the one before the penultimate entry)
-				//TODO make this configurable in depth
-				if (priorfwdentry.prevPathID != PathID::UndefinedPathID)
+				auto it= PIDFwdTable.find(priorfwdentry.prevPathID);
+				if (it != PIDFwdTable.end())
 				{
-					auto it= PIDFwdTable.find(priorfwdentry.prevPathID);
-					if (it != PIDFwdTable.end())
-					{
-						if (it->second.isObsolete())
-						{ // remove entry before priorPathID
-							EV_TRACE << "deleting PID entry " << priorfwdentry.prevPathID << endl;
-							PIDFwdTable.erase(it);
-						}
-						else
-							EV_WARN << "PID entry before prior penultimate entry not obsolete";
+					if (it->second.isObsolete())
+					{ // remove entry before priorPathID
+						//EV_TRACE << "deleting PID entry " << priorfwdentry.prevPathID << endl;
+						//PIDFwdTable.erase(it);
 					}
+					else
+						EV_WARN << "PID entry before prior penultimate entry not obsolete";
 				}
 			}
 		}
@@ -266,8 +248,7 @@ bool FwdTablePathID::modEntry(KadContact_p contact, bool isForeignPID)
 	}
 
 	// activate new mapping for replacements (or new entries)
-	if (not additionalEntry)
-		NIDPIDTable[contact->getKey()]= incomingPathID;
+	NIDPIDTable[contact->getKey()]= incomingPathID;
 
 	EV_TRACE << "modEntry(): inPID:" << incomingPathID << " outPID:"
 		 << fwdentry.outgoingPathID

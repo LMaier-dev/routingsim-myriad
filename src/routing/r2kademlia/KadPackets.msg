@@ -138,11 +138,13 @@ packet KadProbeRsp extends KadAnswer {
 packet KadPathSetupReq extends KadPacket {
 	type = KAD_PathSetupReq;
 	simtime_t contactLastSeen;
+	stateseqno_t contactSeqNo;
 }
 
 packet KadPathSetupRsp extends KadAnswer {
 	type = KAD_PathSetupRsp;
 	simtime_t contactLastSeen;
+	stateseqno_t contactSeqNo;
 	OverlayKey fwdSourcePath[];
 }
 

@@ -227,6 +227,7 @@ private:
 	short addTimer(simtime_t initialOffset, simtime_t duration, std::function<void(short timerId)> callback);
 	void stopTimer(short timerId);
 	void stopAllTimers() { for (short timerId= 0; (size_type) timerId < timerMsg.size(); timerId++) { stopTimer(timerId); } };
+	void doSendHello(short timerId);
 	void doProbe(short timerId);
 	void doProbeSelf(short timerId);
 	void doProbeNeighbors(short timerId);

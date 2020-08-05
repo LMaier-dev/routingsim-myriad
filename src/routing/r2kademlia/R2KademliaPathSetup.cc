@@ -17,6 +17,7 @@ void R2Kademlia::sendPathSetup(KadContact_p contact) {
 	sentPathSetup++;
 	std::unique_ptr<KadPathSetupReq> packet(makePacket<KadPathSetupReq>(contact, "KadPathSetupReq"));
 	packet->setContactLastSeen(contact->getLastSeen());
+	packet->setContactSeqNo(contact->getStateSeqNo());
 	sendRpcCall(std::move(packet),
 		std::bind(&R2Kademlia::handlePathSetupResponse, this, ph::_1, ph::_2),
 		std::bind(&R2Kademlia::handlePathSetupResponse, this, ph::_1, ph::_2),
@@ -49,32 +50,34 @@ bool R2Kademlia::handlePathSetupResponse(KadPacket_p answer, RPCState& rpcState)
 			setuppath[i-1]= pathSetupRsp->getFwdSourcePath(i);
 
 	}
-	KadContact contact(target, setuppath);
+	KadContact tmpcontact(target, setuppath);
 
 	EV_TRACE << "Received PathSetupRsp, source path: " << setuppath << " to " << target.shortStr() << endl;
 
 	// meanwhile the contact may have been replaced or deleted etc.
 	// also the pathID may have been updated for the contact in the meantime
 	// otherwise actually install the path
-	if (routingTable.getContact(contact.getKey()) != nullptr) {
+	if (auto contactp= routingTable.getContact(tmpcontact.getKey()); contactp != nullptr) {
 		// check if contact has been changed meanwhile
 		// e.g., maybe without path setup as precalc, so this action would override the correct better path...
-		if (contact.getLastSeen() < pathSetupRsp->getContactLastSeen()) {
-			if (auto pidentry= fwdTablePathID.NIDPIDTable.find(contact.getKey()); pidentry != fwdTablePathID.NIDPIDTable.end()) {
+		if (contactp->getStateSeqNo() < pathSetupRsp->getContactSeqNo() or
+		    (contactp->getStateSeqNo() == pathSetupRsp->getContactSeqNo() and
+		     tmpcontact.getLastSeen() < pathSetupRsp->getContactLastSeen())) {
+			if (auto pidentry= fwdTablePathID.NIDPIDTable.find(tmpcontact.getKey()); pidentry != fwdTablePathID.NIDPIDTable.end()) {
 				// contact to PID mapping exists already, then call modEntry()
-				fwdTablePathID.modEntry(&contact, false);
+				fwdTablePathID.modEntry(&tmpcontact, false);
 			}
 			else {
-				if (auto incomingPID= fwdTablePathID.addEntry(&contact, false, false); incomingPID != PathID::UndefinedPathID) {
-					fwdTablePathID.setNIDtoPIDmapping(contact.getKey(),incomingPID);
+				if (auto incomingPID= fwdTablePathID.addEntry(&tmpcontact, false, false); incomingPID != PathID::UndefinedPathID) {
+					fwdTablePathID.setNIDtoPIDmapping(tmpcontact.getKey(),incomingPID);
 				}
 			}
 		}
 		else
-			EV_WARN << "PathSetupRsp: ignoring, because Last Seen of current contact is more recent:" << contact.getLastSeen() << endl;
+			EV_WARN << "PathSetupRsp: ignoring, because Last Seen of current contact is more recent:" << tmpcontact.getLastSeen() << endl;
 	}
 	else
-		EV_TRACE << "PathSetupRsp: ignoring, because contact " << target.shortStr() << " does not exist anymore";
+		EV_TRACE << "PathSetupRsp: ignoring, because contact " << tmpcontact.getKey().shortStr() << " does not exist anymore" << endl;
 
 	return true;
 }
@@ -149,6 +152,7 @@ R2Kademlia::makeAnswerKadPathSetupRsp(const KadPathSetupReq& original)
 		responsepacket->setFwdSourcePath(i, original.getRoute(i));
 	// just reflect the time stamp
 	responsepacket->setContactLastSeen(original.getContactLastSeen());
+	responsepacket->setContactSeqNo(original.getContactSeqNo());
 	return responsepacket;
 }
 
