@@ -307,6 +307,9 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 
 		};
 
+		if (packet->getType() != KAD_PNDiscRsp)
+			checkForResync(packet->getSource(), packet->getStateSeqNo());
+
 		// evaluate return path for routing table
 		routingTable.addPath(packet->getSource(), packet->reversePath(packet->getIntermediatePath()), packet->getStateSeqNo(), 0, pathproperty);
 
@@ -399,7 +402,6 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 		// send back PNDiscReq to get contacts from physical neighbor
 		//TODO wait random time
 		KadContact neighborcontact(packet->getSource(), kad_path());
-		sendDiscoveryReq(&neighborcontact);
 
 		// try to add neighbor to routing table
 		if (routingTable.addPath(packet->getSource(), kad_path(), packet->getStateSeqNo(), 0, KadContact::PathProperty::direct))
@@ -408,15 +410,12 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 		}
 		else
 			EV_TRACE << "adding neighbor failed (maybe was already there)" << endl;
+		// send PN Discovery Request
+		sendDiscoveryReq(&neighborcontact);
 	}
 	else {
 		// already known neighbor, just check for seqno synchronization
-		if (KadContact* contact_p= const_cast<KadContact*>(routingTable.getContact(packet->getSource())); contact_p != nullptr) {
-			contact_p->updateLastSeen();
-			// if state seqno of PN has changed resync
-			if (packet->getStateSeqNo() > contact_p->getStateSeqNo())
-				reSyncPN(*contact_p);
-		}
+		checkForResync(packet->getSource(), packet->getStateSeqNo());
 
 		return;
 	}
@@ -873,11 +872,26 @@ void R2Kademlia::sendGetOverlayNeighbors(KadContact_p contact)
 void R2Kademlia::sendDiscoveryReq(KadContact_p contact)
 {
 	ASSERT(contact != nullptr);
-	EV_TRACE << "sending PNDisc request to " << *contact << endl;
+	EV_TRACE << "sending PNDiscReq to " << *contact << " mystate: " << getGLSSeqNo() << endl;
 	auto req = makePacket<KadPNDiscReq>(contact, "KadPNDiscReq");
 	req->setSourceId(node().getNodeId());
 	req->setNeighborhood(1); // get only physical neighbors (1 hop away)
 	req->setContactsOnly(false);
+	// send my own physical neighbors
+	if (std::vector<OverlayKey> neighbors = neighborTable.getNeighbors(); neighbors.size() > 0) {
+		req->setPhyNeighborArraySize(neighbors.size());
+		req->setPhyNeighborSeqNoArraySize(neighbors.size());
+		req->setPhyNeighborAgeArraySize(neighbors.size());
+		for (uint i = 0; i < neighbors.size(); i++) {
+			req->setPhyNeighbor(i, neighbors[i]);
+			if (routingTable.getContact(neighbors[i]) != nullptr) {
+				req->setPhyNeighborSeqNo(i, routingTable.getContact(neighbors[i])->getStateSeqNo());
+				req->setPhyNeighborAge(i,routingTable.getContact(neighbors[i])->getAge());
+			}
+			else
+				EV_ERROR << "Contact in RT for neighbor " << neighbors[i] << " not found" << endl; 
+		}
+	}
 	//req->setHopLimit(1);
 	sendRpcCall(
 		std::move(req),
@@ -891,13 +905,27 @@ void R2Kademlia::sendDiscoveryReq(KadContact_p contact)
 
 // handle PNDiscReq
 void R2Kademlia::handlePacket(std::unique_ptr<KadPNDiscReq> packet) {
-	EV_TRACE << "received PNDiscReq from " << packet->getSource().shortStr() << endl;
+	EV_TRACE << "received PNDiscReq from " << packet->getSource().shortStr() << " w/ " << packet->getPhyNeighborArraySize() << " neighbors" << endl;
 
 	// since this is physical neighbor add it to our neighbortable
 	if (neighborTable.addNeighbor(packet->getSourceId(), packet->getSource())) {
 		// new neighbor -> increase sequence number
 		incGLSSeqNo();
 	}
+
+	// check for physical neighbors sent with
+	kad_path path{packet->getSource()};
+	if (packet->getPhyNeighborArraySize() > 0) {
+		for (uint i = 0; i < packet->getPhyNeighborArraySize(); i++) {
+			routingTable.addPath(packet->getPhyNeighbor(i), path,
+					     packet->getPhyNeighborSeqNo(i),
+					     packet->getPhyNeighborAge(i), KadContact::PathProperty::direct);
+		}
+	}
+	else {
+		checkForResync(packet->getSource(), packet->getStateSeqNo());
+	}
+
 	EV_TRACE << "neighbor table: "<< neighborTable << endl;
 
 	// add physical contact to routing table or update sequence number
@@ -1002,8 +1030,8 @@ bool R2Kademlia::handlePNDiscResponse(KadPacket_p answer, RPCState& rpcState)
 {
 	if (rpcState.status != RPC_SUCCESS) return true;
 	auto response = safe_packet_cast<KadPNDiscRsp>(answer);
-	EV_TRACE << "PNDiscRsp received " << response->getContactArraySize() << " neighbors from " << response->getSource().shortStr()
-		 << " SeqNo#" << response->getStateSeqNo() << endl;
+	EV_TRACE << "PNDiscRsp from " << response->getSource().shortStr() << " received " << response->getContactArraySize()
+		 << " neighbors SeqNo#" << response->getStateSeqNo() << endl;
 	// update sequence number or restore direct link
 	routingTable.addPath(response->getSource(), kad_path(), response->getStateSeqNo(), 0, KadContact::PathProperty::direct);
 
@@ -1464,7 +1492,6 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 		}
 	}
 
-
 	scheduleUpdate(*contact, KAD_Announce);
 }
 
@@ -1916,6 +1943,22 @@ void R2Kademlia::doReachabilityTest(short timerID) {
 	sendFindNode(*key, true);
 }
 
+
+bool R2Kademlia::checkForResync(const OverlayKey& contact, stateseqno_t newseqno) {
+	if (KadContact* contact_p= const_cast<KadContact*>(routingTable.getContact(contact)); contact_p != nullptr and contact_p->isPhysicalNeighbor()) {
+		contact_p->updateLastSeen();
+		// if state seqno of PN has changed resync
+		if (newseqno > contact_p->getStateSeqNo()) {
+			EV_TRACE << "resync required for " << contact_p->getKey().shortStr() << " new: "
+				 << newseqno << " old: " << contact_p->getStateSeqNo() << endl;
+
+			reSyncPN(*contact_p);
+			return true;
+		}
+	}
+
+	return false;
+}
 
 void R2Kademlia::countReceived(KadPacket& packet) {
 	//EV_TRACE << "countReceived: tracked=" << packet.isTracked() << endl;

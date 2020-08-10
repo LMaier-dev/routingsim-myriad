@@ -115,6 +115,9 @@ packet KadHello extends KadPacket {
 packet KadPNDiscReq extends KadRTableReq {
 	type = KAD_PNDiscReq;
 	nodeid_t sourceId;
+	OverlayKey phyNeighbor[];
+	stateseqno_t phyNeighborSeqNo[];
+	age_t phyNeighborAge[];
 }
 
 // PNDiscRsp

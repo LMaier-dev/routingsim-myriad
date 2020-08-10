@@ -250,7 +250,8 @@ private:
 	void applyShortcut(KadPacket& packet);
 	/// try to install path from response packet
 	bool checkForPathInstallation(KadPacket& packet);
-
+	/// checks whether a PN requires a resynch and initiates PNDiscReq if so
+	bool checkForResync(const OverlayKey& contact, stateseqno_t newseqno);
 	/**
 	 * sends an error packet to the sender of the given packet
 	 * the original packet is encapsulated on the error packet

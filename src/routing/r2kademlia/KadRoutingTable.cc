@@ -213,7 +213,7 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 			
 			//EV_TRACE << "Contact existed already, but seems to be a PN now: " << *contact << endl;
 		}
-		
+
 		// update path if:
 		// always when sequence number is actually higher
 		// contact is invalid: only if we have newer information (higher sequence number)
@@ -245,8 +245,8 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 			}
 
 			// sometimes updates may be received that carry a newer sequence number
-			// from physical neighbors (and also a longer path);
-			// but if PN link is still up, we ignore this for now and initiate a resynch
+			// from physical neighbors; this indicates that we do not have the latest state about its neighbors
+			// if PN link is still up, we ignore this for now and initiate a resynch
 			if ( contact->isPhysicalNeighbor() and
 			     (contact->getStateSeqNo() < stateseqno) and
 			     neighbortable.isNeighbor(contact->getKey()) and
@@ -258,6 +258,7 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 				policy->reSyncPN(*contact);
 				return false;
 			}
+
 			contact->setPath(std::move(path)); // will set contact automatically to valid
 			contact->setStateSeqNo(stateseqno);
 
