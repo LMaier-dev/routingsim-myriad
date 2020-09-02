@@ -97,7 +97,8 @@ kad_path KadPacket::getSrcPath(uint from, uint to) const {
 	return result;
 }
 
-void KadPacket::setReturnPathFrom(KadPacket& other) {
+
+void KadPacket::setReturnPathFrom(const KadPacket& other) {
 	// we include the current hop
 	ASSERT(route_arraysize == 0);
 	setRouteArraySize(other.progress + 1);
@@ -111,7 +112,7 @@ void KadPacket::setReturnPathFrom(KadPacket& other) {
 
 
 // returns true if path was shortened
-bool KadPacket::setSimplifiedReturnPathFrom(KadPacket& other) {
+bool KadPacket::setSimplifiedReturnPathFrom(const KadPacket& other) {
 	// we include the current hop
 	ASSERT(route_arraysize == 0);
 	kad_path resultpath;

@@ -17,23 +17,29 @@
 
 namespace routingsim {
 
-void NeighborTable::addNeighbor(nodeid_t nodeId, const OverlayKey& key){
+bool NeighborTable::addNeighbor(nodeid_t nodeId, const OverlayKey& key){
 	//TODO assert nodeId != undefined_node;
 	auto itId = getIter(nodeId);
 	auto itKey = getIter(key);
-	if (itId == itKey){
-		if(itId == table.end())
+	if (itId == itKey) {
+		if(itId == table.end()) { // new entry
 			table.emplace_back(key, nodeId);
-		// else identical pair exists
+		}
+		else // identical pair exists
+			return false;
 	}
-	else if (itKey != table.end()){
+	else if (itKey != table.end()) { // Key exists already
+		// update nodeId
 		std::get<nodeid_t>(*itKey) = nodeId;
 		if (itId != table.end()) // both id and key existed, we erase the id.
 			table.erase(itId);
 	}
-	else if (itId != table.end()){
+	else if (itId != table.end()) { // NodeID existed already
+		// update the key
 		std::get<OverlayKey>(*itId) = key;
 	}
+
+	return true;
 }
 
 void NeighborTable::removeNeighbor(nodeid_t nodeId){

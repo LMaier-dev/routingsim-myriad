@@ -33,7 +33,8 @@ class NeighborTable
 {
 public:
 	/// adds or updates the table with the given pair
-	void addNeighbor(nodeid_t nodeId, const OverlayKey& key);
+	/// @returns true if add/updated, false if this entry existed already
+	bool addNeighbor(nodeid_t nodeId, const OverlayKey& key);
 	/// removes the entry with the given node id if present
 	void removeNeighbor(nodeid_t nodeId);
 	/// returns a vector of all known neighbors
