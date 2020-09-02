@@ -1116,11 +1116,23 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 				if ((contact.getKey() ^ query).log_2() > (myOverlayKey ^ query).log_2()) {
 					EV_WARN << "no prefix progress made - dropping request" << endl;
 				}
-				// since we need an exact match and cannot make any progress, we are lost here
-				EV_ERROR << "cannot reach final destination " << query.shortStr() << " (dead end)" << endl;
-				countDropped(*packet, query, routeFailureDeadEnd);
-				//TODO: if we find a closer contact too far away, we should send HOP LIMIT EXCEEDED
-				returnToSender(KAD_RouteFailureDeadEnd, std::move(packet));
+
+				if (contacts.front()->getPathLength() < packet->getHopLimit())
+				{
+					// since we need an exact match and cannot make any progress, we are lost here
+					EV_ERROR << "cannot reach final destination " << query.shortStr() << " (dead end)" << endl;
+					countDropped(*packet, query, routeFailureDeadEnd);
+
+					returnToSender(KAD_RouteFailureDeadEnd, std::move(packet));
+				}
+				else { // if we find a closer contact too far away, we should send HOP LIMIT EXCEEDED
+					EV_ERROR << "closer contact " << contact.getKey() << " is too far away ("
+						 << contacts.front()->getPathLength() << " hops)"
+						 << endl;
+					countDropped(*packet, query, hopLimitExceeded);
+
+					returnToSender(KAD_HopLimitExceeded, std::move(packet));
+				}
 
 				if (is_rediscovery)
 					droppedRediscovery++;
