@@ -19,14 +19,14 @@
 
 namespace routingsim {
 
-void RPCProtocol::sendRpcCall(packet_p rpcCall, rpc_callback_t callback)
+void RPCProtocol::sendRpcCall(packet_p rpcCall, rpc_callback_t callback, simtime_t delay)
 {
 	sendRpcCall(std::move(rpcCall), callback, callback, callback);
 }
 
 
 void RPCProtocol::sendRpcCall(packet_p rpcCall, rpc_callback_t success_callback,
-	rpc_callback_t error_callback,  rpc_callback_t timeout_callback)
+			      rpc_callback_t error_callback,  rpc_callback_t timeout_callback, simtime_t delay)
 {
 	nonce_t nonce = rpcCall->getTreeId();
 	ASSERT(states.find(nonce) == states.end());
@@ -49,7 +49,7 @@ void RPCProtocol::sendRpcCall(packet_p rpcCall, rpc_callback_t success_callback,
 	// register
 	states[nonce] = std::move(rpcState);
 	// send out
-	sendPacket(std::move(rpcCall));
+	sendPacket(std::move(rpcCall), delay);
 }
 
 

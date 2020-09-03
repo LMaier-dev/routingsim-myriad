@@ -103,7 +103,7 @@ class R2Kademlia : public RPCProtocol, public KadPolicy, public StatisticSample
 	 * uses the given NodePkt for encapsulation.
 	 * This does not make any routing decision.
 	 */
-	void forwardPacket(KadPacket_p packet, NodePkt_p nodePkt);
+	void forwardPacket(KadPacket_p packet, NodePkt_p nodePkt, simtime_t delay= 0);
 	/// forwards a data packet
 	void forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt);
 	/// forwards a data packet based on PathID present in the packet
@@ -112,9 +112,9 @@ class R2Kademlia : public RPCProtocol, public KadPolicy, public StatisticSample
 	/// sends a received packet again after the source route was manipulated
 	void resendPacket(KadPacket_p packet);
 	/// try to find alternative next overlay hop
-	void reroutePacket(const OverlayKey& finaldest, KadPacket_p packet, NodePkt_p nodePkt);
+	void reroutePacket(const OverlayKey& finaldest, KadPacket_p packet, NodePkt_p nodePkt, simtime_t delay= 0);
 	/// routes a packet to a neighbor based on the source route in the packet
-	void sendPacket(KadPacket_p packet) override;
+	void sendPacket(KadPacket_p packet, simtime_t delay= 0) override;
 	/// routes a packet to a neighbor based on the  in the packet
 	void sendPacket(KadDataPacket_p packet);
 	/// chooses the contact to forward a request to according to the overlay metric.

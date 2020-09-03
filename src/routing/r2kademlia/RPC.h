@@ -82,18 +82,18 @@ protected:
 	 */
 	
 	void sendRpcCall(packet_p rpcCall, rpc_callback_t success_callback,
-		 rpc_callback_t error_callback,  rpc_callback_t timeout_callback);
+			 rpc_callback_t error_callback,  rpc_callback_t timeout_callback, simtime_t delay= 0);
 	/**
 	 * registers the given packet, assigns a nonce and sends it out
 	 * callback is called on answer, error or timeout
 	 */
-	void sendRpcCall(packet_p rpcCall, rpc_callback_t callback);
+	void sendRpcCall(packet_p rpcCall, rpc_callback_t callback, simtime_t delay= 0);
 	//@}
 
 	/** @name functions implemented by the subclass */
 	//@{
 	/// used for sending packets
-	virtual void sendPacket(packet_p packet) = 0;
+	virtual void sendPacket(packet_p packet, simtime_t delay) = 0;
 	//@}
 public:	
         void finish();

@@ -480,7 +480,7 @@ void R2Kademlia::handlePacket(KadAnswer_p packet) {
 }
 
 
-void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt) {
+void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt, simtime_t delay) {
 	// we do not route hello packets!
 	ASSERT(packet->getType() != KAD_PNHello);
 	ASSERT(packet->hasRemainingHops());
@@ -504,7 +504,7 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt) {
 
 	if (nid != undefined_node) {
 		nodePkt->encapsulate(packet.release());
-		sendToNode(nid, std::move(nodePkt));
+		sendToNode(nid, std::move(nodePkt), delay);
 
 		forwardedPackets++;
 
@@ -571,7 +571,7 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt) {
 					EV_TRACE << "forwardPacket(): forwarding to next hop (" << nid << ")" << endl;
 
 					nodePkt->encapsulate(packet.release());
-					sendToNode(nid, std::move(nodePkt));
+					sendToNode(nid, std::move(nodePkt), delay);
 					forwardedPackets++;
 					return;
 				}
@@ -594,7 +594,7 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt) {
 			}
 
 			// try to reroute
-			reroutePacket(*finaldestination, std::move(packet), std::move(nodePkt));
+			reroutePacket(*finaldestination, std::move(packet), std::move(nodePkt), delay);
 			return;
 		}
 	} // end else (no next hop found)
@@ -604,7 +604,7 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt) {
 }
 
 
-void R2Kademlia::reroutePacket(const OverlayKey& finaldest, KadPacket_p packet, NodePkt_p nodePkt)
+void R2Kademlia::reroutePacket(const OverlayKey& finaldest, KadPacket_p packet, NodePkt_p nodePkt, simtime_t delay)
 {
 	std::list<link_t> notvialist;
 	if (packet->getNotVia())
@@ -669,7 +669,7 @@ void R2Kademlia::reroutePacket(const OverlayKey& finaldest, KadPacket_p packet, 
 				EV_TRACE << "reroutePacket(): " << packet->getName() << " dest " << packet->getTarget().shortStr()
 					 << " next hop: " << nextHop.shortStr() << " (" << nid << ')' << endl;
 				nodePkt->encapsulate(packet.release());
-				sendToNode(nid, std::move(nodePkt));
+				sendToNode(nid, std::move(nodePkt), delay);
 				forwardedPackets++;
 				return;
 			}
@@ -702,7 +702,7 @@ void R2Kademlia::resendPacket(KadPacket_p packet) {
 }
 
 
-void R2Kademlia::sendPacket(KadPacket_p packet) {
+void R2Kademlia::sendPacket(KadPacket_p packet, simtime_t delay) {
 	ASSERT(packet->getSource() == myOverlayKey);
 	ASSERT(packet->getControlInfo() == nullptr);
 	auto nodePkt = std::make_unique<NodePkt>(packet->getName());
@@ -713,7 +713,7 @@ void R2Kademlia::sendPacket(KadPacket_p packet) {
 	}
 	// EV_TRACE << "sendPacket(): " << packet->getName() << ", " << (int) packet->getType() << endl;
 	sentPackets++;
-	forwardPacket(std::move(packet), std::move(nodePkt));
+	forwardPacket(std::move(packet), std::move(nodePkt), delay);
 }
 
 
@@ -863,7 +863,8 @@ void R2Kademlia::sendGetOverlayNeighbors(KadContact_p contact)
 		std::move(req),
 		std::bind(&R2Kademlia::handleQueryRouteResponse, this, ph::_1, ph::_2),
 		std::bind(&R2Kademlia::handleQueryRouteResponse, this, ph::_1, ph::_2),
-		std::bind(&R2Kademlia::handleRPCTimeOut, this, ph::_1, ph::_2)
+		std::bind(&R2Kademlia::handleRPCTimeOut, this, ph::_1, ph::_2),
+		SimTime(10,SIMTIME_MS)
 	);
 }
 
