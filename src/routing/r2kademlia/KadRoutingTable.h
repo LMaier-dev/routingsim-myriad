@@ -84,10 +84,13 @@ public:
 	virtual void onContactRemoval(KadContact_p contact) = 0;
 	/** called when physical neighbors may be out of synch with their sequence numbers **/
 	virtual void reSyncPN(const KadContact& contact) = 0;
+	
 	/** called when a rediscovery needs to be performed for a contact */
 	virtual void scheduleRediscovery(const OverlayKey& contact, const OverlayKey& notvia_unreachable_node, const OverlayKey& notvia_failednode_neighbor, bool immediate= false) = 0;
 	/** called when the path of a contact is probably broken and needs to be checked */
 	virtual void onContactCheck(const KadContact& contact) = 0;
+	/** called when new far away contact has been updated **/
+	virtual void askFingerForNeighbors(const KadContact& contact) = 0;
 };
 
 /**
@@ -98,7 +101,7 @@ class KadRoutingTable : public cObject
 {
 	friend KadBucket;
 public:
-        KadRoutingTable(const NeighborTable& ro_neighbortable) : neighbortable(ro_neighbortable) {};
+        KadRoutingTable(const NeighborTable& ro_neighbortable) : neighbortable(ro_neighbortable), exploringFingerContact(OverlayKey::UNSPECIFIED_KEY) {};
 	void init(const OverlayKey& myKey,
 		  KadPolicy* policy,
 		  size_type accelerationFactor, size_type bucketSize,
@@ -242,6 +245,7 @@ protected:
 	KadContact *getContactInternal(const OverlayKey& key) { return const_cast<KadContact*>(getContact(key)); }
 
 private:
+
 	const NeighborTable& neighbortable; // only for read-only access
 	/**
 	 * number of bits used for accelerated lookup
@@ -265,6 +269,10 @@ private:
 	uint updateCount = 0;
 	/// discoveryRadius (from R2Kademlia class)
 	uint8_t discoveryRadius = 1;
+
+	/// the contact that is far away
+	KadContact exploringFingerContact;
+
 };
 
 

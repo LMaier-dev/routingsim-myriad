@@ -35,7 +35,7 @@ namespace routingsim {
 using size_type = std::size_t;
 using stateseqno_t = uint16_t;
 constexpr stateseqno_t invalidSeqNo= 0xffff;
-
+	
 class RediscoveryState {
 public:
 	RediscoveryState(const link_t& failedlink) : failedLinkList({failedlink}) {};

@@ -1556,6 +1556,13 @@ void R2Kademlia::onContactCheck(const KadContact& contact) {
 }
 
 
+void R2Kademlia::askFingerForNeighbors(const KadContact& contact) {
+	// simply trigger a PNDiscReq to update any sequence number
+	EV_TRACE << "ask exploring finger " << contact.getKey().shortStr() << " for neighbors" << endl;
+	sendGetOverlayNeighbors(&contact);
+}
+
+
 void R2Kademlia::recordScalars() {
 	recordScalar("forwardedPackets", forwardedPackets);
 	recordScalar("droppedPackets", droppedPackets);

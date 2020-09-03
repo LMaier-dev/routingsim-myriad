@@ -335,7 +335,7 @@ void R2Kademlia::sendUrgentUpdates()
 				packet->setActionArraySize(urgentupdatelist.size());
 				packet->setSeqNoArraySize(urgentupdatelist.size());
 
-				EV_TRACE << "UrgentUpdateRoute packet to " << notifyContact_it->first.shortStr() << " w/ ";
+				//EV_TRACE << "UrgentUpdateRoute packet to " << notifyContact_it->first.shortStr() << " w/ ";
 
 				// now construct the routing information by the information from urgentupdatelist
 				std::size_t i= 0;
@@ -345,10 +345,10 @@ void R2Kademlia::sendUrgentUpdates()
 					packet->setPath(i, affectedContact.getPath());
 					packet->setSeqNo(i, affectedContact.getStateSeqNo());
 					packet->setAction(i, action);
-					EV_TRACE << affectedContact << "; ";
+					//EV_TRACE << affectedContact << "; ";
 					i++;
 				}
-				EV_TRACE << endl;
+				//EV_TRACE << endl;
 				if ( i > 0 ) {
 					// send UpdateRouteReq w/ failed link
 					sendPacket(std::move(packet));
@@ -382,7 +382,7 @@ void R2Kademlia::sendUpdates()
 			// UpdateRouteReqs are not expecting an answer, so no RPC call
 			auto packet = makePacket<KadUpdateRouteReq>(notify_target, "UpdateRouteReq");
 			packet->setDstNodeID(notify_target->getKey());
-			EV_TRACE << "UpdateRoute packet to " << notifyContact_it->first.shortStr() << " w/ ";
+			//EV_TRACE << "UpdateRoute packet to " << notifyContact_it->first.shortStr() << " w/ ";
 			auto& updatelist(notifyContact_it->second);
 			// sanitize list first, i.e., remove obsolete entries
 			for (auto affcontact_it= updatelist.begin(); affcontact_it != updatelist.end(); /* see loop */)
@@ -391,9 +391,9 @@ void R2Kademlia::sendUpdates()
 				{
 					if (affcontactnow->getStateSeqNo() > affcontact_it->first.getStateSeqNo())
 					{ // current state for contact is newer, there should be another update for this
-						EV_TRACE << "(obsolete " << affcontact_it->first
-							 << " #" << affcontactnow->getStateSeqNo()
-							 << " > #" << affcontact_it->first.getStateSeqNo() << ") ";
+						//EV_TRACE << "(obsolete " << affcontact_it->first
+						//	 << " #" << affcontactnow->getStateSeqNo()
+						//	 << " > #" << affcontact_it->first.getStateSeqNo() << ") ";
 
 						affcontact_it= updatelist.erase(affcontact_it);
 					}
@@ -402,7 +402,7 @@ void R2Kademlia::sendUpdates()
 				}
 				else // contact not known anymore, probably replaced already
 				{
-					EV_TRACE << "(removed " << affcontact_it->first.getKey().shortStr() << ") ";
+					//EV_TRACE << "(removed " << affcontact_it->first.getKey().shortStr() << ") ";
 
 					affcontact_it= updatelist.erase(affcontact_it);
 				}
@@ -425,10 +425,10 @@ void R2Kademlia::sendUpdates()
 				packet->setSeqNo(i, affectedContact.getStateSeqNo());
 				packet->setContactAge(i, affectedContact.getAge());
 				packet->setAction(i, action);
-				EV_TRACE << affectedContact << "; ";
+				//EV_TRACE << affectedContact << "; ";
 				i++;
 			}
-			EV_TRACE << endl;
+			//EV_TRACE << endl;
 			// send UpdateRouteReq w/ failed link
 			if ( i > 0 ) {
 				sendPacket(std::move(packet));

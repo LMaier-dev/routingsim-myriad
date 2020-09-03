@@ -163,6 +163,8 @@ public:
 	virtual void reSyncPN(const KadContact& contact) override;
 	/** called when supposed failed link detected **/
 	virtual void onContactCheck(const KadContact& contact) override;
+	/** called when new far away contact has been updated **/
+	virtual void askFingerForNeighbors(const KadContact& contact);
 
 	//@}
 
@@ -307,6 +309,7 @@ private:
 	~R2Kademlia() { updateQueue.clear(); pathSetupQueue.clear(); stopAllTimers(); }
 	/// the overlay key of this node
 	OverlayKey myOverlayKey;
+
 	/// Node Global Link State Sequence Number
 	pathseqno_t glsseqno= 0;
 	/// Table of direct physical neighbors
