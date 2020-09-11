@@ -197,6 +197,9 @@ public:
 	inline bool isKnown(const OverlayKey& key) const { return getContact(key) != nullptr; }
 	/// returns true if key is in last bucket
 	inline bool isInLastBucket(const OverlayKey& key) const { return getBucketIndex(key) == buckets.size()-1; }
+	/// returns true if key is in last bucket and not present
+	inline bool isInLastBucketAndNew(const OverlayKey& key) const { size_t index(getBucketIndex(key));
+		return  index == buckets.size()-1 and buckets.at(index).getContact(key) == nullptr; }
 
 	/// returns the distance between the two keys
 	inline OverlayKey distance(const OverlayKey& a, const OverlayKey& b) const { return a ^ b; }

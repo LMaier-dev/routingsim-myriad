@@ -178,14 +178,11 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 		path_was_simplified= true;
 	}
 
+	KadContact exploringCandidate(key);
 	if (path.size() > exploringFingerContact.getPathLength()) {
-		// update exploring finger when new path is longer
-		exploringFingerContact= { key, path, stateseqno };
-		exploringFingerContact.updateLastSeen();
-		EV_TRACE << "finger update: " << exploringFingerContact.getKey() << " (" << exploringFingerContact.getPathLength() << ") " << exploringFingerContact.getPath() << endl;
-		if (path.size() > exploreMinRadius) { // do not ask for "nearby" region
-			policy->askFingerForNeighbors(exploringFingerContact);
-		}
+		// remember the candidate to potential later replacement
+		exploringCandidate= { key, path, stateseqno };
+		exploringCandidate.updateLastSeen();
 	}
 
 	// sanity check: do not use paths that lead via an invalid neighbor as first hop
@@ -289,7 +286,20 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 	}
 	else // contact is new
 	{
-		return handleNewContact(key, std::move(path), stateseqno, contact_age, pathprop);
+		if (handleNewContact(key, std::move(path), stateseqno, contact_age, pathprop)) {
+			return true;
+		}
+		else { // contact was not added, so it may be interesting as exploring finger then
+			if (exploringCandidate.getPathLength() > exploringFingerContact.getPathLength()) {
+				// update exploring finger when new path is longer
+				exploringFingerContact= std::move(exploringCandidate);
+				EV_TRACE << "finger update: " << exploringFingerContact.getKey() << " (" << exploringFingerContact.getPathLength() << ") " << exploringFingerContact.getPath() << endl;
+				if (exploringFingerContact.getPathLength() > exploreMinRadius) { // do not ask for "nearby" region
+					policy->askFingerForNeighbors(exploringFingerContact);
+				}
+			}
+		}
+		return false;
 	}
 }
 

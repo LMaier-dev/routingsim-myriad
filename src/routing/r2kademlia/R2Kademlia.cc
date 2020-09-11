@@ -425,7 +425,7 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 
 
 void R2Kademlia::handlePacket(KadAnswer_p packet) {
-	//EV_DEBUG << "received answer packet (for nonce=" << packet->getNonce() << ") from " << packet->getSource().shortStr() << endl;
+	EV_DEBUG << "received " << packet->getName() << "(for nonce=" << packet->getNonce() << ") from " << packet->getSource().shortStr() << endl;
 	if (packet->getType() == KAD_Error) {
 		onErrorPacket(*check_and_cast<KadError *>(packet.get()));
 		// note that handleAnswer() will be called  afterwards for processing the RPC result
@@ -497,10 +497,12 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt, simtime_t 
 	const OverlayKey nextHop(packet->getNextHop());
 	nodeid_t nid(neighborTable.getNodeId(nextHop));
 
-	EV_TRACE << "forwardPacket(): " << packet->getName() << " dest " << packet->getTarget().shortStr()
-		 << " next hop: " << nextHop.shortStr() << " (" << nid << ')'
-		 << " nonce=" << packet->getNonce()
-		 << " path " << packet->getSrcPath() << " progress=" << packet->getProgress() << endl;
+	if (packet->getProgress() == 0) { // only print this for originating packets
+		EV_TRACE << "forwardPacket(): " << packet->getName() << " dest " << packet->getTarget().shortStr()
+			 << " next hop: " << nextHop.shortStr() << " (" << nid << ')'
+			 << " nonce=" << packet->getNonce()
+			 << " path " << packet->getSrcPath() << " progress=" << packet->getProgress() << endl;
+	}
 
 	if (nid != undefined_node) {
 		nodePkt->encapsulate(packet.release());
@@ -1557,7 +1559,17 @@ void R2Kademlia::onContactCheck(const KadContact& contact) {
 
 
 void R2Kademlia::askFingerForNeighbors(const KadContact& contact) {
-	// ask exploring finger for neighbors
+	// check all contacts along the path for being yet unknown ID-wise close neighbors
+	const kad_path& longpath= contact.getPath();
+	for (auto it= longpath.begin()+discoveryRadius; it != longpath.end() ; it++) {
+		if (routingTable.isInLastBucketAndNew(*it)) {
+			KadContact newcontact( *it, { longpath.begin(), it }, 0 );
+			EV_TRACE << "found interesting new potential neighbor " << newcontact << " in path" << endl;
+			sendGetOverlayNeighbors(&newcontact);
+		}
+	}
+
+	// ask exploring finger for ID-wise neighbors
 	EV_TRACE << "ask exploring finger " << contact.getKey().shortStr() << " for neighbors" << endl;
 	sendGetOverlayNeighbors(&contact);
 }
