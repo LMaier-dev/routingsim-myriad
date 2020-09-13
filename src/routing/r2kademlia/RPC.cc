@@ -69,6 +69,7 @@ void RPCProtocol::handleAnswer(packet_p answer)
 	if (rpcState.timeoutMsg != nullptr)
 		cancelAndDelete(rpcState.timeoutMsg);
 
+	EV_TRACE << answer->getName() << " RTT: " << simTime()-rpcState.original_packet->getCreationTime() << 's' << endl;
 	if (answer->getType() == KAD_Error) {
 		rpcState.status = RPC_ERROR;
 		result = rpcState.error_callback(std::move(answer), rpcState);

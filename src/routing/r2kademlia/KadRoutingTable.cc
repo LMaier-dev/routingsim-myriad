@@ -463,7 +463,7 @@ bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, sta
 	contact->setStateSeqNo(stateseqno);
 	// TODO should be corrected by RTT
 	contact->updateLastSeenTo(simTime()-SimTime(contact_age,SIMTIME_MS));
-	
+
 	// physical neighbors get always inserted as contact
 	if (isPhysicalNeighbor)
 	{

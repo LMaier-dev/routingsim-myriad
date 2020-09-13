@@ -42,7 +42,7 @@ protected:
 	/// a function that handles some rpc state change, returns true if rpc is done
 	using rpc_callback_t = std::function<bool(packet_p, RPCState&)>;
 	struct RPCState {
-	   public:	
+	   public:
 		nonce_t nonce;
 		packet_p original_packet;
 		uint8_t retransmissions = 0;
