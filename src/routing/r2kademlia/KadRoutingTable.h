@@ -90,7 +90,7 @@ public:
 	/** called when the path of a contact is probably broken and needs to be checked */
 	virtual void onContactCheck(const KadContact& contact) = 0;
 	/** called when new far away contact has been updated **/
-	virtual void askFingerForNeighbors(const KadContact& contact) = 0;
+	//virtual void askFingerForNeighbors(const KadContact& contact) = 0;
 };
 
 /**
@@ -101,7 +101,9 @@ class KadRoutingTable : public cObject
 {
 	friend KadBucket;
 public:
-        KadRoutingTable(const NeighborTable& ro_neighbortable) : neighbortable(ro_neighbortable), exploringFingerContact(OverlayKey::UNSPECIFIED_KEY) {};
+ KadRoutingTable(const NeighborTable& ro_neighbortable) : neighbortable(ro_neighbortable) //,
+							  //exploringFingerContact(OverlayKey::UNSPECIFIED_KEY)
+	  {};
 	void init(const OverlayKey& myKey,
 		  KadPolicy* policy,
 		  size_type accelerationFactor, size_type bucketSize,
@@ -274,7 +276,7 @@ private:
 	uint8_t discoveryRadius = 1;
 
 	/// the contact that is far away
-	KadContact exploringFingerContact;
+	//KadContact exploringFingerContact;
 
 };
 

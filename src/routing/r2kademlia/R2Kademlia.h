@@ -164,7 +164,7 @@ public:
 	/** called when supposed failed link detected **/
 	virtual void onContactCheck(const KadContact& contact) override;
 	/** called when new far away contact has been updated **/
-	virtual void askFingerForNeighbors(const KadContact& contact);
+	//virtual void askFingerForNeighbors(const KadContact& contact);
 
 	//@}
 

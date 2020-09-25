@@ -178,12 +178,12 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 		path_was_simplified= true;
 	}
 
-	KadContact exploringCandidate(key);
-	if (path.size() > exploringFingerContact.getPathLength()) {
-		// remember the candidate to potential later replacement
-		exploringCandidate= { key, path, stateseqno };
-		exploringCandidate.updateLastSeen();
-	}
+	// KadContact exploringCandidate(key);
+	// if (path.size() > exploringFingerContact.getPathLength()) {
+	// 	// remember the candidate to potential later replacement
+	// 	exploringCandidate= { key, path, stateseqno };
+	// 	exploringCandidate.updateLastSeen();
+	// }
 
 	// sanity check: do not use paths that lead via an invalid neighbor as first hop
 	if (path.size() > 0 and not neighbortable.isNeighbor(path[0]))
@@ -290,14 +290,14 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 			return true;
 		}
 		else { // contact was not added, so it may be interesting as exploring finger then
-			if (exploringCandidate.getPathLength() > exploringFingerContact.getPathLength()) {
-				// update exploring finger when new path is longer
-				exploringFingerContact= std::move(exploringCandidate);
-				EV_TRACE << "finger update: " << exploringFingerContact.getKey() << " (" << exploringFingerContact.getPathLength() << ") " << exploringFingerContact.getPath() << endl;
-				if (exploringFingerContact.getPathLength() > exploreMinRadius) { // do not ask for "nearby" region
-					policy->askFingerForNeighbors(exploringFingerContact);
-				}
-			}
+			// if (exploringCandidate.getPathLength() > exploringFingerContact.getPathLength()) {
+			// 	// update exploring finger when new path is longer
+			// 	exploringFingerContact= std::move(exploringCandidate);
+			// 	EV_TRACE << "finger update: " << exploringFingerContact.getKey() << " (" << exploringFingerContact.getPathLength() << ") " << exploringFingerContact.getPath() << endl;
+			// 	if (exploringFingerContact.getPathLength() > exploreMinRadius) { // do not ask for "nearby" region
+			// 		policy->askFingerForNeighbors(exploringFingerContact);
+			// 	}
+			// }
 		}
 		return false;
 	}
