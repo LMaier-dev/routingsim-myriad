@@ -237,21 +237,26 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 		    or
 		    (contact->getStateSeqNo() < stateseqno) )
 		{
-			// check for age information if seq no is equal
-			if (contact->getStateSeqNo() == stateseqno and contact->getAge() < contact_age) {
-				EV_TRACE << "ignoring older contact info: mine " << contact->getAge() << " other " << contact_age << endl;
-				return false;
-			}
+			// special case for non updated sequence number
+			if (contact->getStateSeqNo() == stateseqno) {
+				// check for age information if seq no is equal
+				if (contact->getAge() < contact_age) {
+					EV_TRACE << "ignoring older contact info: mine " << contact->getAge() << " other " << contact_age << endl;
+					return false;
+				}
 
-			// in case the path had a failure, check whether the supposed new path actually avoids the broken link
-			if (contact->isInvalid())
-			{
-				for (const auto& failedlink : contact->getRDS().failedLinkList) {
-					if (containsUndirectedLink(myKey, contact->getKey(), path, failedlink)) {
-						// provided path does not repair broken link
-						return false;
-					}
-				} // end for
+				// in case the path had a failure, check whether the supposed new path actually avoids the broken link
+				// note that this check will fail in case the path was repaired,
+				// but then the sequence number must be newer
+				if (contact->isInvalid())
+				{
+					for (const auto& failedlink : contact->getRDS().failedLinkList) {
+						if (containsUndirectedLink(myKey, contact->getKey(), path, failedlink)) {
+							// provided path does not repair broken link
+							return false;
+						}
+					} // end for
+				}
 			}
 
 			// sometimes updates may be received that carry a newer sequence number
