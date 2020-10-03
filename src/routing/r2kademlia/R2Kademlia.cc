@@ -410,8 +410,9 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 		}
 		else
 			EV_TRACE << "adding neighbor failed (maybe was already there)" << endl;
-		// send PN Discovery Request
-		sendDiscoveryReq(&neighborcontact);
+
+		// schedule PN Discovery Request
+		schedulePNDiscReq(neighborcontact.getKey());
 	}
 	else {
 		// already known neighbor, just check for seqno synchronization
@@ -1035,6 +1036,7 @@ bool R2Kademlia::handlePNDiscResponse(KadPacket_p answer, RPCState& rpcState)
 	auto response = safe_packet_cast<KadPNDiscRsp>(answer);
 	EV_TRACE << "PNDiscRsp from " << response->getSource().shortStr() << " received " << response->getContactArraySize()
 		 << " neighbors SeqNo#" << response->getStateSeqNo() << endl;
+
 	// update sequence number or restore direct link
 	routingTable.addPath(response->getSource(), kad_path(), response->getStateSeqNo(), 0, KadContact::PathProperty::direct);
 
@@ -1545,11 +1547,13 @@ void R2Kademlia::onImprovement(const KadContact& contact) {
 }
 
 
+
 void R2Kademlia::reSyncPN(const KadContact& contact) {
 	// simply trigger a PNDiscReq to update any sequence number
 	EV_TRACE << "reSyncPN triggered for " << contact.getKey().shortStr() << endl;
-	sendDiscoveryReq(&contact);
+	schedulePNDiscReq(contact.getKey());
 }
+
 
 
 void R2Kademlia::onContactCheck(const KadContact& contact) {
@@ -1985,12 +1989,64 @@ bool R2Kademlia::checkForResync(const OverlayKey& contact, stateseqno_t newseqno
 				 << newseqno << " old: " << contact_p->getStateSeqNo() << endl;
 
 			reSyncPN(*contact_p);
+
 			return true;
 		}
 	}
 
 	return false;
 }
+
+
+/// schedule sending PNDiscReq, because meanwhile more neighbors will be discovered
+/// this will avoid triggering frequent resynchronizations
+void R2Kademlia::schedulePNDiscReq(const OverlayKey& neighbor)
+{
+	if (not PNDiscoverQueue.empty()) {
+		if (find(PNDiscoverQueue.begin(), PNDiscoverQueue.end(), neighbor) != PNDiscoverQueue.end())
+			return; // same neighbor already present
+	}
+
+	PNDiscoverQueue.push_back(neighbor);
+
+	if (not pndiscScheduled)
+	{
+		EV_TRACE << "scheduling PNDiscReq for " << neighbor.shortStr() << endl;
+		addTimer(SimTime(2,SIMTIME_MS), 0, std::bind(&R2Kademlia::sendScheduledPNDiscReq, this));
+		pndiscScheduled= true;
+	}
+}
+
+
+
+void R2Kademlia::sendScheduledPNDiscReq() {
+	// traverse list of scheduled contact keys for path setup
+	// recheck status and set to rediscover
+	EV_TRACE << "sendScheduledPNDiscReq() called, Queued: " << PNDiscoverQueue.size() << endl;
+
+	while (!PNDiscoverQueue.empty())
+	{
+		auto& neighborcontactkey= PNDiscoverQueue.front();
+		// check for current status of scheduled contact
+		if (neighborTable.isNeighbor(neighborcontactkey)) { // so contact is still an active neighbor
+			// note: contact may have been invalidated or changed meanwhile
+			if (auto rt_contact= routingTable.getContact(neighborcontactkey); rt_contact != nullptr) { // so contact still exists
+
+				sendDiscoveryReq(rt_contact);
+			}
+			else
+				EV_ERROR << "PNDiscReq cannot be sent, because contact " << neighborcontactkey.shortStr() << " not found!?" << endl;
+		}
+		else
+			EV_ERROR << "PNDiscReq cannot be sent, because contact " << neighborcontactkey.shortStr() << " not in neighbor table anymore" << endl;
+		PNDiscoverQueue.pop_front();
+	}
+
+	// next call of this procedure will be scheduled on demand
+	pndiscScheduled= false;
+}
+
+
 
 void R2Kademlia::countReceived(KadPacket& packet) {
 	//EV_TRACE << "countReceived: tracked=" << packet.isTracked() << endl;

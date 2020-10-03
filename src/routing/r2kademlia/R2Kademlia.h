@@ -276,6 +276,11 @@ private:
 	kad_path concatViaPath(const kad_path& viaPath, const OverlayKey& viaKey, const kad_path& path);
 	/// adds contact and not via link for rediscovery queue (or send it immediately)
 	void scheduleRediscovery(const OverlayKey& contactkey, const OverlayKey& notvia_unreachable_node, const OverlayKey& notvia_failednode_neighbor, bool immediate= false);
+	/// schedule sending PNDiscReq
+	void schedulePNDiscReq(const OverlayKey& neighbor);
+	/// create and send PNDiscReqs for queued neighbors
+	void sendScheduledPNDiscReq();
+
 	void rediscoverContacts();
 	/// adds routing table updates for contacts to an update queue
 	void scheduleUpdate(const KadContact& affectedcontact, KadRouteUpdateAction action);
@@ -289,6 +294,7 @@ private:
 	void schedulePathSetup(const OverlayKey& contactkey);
 	/// send all queue (valid) path setups
 	void sendScheduledPathSetups();
+
 	/// evaluate Updates while forwarding
 	void evalUpdateReq(const KadUpdateRouteReq* packet);
 	/// evaluateQueryRouteRsp
@@ -361,7 +367,6 @@ private:
 	bool updateScheduled= false;
 	bool urgentUpdateScheduled= false;
 
-
 	struct greatercmp {
 		const OverlayKey& ownkey;
 		greatercmp(const OverlayKey& key) : ownkey(key) {}
@@ -383,6 +388,9 @@ private:
 	// a list that is used to periodically probe contacts
 	std::list<OverlayKey> probeContactQueue;
 
+	// a list that is used to send PN discover request messages
+	std::list<OverlayKey> PNDiscoverQueue;
+
 	// selfMessage
 	bool pathSetupScheduled= false;
 
@@ -390,6 +398,8 @@ private:
 	bool rediscoveryScheduled= false;
 	bool urgentRediscoveryScheduled= false;
 	
+	// selfMessage
+	bool pndiscScheduled= false;
 	/** @name statistics */
 	//@{
 	uint forwardedPackets = 0;
