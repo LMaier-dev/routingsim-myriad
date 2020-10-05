@@ -1562,23 +1562,6 @@ void R2Kademlia::onContactCheck(const KadContact& contact) {
 }
 
 
-// void R2Kademlia::askFingerForNeighbors(const KadContact& contact) {
-// 	// check all contacts along the path for being yet unknown ID-wise close neighbors
-// 	const kad_path& longpath= contact.getPath();
-// 	for (auto it= longpath.begin()+discoveryRadius; it != longpath.end() ; it++) {
-// 		if (routingTable.isInLastBucketAndNew(*it)) {
-// 			KadContact newcontact( *it, { longpath.begin(), it }, 0 );
-// 			EV_TRACE << "found interesting new potential neighbor " << newcontact << " in path" << endl;
-// 			sendGetOverlayNeighbors(&newcontact);
-// 		}
-// 	}
-
-// 	// ask exploring finger for ID-wise neighbors
-// 	EV_TRACE << "ask exploring finger " << contact.getKey().shortStr() << " for neighbors" << endl;
-// 	sendGetOverlayNeighbors(&contact);
-// }
-
-
 void R2Kademlia::recordScalars() {
 	recordScalar("forwardedPackets", forwardedPackets);
 	recordScalar("droppedPackets", droppedPackets);
