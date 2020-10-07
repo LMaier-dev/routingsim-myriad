@@ -59,19 +59,6 @@ const char* HEX = "0123456789abcdef";
 // construction and destruction
 //--------------------------------------------------------------------
 
-// default construction: create an unspecified node key
-OverlayKey::OverlayKey()
-{
-	isUnspec = true;
-}
-
-// create a key out of an normal integer
-OverlayKey::OverlayKey(uint32_t num)
-{
-	clear();
-	key[0] = num;
-	trim();
-}
 
 // create a key out of a buffer
 OverlayKey::OverlayKey(const unsigned char* buf, uint32_t size)
@@ -117,12 +104,7 @@ OverlayKey::OverlayKey(const std::string& str, uint32_t base)
 	trim();
 }
 
-// copy constructor
-OverlayKey::OverlayKey(const OverlayKey& rhs) : cObject(rhs), isUnspec(rhs.isUnspec)
-{
-	if (this != &rhs) // do not copy into itself
-		memcpy( &key, &rhs.key, sizeof(key) );
-}
+
 
 // default destructor
 // OverlayKey::~OverlayKey() {
@@ -159,17 +141,6 @@ void OverlayKey::setKeyLength(uint32_t length)
 }
 
 
-// returns the length in bits
-uint32_t OverlayKey::getLength()
-{
-	return OverlayKey::keyLength;
-}
-
-bool OverlayKey::isUnspecified() const
-{
-	return isUnspec;
-}
-
 bool OverlayKey::isValid(std::string str)
 {
 	std::string s(str);
@@ -189,6 +160,7 @@ bool OverlayKey::isValid(std::string str)
 
 	return true;
 }
+
 
 std::string OverlayKey::toString(uint32_t base) const
 {
@@ -224,149 +196,6 @@ std::string OverlayKey::toString(uint32_t base) const
 //--------------------------------------------------------------------
 // operators
 //--------------------------------------------------------------------
-
-// assignment operator
-OverlayKey& OverlayKey::operator=(const OverlayKey& rhs)
-{
-	if (this == &rhs) // exclude assignment to itself, mempcy doesn't work then
-		return *this;
-
-	cObject::operator=(rhs);
-	isUnspec = rhs.isUnspec;
-	memcpy( &key, &rhs.key, sizeof(key) );
-	return *this;
-}
-
-
-// sub one prefix operator
-OverlayKey& OverlayKey::operator--()
-{
-	return (*this -= ONE);
-}
-
-// sub one postfix operator
-OverlayKey OverlayKey::operator--(int)
-{
-	OverlayKey clone = *this;
-	*this -= ONE;
-	return clone;
-}
-
-// add one prefix operator
-OverlayKey& OverlayKey::operator++()
-{
-	return (*this += ONE);
-}
-
-// sub one postfix operator
-OverlayKey OverlayKey::operator++(int)
-{
-	OverlayKey clone = *this;
-	*this += ONE;
-	return clone;
-}
-
-// add assign operator
-OverlayKey& OverlayKey::operator+=( const OverlayKey& rhs )
-{
-	mpn_add_n((mp_limb_t*)key, (mp_limb_t*)key, (mp_limb_t*)rhs.key, aSize);
-	trim();
-	isUnspec = false;
-	return *this;
-}
-
-// sub assign operator
-OverlayKey& OverlayKey::operator-=( const OverlayKey& rhs )
-{
-	mpn_sub_n((mp_limb_t*)key, (mp_limb_t*)key, (mp_limb_t*)rhs.key, aSize);
-	trim();
-	isUnspec = false;
-	return *this;
-}
-
-// add operator
-OverlayKey OverlayKey::operator+(const OverlayKey& rhs) const
-{
-	OverlayKey result = *this;
-	result += rhs;
-	return result;
-}
-
-// sub operator
-OverlayKey OverlayKey::operator-(const OverlayKey& rhs) const
-{
-	OverlayKey result = *this;
-	result -= rhs;
-	return result;
-}
-
-// compare operators
-bool OverlayKey::operator<(const OverlayKey& compKey) const
-{
-	return compareTo(compKey) < 0;
-}
-bool OverlayKey::operator>(const OverlayKey& compKey) const
-{
-	return compareTo(compKey) > 0;
-}
-bool OverlayKey::operator<=(const OverlayKey& compKey) const
-{
-	return compareTo(compKey) <=0;
-}
-bool OverlayKey::operator>=(const OverlayKey& compKey) const
-{
-	return compareTo(compKey) >=0;
-}
-bool OverlayKey::operator==(const OverlayKey& compKey) const
-{
-	return compareTo(compKey) ==0;
-}
-bool OverlayKey::operator!=(const OverlayKey& compKey) const
-{
-	return compareTo(compKey) !=0;
-}
-
-// bitwise xor
-OverlayKey OverlayKey::operator^ (const OverlayKey& rhs) const
-{
-	OverlayKey result = *this;
-	for (uint32_t i=0; i<aSize; i++) {
-		result.key[i] ^= rhs.key[i];
-	}
-	return result;
-}
-
-// bitwise or
-OverlayKey OverlayKey::operator| (const OverlayKey& rhs) const
-{
-	OverlayKey result = *this;
-	for (uint32_t i=0; i<aSize; i++) {
-		result.key[i] |= rhs.key[i];
-	}
-	return result;
-}
-
-// bitwise and
-OverlayKey OverlayKey::operator& (const OverlayKey& rhs) const
-{
-	OverlayKey result = *this;
-	for (uint32_t i=0; i<aSize; i++) {
-		result.key[i] &= rhs.key[i];
-	}
-	return result;
-}
-
-// complement
-OverlayKey OverlayKey::operator~ () const
-{
-	OverlayKey result = *this;
-	for (uint32_t i=0; i<aSize; i++) {
-		result.key[i] = ~key[i];
-	}
-	result.trim();
-
-	return result;
-}
 
 // bitwise shift right
 OverlayKey OverlayKey::operator>>(uint32_t num) const
@@ -407,11 +236,6 @@ OverlayKey OverlayKey::operator<<(uint32_t num) const
 	return result;
 }
 
-// get bit
-OverlayKeyBit OverlayKey::operator[](uint32_t n)
-{
-	return OverlayKeyBit(getBit(n), n, this);
-}
 
 OverlayKey& OverlayKey::setBit(uint32_t pos, bool value)
 {
@@ -736,47 +560,6 @@ OverlayKey OverlayKey::pow2( uint32_t exponent )
 	return newKey;
 }
 
-int OverlayKey::getCommonPrefixLength(const OverlayKey& a, const OverlayKey& b)
-{
-	return getLength() - (a ^ b).log_2();
-}
-
-//--------------------------------------------------------------------
-// private methods (mostly inlines)
-//--------------------------------------------------------------------
-
-// trims uppermost (unused) bits of a key after each operation
-inline void OverlayKey::trim()
-{
-	key[aSize-1] &= GMP_MSB_MASK;
-}
-
-
-// compares this key to any other
-int OverlayKey::compareTo( const OverlayKey& compKey ) const
-{
-	if (compKey.isUnspec || isUnspec)
-		throw cRuntimeError("OverlayKey::compareTo(): key is unspecified!");
-	return mpn_cmp(key,compKey.key,aSize);
-}
-
-// sets key to zero and clears unspecified bit
-inline void OverlayKey::clear()
-{
-	memset( key, 0, sizeof(key) );
-	isUnspec = false;
-}
-
-// replacement function for mpn_random() using omnet's rng
-inline void omnet_random(mp_limb_t *r1p, mp_size_t r1n, cRNG* rng)
-{
-	// fill in 32 bit chunks
-	uint32_t* chunkPtr = (uint32_t*)r1p;
-
-	for (uint32_t i=0; i < ((r1n*sizeof(mp_limb_t) + 3) / 4); i++) {
-		chunkPtr[i] = intuniform(rng, 0, 0xFFFFFFFF);
-	}
-}
 
 #ifdef __GMP_SHORT_LIMB
 #define GMP_TYPE unsigned int
