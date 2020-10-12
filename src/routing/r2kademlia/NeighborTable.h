@@ -21,6 +21,7 @@
 #include "OverlayKey.h"
 #include <vector>
 #include <utility>
+#include <algorithm>
 
 namespace routingsim {
 using inner_table = std::vector<std::pair<OverlayKey, nodeid_t>>;

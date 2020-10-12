@@ -190,6 +190,7 @@ void Node::sendToNode( nodeid_t nid, NodePkt* np ) {
 	sendDelayed(np, delay, n.out);
 }
 
+
 void Node::sendToModules( NodePkt* np ) {
 	int outGateBaseId = gateBaseId("toProtocols$o");
 	int n = gate(outGateBaseId)->getVectorSize();
@@ -198,6 +199,7 @@ void Node::sendToModules( NodePkt* np ) {
 		send(pkt, outGateBaseId+i);
 	}
 }
+
 
 void Node::sendToNeighbors( NodePkt* np ) {
 	size_t n = neighbor_set.size();
@@ -219,6 +221,7 @@ void Node::sendNotify(NodePkt *packet, cGate *dg) {
 	send(packet, dg);
 }
 
+
 void Node::initNeighbors() {
 	NodePkt* np = new NodePkt();
 	np->setType(PAYLOAD_HELLO);
@@ -232,6 +235,7 @@ void Node::initNeighbors() {
 		send(pkt, outGateBaseId+i);
 	}
 }
+
 
 void Node::onHello( NodePkt* pkt ) {
 	nodeid_t nid = pkt->getHop().from;
@@ -313,15 +317,11 @@ bool Node::enableLink(Node *mod, const char *gatename) {
 }
 
 void Node::disableGate(cGate *dg) {
-	vector<cGate *>::iterator cit;
-
 	// verify that gate is not already disabled
-	for(cit=disabledLinks.begin(); cit < disabledLinks.end(); cit++) {
-		if (*cit == dg)
-			return;
-	}
+	if (gateIsDisabled(dg))
+		return;
 
-	//create disconnect packet before filter is set
+	// create disconnect packet before filter is set
 	NodePkt *disableLinkPacket = new NodePkt();
 	disableLinkPacket->setType(PAYLOAD_GOODBYE);
 	disableLinkPacket->setName("Link Down");
@@ -337,15 +337,12 @@ void Node::disableGate(cGate *dg) {
 	return;
 }
 
-void Node::enableGate(cGate *dg) {
-	vector<cGate *>::iterator cit;
 
-	//remove gate from filter list
-	for(cit=disabledLinks.begin(); cit < disabledLinks.end(); cit++) {
-		if (*cit == dg) {
-			//EV << " enabling cGate * " << dg << endl;
-			disabledLinks.erase(cit);
-		}
+void Node::enableGate(cGate *dg) {
+	// remove gate from filter list
+	if (vector<cGate *>::iterator cit= std::find(disabledLinks.begin(), disabledLinks.end(), dg); cit!= disabledLinks.end()) {
+		disabledLinks.erase(cit);
+		//EV << " enabling cGate * " << dg << endl;
 	}
 
 	// notify node that it is connected now
@@ -361,17 +358,14 @@ void Node::enableGate(cGate *dg) {
 	return;
 }
 
-bool Node::gateIsDisabled(cGate *g) {
-	vector<cGate *>::iterator cit;
-	for(cit=disabledLinks.begin(); cit < disabledLinks.end(); cit++) {
-		if (*cit == g) {
-			//EV << "found gate in disabledLinks" << endl;
-			return true;
-		}
+
+bool Node::gateIsDisabled(const cGate *g) const {
+	if (std::find(disabledLinks.begin(), disabledLinks.end(), g) != disabledLinks.end()) {
+		return true;
+		//EV << "found gate in disabledLinks" << endl;
 	}
 
-	// gate not found in disabledLinks
-	return false;
+	return false; 	// gate not found in disabledLinks
 }
 
 } //namespace

@@ -18,7 +18,7 @@
 
 #include <omnetpp.h>
 #include <cdisplaystring.h>
-#include <boost/unordered_map.hpp>
+#include <unordered_map>
 
 namespace routingsim {
 class Node;
@@ -78,11 +78,11 @@ protected:
 
 	/// the bindings of the node modules
 	/// maps type int to gate index
-	boost::unordered_map<int, int> bindings;
+	std::unordered_map<int, int> bindings;
 
 	/// Neighbors of the node
 	vector_set<nodeid_t> neighbor_set;
-	boost::unordered_map<nodeid_t, neighbor_t> neighbor_map;
+	std::unordered_map<nodeid_t, neighbor_t> neighbor_map;
 
 	/// Broadcast a message among all node modules
 	void sendToModules( NodePkt* np );
@@ -105,7 +105,7 @@ private:
 	void enableGate(cGate *);
 
 	/// check whether a gate is marked disabled
-	bool gateIsDisabled(cGate *g);
+	bool gateIsDisabled(const cGate *g) const;
 
 	/// Initialize neighbors
 	virtual void initNeighbors();

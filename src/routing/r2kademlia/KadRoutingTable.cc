@@ -905,9 +905,12 @@ double KadRoutingTable::getAveragePathStretch() const
 		for (auto& contact : b.PNContacts) {
 			// stored paths exclude the destination node
 			if (getKadObserver().getPhysicalDistance(myKey, contact->getKey()) > 0) {
-				sum += contact->getPathLength()+1 / getKadObserver().getPhysicalDistance(myKey, contact->getKey());
+				sum += (contact->getPathLength()+1) / getKadObserver().getPhysicalDistance(myKey, contact->getKey());
 				count++;
 			}
+			else
+				EV_WARN << "Physical Distance = " << getKadObserver().getPhysicalDistance(myKey, contact->getKey())
+					<< ": " << myKey << " to " << contact->getKey().shortStr() << endl;
 		}
 	}
 	return count == 0 ? 0.0 : sum / count;

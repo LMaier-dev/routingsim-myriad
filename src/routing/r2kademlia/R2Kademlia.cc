@@ -705,6 +705,7 @@ void R2Kademlia::resendPacket(KadPacket_p packet) {
 }
 
 
+
 void R2Kademlia::sendPacket(KadPacket_p packet, simtime_t delay) {
 	ASSERT(packet->getSource() == myOverlayKey);
 	ASSERT(packet->getControlInfo() == nullptr);

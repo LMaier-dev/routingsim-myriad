@@ -263,24 +263,13 @@ void R2Kademlia::propagateUpdateReq(std::unique_ptr<KadUpdateRouteReq> packet)
 	}
 
 	const KadContact& contact = chooseNextHop(closeContacts, destContactKey);
-	// check whether that contact is closer to the target than we
-	if ( contact.isValid() and (contact.getKey() ^ myOverlayKey) > (contact.getKey() ^ destContactKey) )
+	// check whether that contact is closer to the target than we are (but do not send back to source)
+	if ( contact.isValid() and (contact.getKey() ^ myOverlayKey) > (contact.getKey() ^ destContactKey) and not packet->isOverlayHopInPath(contact.getKey()) )
 	{
-		if (NodePkt *nodepkt= check_and_cast<NodePkt *>(packet->removeControlInfo()); nodepkt != nullptr) {
-			delete nodepkt;
-		}
-
-		// this will reset the route
-		packet->setRouteArraySize(0);
-		packet->setActiveArraySize(0);
-		packet->setSource(myOverlayKey);
-		packet->setStateSeqNo(getGLSSeqNo());
-		packet->setProgress(0);
-		packet->setHopLimit(hopLimit);
 		packet->appendRoute(contact);
 		packet->setTargetSeqNo(contact.getStateSeqNo());
 		EV_TRACE << "propagateUpdateReq(): final dest: " << destContactKey.shortStr() << ", next dest: " << contact << endl;
-	        sendPacket(std::move(packet));
+	        resendPacket(std::move(packet));
 	}
 	else
 	{
