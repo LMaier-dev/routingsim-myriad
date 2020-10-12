@@ -96,6 +96,7 @@ public:
 	 */
 	OverlayKey( const OverlayKey& rhs );
 
+
 	/**
 	 * override dup() function from cObject base class
 	 */
@@ -545,6 +546,8 @@ private:
 	void clear();
 };
 
+
+
 /**
  * An auxiliary class for single bits in OverlayKey
  *
@@ -608,4 +611,281 @@ namespace std {
 	};
 
 }
+
+
+// default construction: create an unspecified node key
+inline
+OverlayKey::OverlayKey()
+{
+	isUnspec = true;
+}
+
+
+// create a key out of an normal integer
+inline
+OverlayKey::OverlayKey(uint32_t num)
+{
+	clear();
+	key[0] = num;
+	trim();
+}
+
+
+
+// copy constructor
+inline
+OverlayKey::OverlayKey(const OverlayKey& rhs) : cObject(rhs), isUnspec(rhs.isUnspec)
+{
+	if (this != &rhs) // do not copy into itself
+		memcpy( &key, &rhs.key, sizeof(key) );
+}
+
+
+
+// returns the length in bits
+inline
+uint32_t OverlayKey::getLength()
+{
+	return OverlayKey::keyLength;
+}
+
+
+inline
+bool OverlayKey::isUnspecified() const
+{
+	return isUnspec;
+}
+
+
+//--------------------------------------------------------------------
+// operators
+//--------------------------------------------------------------------
+
+// assignment operator
+inline
+OverlayKey& OverlayKey::operator=(const OverlayKey& rhs)
+{
+	if (this == &rhs) // exclude assignment to itself, mempcy doesn't work then
+		return *this;
+
+	cObject::operator=(rhs);
+	isUnspec = rhs.isUnspec;
+	memcpy( &key, &rhs.key, sizeof(key) );
+	return *this;
+}
+
+
+// sub one prefix operator
+inline
+OverlayKey& OverlayKey::operator--()
+{
+	return (*this -= ONE);
+}
+
+// sub one postfix operator
+inline
+OverlayKey OverlayKey::operator--(int)
+{
+	OverlayKey clone = *this;
+	*this -= ONE;
+	return clone;
+}
+
+
+// add one prefix operator
+inline
+OverlayKey& OverlayKey::operator++()
+{
+	return (*this += ONE);
+}
+
+// sub one postfix operator
+inline
+OverlayKey OverlayKey::operator++(int)
+{
+	OverlayKey clone(*this);
+	*this += ONE;
+	return clone;
+}
+
+
+// add assign operator
+inline
+OverlayKey& OverlayKey::operator+=( const OverlayKey& rhs )
+{
+	mpn_add_n((mp_limb_t*)key, (mp_limb_t*)key, (mp_limb_t*)rhs.key, aSize);
+	trim();
+	isUnspec = false;
+	return *this;
+}
+
+
+// sub assign operator
+inline
+OverlayKey& OverlayKey::operator-=( const OverlayKey& rhs )
+{
+	mpn_sub_n((mp_limb_t*)key, (mp_limb_t*)key, (mp_limb_t*)rhs.key, aSize);
+	trim();
+	isUnspec = false;
+	return *this;
+}
+
+
+// add operator
+inline
+OverlayKey OverlayKey::operator+(const OverlayKey& rhs) const
+{
+	OverlayKey result(*this);
+	result += rhs;
+	return result;
+}
+
+
+// sub operator
+inline
+OverlayKey OverlayKey::operator-(const OverlayKey& rhs) const
+{
+	OverlayKey result(*this);
+	result -= rhs;
+	return result;
+}
+
+// compare operators
+inline
+bool OverlayKey::operator<(const OverlayKey& compKey) const
+{
+	return compareTo(compKey) < 0;
+}
+
+inline
+bool OverlayKey::operator>(const OverlayKey& compKey) const
+{
+	return compareTo(compKey) > 0;
+}
+
+inline
+bool OverlayKey::operator<=(const OverlayKey& compKey) const
+{
+	return compareTo(compKey) <=0;
+}
+
+inline
+bool OverlayKey::operator>=(const OverlayKey& compKey) const
+{
+	return compareTo(compKey) >=0;
+}
+
+inline
+bool OverlayKey::operator==(const OverlayKey& compKey) const
+{
+	return compareTo(compKey) ==0;
+}
+
+inline
+bool OverlayKey::operator!=(const OverlayKey& compKey) const
+{
+	return compareTo(compKey) !=0;
+}
+
+// bitwise xor
+inline
+OverlayKey OverlayKey::operator^ (const OverlayKey& rhs) const
+{
+	OverlayKey result(*this);
+	for (uint32_t i=0; i<aSize; i++) {
+		result.key[i] ^= rhs.key[i];
+	}
+	return std::move(result);
+}
+
+// bitwise or
+inline
+OverlayKey OverlayKey::operator| (const OverlayKey& rhs) const
+{
+	OverlayKey result(*this);
+	for (uint32_t i=0; i<aSize; i++) {
+		result.key[i] |= rhs.key[i];
+	}
+	return result;
+}
+
+// bitwise and
+inline
+OverlayKey OverlayKey::operator& (const OverlayKey& rhs) const
+{
+	OverlayKey result(*this);
+	for (uint32_t i=0; i<aSize; i++) {
+		result.key[i] &= rhs.key[i];
+	}
+	return result;
+}
+
+// complement
+inline
+OverlayKey OverlayKey::operator~ () const
+{
+	OverlayKey result(*this);
+	for (uint32_t i=0; i<aSize; i++) {
+		result.key[i] = ~key[i];
+	}
+	result.trim();
+
+	return result;
+}
+
+
+// get bit
+inline
+OverlayKeyBit OverlayKey::operator[](uint32_t n)
+{
+	return OverlayKeyBit(getBit(n), n, this);
+}
+
+
+inline
+int OverlayKey::getCommonPrefixLength(const OverlayKey& a, const OverlayKey& b)
+{
+	return getLength() - (a ^ b).log_2();
+}
+
+//--------------------------------------------------------------------
+// private methods (mostly inlines)
+//--------------------------------------------------------------------
+
+// trims uppermost (unused) bits of a key after each operation
+inline void OverlayKey::trim()
+{
+	key[aSize-1] &= GMP_MSB_MASK;
+}
+
+
+// compares this key to any other
+inline
+int OverlayKey::compareTo( const OverlayKey& compKey ) const
+{
+	ASSERT (!compKey.isUnspec and !isUnspec);
+	return mpn_cmp(key,compKey.key,aSize);
+}
+
+
+// sets key to zero and clears unspecified bit
+inline void OverlayKey::clear()
+{
+	memset( key, 0, sizeof(key) );
+	isUnspec = false;
+}
+
+
+// replacement function for mpn_random() using omnet's rng
+inline void omnet_random(mp_limb_t *r1p, mp_size_t r1n, cRNG* rng)
+{
+	// fill in 32 bit chunks
+	uint32_t* chunkPtr = (uint32_t*)r1p;
+
+	for (uint32_t i=0; i < ((r1n*sizeof(mp_limb_t) + 3) / 4); i++) {
+		chunkPtr[i] = intuniform(rng, 0, 0xFFFFFFFF);
+	}
+}
+
+
 #endif
