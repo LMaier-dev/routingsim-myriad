@@ -795,7 +795,7 @@ OverlayKey OverlayKey::operator^ (const OverlayKey& rhs) const
 	for (uint32_t i=0; i<aSize; i++) {
 		result.key[i] ^= rhs.key[i];
 	}
-	return std::move(result);
+	return result;
 }
 
 // bitwise or

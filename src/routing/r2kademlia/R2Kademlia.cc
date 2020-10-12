@@ -1938,8 +1938,9 @@ void R2Kademlia::doReachabilityTest(short timerID) {
 			if (nodeit == getNetworkManager()->getFailedNodes().end())
 				return;
 
-			if (getNetworkManager()->getTopology().isActive(*nodeit) == false or
-			    getNetworkManager()->getTopology().getNodeDegree(*nodeit) == 0) {
+			nodeid_t failnodecandidate(*nodeit);
+			if (getNetworkManager()->getTopology().isActive(failnodecandidate) == false or
+			    getNetworkManager()->getTopology().getNodeDegree(failnodecandidate) == 0) {
 				if (getNetworkManager()->getFailedNodes().size() == 1) { // no other choice
 					return;
 				}
@@ -1949,8 +1950,13 @@ void R2Kademlia::doReachabilityTest(short timerID) {
 				}
 			}
 
+			// check whether destination node is actually reachable
+			if (getNetworkManager()->getDistance(node().getNodeId(), failnodecandidate) == 0) {
+				EV_TRACE << "Node " << failnodecandidate << " not reachable" << endl;
+				return;
+			}
 
-			key = &getKadObserver().getNodeKey(*nodeit);
+			key = &getKadObserver().getNodeKey(failnodecandidate);
 			// it does not make sense to use the own key if it is the only choice
 			if (*key == myOverlayKey and getNetworkManager()->getFailedNodes().size() == 1)
 				return;
