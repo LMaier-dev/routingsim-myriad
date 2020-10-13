@@ -1928,45 +1928,57 @@ void R2Kademlia::doProbeSelf(short timerId) {
 void R2Kademlia::doReachabilityTest(short timerID) {
 	if (neighborTable.size() == 0) return; // we are isolated
 	const OverlayKey* key(nullptr);
+	unsigned int maxtries= 10;
+	bool nodefound= false;
 	do {
-		// during periods of failed links we want to test reachability for affected nodes
+		// during periods of failed links we want to preferably test reachability for affected nodes
 		if (getNetworkManager()->getFailedNodes().size() > 0) {
+			// select random nodes out of set of failed nodes
 			auto nodeit= getNetworkManager()->getFailedNodes().cbegin();
 			for (unsigned int index= intuniform(0, getNetworkManager()->getFailedNodes().size()-1); index > 0; index--)
 				nodeit++;
-
-			if (nodeit == getNetworkManager()->getFailedNodes().end())
-				return;
-
-			nodeid_t failnodecandidate(*nodeit);
-			if (getNetworkManager()->getTopology().isActive(failnodecandidate) == false or
-			    getNetworkManager()->getTopology().getNodeDegree(failnodecandidate) == 0) {
-				if (getNetworkManager()->getFailedNodes().size() == 1) { // no other choice
-					return;
-				}
-				else { // next try
-					key= &myOverlayKey;
-					continue;
+			
+			if (nodeit != getNetworkManager()->getFailedNodes().end()) {
+				nodeid_t nodecandidate(*nodeit);
+				// if node is active and not isolated
+				if (getNetworkManager()->getTopology().isActive(nodecandidate) == true and
+				    getNetworkManager()->getTopology().getNodeDegree(nodecandidate) > 0) {
+					if (getNetworkManager()->getFailedNodes().size() > 1) { // not the only choice
+						// try this failed node
+						key = &getKadObserver().getNodeKey(nodecandidate);
+						nodefound= true;
+					}
 				}
 			}
-
-			// check whether destination node is actually reachable
-			if (getNetworkManager()->getDistance(node().getNodeId(), failnodecandidate) == 0) {
-				EV_TRACE << "Node " << failnodecandidate << " not reachable" << endl;
-				return;
-			}
-
-			key = &getKadObserver().getNodeKey(failnodecandidate);
-			// it does not make sense to use the own key if it is the only choice
-			if (*key == myOverlayKey and getNetworkManager()->getFailedNodes().size() == 1)
-				return;
 		}
-		else
-			key = &getKadObserver().getRandomNodeKey();
 
-	} while (*key == myOverlayKey);
-	EV_TRACE << "Reachability Test to " << key->shortStr() << endl;
-	sendFindNode(*key, true);
+		if (not nodefound) { // try different non affected node as alternative
+			key = &getKadObserver().getRandomNodeKey();
+		}
+
+		// check whether destination node is actually reachable
+		if (key != nullptr) {
+			if (getKadObserver().getPhysicalDistance(myOverlayKey, *key) == 0) {
+				EV_TRACE << "Node " << key->shortStr() << " not reachable" << endl;
+				nodefound= false;
+			}
+			else { // node is reachable
+				nodefound= true;
+			}
+		}
+		else {
+			nodefound= false;
+		}
+
+		maxtries--;
+	} while ( nodefound == false and maxtries > 0 );
+
+	if (key != nullptr) {
+		EV_TRACE << "Reachability Test to " << key->shortStr() << endl;
+		sendFindNode(*key, true);
+	}
+	else
+		EV_WARN << "Reachability Test cannot be performed (key==nullptr)" << endl;
 }
 
 
