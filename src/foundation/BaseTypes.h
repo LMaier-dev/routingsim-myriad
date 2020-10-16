@@ -138,6 +138,7 @@ public:
 	nodeid_t id;
 	simtime_t activity;
 	simtime_t lastsent;
+	unsigned long long usecount= 0;
 
 	cGate * out;
 };

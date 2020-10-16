@@ -220,7 +220,7 @@ public:
 	void getNeighborNodeIDs(nodeid_t fromID, vector<nodeid_t> &neighborIDs) const;
 
 	// return the node ids of the count highest degree nodes
-    vector<nodeid_t> getHighestDegreeNodes( unsigned int count ) const;
+	vector<nodeid_t> getHighestDegreeNodes( unsigned int count ) const;
 
 	/**
 	 * Adds an active bidirectional link between nodes node1 and node2

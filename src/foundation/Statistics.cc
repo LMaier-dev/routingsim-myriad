@@ -74,7 +74,7 @@ public:
 	cHistogram* histogram; // histogram of average values
 	cHistogram* histogramAbs; // histogram of actual values from sample set
 	cHistogram* histogramDiffQuot; // histogram of difference quotient from average values
-	cOutVector* quantileVec[qvaluenumber];
+	cOutVector* quantileVec[qvaluenumber]; // a vector of various quantiles (see qvalues)
 	int f;
 
 	double eqTrigger;

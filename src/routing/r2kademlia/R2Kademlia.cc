@@ -110,6 +110,7 @@ void R2Kademlia::onInitialize() {
 
 void R2Kademlia::onConnect( nodeid_t nid ) {
 	sendToNode(nid, makeHelloPacket(), SimTime(10,SIMTIME_US));
+	sentPackets++;
 }
 
 
@@ -392,6 +393,8 @@ void R2Kademlia::reset() {
 void R2Kademlia::handlePacket(KadHello_p packet) {
 	EV << "received hello packet from " << packet->getSource().shortStr() << " StateSeq#" << packet->getStateSeqNo() << endl;
 
+	receivedPackets++;
+
 	if (neighborTable.addNeighbor(packet->getSourceId(), packet->getSource())) {
 		// physical neighborhood changed -> increase local state variable
 		incGLSSeqNo();
@@ -481,12 +484,14 @@ void R2Kademlia::handlePacket(KadAnswer_p packet) {
 }
 
 
+/// note: this method is also called when packet originate from this node
 void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt, simtime_t delay) {
 	// we do not route hello packets!
 	ASSERT(packet->getType() != KAD_PNHello);
 	ASSERT(packet->hasRemainingHops());
 	ASSERT(packet->getControlInfo() == nullptr);
 
+	bool packetorigin(packet->getSource() == myOverlayKey);
 	// TODO Check for already present NotVia() => loop
 	// TODO Check for presence of own ID in so far processed path (maybe as overlay hop)
 	
@@ -506,10 +511,12 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt, simtime_t 
 	}
 
 	if (nid != undefined_node) {
+
 		nodePkt->encapsulate(packet.release());
 		sendToNode(nid, std::move(nodePkt), delay);
 
-		forwardedPackets++;
+		if (not packetorigin)
+			forwardedPackets++;
 
 		return;
 	}
@@ -575,7 +582,8 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt, simtime_t 
 
 					nodePkt->encapsulate(packet.release());
 					sendToNode(nid, std::move(nodePkt), delay);
-					forwardedPackets++;
+					if (not packetorigin)
+						forwardedPackets++;
 					return;
 				}
 				else {
@@ -616,6 +624,8 @@ void R2Kademlia::reroutePacket(const OverlayKey& finaldest, KadPacket_p packet, 
 			notvialist.push_back(packet->getFailedLink(i));
 		}
 	}
+
+	bool packetorigin(packet->getSource() == myOverlayKey);
 
 	KadContactList ovlyneighbors= routingTable.getClosestContacts(finaldest, routingTable.getSplitSize(), true, notvialist);
 	while (not ovlyneighbors.empty())
@@ -673,7 +683,8 @@ void R2Kademlia::reroutePacket(const OverlayKey& finaldest, KadPacket_p packet, 
 					 << " next hop: " << nextHop.shortStr() << " (" << nid << ')' << endl;
 				nodePkt->encapsulate(packet.release());
 				sendToNode(nid, std::move(nodePkt), delay);
-				forwardedPackets++;
+				if (not packetorigin)
+					forwardedPackets++;
 				return;
 			}
 			else
@@ -684,7 +695,7 @@ void R2Kademlia::reroutePacket(const OverlayKey& finaldest, KadPacket_p packet, 
 		}
 		else
 		{
-			EV_TRACE << "reroutePacket(): cannot find alternative route via overlay" << endl;
+			EV_TRACE << "reroutePacket(): cannot find alternative route via overlay (no progress)" << endl;
 			break;
 		}
 	} // end while
@@ -911,6 +922,8 @@ void R2Kademlia::sendDiscoveryReq(KadContact_p contact)
 // handle PNDiscReq
 void R2Kademlia::handlePacket(std::unique_ptr<KadPNDiscReq> packet) {
 	EV_TRACE << "received PNDiscReq from " << packet->getSource().shortStr() << " w/ " << packet->getPhyNeighborArraySize() << " neighbors" << endl;
+
+	receivedPackets++;
 
 	// since this is physical neighbor add it to our neighbortable
 	if (neighborTable.addNeighbor(packet->getSourceId(), packet->getSource())) {

@@ -128,6 +128,7 @@ void KadObserver::initialize() {
 void KadObserver::finish() {
 	for (auto& h : histograms)
 		h->record();
+	recordLinkUsage();
 	recordStatistics();
 	recordMessageScalars();
 
@@ -164,11 +165,35 @@ std::set<nodeid_t> KadObserver::sampleNodes(int n) {
 	return sample;
 }
 
+
+void KadObserver::recordLinkUsage() const {
+	cHistogram linkUsageHist("LinkUsage");
+	//hist->setRange(rangeLower, rangeUpper);
+	//hist->setNumBinsHint(numBins);
+	linkUsageHist.setMode(cHistogram::MODE_INTEGERS);
+	NetworkTopology& topo = getNetworkManager()->getTopology();
+
+	for (nodeid_t nid=0; nid < nodes.size(); nid++) {
+		if (const Node *np= topo.getNodeModule(nid); np != nullptr) {
+			// traverse all outgoing links to neighbors
+			unsigned long long sum= 0;
+			for (auto& neighbor : np->getNeighborMap()) {
+				linkUsageHist.collect(neighbor.second.usecount);
+				sum += neighbor.second.usecount;
+			}
+			//EV_TRACE << "Node " <<  nid << " linkusage sum:" << sum << endl;
+		}
+	}
+	linkUsageHist.record();
+}
+
+
 void KadObserver::recordStatistics() {
 	for (nodeid_t nid : sampleNodes(par("nodeSample").intValue()))
 		getR2Kademlia(nid).recordScalars();
 	for (nodeid_t nid : sampleNodes(par("routingTableSample").intValue()))
 		getR2Kademlia(nid).recordRoutingTable();
+
 	recordScalar("simTime", simTime());
 }
 
@@ -381,11 +406,14 @@ void KadObserver::registerPacketDelivered(KadPacket& packet) {
 	ASSERT(info.overlayHops > 0);
 	histograms[hopCount]->collect(info.hops);
 	histograms[distance]->collect(info.distance);
-	histograms[stretchMul]->collect(info.hops / (double)info.distance);
-	histograms[stretchAdd]->collect(info.hops - info.distance);
+	if (info.distance > 0) {
+		histograms[stretchMul]->collect(info.hops / (double)info.distance);
+		histograms[stretchAdd]->collect(info.hops - info.distance);
+	}
 	histograms[prefixDist]->collect(info.prefixDist);
 	histograms[overlayHops]->collect(info.overlayHops);
-	histograms[prefixPerHop]->collect(info.prefixDist / (double)info.overlayHops);
+	if (info.overlayHops > 0)
+		histograms[prefixPerHop]->collect(info.prefixDist / (double)info.overlayHops);
 	if (simTime() > messageSampleTime and messageDeliveryInfos.size() < numMessageDeliveryInfos)
 		messageDeliveryInfos.push_back(info);
 }
@@ -411,11 +439,14 @@ void KadObserver::registerPacketDelivered(KadDataPacket& packet) {
 	ASSERT(info.overlayHops > 0);
 	histograms[hopCountData]->collect(info.hops);
 	histograms[distanceData]->collect(info.distance);
-	histograms[stretchMulData]->collect(info.hops / (double)info.distance);
-	histograms[stretchAddData]->collect(info.hops - info.distance);
+	if (info.distance > 0) {
+		histograms[stretchMulData]->collect(info.hops / (double)info.distance);
+		histograms[stretchAddData]->collect(info.hops - info.distance);
+	}
 	histograms[prefixDistData]->collect(info.prefixDist);
 	histograms[overlayHopsData]->collect(info.overlayHops);
-	histograms[prefixPerHopData]->collect(info.prefixDist / (double)info.overlayHops);
+	if (info.overlayHops > 0)
+		histograms[prefixPerHopData]->collect(info.prefixDist / (double)info.overlayHops);
 	if (simTime() > messageSampleTime and dataDeliveryInfos.size() < numMessageDeliveryInfos)
 		dataDeliveryInfos.push_back(info);
 }

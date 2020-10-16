@@ -57,7 +57,7 @@ protected:
 	virtual void handleMessage(cMessage *msg) override;
 	void recordStatistics();
 	void recordMessageScalars();
-
+	void recordLinkUsage() const;
 private:
 	boost::bimap<OverlayKey, nodeid_t> nodes;
 
@@ -69,7 +69,8 @@ private:
 	unsigned int deliveredDataPackets = 0;
 	unsigned int droppedDataPackets = 0;
 	unsigned int registeredDataPackets = 0;
-	
+
+	// scalars, histograms and vectors
 	enum dataType : uint8_t {hopCount=0, distance=1, prefixDist=2, overlayHops=3,
 		stretchMul=4, stretchAdd=5, prefixPerHop=6, distanceLeft=7,
 		prefixDistLeft=8, hopCountDropped=9, overlayHopsDropped=10,
@@ -82,6 +83,8 @@ private:
 		stretchMulLater= 33, stretchAddLater= 34,
 		numDataTypes= 35 // insert new types before this and update value accordingly
 	};
+
+	// vectors
 	enum addDataType : uint8_t {deliveryRatioV=0, deliveredPacketsV=1, droppedPacketsV=2, roamingPacketsV=3,
 			            deliveryRatioDataV=4, deliveredDataPacketsV=5, droppedDataPacketsV=6,
 			            roamingDataPacketsV=7,
@@ -95,6 +98,7 @@ private:
 	std::vector<MessageDroppedInfo> messageDroppedInfos;
 	std::vector<MessageDeliveryInfo> dataDeliveryInfos;
 	std::vector<MessageDroppedInfo> dataDroppedInfos;
+
 	/// if true, histograms and averages are reset each sampling interval
 	bool resetAfterSample;
 	/// time when message recording should start
@@ -112,6 +116,8 @@ private:
 	inline const R2Kademlia& getR2Kademlia(nodeid_t nid) const { return getR2Kademlia(getNetworkManager()->getTopology().getNodeModule(nid)); }
 	inline R2Kademlia& getR2Kademlia(const OverlayKey& key) { return getR2Kademlia(getNodeId(key)); }
 	inline const R2Kademlia& getR2Kademlia(const OverlayKey& key) const { return getR2Kademlia(getNodeId(key)); }
+
+	// the set of nodes used for sampling statistics values
 	std::set<nodeid_t> sampleNodes(int n);
 
 public:

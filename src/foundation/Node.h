@@ -41,14 +41,13 @@ public:
 	static Node* getOtherNode(cGate *gate);
 
 	/// returns the node_id of this node
-	inline nodeid_t getNodeId() const {
-		return id;
-	}
+	nodeid_t getNodeId() const { return id; }
 
 	/// returns the physical neighbors of the node
-	inline const vector_set<nodeid_t>& getNeighbors() const {
-		return neighbor_set;
-	}
+	const vector_set<nodeid_t>& getNeighbors() const { return neighbor_set; }
+
+	/// getNeighborMap()
+	const std::unordered_map<nodeid_t, neighbor_t> getNeighborMap() const { return neighbor_map; }
 
 	/// Binds a module to the given packet type
 	void bind( int type, cModule* mod );

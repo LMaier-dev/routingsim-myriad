@@ -187,6 +187,8 @@ void Node::sendToNode( nodeid_t nid, NodePkt* np ) {
 
 	n.lastsent= simTime()+delay;
 
+	n.usecount++;
+	EV_TRACE << "sendToNode() @Node "<<getNodeId()<<": Destination node " << nid << " msg:" << np->getName() << endl;
 	sendDelayed(np, delay, n.out);
 }
 
@@ -258,6 +260,7 @@ void Node::onHello( NodePkt* pkt ) {
 	sendToModules(pkt);
 }
 
+
 void Node::onGoodbye( NodePkt* pkt ) {
 	nodeid_t nid = pkt->getHop().from;
 	if (neighbor_map.count(nid) == 0) return;
@@ -269,6 +272,7 @@ void Node::onGoodbye( NodePkt* pkt ) {
 	// announce at neighbors
 	sendToModules(pkt);
 }
+
 
 bool Node::disableLink(Node *mod, const char *gatename) {
 	if (!hasGate(gatename))
