@@ -210,14 +210,16 @@ public:
 		minVec->record(min);
 		maxVec->record(max);
 		if (!first) {
-			double dx = (simTime() - lastLog).dbl();
-			// DiffQuot is the difference quotient (= average rate of change)
-			avgVecDiffQuot->record((value - lastavg) / dx);
-			//EV_TRACE << "Value::record(" << avgVecDiffQuot->getName() << "), lastavg:" << lastavg << " diff:" << (value - lastavg) << " delta:" << (value - lastavg)/dx << " dx=" << dx << endl;
+			if (double dx = (simTime() - lastLog).dbl();
+			    dx > 0.0) {
+				// DiffQuot is the difference quotient (= average rate of change)
+				avgVecDiffQuot->record((value - lastavg) / dx);
+				//EV_TRACE << "Value::record(" << avgVecDiffQuot->getName() << "), lastavg:" << lastavg << " diff:" << (value - lastavg) << " delta:" << (value - lastavg)/dx << " dx=" << dx << endl;
 
-			histogramDiffQuot->collect((value - lastavg) / dx);
-			minVecDiffQuot->record((min - lastmin) / dx);
-			maxVecDiffQuot->record((max - lastmax) / dx);
+				histogramDiffQuot->collect((value - lastavg) / dx);
+				minVecDiffQuot->record((min - lastmin) / dx);
+				maxVecDiffQuot->record((max - lastmax) / dx);
+			}
 			calcQuantiles();
 		}
 		lastavg = value;
