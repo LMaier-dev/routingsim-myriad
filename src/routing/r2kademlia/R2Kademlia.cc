@@ -627,7 +627,10 @@ void R2Kademlia::reroutePacket(const OverlayKey& finaldest, KadPacket_p packet, 
 
 	bool packetorigin(packet->getSource() == myOverlayKey);
 
+	// try up to k closest valid contacts
 	KadContactList ovlyneighbors= routingTable.getClosestContacts(finaldest, routingTable.getSplitSize(), true, notvialist);
+	EV_ERROR << "reroutePacket(): found " << ovlyneighbors.size() << " contacts close to " << finaldest << endl;
+
 	while (not ovlyneighbors.empty())
 	{
 		const KadContact& contact= chooseNextHop(ovlyneighbors, finaldest);
@@ -700,7 +703,7 @@ void R2Kademlia::reroutePacket(const OverlayKey& finaldest, KadPacket_p packet, 
 		}
 	} // end while
 
-	EV_ERROR << "reroutePacket(): no contacts found" << endl;
+	EV_ERROR << "reroutePacket(): no (more) contacts found" << endl;
 
 	// if we get here: bad luck
 	onMissingNeighbor(std::move(packet), std::move(nodePkt));

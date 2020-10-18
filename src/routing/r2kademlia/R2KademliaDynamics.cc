@@ -447,7 +447,7 @@ void R2Kademlia::scheduleRediscovery(const OverlayKey& contactkey, const Overlay
 
 	EV_TRACE << (immediate ? "Urgent " : "") << "Rediscovery scheduled for contact " << contactkey.shortStr() << " <"
 		<< notvia_unreachable_node.shortStr() << ' '
-		<< notvia_failednode_neighbor.shortStr() << '>' << endl;
+		 << notvia_failednode_neighbor.shortStr() << '>' << endl;
 
 	auto rediscoverContact=
 		std::make_unique<const KadContact>(contactkey, std::vector<OverlayKey>{notvia_unreachable_node, notvia_failednode_neighbor});
@@ -514,7 +514,16 @@ void R2Kademlia::rediscoverContacts() {
 				// }
 
 				EV_TRACE << "rediscoverContacts(): number of via contacts: " << contacts.size() << endl;
-				sendRediscovery(rt_contact, rediscoveryFanOutFactor);
+				if (rt_contact->getRDS().retryCounter == 0) { // immediate rediscovery
+					sendRediscovery(rt_contact, rediscoveryFanOutFactor);
+				}
+				else {
+					// schedule rediscovery for later (max backofFactor arbitrarily set to 1024)
+					unsigned long backoffFactor(1UL << (rt_contact->getRDS().retryCounter < 10 ? rt_contact->getRDS().retryCounter : 10));
+					EV_TRACE << "rediscoverContacts(): will sendRediscovery in " << 500*backoffFactor << "ms, retry:" << rt_contact->getRDS().retryCounter << endl;
+					addTimer(backoffFactor*SimTime(500,SIMTIME_MS), 0, std::bind(&R2Kademlia::sendRediscovery, this, rt_contact, rediscoveryFanOutFactor));
+				}
+
 			}
 		}
 		rediscoverQ.pop();
@@ -570,10 +579,17 @@ void R2Kademlia::sendRediscovery(KadContact* failedcontact, uint8_t maxFanOut) {
 	else
 	{ // no (more) contacts to choose from (initially only possible for isolated nodes)
 		EV_WARN << "no (more) contacts found, cannot send rediscovery" << endl;
-		// TODO maybe a second round of rediscovery for contacts in the deepest bucket?
-		// do not remove physical contacts
-		if (failedcontact->isInvalid() and failedcontact->isPhysicalNeighbor() == false)
-			routingTable.removeContact(failedcontact);
+		// try several rounds of rediscovery for contacts in the deepest bucket
+		failedcontact->getRDS().retryCounter++;
+		if (failedcontact->getRDS().retryCounter < maxRediscoveryRetries and routingTable.isInLastBucket(failedcontact->getKey())) {
+			scheduleRediscovery(failedcontact->getKey(), failedcontact->getPath().front(), failedcontact->getPath().back(), true);
+			EV_TRACE << "retrying rediscovery for last bucket contact " << failedcontact->getKey().shortStr() << endl;
+		}
+		else {
+			// do not remove physical contacts
+			if (failedcontact->isInvalid() and failedcontact->isPhysicalNeighbor() == false)
+				routingTable.removeContact(failedcontact);
+		}
 	}
 }
 

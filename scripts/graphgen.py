@@ -229,7 +229,8 @@ def clos_fat_tree(k, hosts=False):
     assert k % 2  == 0
     # we have:
     # - (k//2) ** 2 core nodes
-    # - k pods with k nodes each
+    # - k pods with k nodes each, i.e., k**2 pods
+    # - k**3 // 4 hosts
     G = networkx.empty_graph(k**2 + (k//2)**2)
     # pod node id is: pod*k + node
     # core node id is (with x,y core coordinates): k**2 + x*k//2 + y

@@ -34,12 +34,14 @@ namespace routingsim {
 using size_type = std::size_t;
 using stateseqno_t = uint16_t;
 constexpr stateseqno_t invalidSeqNo= 0xffff;
-	
+constexpr unsigned short int maxRediscoveryRetries= 4;
+
 class RediscoveryState {
 public:
 	RediscoveryState(const link_t& failedlink) : failedLinkList({failedlink}) {};
 	std::list<link_t> failedLinkList; // the currently failed links
 	std::list<OverlayKey> viaContacts; // these nodes should be considered for rediscovery actions for this contact
+	unsigned short int retryCounter= 0;
 };
 
 
