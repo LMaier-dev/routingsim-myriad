@@ -518,7 +518,7 @@ void R2Kademlia::rediscoverContacts() {
 					sendRediscovery(rt_contact, rediscoveryFanOutFactor);
 				}
 				else {
-					// schedule rediscovery for later (max backofFactor arbitrarily set to 1024)
+					// schedule rediscovery for later (max backoffFactor arbitrarily set to 1024)
 					unsigned long backoffFactor(1UL << (rt_contact->getRDS().retryCounter < 10 ? rt_contact->getRDS().retryCounter : 10));
 					EV_TRACE << "rediscoverContacts(): will sendRediscovery in " << 500*backoffFactor << "ms, retry:" << rt_contact->getRDS().retryCounter << endl;
 					addTimer(backoffFactor*SimTime(500,SIMTIME_MS), 0, std::bind(&R2Kademlia::sendRediscovery, this, rt_contact, rediscoveryFanOutFactor));
@@ -581,9 +581,9 @@ void R2Kademlia::sendRediscovery(KadContact* failedcontact, uint8_t maxFanOut) {
 		EV_WARN << "no (more) contacts found, cannot send rediscovery" << endl;
 		// try several rounds of rediscovery for contacts in the deepest bucket
 		failedcontact->getRDS().retryCounter++;
-		if (failedcontact->getRDS().retryCounter < maxRediscoveryRetries and routingTable.isInLastBucket(failedcontact->getKey())) {
-			scheduleRediscovery(failedcontact->getKey(), failedcontact->getPath().front(), failedcontact->getPath().back(), true);
-			EV_TRACE << "retrying rediscovery for last bucket contact " << failedcontact->getKey().shortStr() << endl;
+		if (failedcontact->getRDS().retryCounter < maxRediscoveryRetries) {
+			scheduleRediscovery(failedcontact->getKey(), failedcontact->getPath().front(), failedcontact->getPath().back(), routingTable.isInLastBucket(failedcontact->getKey()));
+			EV_TRACE << "retrying rediscovery for contact " << failedcontact->getKey().shortStr() << endl;
 		}
 		else {
 			// do not remove physical contacts

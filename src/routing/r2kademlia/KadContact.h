@@ -34,7 +34,7 @@ namespace routingsim {
 using size_type = std::size_t;
 using stateseqno_t = uint16_t;
 constexpr stateseqno_t invalidSeqNo= 0xffff;
-constexpr unsigned short int maxRediscoveryRetries= 4;
+constexpr unsigned short int maxRediscoveryRetries= 6;
 
 class RediscoveryState {
 public:
