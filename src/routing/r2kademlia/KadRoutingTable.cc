@@ -733,7 +733,6 @@ void KadRoutingTable::invalidateContact(KadContact& contact, const link_t& faile
 	const auto& path= contact.getPath();
 	if (path.size() > 0)
 	{
-		const auto &[failedNodeKey, otherNodeKey]= failed_link;
 		if (contact.isContainedinPath(myKey, failed_link))
 		{ // link somewhere in the path
 
@@ -744,7 +743,7 @@ void KadRoutingTable::invalidateContact(KadContact& contact, const link_t& faile
 				EV_TRACE << "Set Contact to invalid due to failed link " << failed_link << ":"  << contact << endl;
 				// if contact is important neighbor: send rediscovery immediately
 				// otherwise schedule normal rediscovery
-				policy->scheduleRediscovery(contact.getKey(), failedNodeKey, otherNodeKey, isInLastBucket(contact.getKey()));
+				policy->scheduleRediscovery(contact.getKey(), isInLastBucket(contact.getKey()));
 			}
 			else
 			if (contact.isInvalid()) { // contact already invalid or rediscovering
@@ -827,7 +826,7 @@ void KadRoutingTable::invalidateContactsPN(const OverlayKey& failedNodeKey)
 						contact->setInvalid({failedNodeKey, myKey});
 						EV_TRACE << "Set Contact to invalid due to PN first hop failure: "  << *contact << endl;
 						// will schedule this for rediscovery later
-						policy->scheduleRediscovery(contact->getKey(), failedNodeKey, myKey, isInLastBucket(contact->getKey()));
+						policy->scheduleRediscovery(contact->getKey(), isInLastBucket(contact->getKey()));
 					}
 					else
 					if (contact->isInvalid()) { // contact already invalid or rediscovering
@@ -849,7 +848,7 @@ void KadRoutingTable::invalidateContactsPN(const OverlayKey& failedNodeKey)
 						contact->setInvalid({failedNodeKey, myKey});
 						EV_TRACE << "Set Contact to invalid due to PN first hop failure: "  << *contact << endl;
 						// will schedule this for rediscovery later
-						policy->scheduleRediscovery(contact->getKey(), failedNodeKey, myKey, isInLastBucket(contact->getKey()));
+						policy->scheduleRediscovery(contact->getKey(), isInLastBucket(contact->getKey()));
 					}
 					else
 					if (contact->isInvalid()) { // contact already invalid or rediscovering

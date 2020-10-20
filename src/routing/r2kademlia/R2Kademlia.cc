@@ -135,7 +135,7 @@ void R2Kademlia::onDisconnect( nodeid_t nid ) {
 	
 	// Try to rediscover that contact
 	// after grace period (otherwise more links may fail immediately after this)
-	scheduleRediscovery(key, key, myOverlayKey, routingTable.isInLastBucket(key));
+	scheduleRediscovery(key, routingTable.isInLastBucket(key));
 
 	// contacts from routing table with this neighbor as next hop are not usable until rediscovered
 	routingTable.invalidateContactsPN(key);
@@ -629,7 +629,7 @@ void R2Kademlia::reroutePacket(const OverlayKey& finaldest, KadPacket_p packet, 
 
 	// try up to k closest valid contacts
 	KadContactList ovlyneighbors= routingTable.getClosestContacts(finaldest, routingTable.getSplitSize(), true, notvialist);
-	EV_ERROR << "reroutePacket(): found " << ovlyneighbors.size() << " contacts close to " << finaldest << endl;
+	EV_TRACE << "reroutePacket(): found " << ovlyneighbors.size() << " contacts close to " << finaldest << endl;
 
 	while (not ovlyneighbors.empty())
 	{
@@ -725,9 +725,14 @@ void R2Kademlia::sendPacket(KadPacket_p packet, simtime_t delay) {
 	ASSERT(packet->getControlInfo() == nullptr);
 	auto nodePkt = std::make_unique<NodePkt>(packet->getName());
 	nodePkt->setType(KAD_CTRL_PACKET_TYPE);
-	if (packet->getType() == KAD_FindNodeReq and check_and_cast<KadFindNodeReq*>(packet.get())->getExact()) {
-		getKadObserver().registerPacket(*packet);
-		getStatistics().registerMessage(nodePkt.get());
+	if (packet->getType() == KAD_FindNodeReq) {
+		const KadFindNodeReq* tmp_packet= check_and_cast<KadFindNodeReq*>(packet.get());
+		// it doesn't make sense to count packets destined to isolated nodes: they cannot be reached
+		if (tmp_packet->getExact() and tmp_packet->getRediscovery()==false and
+		    getKadObserver().getPhysicalDistance(myOverlayKey, tmp_packet->getDstNodeID()) > 0) {
+				getKadObserver().registerPacket(*packet);
+				getStatistics().registerMessage(nodePkt.get());
+		}
 	}
 	// EV_TRACE << "sendPacket(): " << packet->getName() << ", " << (int) packet->getType() << endl;
 	sentPackets++;
@@ -1272,7 +1277,7 @@ bool R2Kademlia::handleFindNodeResponse(KadPacket_p answer_, RPCState& rpcState)
 			if (contactp->isRediscovering()) { // not successful yet
 				EV_TRACE << "Rediscovery not successful for contact " << *contactp << ", next try." << endl;
 				// send a new find node req
-				sendRediscovery(const_cast<KadContact*>(contactp), 1);
+				sendRediscovery(contactp->getKey(), 1);
 			}
 		}
 	}

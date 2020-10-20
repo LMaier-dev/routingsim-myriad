@@ -132,7 +132,7 @@ class R2Kademlia : public RPCProtocol, public KadPolicy, public StatisticSample
 	/// sends a find node call to find this node
 	void sendFindNode(const OverlayKey& key, bool exact=false);
 	/// sends a find node call for rediscovery, possibly using "not via" failed link
-	void sendRediscovery(KadContact* failedcontact, uint8_t maxFanOut);
+	void sendRediscovery(OverlayKey failedcontact, uint8_t maxFanOut);
 
 	/// sends a data packet
 	void sendData(const OverlayKey& key);
@@ -273,7 +273,7 @@ private:
 
 	kad_path concatViaPath(const kad_path& viaPath, const OverlayKey& viaKey, const kad_path& path);
 	/// adds contact and not via link for rediscovery queue (or send it immediately)
-	void scheduleRediscovery(const OverlayKey& contactkey, const OverlayKey& notvia_unreachable_node, const OverlayKey& notvia_failednode_neighbor, bool immediate= false);
+	void scheduleRediscovery(const OverlayKey& contactkey, bool immediate= false);
 	/// schedule sending PNDiscReq
 	void schedulePNDiscReq(const OverlayKey& neighbor);
 	/// create and send PNDiscReqs for queued neighbors
@@ -368,14 +368,20 @@ private:
 	struct greatercmp {
 		const OverlayKey& ownkey;
 		greatercmp(const OverlayKey& key) : ownkey(key) {}
-		bool operator()(std::unique_ptr<const KadContact>& leftcontact, std::unique_ptr<const KadContact>& rightcontact) const
-			{ return (leftcontact.get()->getKey() ^ ownkey) > (rightcontact.get()->getKey() ^ ownkey);}
+		bool operator()(const OverlayKey& leftcontact, const OverlayKey& rightcontact) const
+			{ return (leftcontact ^ ownkey) > (rightcontact ^ ownkey);}
 	} cmp;
 
 	// a list that is used to send rediscover messages sorted by node ID vicinity
-	typedef std::priority_queue<std::unique_ptr<const KadContact>, std::deque<std::unique_ptr<const KadContact>>, decltype(cmp)> rediscoverQueueType;
-	rediscoverQueueType rediscoverQueue;
-	rediscoverQueueType urgentRediscoverQueue;
+	typedef std::priority_queue< OverlayKey, std::deque<OverlayKey>, decltype(cmp)> rediscoverQueueType;
+	class rediscoverQueueClass : public rediscoverQueueType {
+	public:
+		rediscoverQueueClass(decltype(cmp) comparefct) : rediscoverQueueType(comparefct) {}
+		container_type::iterator begin() { return c.begin(); }
+		container_type::iterator end() { return c.end(); }
+	};
+	rediscoverQueueClass rediscoverQueue;
+	rediscoverQueueClass urgentRediscoverQueue;
 
 	// a list that is used to send pathsetup messages
 	std::list<OverlayKey> pathSetupQueue;

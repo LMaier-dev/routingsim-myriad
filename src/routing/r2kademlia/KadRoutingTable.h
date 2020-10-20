@@ -86,7 +86,7 @@ public:
 	virtual void reSyncPN(const KadContact& contact) = 0;
 	
 	/** called when a rediscovery needs to be performed for a contact */
-	virtual void scheduleRediscovery(const OverlayKey& contact, const OverlayKey& notvia_unreachable_node, const OverlayKey& notvia_failednode_neighbor, bool immediate= false) = 0;
+	virtual void scheduleRediscovery(const OverlayKey& contact, bool immediate= false) = 0;
 	/** called when the path of a contact is probably broken and needs to be checked */
 	virtual void onContactCheck(const KadContact& contact) = 0;
 };
