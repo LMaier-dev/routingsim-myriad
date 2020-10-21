@@ -187,8 +187,8 @@ void Node::sendToNode( nodeid_t nid, NodePkt* np ) {
 
 	n.lastsent= simTime()+delay;
 
-	n.usecount++;
-	EV_TRACE << "sendToNode() @Node "<<getNodeId()<<": Destination node " << nid << " msg:" << np->getName() << endl;
+	linkusage_map[nid]++;
+	//EV_TRACE << "sendToNode() @Node "<<getNodeId()<<": Destination node " << nid << " msg:" << np->getName() << endl;
 	sendDelayed(np, delay, n.out);
 }
 

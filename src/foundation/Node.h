@@ -35,6 +35,7 @@ namespace routingsim {
  */
 class Node: public cSimpleModule {
 public:
+	typedef unsigned long long linkcount_t;
 	/// returns the node, that is either a submodule, the node of a protocol, etc
 	static Node* getNode(cModule *mod);
 	/// returns the node on the other side of this outgoing gate
@@ -48,6 +49,9 @@ public:
 
 	/// getNeighborMap()
 	const std::unordered_map<nodeid_t, neighbor_t> getNeighborMap() const { return neighbor_map; }
+
+	/// getLinkUsageMap()
+	const std::unordered_map<nodeid_t, linkcount_t> getLinkUsageMap() const { return linkusage_map; }
 
 	/// Binds a module to the given packet type
 	void bind( int type, cModule* mod );
@@ -82,6 +86,8 @@ protected:
 	/// Neighbors of the node
 	vector_set<nodeid_t> neighbor_set;
 	std::unordered_map<nodeid_t, neighbor_t> neighbor_map;
+	/// need separate map for link counters as neighbor_map will remove nodes
+	std::unordered_map<nodeid_t, linkcount_t> linkusage_map;
 
 	/// Broadcast a message among all node modules
 	void sendToModules( NodePkt* np );

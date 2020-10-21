@@ -491,7 +491,7 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt, simtime_t 
 	ASSERT(packet->hasRemainingHops());
 	ASSERT(packet->getControlInfo() == nullptr);
 
-	bool packetorigin(packet->getSource() == myOverlayKey);
+	bool packetorigin(packet->getProgress() == 0);
 	// TODO Check for already present NotVia() => loop
 	// TODO Check for presence of own ID in so far processed path (maybe as overlay hop)
 	
@@ -503,20 +503,22 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt, simtime_t 
 	const OverlayKey nextHop(packet->getNextHop());
 	nodeid_t nid(neighborTable.getNodeId(nextHop));
 
-	if (packet->getProgress() == 0) { // only print this for originating packets
+	if (packetorigin) { // only print this for originating packets
 		EV_TRACE << "forwardPacket(): " << packet->getName() << " dest " << packet->getTarget().shortStr()
 			 << " next hop: " << nextHop.shortStr() << " (" << nid << ')'
 			 << " nonce=" << packet->getNonce()
-			 << " path " << packet->getSrcPath() << " progress=" << packet->getProgress() << endl;
+			 << " path " << packet->getSrcPath() << " progress=" << packet->getProgress() << " delay:" << delay << endl;
 	}
 
 	if (nid != undefined_node) {
 
+		if (not packetorigin) {
+			forwardedPackets++;
+			//EV_TRACE << "forwardPacket(): Node" << node().getNodeId() << " " << packet->getName() << " nonce=" << packet->getNonce() << " progress:" << packet->getProgress() << " route:" << packet->getSrcPath() << " delay:" << delay << endl;
+		}
+
 		nodePkt->encapsulate(packet.release());
 		sendToNode(nid, std::move(nodePkt), delay);
-
-		if (not packetorigin)
-			forwardedPackets++;
 
 		return;
 	}
@@ -580,10 +582,14 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt, simtime_t 
 					packet->addNotViaLink({nextHop,myOverlayKey}, true);
 					EV_TRACE << "forwardPacket(): forwarding to next hop (" << nid << ")" << endl;
 
+					if (not packetorigin) {
+						forwardedPackets++;
+						//EV_TRACE << "forwardPacket(): Node" << node().getNodeId() << " " << packet->getName() << " nonce=" << packet->getNonce() << " progress:" << packet->getProgress() << " route:" << packet->getSrcPath() << endl;
+					}
+
 					nodePkt->encapsulate(packet.release());
 					sendToNode(nid, std::move(nodePkt), delay);
-					if (not packetorigin)
-						forwardedPackets++;
+
 					return;
 				}
 				else {
@@ -625,7 +631,7 @@ void R2Kademlia::reroutePacket(const OverlayKey& finaldest, KadPacket_p packet, 
 		}
 	}
 
-	bool packetorigin(packet->getSource() == myOverlayKey);
+	bool packetorigin(packet->getProgress()==0);
 
 	// try up to k closest valid contacts
 	KadContactList ovlyneighbors= routingTable.getClosestContacts(finaldest, routingTable.getSplitSize(), true, notvialist);
@@ -684,10 +690,13 @@ void R2Kademlia::reroutePacket(const OverlayKey& finaldest, KadPacket_p packet, 
 			if (nid != undefined_node) {
 				EV_TRACE << "reroutePacket(): " << packet->getName() << " dest " << packet->getTarget().shortStr()
 					 << " next hop: " << nextHop.shortStr() << " (" << nid << ')' << endl;
+				if (not packetorigin) {
+					forwardedPackets++;
+					//EV_TRACE << "forwardPacket(): Node" << node().getNodeId() << " " << packet->getName() << " nonce=" << packet->getNonce() << " progress:" << packet->getProgress() << " route:" << packet->getSrcPath() << endl;
+				}
 				nodePkt->encapsulate(packet.release());
 				sendToNode(nid, std::move(nodePkt), delay);
-				if (not packetorigin)
-					forwardedPackets++;
+
 				return;
 			}
 			else
@@ -1826,6 +1835,7 @@ void R2Kademlia::doSendHello(short timerId) {
 	}
 
 	sendToNeighbors(makeHelloPacket());
+	sentPackets+= neighborTable.size();
 }
 
 

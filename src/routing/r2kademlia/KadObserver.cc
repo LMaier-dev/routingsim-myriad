@@ -177,9 +177,9 @@ void KadObserver::recordLinkUsage() const {
 		if (const Node *np= topo.getNodeModule(nid); np != nullptr) {
 			// traverse all outgoing links to neighbors
 			unsigned long long sum= 0;
-			for (auto& neighbor : np->getNeighborMap()) {
-				linkUsageHist.collect(neighbor.second.usecount);
-				sum += neighbor.second.usecount;
+			for (auto& neighbor : np->getLinkUsageMap()) {
+				linkUsageHist.collect(neighbor.second);
+				sum += neighbor.second;
 			}
 			//EV_TRACE << "Node " <<  nid << " linkusage sum:" << sum << endl;
 		}
