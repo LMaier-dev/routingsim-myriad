@@ -167,7 +167,7 @@ std::set<nodeid_t> KadObserver::sampleNodes(int n) {
 
 
 void KadObserver::recordLinkUsage() const {
-	cHistogram linkUsageHist("LinkUsage");
+	cHistogram linkUsageHist("linkUsage");
 	//hist->setRange(rangeLower, rangeUpper);
 	//hist->setNumBinsHint(numBins);
 	linkUsageHist.setMode(cHistogram::MODE_INTEGERS);
