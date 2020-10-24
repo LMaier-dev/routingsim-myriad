@@ -276,6 +276,9 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 			// do something on improved path according to policy
 			policy->onImprovement(*contact);
 
+			// try to improve other paths with newly improved contact path
+			updatePaths(*contact);
+
 			return true;
 		}
 		// else contact exists, but new path is not interesting
@@ -360,6 +363,9 @@ bool KadRoutingTable::addPath(const OverlayKey& key, const kad_path& path, state
 
 			// do something on improved path according to policy
 			policy->onImprovement(*contact);
+
+			// try to improve other paths with newly improved contact path
+			updatePaths(*contact);
 
 			return true;
 		}
@@ -724,6 +730,41 @@ size_type KadRoutingTable::getNumIndirectPaths() const
 		}
 	// no need to check for PNcontacts: they are always direct...
 	return sum;
+}
+
+
+void KadRoutingTable::updatePaths(const KadContact& improvedContact)
+{
+	// iterate over all buckets and contacts (not PNcontacts, because this )
+	for (KadBucket& b : buckets) {
+		for (auto& contact : b.contacts) {
+			// check for existence of contact and replace path
+			// (either shorter or more current)
+			if (auto& path= contact->getPath(); path.size()>0) {
+				bool found(false);
+				for (auto revpathit= path.rbegin(); revpathit!= path.rend() and !found; revpathit++) {
+					if (*revpathit == improvedContact.getKey()) {
+						// special case when found contact is the neighbor and nothing changed
+						if (path.size() == 1 and improvedContact.getPath().empty()) {
+								continue;
+						}
+						// construct new path
+						kad_path newpath(improvedContact.getPath());
+						// +1 because improvedContact is missing in getPathLength
+						newpath.reserve(improvedContact.getPathLength()+1+(revpathit-path.rbegin()));
+						newpath.push_back(improvedContact.getKey());
+						for (auto fwdpathit= path.begin() + (path.rend() - revpathit); fwdpathit != path.end(); fwdpathit++) {
+							newpath.push_back(*fwdpathit);
+						}
+						// only set new path in case the newpath repairs all pending failures
+						contact->updatePath( myKey, newpath );
+						// optionally: call onImprovement(contact)
+						found=true; // break the loop
+					}
+				} // end for: iterating backwards over path
+			}
+		} // end for inner loop over all contacts
+	} // end for over all buckets
 }
 
 

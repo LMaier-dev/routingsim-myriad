@@ -30,6 +30,21 @@ bool KadContact::isContainedinPath(const OverlayKey& myOverlayKey, const link_t&
 }
 
 
+void KadContact::updatePath(const OverlayKey& myOverlayKey, kad_path newpath)
+{
+	if (isRediscovering()) { // if rediscovering, check for repair of failed links
+		for (const auto& failedlink : getRDS().failedLinkList) {
+			if (containsUndirectedLink(myOverlayKey, getKey(), newpath, failedlink)) {
+				// just update the path, but not the state
+				this->path = std::move(newpath);
+				return;
+			}
+		}
+	}
+	setPath(newpath);
+}
+
+
 std::ostream& operator<<(std::ostream& os, const KadContact& c) {
 	os << c.getKey().shortStr();
 	// state is next V = valid, I = invalid, U = undefined

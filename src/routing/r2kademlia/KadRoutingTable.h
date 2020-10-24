@@ -204,6 +204,8 @@ public:
 	/// returns the distance of the given key to my key
 	inline OverlayKey distance(const OverlayKey& key) const { return key ^ myKey; }
 
+	// update all contact paths that are affected by improved contact path
+	void updatePaths(const KadContact& improvedContact);
 	/// pathSimplification on?
 	bool usePathSimplification() const { return pathSimplification; }
 	/// tries to find shortcuts using own routing table entries

@@ -111,6 +111,8 @@ public:
 	/// returns the length of the path (here: number of hops-1)
 	/// i.e., the _intermediate hops_ between me and this contact
 	size_t getPathLength() const { return path.size(); }
+	/// sets new path, but only sets path state to valid if path does not contain failed links
+	void updatePath(const OverlayKey& myOverlayKey, kad_path path);
 	/// sets the path to reach this contact (will implicitly set status to valid)
 	void setPath(kad_path path) { this->path = std::move(path); setValid(); }
 	const kad_path& getPath() const { return path; }
