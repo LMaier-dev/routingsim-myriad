@@ -1479,6 +1479,9 @@ void R2Kademlia::onContactRemoval(KadContact_p contact)
 	// TODO: this can be scheduled for happening later
 	if (usePathIDs)
 		fwdTablePathID.delEntry(contact);
+
+	// remove from queried node set (in case of later rendezvous again)
+	queriedNeighbors.erase(contact->getKey());
 }
 
 

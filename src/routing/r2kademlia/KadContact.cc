@@ -37,6 +37,7 @@ void KadContact::updatePath(const OverlayKey& myOverlayKey, kad_path newpath)
 			if (containsUndirectedLink(myOverlayKey, getKey(), newpath, failedlink)) {
 				// just update the path, but not the state
 				this->path = std::move(newpath);
+				EV_TRACE << "updatePath(): rediscovering path not fully repaired yet" << endl;
 				return;
 			}
 		}
