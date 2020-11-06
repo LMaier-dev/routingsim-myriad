@@ -105,6 +105,7 @@ void R2Kademlia::handleDataPacket(NodePkt_p pkt) {
 // @returns true in case of successful forwarding/transmission to next hop or dropped packet
 bool R2Kademlia::forwardDataPacketToNextHop(KadDataPacket_p& packet, NodePkt_p& nodePkt)
 {
+	bool packetorigin(packet->getSrcNodeID() == myOverlayKey);
 	// lookup outgoing PathID (next hop) based on incoming PathID
 	auto fwdentry= fwdTablePathID.PIDFwdTable.find(packet->getDestPathID());
 	if (fwdentry != fwdTablePathID.PIDFwdTable.end())
@@ -145,7 +146,9 @@ bool R2Kademlia::forwardDataPacketToNextHop(KadDataPacket_p& packet, NodePkt_p& 
 			packet->advanceProgress(); // decrease hop limit
 			nodePkt->encapsulate(packet.release());
 			sendToNode(nid, std::move(nodePkt));
-			forwardedDataPackets++;
+			if (not packetorigin) {
+				forwardedDataPackets++;
+			}
 			EV_TRACE << "send to next hop nid=" << nid << endl;
 			// true means success
 			return true;
