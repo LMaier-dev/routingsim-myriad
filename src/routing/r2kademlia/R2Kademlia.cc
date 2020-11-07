@@ -1225,6 +1225,10 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 					// since we need an exact match and cannot make any progress, we are lost here
 					EV_ERROR << "cannot reach final destination " << query.shortStr() << " (dead end)" << endl;
 					countDropped(*packet, query, routeFailureDeadEnd);
+					// since this node should exist, it may be a hint for inconsistency
+					// trigger discovery of own neighborhood or lookup this contact?
+					sendFindNode(myOverlayKey, false);
+					//sendFindNode(query, false);
 
 					returnToSender(KAD_RouteFailureDeadEnd, std::move(packet));
 				}
@@ -1953,9 +1957,8 @@ void R2Kademlia::doProbeSelf(short timerId) {
 	}
 
 	if (neighborTable.size() == 0) return; // we are isolated
-	bool exact= false;
 
-	sendFindNode(myOverlayKey, exact);
+	sendFindNode(myOverlayKey, false);
 }
 
 
