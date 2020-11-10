@@ -225,8 +225,13 @@ private:
 	//@{
 	/// adds a timer to the timer vectors, sends a timer packet
 	short addTimer(simtime_t initialOffset, simtime_t duration, std::function<void(short timerId)> callback);
+	/// stops timer and cancels timer message
 	void stopTimer(short timerId);
+	/// stops timer and cancel timer message, starts new timer with new duration
+	void resetTimer(short timerId, simtime_t duration);
 	void stopAllTimers() { for (short timerId= 0; (size_type) timerId < timerMsg.size(); timerId++) { stopTimer(timerId); } };
+
+	/// timer callbacks
 	void doSendHello(short timerId);
 	void doProbe(short timerId);
 	void doProbeSelf(short timerId);
@@ -350,6 +355,7 @@ private:
 	bool pathSnooping;
 	bool sendDataPackets;
 	bool usePathIDs;
+	short probeTimerId;
 	uint8_t probeStrategy;
 	uint8_t rediscoveryFanOutFactor= 2;
 	simtime_t rediscoveryWaitTime;

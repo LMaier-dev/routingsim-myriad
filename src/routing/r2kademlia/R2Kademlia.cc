@@ -79,7 +79,7 @@ void R2Kademlia::onInitialize() {
 	// doProbeSelf is required for joining (will do exponential backoff)
 	// calculation for first timer is: initialOffset - duration/2 + random([0..duration])
 	// start after 100ms, use 250ms, 500ms, 1s, 2s, 4s, 8s, 16s, 32s, 64s, 128s, 256s, 300s as intervals
-	addTimer(SimTime(225,SIMTIME_MS), SimTime(250,SIMTIME_MS), std::bind(&R2Kademlia::doProbeSelf, this, ph::_1));
+	probeTimerId= addTimer(SimTime(225,SIMTIME_MS), SimTime(250,SIMTIME_MS), std::bind(&R2Kademlia::doProbeSelf, this, ph::_1));
 	// regularly probe for closest neighbors
 	addTimer(SimTime(1000,SIMTIME_MS), probeInterval*2, std::bind(&R2Kademlia::doProbeNeighbors, this, ph::_1));
 	// regularly probe for non PN contacts to test path liveliness
@@ -732,6 +732,12 @@ void R2Kademlia::resendPacket(KadPacket_p packet) {
 void R2Kademlia::sendPacket(KadPacket_p packet, simtime_t delay) {
 	ASSERT(packet->getSource() == myOverlayKey);
 	ASSERT(packet->getControlInfo() == nullptr);
+
+	if (not packet->hasRemainingHops() or packet->getTarget() == myOverlayKey) {
+		EV_ERROR << "sendPacket: not sending packet destined to myself" << endl;
+		return;
+	}
+
 	auto nodePkt = std::make_unique<NodePkt>(packet->getName());
 	nodePkt->setType(KAD_CTRL_PACKET_TYPE);
 	if (packet->getType() == KAD_FindNodeReq) {
@@ -1138,30 +1144,20 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 		}
 	}
 	// ContactList is sorted according to XOR metric with respect to key
+	// the first contact is ID-wise closest to query key, however, it may not be the one with the shortest path
 	KadContactList contacts = routingTable.getClosestContacts(query, contactsLen, true, notvialist);
 
-	if (query != myOverlayKey) { // someone else routing via us
-
-		// the first contact is closest to query key
-		// if it is the source, we would route it back in a loop
-		// (may be also the case if a node tries to join and looks up its own node ID)
-		if (contacts.empty() == false and contacts.front()->getKey() == packet->getSource()) {
-			if (contacts.size() == 1) {
-				// the only contact we know is the source
-				EV_ERROR << "only one contact known: the source" << endl;
-				countDropped(*packet, query, routeFailureDeadEnd);
-				returnToSender(KAD_RouteFailureDeadEnd, std::move(packet));
-
-				if (is_rediscovery)
-					droppedRediscovery++;
-
-				return;
-			}
-			else // remove source from answer
-			{
-				contacts.erase(contacts.begin());
+	// remove source from the list of potential next hops to avoid loop or exclude it from answer
+	if (!contacts.empty()) {
+		for (auto it= contacts.begin(); it != contacts.end(); it++) {
+			if (*it != nullptr and (*it)->getKey() == packet->getSource()) {
+				contacts.erase(it);
+				break;
 			}
 		}
+	}
+
+	if (query != myOverlayKey) { // someone else routing via us
 
 		if (contacts.empty() or contacts.front()->getKey().isUnspecified())
 		{
@@ -1189,6 +1185,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 				and contacts.front()->getPathLength() < packet->getHopLimit()) {
 			// we have found a contact that is closer than us to target (query)
 			// => forward request
+			// note: chooseNextHop may choose the next hop with the shortest path (proximity routing)
 			const KadContact& contact = chooseNextHop(contacts, query);
 			EV_TRACE << "KadFindNodeReq received query for: " << packet->getDstNodeID().shortStr() << " next overlay hop is " << contact << endl;
 			// note: the log_2 will be smaller for a longer common prefix
@@ -1227,7 +1224,8 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 					countDropped(*packet, query, routeFailureDeadEnd);
 					// since this node should exist, it may be a hint for inconsistency
 					// trigger discovery of own neighborhood or lookup this contact?
-					sendFindNode(myOverlayKey, false);
+
+					//sendFindNode(myOverlayKey, false);
 					//sendFindNode(query, false);
 
 					returnToSender(KAD_RouteFailureDeadEnd, std::move(packet));
@@ -1823,6 +1821,25 @@ void R2Kademlia::stopTimer(short timerId)
 		delete(cbfunc_p);
 		timermsg->setContextPointer(nullptr);
 		delete timermsg;
+	}
+}
+
+
+void R2Kademlia::resetTimer(short timerId, simtime_t duration)
+{
+	if (timerId > 0 and (size_type) timerId < timerMsg.size()) {
+		cMessage* timermsg= timerMsg[timerId];
+		// save callback function pointer
+		cbfunc_t* cbfunc_p(static_cast<cbfunc_t*>(timermsg->getContextPointer()));
+		// cancel potentially scheduled message (nothing happens if it was not)
+		timerMsg[timerId]= nullptr;
+		cancelEvent(timermsg);
+		if (duration > 0) {
+			timerDuration[timerId]= duration;
+			cMessage *msg = new cMessage("TimerMsg", timerId);
+			msg->setContextPointer( reinterpret_cast<void *>( cbfunc_p ) );
+			scheduleAt(simTime() + uniform(duration, duration/2*3), msg);
+		}
 	}
 }
 

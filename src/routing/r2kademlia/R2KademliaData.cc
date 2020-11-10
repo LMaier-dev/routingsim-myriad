@@ -177,7 +177,7 @@ void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 	ASSERT(packet->getControlInfo() == nullptr);
         ASSERT(packet->hasRemainingHops());
 	
-	if (packet->hasRemainingHops() == 0)
+	if (packet->hasRemainingHops() == false)
 	{ // Loop detected
 		countDropped(*packet, packet->getDstNodeID(), hopLimitExceeded);
 		returnToSender(KAD_HopLimitExceeded, std::move(packet));
