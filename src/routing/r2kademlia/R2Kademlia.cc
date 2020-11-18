@@ -1400,15 +1400,15 @@ void R2Kademlia::onErrorPacket(KadError& error) {
 			// find out the failed link
 			auto reportingNode = error.getSource();
 			const auto originalPath= original->getSrcPath();
-			// find reporting node in the source path
-			auto it= find(originalPath.begin(), originalPath.end(), reportingNode);
+			// use progress in original path to find the correct link
+			// just finding the reporting node in the source path isn't safe due to cycles in forwarding path!
+			auto index= original->getProgress();
 			// the following should be true, otherwise we are getting
 			// an error from some off path node
-			ASSERT(it != originalPath.end());
+			ASSERT(originalPath[index] == reportingNode and index+1 < originalPath.size());
 			// the next hop is the one that failed
-			auto failedNextHop = (++it != originalPath.end()) ? *it : reportingNode ;
-
-			if (reportingNode != failedNextHop) {
+			if (index+1 < originalPath.size()) {
+				auto failedNextHop = originalPath[index+1];
 				link_t failedlink(reportingNode, failedNextHop);
 				EV_INFO << "Check for invalid contacts because of failed link " << failedlink << " in error packet" << endl;
 				// this segment or node error is current and should invalidate all affected contacts
