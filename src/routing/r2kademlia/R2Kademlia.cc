@@ -1225,7 +1225,10 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 					// since this node should exist, it may be a hint for inconsistency
 					// trigger discovery of own neighborhood or lookup this contact?
 
-					//sendFindNode(myOverlayKey, false);
+					if (timerDuration[probeTimerId] > SimTime(2000,SIMTIME_MS)) {
+					  sendFindNode(myOverlayKey, false);
+					  resetTimer(probeTimerId, SimTime(100,SIMTIME_MS));
+					}
 					//sendFindNode(query, false);
 
 					returnToSender(KAD_RouteFailureDeadEnd, std::move(packet));
@@ -1398,16 +1401,16 @@ void R2Kademlia::onErrorPacket(KadError& error) {
 		{ // Invalidate contact as the error information is current
 
 			// find out the failed link
-			auto reportingNode = error.getSource();
-			const auto originalPath= original->getSrcPath();
+		        auto reportingNode(error.getSource());
+		        const auto originalPath(original->getSrcPath());
 			// use progress in original path to find the correct link
 			// just finding the reporting node in the source path isn't safe due to cycles in forwarding path!
-			auto index= original->getProgress();
+		        short unsigned int index(original->getProgress());
 			// the following should be true, otherwise we are getting
 			// an error from some off path node
-			ASSERT(originalPath[index] == reportingNode and index+1 < originalPath.size());
+			ASSERT(originalPath[index] == reportingNode and index+1U < originalPath.size());
 			// the next hop is the one that failed
-			if (index+1 < originalPath.size()) {
+			if (index+1U < originalPath.size()) {
 				auto failedNextHop = originalPath[index+1];
 				link_t failedlink(reportingNode, failedNextHop);
 				EV_INFO << "Check for invalid contacts because of failed link " << failedlink << " in error packet" << endl;
