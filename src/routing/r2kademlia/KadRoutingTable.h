@@ -84,7 +84,8 @@ public:
 	virtual void onContactRemoval(KadContact_p contact) = 0;
 	/** called when physical neighbors may be out of synch with their sequence numbers **/
 	virtual void reSyncPN(const KadContact& contact) = 0;
-	
+	/** called when physical neighbors in discoveryradius may be out of synch with their sequence numbers **/
+	virtual void recheckPhysicalNeighbors(const KadContact& contact) = 0;
 	/** called when a rediscovery needs to be performed for a contact */
 	virtual void scheduleRediscovery(const OverlayKey& contact, bool immediate= false) = 0;
 	/** called when the path of a contact is probably broken and needs to be checked */

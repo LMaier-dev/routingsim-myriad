@@ -161,6 +161,8 @@ public:
 	virtual void onImprovement(const KadContact& contact) override;
 	/** called when physical neighbors may be out of synch with their sequence numbers **/
 	virtual void reSyncPN(const KadContact& contact) override;
+	/** sendGetPhysicalNeighbors to contact **/
+	virtual void recheckPhysicalNeighbors(const KadContact& contact) override;
 	/** called when supposed failed link detected **/
 	virtual void onContactCheck(const KadContact& contact) override;
 

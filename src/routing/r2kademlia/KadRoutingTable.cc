@@ -252,19 +252,26 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 				}
 			}
 
-			// sometimes updates may be received that carry a newer sequence number
-			// from physical neighbors; this indicates that we do not have the latest state about its neighbors
-			// if PN link is still up, we ignore this for now and initiate a resynch
-			if ( contact->isPhysicalNeighbor() and
-			     (contact->getStateSeqNo() < stateseqno) and
-			     neighbortable.isNeighbor(contact->getKey()) and
-			     contact->getPathLength() == 0 and
-			     path.size() > 0) {
-				// try to resynchronize with physical neighbor
-				EV_TRACE << "resync required for " << contact->getKey().shortStr() << " new: "
-					 << stateseqno << " old: " << contact->getStateSeqNo() << endl;
-				policy->reSyncPN(*contact);
-				return false;
+			// contact has new state
+			if (contact->getStateSeqNo() < stateseqno) {
+				// sometimes updates may be received that carry a newer sequence number
+				// from physical neighbors; this indicates that we do not have the latest state about its neighbors
+				// if PN link is still up, we ignore this for now and initiate a resynch
+				if ( contact->isPhysicalNeighbor() and
+				     neighbortable.isNeighbor(contact->getKey()) and
+				     contact->getPathLength() == 0 and
+				     path.size() > 0) {
+					// try to resynchronize with physical neighbor
+					EV_TRACE << "resync required for " << contact->getKey().shortStr() << " new: "
+						 << stateseqno << " old: " << contact->getStateSeqNo() << endl;
+					policy->reSyncPN(*contact);
+					return false;
+				}
+
+				// if contact is within discover radius, ask again for neighbors
+				if ( contact->getPathLength()+1 < discoveryRadius or path.size()+1 < discoveryRadius ) {
+					policy->recheckPhysicalNeighbors(*contact);
+				}
 			}
 
 			contact->setPath(std::move(path)); // will set contact automatically to valid

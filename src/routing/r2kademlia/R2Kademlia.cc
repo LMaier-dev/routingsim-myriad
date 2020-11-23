@@ -1583,6 +1583,12 @@ void R2Kademlia::onImprovement(const KadContact& contact) {
 }
 
 
+void R2Kademlia::recheckPhysicalNeighbors(const KadContact& contact) {
+	// simply recheck the physical Neighbors
+	EV_TRACE << "recheckPhysicalNeighbors triggered for " << contact.getKey().shortStr() << endl;
+	sendGetPhysicalNeighbors(&contact);
+}
+
 
 void R2Kademlia::reSyncPN(const KadContact& contact) {
 	// simply trigger a PNDiscReq to update any sequence number
