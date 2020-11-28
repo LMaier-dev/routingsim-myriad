@@ -566,7 +566,7 @@ void R2Kademlia::sendRediscovery(OverlayKey failedcontactkey, uint8_t maxFanOut)
 				packet->setExact(true);
 				packet->setRediscovery(true);
 				for (auto& failedLink : failedcontact->getRDS().failedLinkList)
-					packet->addNotViaLink(failedLink, failedLink.first == myOverlayKey or failedLink.second == myOverlayKey);
+					packet->addNotViaLink(failedLink.first, failedLink.second);
 				sentRediscovery++;
 				EV_TRACE << "Rediscovery sending ... msg id=" << packet->getId() << " via " << contact->getKey().shortStr() << " fanout: " << fanout << endl;
 				EV_TRACE << "sending KadFindNodeReq" << endl;

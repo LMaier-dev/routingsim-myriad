@@ -244,7 +244,7 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 				if (contact->isInvalid())
 				{
 					for (const auto& failedlink : contact->getRDS().failedLinkList) {
-						if (containsUndirectedLink(myKey, contact->getKey(), path, failedlink)) {
+						if (failedlink.second < contact->getAge() and containsUndirectedLink(myKey, contact->getKey(), path, failedlink.first)) {
 							// provided path does not repair broken link
 							return false;
 						}
@@ -356,7 +356,7 @@ bool KadRoutingTable::addPath(const OverlayKey& key, const kad_path& path, state
 			if (contact->isInvalid())
 			{
 				for (const auto& failedlink : contact->getRDS().failedLinkList) {
-					if (containsUndirectedLink(myKey, contact->getKey(), concatViaPath(viaPath, path), failedlink)) {
+					if (failedlink.second < contact->getAge() and containsUndirectedLink(myKey, contact->getKey(), concatViaPath(viaPath, path), failedlink.first)) {
 						// provided path does not repair broken link
 						return false;
 					}
@@ -788,7 +788,7 @@ void KadRoutingTable::invalidateContact(KadContact& contact, const link_t& faile
 
 			if (contact.isValid()) {
 
-				contact.setInvalid(failedLink);
+				contact.setInvalid(failedLink, failedLinkAge);
 				contact.updateLastSeen();
 
 				EV_TRACE << "Set Contact to invalid due to failed link " << failedLink
@@ -800,7 +800,7 @@ void KadRoutingTable::invalidateContact(KadContact& contact, const link_t& faile
 			else
 			if (contact.isInvalid()) { // contact already invalid or rediscovering
 				// add potentially further failed link
-					contact.setInvalid(failedLink);
+				contact.setInvalid(failedLink, failedLinkAge);
 					contact.updateLastSeen();
 			}
 		}
@@ -876,7 +876,7 @@ void KadRoutingTable::invalidateContactsPN(const OverlayKey& failedNodeKey)
 				if (path[0] == failedNodeKey) // failed node is first hop
 				{
 					if (contact->isValid()) {
-						contact->setInvalid({failedNodeKey, myKey});
+						contact->setInvalid({failedNodeKey, myKey},0);
 						EV_TRACE << "Set Contact to invalid due to PN first hop failure: "  << *contact << endl;
 						// will schedule this for rediscovery later
 						policy->scheduleRediscovery(contact->getKey(), isInLastBucket(contact->getKey()));
@@ -884,7 +884,7 @@ void KadRoutingTable::invalidateContactsPN(const OverlayKey& failedNodeKey)
 					else
 					if (contact->isInvalid()) { // contact already invalid or rediscovering
 						// add potentially further failed link
-						contact->setInvalid({failedNodeKey, myKey});
+						contact->setInvalid({failedNodeKey, myKey},0);
 					}
 				}
 			}
@@ -898,7 +898,7 @@ void KadRoutingTable::invalidateContactsPN(const OverlayKey& failedNodeKey)
 				if (path[0] == failedNodeKey) // failed node is first hop
 				{
 					if (contact->isValid()) {
-						contact->setInvalid({failedNodeKey, myKey});
+						contact->setInvalid({failedNodeKey, myKey},0);
 						EV_TRACE << "Set Contact to invalid due to PN first hop failure: "  << *contact << endl;
 						// will schedule this for rediscovery later
 						policy->scheduleRediscovery(contact->getKey(), isInLastBucket(contact->getKey()));
@@ -906,7 +906,7 @@ void KadRoutingTable::invalidateContactsPN(const OverlayKey& failedNodeKey)
 					else
 					if (contact->isInvalid()) { // contact already invalid or rediscovering
 						// add potentially further failed link
-						contact->setInvalid({failedNodeKey, myKey});
+						contact->setInvalid({failedNodeKey, myKey}, 0);
 					}
 				}
 			}

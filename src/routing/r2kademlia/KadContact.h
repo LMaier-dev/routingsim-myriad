@@ -33,13 +33,15 @@ namespace routingsim {
 
 using size_type = std::size_t;
 using stateseqno_t = uint16_t;
+using age_t = uint32_t;
+
 constexpr stateseqno_t invalidSeqNo= 0xffff;
 constexpr unsigned short int maxRediscoveryRetries= 6;
 
 class RediscoveryState {
 public:
-	RediscoveryState(const link_t& failedlink) : failedLinkList({failedlink}) {};
-	std::list<link_t> failedLinkList; // the currently failed links
+	RediscoveryState(const std::pair<link_t,age_t>& failedlink) : failedLinkList({failedlink}) {};
+	std::list<std::pair<link_t, age_t>> failedLinkList; // the currently failed links
 	std::list<OverlayKey> viaContacts; // these nodes should be considered for rediscovery actions for this contact
 	unsigned short int retryCounter= 0;
 };
@@ -88,7 +90,7 @@ public:
 	bool isPhysicalNeighbor() const { return physicalNeighbor; }
 
 	/// set contact state
-	inline void setInvalid(const link_t& failed_link);
+	inline void setInvalid(const link_t& failed_link, age_t failed_link_age);
 	void setValid() { state= State::valid; rds_p.reset(nullptr); }
 	void setRediscovering() { ASSERT(state == State::invalid); state= State::rediscovering; }
 	void setState(State newstate) { state= newstate; }
@@ -192,11 +194,11 @@ inline KadContact& KadContact::operator=(KadContact&& other)
 }
 
 
-inline void KadContact::setInvalid(const link_t& failed_link)
+inline void KadContact::setInvalid(const link_t& failed_link, age_t failed_link_age)
 {
 	if (state == State::valid) {
 		state= State::invalid;
-		rds_p= std::make_unique<RediscoveryState>(failed_link);
+		rds_p= std::make_unique<RediscoveryState>(std::make_pair(failed_link, failed_link_age));
 	}
 	else // already invalid or rediscovering
 	{
@@ -204,11 +206,11 @@ inline void KadContact::setInvalid(const link_t& failed_link)
 		if (rds_p != nullptr) {
 			if (std::find_if(rds_p->failedLinkList.begin(),
 					 rds_p->failedLinkList.end(),
-					 [&](const auto& link) { return link == failed_link or (link.first == failed_link.second and link.second == failed_link.first); })
+					 [&](const auto& link) { return link.first == failed_link or (link.first.first == failed_link.second and link.first.second == failed_link.first); })
 			    == rds_p->failedLinkList.end())
 			{ // link not present yet, so add it to the list
 				EV_TRACE << "Adding another failed link " << failed_link << " to RDS for contact " << key.shortStr() << endl;
-				rds_p->failedLinkList.push_back(failed_link);
+				rds_p->failedLinkList.push_back(std::make_pair(failed_link,failed_link_age));
 			}
 		}
 	}
