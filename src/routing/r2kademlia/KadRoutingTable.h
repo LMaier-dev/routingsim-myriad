@@ -152,7 +152,7 @@ public:
 	 * Returns a list of n (valid) contacts that are closest to the given key if possible.
 	 * If there are not enough contacts found, the list is shorter.
 	 */
-	KadContactList getClosestContacts(const OverlayKey& key, size_type n, bool validcontactsonly, const std::list<link_t>& notvialist= {}) const;
+	KadContactList getClosestContacts(const OverlayKey& key, size_type n, bool validcontactsonly, const std::list<std::pair<link_t,age_t>>& notvialist= {}) const;
 	/// returns a list of all known contacts
 	KadContactList getAllContacts() const;
 	/// returns a list of all known valid contacts (if noPN true, PNs are not returned)
@@ -162,7 +162,7 @@ public:
 
 	/// returns the number of contacts in buckets
 	size_type getNumContacts() const;
-	
+
 	/// returns the number of paths in buckets
 	size_type getNumIndirectPaths() const;
 

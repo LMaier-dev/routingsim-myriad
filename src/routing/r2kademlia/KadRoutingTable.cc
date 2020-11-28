@@ -565,7 +565,7 @@ auto copyValidContacts = std::bind( &copySelectedContacts,ph::_1,ph::_2, [](cons
  * the first returned contact is the closest to key.
  * if the notvialist is not empty, it will be considered for validcontactsonly==true
  */
-KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_type n, bool validcontactsonly, const std::list<link_t>& notvialist) const
+KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_type n, bool validcontactsonly, const std::list<std::pair<link_t,age_t>>& notvialist) const
 {
 	ASSERT(not key.isUnspecified()); // calling this with unspecified key is considered useless and an error
 	KadContactList result{};
@@ -575,9 +575,10 @@ KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_t
 	auto selectorValidNotViaSafeFn = [&](const KadContact& contact) -> bool {
 					     if (contact.isValid()) {
 						     for ( const auto& failedLink : notvialist) {
-							     if (containsUndirectedLink(myKey,contact.getKey(),contact.getPath(),failedLink))
+							     if (contact.getAge() > failedLink.second and
+								 containsUndirectedLink(myKey,contact.getKey(),contact.getPath(),failedLink.first))
 							     {
-								     EV_TRACE << "Contact " << contact << " matches not via " << failedLink << endl;
+								     EV_TRACE << "Contact " << contact << " matches not via " << failedLink.first << endl;
 								     return false;
 							     }
 						     };
@@ -585,6 +586,7 @@ KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_t
 					     }
 					     return false;
 				     };
+
 	// selects all valid and "not via safe" contacts, i.e., contacts are excluded if occuring in the notvialist
 	auto copyValidNotViaSafeContacts = std::bind( &copySelectedContacts,ph::_1,ph::_2, selectorValidNotViaSafeFn );
 

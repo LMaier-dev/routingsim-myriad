@@ -623,11 +623,11 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt, simtime_t 
 
 void R2Kademlia::reroutePacket(const OverlayKey& finaldest, KadPacket_p packet, NodePkt_p nodePkt, simtime_t delay)
 {
-	std::list<link_t> notvialist;
+	std::list<std::pair<link_t,age_t>> notvialist;
 	if (packet->getNotVia())
 	{
 		for (uint i= 0; i < packet->getFailedLinkArraySize(); i++) {
-			notvialist.push_back(packet->getFailedLink(i));
+			notvialist.push_back(std::make_pair(packet->getFailedLink(i), packet->getFailedLinkAge(i)));
 		}
 	}
 
@@ -1136,11 +1136,11 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 
 	size_t contactsLen = std::max((size_t)findNodeNumber, routingTable.getSplitSize());
 	// contstruct notvia list for filtering contacts
-	std::list<link_t> notvialist;
+	std::list<std::pair<link_t,age_t>> notvialist;
 	if (packet->getNotVia())
 	{
 		for (uint i= 0; i < packet->getFailedLinkArraySize(); i++) {
-			notvialist.push_back(packet->getFailedLink(i));
+			notvialist.push_back(std::make_pair(packet->getFailedLink(i), packet->getFailedLinkAge(i)));
 		}
 	}
 	// ContactList is sorted according to XOR metric with respect to key

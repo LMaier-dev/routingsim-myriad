@@ -248,11 +248,11 @@ void R2Kademlia::propagateUpdateReq(std::unique_ptr<KadUpdateRouteReq> packet)
 	unsigned int numContacts= packet->getContactArraySize();
 
 	size_t contactsLen = std::max((size_t)findNodeNumber, routingTable.getSplitSize());
-	std::list<link_t> notvialist;
+	std::list<std::pair<link_t,age_t>> notvialist;
 	if (packet->getNotVia())
 	{
 		for (uint i= 0; i < packet->getFailedLinkArraySize(); i++) {
-			notvialist.push_back(packet->getFailedLink(i));
+			notvialist.push_back(make_pair(packet->getFailedLink(i),packet->getFailedLinkAge(i)));
 		}
 	}
 	KadContactList closeContacts(routingTable.getClosestContacts(destContactKey, contactsLen, true, notvialist));
