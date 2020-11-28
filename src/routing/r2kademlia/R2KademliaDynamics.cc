@@ -93,7 +93,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadUpdateRouteReq> packet) {
 
 				if (path[0] != myOverlayKey) {
 					// now invalidate all contacts with this link
-					routingTable.invalidateContacts({contactkey, path[0]});
+					routingTable.invalidateContacts({contactkey, path[0]}, 0);
 				}
 				else { // if I'm part of the failed link, it's a PN link, so ignore this
 					EV_TRACE << "ignored news about me or my PN" << endl;
@@ -227,7 +227,7 @@ void R2Kademlia::evalUpdateReq(const KadUpdateRouteReq* packet)
 					 << path[0].shortStr() << ',' << contactkey.shortStr() << " >" << endl;
 				if (path[0] != myOverlayKey) {
 					// now invalidate all contacts with this link
-					routingTable.invalidateContacts({contactkey, path[0]});
+					routingTable.invalidateContacts({contactkey, path[0]}, 0);
 				}
 				else { // if I'm part of the failed link, it's a PN link, so ignore this
 					EV_TRACE << "ignored news about me" << endl;

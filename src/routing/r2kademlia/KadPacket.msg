@@ -22,6 +22,8 @@ cplusplus {{
 typedef std::pair<OverlayKey,OverlayKey> link_t;
 typedef uint16_t pathseqno_t;
 constexpr pathseqno_t invalidSeqNo= 0xffff;
+
+typedef uint32_t age_t;
 }}
 
 namespace routingsim;
@@ -55,6 +57,7 @@ class noncobject nodeid_t;
 class noncobject nonce_t;
 class noncobject link_t;
 class noncobject pathseqno_t;
+class noncobject age_t;
 
 // a KAD control packet
 packet KadPacket {
@@ -68,7 +71,7 @@ packet KadPacket {
 	uint8_t type enum(KadPDUType);
 	bool notVia = false;
 	link_t failedLink[];
-	bool failedLinkAuth[];
+	age_t failedLinkAge[]; // age of link info in ms
 	uint16_t hopLimit = 255;
 }
 

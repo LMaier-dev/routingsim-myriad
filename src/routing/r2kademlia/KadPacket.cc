@@ -151,9 +151,9 @@ bool KadPacket::setSimplifiedReturnPathFrom(const KadPacket& other) {
 }
 
 
-// authoritative flag should always be set by nodes that are one of the failedLink nodes,
+// failedlinkage should always be set to 0 by nodes that are one of the failedLink nodes,
 // i.e., they have current information that the link is currently down
-void KadPacket::addNotViaLink(const link_t& failedlink, bool authoritative) {
+void KadPacket::addNotViaLink(const link_t& failedlink, age_t failedlinkAge) {
 	ASSERT(not failedlink.first.isUnspecified() and not failedlink.second.isUnspecified());
 	ASSERT(failedlink.first != failedlink.second);
 
@@ -162,6 +162,9 @@ void KadPacket::addNotViaLink(const link_t& failedlink, bool authoritative) {
 	while(i < getFailedLinkArraySize())
 	{
 		if ( (getFailedLink(i) == failedlink) or (getFailedLink(i) == link_t(failedlink.second, failedlink.first)) ) {
+			// check whether we need to update the age value
+			if (getFailedLinkAge(i) > failedlinkAge)
+				setFailedLinkAge(i, failedlinkAge);
 			break;
 		}
 		i++;
@@ -171,8 +174,8 @@ void KadPacket::addNotViaLink(const link_t& failedlink, bool authoritative) {
 		// add failed link
 		setFailedLinkArraySize(i+1); // since i == getFailedLinkArraySize()
 		setFailedLink(i, failedlink);
-		setFailedLinkAuthArraySize(i+1);
-		setFailedLinkAuth(i, authoritative);
+		setFailedLinkAgeArraySize(i+1);
+		setFailedLinkAge(i, failedlinkAge);
 
 		if (i==0) // indicate NotVia for the first added link
 			setNotVia(true);

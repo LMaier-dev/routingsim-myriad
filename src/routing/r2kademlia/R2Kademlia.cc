@@ -1416,7 +1416,7 @@ void R2Kademlia::onErrorPacket(KadError& error) {
 				EV_INFO << "Check for invalid contacts because of failed link " << failedlink << " in error packet" << endl;
 				// this segment or node error is current and should invalidate all affected contacts
 				// a rediscovery will be triggered automatically if necessary
-				routingTable.invalidateContacts(failedlink);
+				routingTable.invalidateContacts(failedlink, (simTime()-error.getCreationTime()).inUnit(SIMTIME_MS));
 			}
 			else
 				EV_ERROR << "onErrorPacket: failed link collapsed to node " << reportingNode << " path:" << originalPath << endl;

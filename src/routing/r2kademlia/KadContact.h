@@ -112,7 +112,7 @@ public:
 	/// i.e., the _intermediate hops_ between me and this contact
 	size_t getPathLength() const { return path.size(); }
 	/// sets new path, but only sets path state to valid if path does not contain failed links
-	void updatePath(const OverlayKey& myOverlayKey, kad_path path);
+	void updatePath(const OverlayKey& myOverlayKey, kad_path newpath) { setPath(newpath); }
 	/// sets the path to reach this contact (will implicitly set status to valid)
 	void setPath(kad_path path) { this->path = std::move(path); setValid(); }
 	const kad_path& getPath() const { return path; }
@@ -131,7 +131,7 @@ public:
 	static const KadContact undefinedContact;
 private:
 	OverlayKey key;	   /// the OverlayKey of this contact
-	simtime_t lastseen; /// time of last direct contact (could stem from other node, too)
+	simtime_t lastseen; /// time of last direct contact or path update (could stem from other node, too)
 	/// the following path does neither contain the source (myself) nor the target node
 	kad_path path;	   /// the best known source routing path to reach this contact
 	stateseqno_t seqno= invalidSeqNo; /// sequence number for the path state (announced by origin)
@@ -213,6 +213,14 @@ inline void KadContact::setInvalid(const link_t& failed_link)
 		}
 	}
 }
+
+
+inline
+bool KadContact::isContainedinPath(const OverlayKey& myOverlayKey, const link_t& link) const
+{
+	return containsUndirectedLink(myOverlayKey, getKey(), path, link);
+}
+
 
 }; // namespace
 

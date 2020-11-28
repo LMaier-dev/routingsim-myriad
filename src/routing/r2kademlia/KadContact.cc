@@ -24,27 +24,6 @@ namespace routingsim {
 
 const KadContact KadContact::undefinedContact(OverlayKey::UNSPECIFIED_KEY);
 
-bool KadContact::isContainedinPath(const OverlayKey& myOverlayKey, const link_t& link) const
-{
-	return containsUndirectedLink(myOverlayKey, getKey(), path, link);
-}
-
-
-void KadContact::updatePath(const OverlayKey& myOverlayKey, kad_path newpath)
-{
-	// if (isRediscovering()) { // if rediscovering, check for repair of failed links
-	// 	for (const auto& failedlink : getRDS().failedLinkList) {
-	// 		if (containsUndirectedLink(myOverlayKey, getKey(), newpath, failedlink)) {
-	// 			// just update the path, but not the state
-	// 			EV_TRACE << "updatePath(): contact " << getKey().shortStr() << " in rediscover, path not fully repaired yet, old: " << getPath() << " new: " << newpath << " still failed:" << failedlink << endl;
-	// 			this->path = std::move(newpath);
-	// 			return;
-	// 		}
-	// 	}
-	// }
-	setPath(newpath);
-}
-
 
 std::ostream& operator<<(std::ostream& os, const KadContact& c) {
 	os << c.getKey().shortStr();
