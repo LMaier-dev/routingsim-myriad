@@ -40,8 +40,8 @@ constexpr unsigned short int maxRediscoveryRetries= 6;
 
 class RediscoveryState {
 public:
-	RediscoveryState(const std::pair<link_t,age_t>& failedlink) : failedLinkList({failedlink}) {};
-	std::list<std::pair<link_t, age_t>> failedLinkList; // the currently failed links
+	RediscoveryState(const std::pair<link_t, simtime_t>& failedlink) : failedLinkList({failedlink}) {};
+	std::list<std::pair<link_t, simtime_t>> failedLinkList; // the currently failed links
 	std::list<OverlayKey> viaContacts; // these nodes should be considered for rediscovery actions for this contact
 	unsigned short int retryCounter= 0;
 };
@@ -198,7 +198,7 @@ inline void KadContact::setInvalid(const link_t& failed_link, age_t failed_link_
 {
 	if (state == State::valid) {
 		state= State::invalid;
-		rds_p= std::make_unique<RediscoveryState>(std::make_pair(failed_link, failed_link_age));
+		rds_p= std::make_unique<RediscoveryState>(std::make_pair(failed_link, simTime() - SimTime(failed_link_age,SIMTIME_MS)));
 	}
 	else // already invalid or rediscovering
 	{
@@ -210,7 +210,7 @@ inline void KadContact::setInvalid(const link_t& failed_link, age_t failed_link_
 			    == rds_p->failedLinkList.end())
 			{ // link not present yet, so add it to the list
 				EV_TRACE << "Adding another failed link " << failed_link << " to RDS for contact " << key.shortStr() << endl;
-				rds_p->failedLinkList.push_back(std::make_pair(failed_link,failed_link_age));
+				rds_p->failedLinkList.push_back(std::make_pair(failed_link,simTime() - SimTime(failed_link_age,SIMTIME_MS)));
 			}
 		}
 	}

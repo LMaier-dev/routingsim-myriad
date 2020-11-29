@@ -244,7 +244,7 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 				if (contact->isInvalid())
 				{
 					for (const auto& failedlink : contact->getRDS().failedLinkList) {
-						if (failedlink.second < contact->getAge() and containsUndirectedLink(myKey, contact->getKey(), path, failedlink.first)) {
+						if ((simTime() - failedlink.second).inUnit(SIMTIME_MS) < contact->getAge() and containsUndirectedLink(myKey, contact->getKey(), path, failedlink.first)) {
 							// provided path does not repair broken link
 							return false;
 						}
@@ -356,7 +356,7 @@ bool KadRoutingTable::addPath(const OverlayKey& key, const kad_path& path, state
 			if (contact->isInvalid())
 			{
 				for (const auto& failedlink : contact->getRDS().failedLinkList) {
-					if (failedlink.second < contact->getAge() and containsUndirectedLink(myKey, contact->getKey(), concatViaPath(viaPath, path), failedlink.first)) {
+					if ((simTime() - failedlink.second).inUnit(SIMTIME_MS) < contact->getAge() and containsUndirectedLink(myKey, contact->getKey(), concatViaPath(viaPath, path), failedlink.first)) {
 						// provided path does not repair broken link
 						return false;
 					}

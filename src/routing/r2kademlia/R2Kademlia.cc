@@ -579,7 +579,7 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt, simtime_t 
 				nid = neighborTable.getNodeId(newpath.front());
 				if (nid != undefined_node) {
 					// TODO check whether this actually makes sense for all packet types?
-					packet->addNotViaLink({nextHop,myOverlayKey}, true);
+					packet->addNotViaLink({nextHop,myOverlayKey}, 0);
 					EV_TRACE << "forwardPacket(): forwarding to next hop (" << nid << ")" << endl;
 
 					if (not packetorigin) {
@@ -607,7 +607,7 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt, simtime_t 
 			// add not via information before forwarding
 			if (  updatepacket != nullptr or findnodepacket != nullptr )
 			{
-				packet->addNotViaLink({nextHop,myOverlayKey}, true);
+				packet->addNotViaLink({nextHop,myOverlayKey}, 0);
 			}
 
 			// try to reroute
