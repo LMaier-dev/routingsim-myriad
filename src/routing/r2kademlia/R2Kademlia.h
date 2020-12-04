@@ -329,7 +329,7 @@ private:
 	KadRoutingTable routingTable;
 
 	/// already queried neighbors
-	std::unordered_set<OverlayKey> queriedNeighbors;
+	std::unordered_map<OverlayKey,unsigned short> queriedNeighbors;
 	/// Forwarding Table according to node IDs
 	/// fwtabwdTableNodeID fwdTableNodeID;
 

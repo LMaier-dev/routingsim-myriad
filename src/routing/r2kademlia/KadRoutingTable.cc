@@ -244,7 +244,7 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 				if (contact->isInvalid())
 				{
 					for (const auto& failedlink : contact->getRDS().failedLinkList) {
-						if ((simTime() - failedlink.second).inUnit(SIMTIME_MS) < contact->getAge() and containsUndirectedLink(myKey, contact->getKey(), path, failedlink.first)) {
+						if (static_cast<unsigned long>((simTime() - failedlink.second).inUnit(SIMTIME_MS)) < contact->getAge() and containsUndirectedLink(myKey, contact->getKey(), path, failedlink.first)) {
 							// provided path does not repair broken link
 							return false;
 						}
@@ -356,7 +356,7 @@ bool KadRoutingTable::addPath(const OverlayKey& key, const kad_path& path, state
 			if (contact->isInvalid())
 			{
 				for (const auto& failedlink : contact->getRDS().failedLinkList) {
-					if ((simTime() - failedlink.second).inUnit(SIMTIME_MS) < contact->getAge() and containsUndirectedLink(myKey, contact->getKey(), concatViaPath(viaPath, path), failedlink.first)) {
+					if (static_cast<unsigned long>((simTime() - failedlink.second).inUnit(SIMTIME_MS)) < contact->getAge() and containsUndirectedLink(myKey, contact->getKey(), concatViaPath(viaPath, path), failedlink.first)) {
 						// provided path does not repair broken link
 						return false;
 					}
@@ -765,9 +765,10 @@ void KadRoutingTable::updatePaths(const KadContact& improvedContact)
 						for (auto fwdpathit= path.begin() + (path.rend() - revpathit); fwdpathit != path.end(); fwdpathit++) {
 							newpath.push_back(*fwdpathit);
 						}
-						// only set new path in case the newpath repairs all pending failures
+						// set new path (must be more current than old one)
 						contact->updatePath( myKey, newpath );
-						// optionally: call onImprovement(contact)
+						// call onImprovement(contact) also for updating PID
+						policy->onImprovement(*contact);
 						found=true; // break the loop
 					}
 				} // end for: iterating backwards over path

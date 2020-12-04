@@ -81,9 +81,9 @@ void R2Kademlia::onInitialize() {
 	// start after 100ms, use 250ms, 500ms, 1s, 2s, 4s, 8s, 16s, 32s, 64s, 128s, 256s, 300s as intervals
 	probeTimerId= addTimer(SimTime(225,SIMTIME_MS), SimTime(250,SIMTIME_MS), std::bind(&R2Kademlia::doProbeSelf, this, ph::_1));
 	// regularly probe for closest neighbors
-	addTimer(SimTime(1000,SIMTIME_MS), probeInterval*2, std::bind(&R2Kademlia::doProbeNeighbors, this, ph::_1));
+	addTimer(std::max(probeInterval, SimTime(1000,SIMTIME_MS)), probeInterval*2, std::bind(&R2Kademlia::doProbeNeighbors, this, ph::_1));
 	// regularly probe for non PN contacts to test path liveliness
-	addTimer(SimTime(1000,SIMTIME_MS), probeInterval, std::bind(&R2Kademlia::doProbeContacts, this, ph::_1));
+	addTimer(std::max(probeInterval/2, SimTime(1000,SIMTIME_MS)), probeInterval, std::bind(&R2Kademlia::doProbeContacts, this, ph::_1));
 	// regularly send FindNodeReq to randomly chosen IDs
 	addTimer(probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doProbe, this, ph::_1));
 	// check whether other existing nodes can be reached (uses KadObserver)
@@ -885,7 +885,16 @@ void R2Kademlia::sendGetPhysicalNeighbors(KadContact_p contact)
 		std::bind(&R2Kademlia::handleQueryRouteResponse, this, ph::_1, ph::_2),
 		std::bind(&R2Kademlia::handleRPCTimeOut, this, ph::_1, ph::_2)
 	);
-	queriedNeighbors.insert(contact->getKey());
+
+	// update queriedNeighbors
+	if (queriedNeighbors.find(contact->getKey()) != queriedNeighbors.end()) {
+		// check for updating the path length: only store the shortest known path
+		if (queriedNeighbors[contact->getKey()] > contact->getPathLength()+1)
+			queriedNeighbors[contact->getKey()]= contact->getPathLength()+1;
+	}
+	else {
+		queriedNeighbors[contact->getKey()]= contact->getPathLength()+1;
+	}
 }
 
 
@@ -938,7 +947,8 @@ void R2Kademlia::sendDiscoveryReq(KadContact_p contact)
 		std::bind(&R2Kademlia::handlePNDiscResponse, this, ph::_1, ph::_2),
 		std::bind(&R2Kademlia::handleRPCTimeOut, this, ph::_1, ph::_2)
 	);
-	queriedNeighbors.insert(contact->getKey());
+	// remember or update physical neighbor in queriedNeighbors
+	queriedNeighbors[contact->getKey()]= 1;
 }
 
 
@@ -1786,12 +1796,9 @@ void R2Kademlia::readRTableRsp(const KadRTableRsp& packet) {
 				if (usePathIDs) {
 					fwdTablePathID.addEntry(&neighborhoodContact, false, true);
 				}
-
 			}
-
-
-		}
-	}
+		} // endif: new path not added
+	} // end for each reported contact
 }
 
 

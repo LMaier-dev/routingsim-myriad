@@ -223,7 +223,6 @@ bool KadContact::isContainedinPath(const OverlayKey& myOverlayKey, const link_t&
 	return containsUndirectedLink(myOverlayKey, getKey(), path, link);
 }
 
-
 }; // namespace
 
 #endif // __ROUTINGSIM_KadContact_H_
