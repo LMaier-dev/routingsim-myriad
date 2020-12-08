@@ -25,6 +25,7 @@
 #include "StatisticSample.h"
 #include "KadPackets_m.h"
 #include "NeighborTable.h"
+#include "NodeVicinityGraph.h"
 #include "KadRoutingTable.h"
 #include "FwdTable.h"
 #include "RPC.h"
@@ -147,7 +148,7 @@ class R2Kademlia : public RPCProtocol, public KadPolicy, public StatisticSample
 	//@}
 	virtual void sampleStatistics (Statistics &stats) override;
 public:
-        R2Kademlia() : routingTable(neighborTable), cmp(myOverlayKey), rediscoverQueue(cmp), urgentRediscoverQueue(cmp) {};
+        R2Kademlia() : routingTable(neighborTable), vicinity(myOverlayKey), cmp(myOverlayKey), rediscoverQueue(cmp), urgentRediscoverQueue(cmp) {};
 	/** @name policy functions called by routing table */
 	//@{
 	/** called when last contact is removed from a bucket*/
@@ -328,8 +329,8 @@ private:
 	/// Kademlia-like Routing Table containing Paths to contacts
 	KadRoutingTable routingTable;
 
-	/// already queried neighbors
-	std::unordered_map<OverlayKey,unsigned short> queriedNeighbors;
+	/// n-hop vicinity for PathID calculation
+	nodeVicinityGraph vicinity;
 	/// Forwarding Table according to node IDs
 	/// fwtabwdTableNodeID fwdTableNodeID;
 

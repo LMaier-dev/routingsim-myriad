@@ -886,15 +886,10 @@ void R2Kademlia::sendGetPhysicalNeighbors(KadContact_p contact)
 		std::bind(&R2Kademlia::handleRPCTimeOut, this, ph::_1, ph::_2)
 	);
 
-	// update queriedNeighbors
-	if (queriedNeighbors.find(contact->getKey()) != queriedNeighbors.end()) {
-		// check for updating the path length: only store the shortest known path
-		if (queriedNeighbors[contact->getKey()] > contact->getPathLength()+1)
-			queriedNeighbors[contact->getKey()]= contact->getPathLength()+1;
-	}
-	else {
-		queriedNeighbors[contact->getKey()]= contact->getPathLength()+1;
-	}
+	// update vicinity to avoid future redundant requests
+	vicinity.addNode(contact->getPath().empty() ? myOverlayKey : contact->getPath().back(), // parent
+			 contact->getKey(), // new child
+			 contact->getPath().size()+1);
 }
 
 
@@ -947,8 +942,8 @@ void R2Kademlia::sendDiscoveryReq(KadContact_p contact)
 		std::bind(&R2Kademlia::handlePNDiscResponse, this, ph::_1, ph::_2),
 		std::bind(&R2Kademlia::handleRPCTimeOut, this, ph::_1, ph::_2)
 	);
-	// remember or update physical neighbor in queriedNeighbors
-	queriedNeighbors[contact->getKey()]= 1;
+	// add physical neighbor to my vicinity
+	vicinity.addNode(myOverlayKey, contact->getKey(), 1);
 }
 
 
@@ -1495,8 +1490,8 @@ void R2Kademlia::onContactRemoval(KadContact_p contact)
 	if (usePathIDs)
 		fwdTablePathID.delEntry(contact);
 
-	// remove from queried node set (in case of later rendezvous again)
-	queriedNeighbors.erase(contact->getKey());
+	// remove from vicinity node set (in case of later rendezvous again)
+	vicinity.removeNode(contact->getKey());
 }
 
 
@@ -1637,7 +1632,7 @@ void R2Kademlia::recordScalars() {
 	recordScalar("routingTableUpdates", routingTable.getUpdateCount());
 	recordScalar("routingTableReplacements", routingTable.getReplacementCount());
 	recordScalar("routingTableIndirectPaths", routingTable.getNumIndirectPaths());
-	recordScalar("discoveredNeighborhood", queriedNeighbors.size());
+	recordScalar("discoveredVicinitySize", vicinity.size());
 	nodeid_t nid =  Node::getNode(this)->getNodeId();
 	recordScalar("nodeId", nid);
 	recordScalar("degree", getNetworkManager()->getTopology().getNodeDegree(nid));
@@ -1787,9 +1782,13 @@ void R2Kademlia::readRTableRsp(const KadRTableRsp& packet) {
 				// still room for one more hop in neighborhood exploration
 				// the same is done for new contacts in RT (see onNewContact)
 				if (viaPath.size() + packet.getPath(i).size() + 1  < discoveryRadius) {
-					// first check for already queried neighbors to avoid unnecessary QueryRouteReq
-					if (queriedNeighbors.find(neighborhoodContact.getKey()) == queriedNeighbors.end())
+					// first check for already queried neighbors in vicinity to avoid unnecessary QueryRouteReq
+					if (vicinity.getNode(neighborhoodContact.getKey()) == nullptr) {
+						vicinity.addNode(neighborhoodContact.getPath().empty() ? myOverlayKey : neighborhoodContact.getPath().back(), // parent node
+								 neighborhoodContact.getKey(), // new child node
+								 neighborhoodContact.getPath().size()+1); // distance of child node to us
 						sendGetPhysicalNeighbors(&neighborhoodContact);
+					}
 				}
 
 				// add PID entry
