@@ -1735,7 +1735,36 @@ bool R2Kademlia::checkForPathInstallation(KadPacket& packet)
 }
 
 
-void R2Kademlia::fillRTableRsp(KadRTableRsp& packet, const KadContactList& contacts, bool includePaths){
+// this creates potential additional entries for PathIDs
+// note that the provided contact is of temporary nature and not part of the routing table
+void R2Kademlia::vicinityPathIDCompletion(const KadContact& neighborhoodContact)
+{
+	const nodeVicinityNode* node= vicinity.getNode(neighborhoodContact.getKey());
+	// check for further PID entries that need to be created starting from this neighborhood contact
+	if (node != nullptr and node->distance < discoveryRadius ) {
+		kad_path basicpath(neighborhoodContact.getPath());
+
+		// now traverse any children
+		// due to precondition they must be still within the discovery radius
+		for (auto childkey : node->children) {
+			if (childkey == nullptr)
+				continue;
+
+			kad_path tmppath(basicpath);
+			// extend path by child
+			tmppath.push_back(*childkey->nodeKey);
+
+			KadContact tmpContact(*childkey->nodeKey, tmppath);
+			fwdTablePathID.addEntry(&tmpContact, false, true);
+			// recursive call!
+			vicinityPathIDCompletion(tmpContact);
+		}
+	}
+}
+
+
+void R2Kademlia::fillRTableRsp(KadRTableRsp& packet, const KadContactList& contacts, bool includePaths)
+{
 	ASSERT(packet.getContactArraySize() == 0);
 	ASSERT(packet.getPathArraySize() == 0);
 	// in rare cases contact list may be empty
@@ -1779,21 +1808,24 @@ void R2Kademlia::readRTableRsp(const KadRTableRsp& packet) {
 			{
 				KadContact neighborhoodContact(packet.getContact(i),
 							       routingTable.concatViaPath(viaPath, packet.getPath(i)));
+				bool nodeOrLinkAdded(false);
 				// still room for one more hop in neighborhood exploration
 				// the same is done for new contacts in RT (see onNewContact)
 				if (viaPath.size() + packet.getPath(i).size() + 1  < discoveryRadius) {
 					// first check for already queried neighbors in vicinity to avoid unnecessary QueryRouteReq
 					if (vicinity.getNode(neighborhoodContact.getKey()) == nullptr) {
-						vicinity.addNode(neighborhoodContact.getPath().empty() ? myOverlayKey : neighborhoodContact.getPath().back(), // parent node
-								 neighborhoodContact.getKey(), // new child node
-								 neighborhoodContact.getPath().size()+1); // distance of child node to us
 						sendGetPhysicalNeighbors(&neighborhoodContact);
 					}
+					// try to add node
+					nodeOrLinkAdded= vicinity.addNode(neighborhoodContact.getPath().empty() ? myOverlayKey : neighborhoodContact.getPath().back(), // parent node
+							 neighborhoodContact.getKey(), // new child node
+							 neighborhoodContact.getPath().size()+1); // distance of child node to us
 				}
 
-				// add PID entry
-				if (usePathIDs) {
+				// add PID entry as this neighbor is in our discoveryRadius vicinity
+				if (usePathIDs and nodeOrLinkAdded) {
 					fwdTablePathID.addEntry(&neighborhoodContact, false, true);
+					vicinityPathIDCompletion(neighborhoodContact);
 				}
 			}
 		} // endif: new path not added

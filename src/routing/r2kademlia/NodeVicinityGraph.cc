@@ -2,22 +2,27 @@
 
 namespace routingsim {
 
-// adds a new childnode to the parent
-void
+// adds a new childnode to the parent or at least the link if the childnode is already known
+// @returns whether something has been changed (link or node added)
+bool
 nodeVicinityGraph::addNode(const OverlayKey& parentNodeKey, const OverlayKey& childNodeKey, unsigned short distance) {
 	ASSERT(distance > 0U);
+	bool modified(false);
 
 	if (auto it= graph.find(parentNodeKey); it != graph.end()) {
 		// in case this node is closer than before, update the distance
-		if (distance < it->second.distance)
+		if (distance < it->second.distance) {
 			it->second.distance= distance;
+			modified= true;
+		}
 
 		const nodeVicinityNode* childnodeptr(nullptr);
 		// check for existence of childnodekey
 		if (auto child_it= graph.find(childNodeKey); child_it == graph.end()) {
-			// must create new node for children
+			// must create new node for child
 			graph[childNodeKey]= { &child_it->first, distance, {} };
 			childnodeptr= &graph[childNodeKey];
+			modified= true;
 		}
 		else { // entry for child exists already
 			childnodeptr= &child_it->second;
@@ -31,12 +36,16 @@ nodeVicinityGraph::addNode(const OverlayKey& parentNodeKey, const OverlayKey& ch
 				break;
 		}
 		// if not found, add it
-		if (child_it == it->second.children.end())
-			it->second.children.push_back(childnodeptr); 
+		if (child_it == it->second.children.end()) {
+			it->second.children.push_back(childnodeptr);
+			modified= true;
+		}
 	}
 	else { // parent node not found
 		EV_ERROR << "cannot add child " << childNodeKey.shortStr() << ", because parent " << parentNodeKey << " not found" << endl;
 	}
+
+	return modified;
 }
 
 void

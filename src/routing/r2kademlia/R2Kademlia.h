@@ -258,6 +258,9 @@ private:
 	void applyShortcut(KadPacket& packet);
 	/// try to install path from response packet
 	bool checkForPathInstallation(KadPacket& packet);
+	/// for a new neighborhoodcontact, installed any known paths within discoveryRadius
+	void vicinityPathIDCompletion(const KadContact& neighborhoodContact);
+
 	/// checks whether a PN requires a resynch and initiates PNDiscReq if so
 	bool checkForResync(const OverlayKey& contact, stateseqno_t newseqno);
 	/**

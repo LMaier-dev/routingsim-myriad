@@ -19,7 +19,7 @@ class nodeVicinityGraph {
 public:
 	// constructor initializes this node as root
 	nodeVicinityGraph(const OverlayKey& ownNodeKey) { graph[ownNodeKey]= { &ownNodeKey, 0, {} }; }
-	void addNode(const OverlayKey& parentNodeKey, const OverlayKey& childNodeKey, unsigned short distance);
+	bool addNode(const OverlayKey& parentNodeKey, const OverlayKey& childNodeKey, unsigned short distance);
 	void removeNode(const OverlayKey& nodeKey);
 	size_t size() const { return graph.size(); }
 	const nodeVicinityNode* getNode(const OverlayKey& NodeKey) const;
