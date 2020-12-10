@@ -1818,7 +1818,8 @@ void R2Kademlia::readRTableRsp(const KadRTableRsp& packet) {
 			if ( packet.getContact(i)!= myOverlayKey and ((viaPath.size() + packet.getPath(i).size()) < discoveryRadius) )
 			{
 				KadContact neighborhoodContact(packet.getContact(i),
-							       routingTable.concatViaPath(viaPath, packet.getPath(i)));
+							       routingTable.concatViaPath(viaPath, packet.getPath(i)),
+							       packet.getSeqNo(i));
 				bool nodeOrLinkAdded(false);
 				// still room for one more hop in neighborhood exploration
 				// the same is done for new contacts in RT (see onNewContact)
