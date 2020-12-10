@@ -17,8 +17,8 @@ public:
 
 class nodeVicinityGraph {
 public:
-	// constructor initializes this node as root
-	nodeVicinityGraph(const OverlayKey& ownNodeKey) { graph[ownNodeKey]= { &ownNodeKey, 0, {} }; }
+	// cannot use constructor to initialize root, because ownNodeKey is only set in initialize()
+	void setRoot(const OverlayKey& ownNodeKey) { graph[ownNodeKey]= { &ownNodeKey, 0, {} }; }
 	bool addNode(const OverlayKey& parentNodeKey, const OverlayKey& childNodeKey, unsigned short distance);
 	void removeNode(const OverlayKey& nodeKey);
 	size_t size() const { return graph.size(); }

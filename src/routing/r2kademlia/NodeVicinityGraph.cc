@@ -9,35 +9,51 @@ nodeVicinityGraph::addNode(const OverlayKey& parentNodeKey, const OverlayKey& ch
 	ASSERT(distance > 0U);
 	bool modified(false);
 
-	if (auto it= graph.find(parentNodeKey); it != graph.end()) {
-		// in case this node is closer than before, update the distance
-		if (distance < it->second.distance) {
-			it->second.distance= distance;
-			modified= true;
-		}
+	if (auto parentnode_it= graph.find(parentNodeKey); parentnode_it != graph.end()) {
 
 		const nodeVicinityNode* childnodeptr(nullptr);
 		// check for existence of childnodekey
 		if (auto child_it= graph.find(childNodeKey); child_it == graph.end()) {
 			// must create new node for child
-			graph[childNodeKey]= { &child_it->first, distance, {} };
+			auto result= graph.insert(std::make_pair(childNodeKey, nodeVicinityNode()));
+			graph[childNodeKey].nodeKey= &(result.first)->first;
+			graph[childNodeKey].distance= distance;
+			EV_TRACE << "vicinity.addNode(): " << childNodeKey.shortStr() << " distance:" << distance << endl;
 			childnodeptr= &graph[childNodeKey];
 			modified= true;
 		}
 		else { // entry for child exists already
-			childnodeptr= &child_it->second;
+			childnodeptr= &(child_it->second);
+			// in case this node is closer than before, update the distance
+			unsigned int old_distance= child_it->second.distance;
+			if (distance < old_distance) {
+				child_it->second.distance= distance;
+				modified= true;
+				// now remove it from any children list in further distance
+				// find all nodes at node.distance-1, because they may point to this node being its child
+				for (auto graphit= graph.begin(); graphit != graph.end(); graphit++) {
+					if (graphit->second.distance+1U == old_distance) {
+						// remove any potential referrals to this node
+						graphit->second.children.remove(&child_it->second);
+					}
+				}
+			}
+
 		}
 
-		// add new node as child to parent
-		auto child_it= it->second.children.begin();
-		// check for existing child node
-		for (; child_it != it->second.children.end(); child_it++) {
+		// add new node as child to parent in case it is not leading back
+		if (distance <= parentnode_it->second.distance)
+			return modified;
+
+		auto child_it= parentnode_it->second.children.begin();
+		// check for existing child node in list
+		for (; child_it != parentnode_it->second.children.end(); child_it++) {
 			if (*child_it == childnodeptr)
 				break;
 		}
 		// if not found, add it
-		if (child_it == it->second.children.end()) {
-			it->second.children.push_back(childnodeptr);
+		if (child_it == parentnode_it->second.children.end()) {
+			parentnode_it->second.children.push_back(childnodeptr);
 			modified= true;
 		}
 	}

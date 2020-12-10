@@ -38,6 +38,7 @@ void R2Kademlia::onInitialize() {
 	OverlayKey::setKeyLength(OverlayKeyLength);
 	myOverlayKey = OverlayKey::random(getRNG(0));
 	fwdTablePathID.setOwnNodeID(&myOverlayKey);
+	vicinity.setRoot(myOverlayKey);
 	getKadObserver().registerUp(myOverlayKey, node().getNodeId());
 	bind(KAD_CTRL_PACKET_TYPE);
 	bind(KAD_DATA_PACKET_TYPE);
@@ -959,6 +960,9 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadPNDiscReq> packet) {
 		incGLSSeqNo();
 	}
 
+	// add physical neighbor to my vicinity
+	vicinity.addNode(myOverlayKey, packet->getSource(), 1);
+
 	// check for physical neighbors sent with
 	kad_path path{packet->getSource()};
 	if (packet->getPhyNeighborArraySize() > 0) {
@@ -1740,6 +1744,8 @@ bool R2Kademlia::checkForPathInstallation(KadPacket& packet)
 void R2Kademlia::vicinityPathIDCompletion(const KadContact& neighborhoodContact)
 {
 	const nodeVicinityNode* node= vicinity.getNode(neighborhoodContact.getKey());
+	EV_TRACE << "vicinityPathIDCompletion(" << neighborhoodContact.getKey().shortStr() << ")" << endl;
+	// 832741 aaed63
 	// check for further PID entries that need to be created starting from this neighborhood contact
 	if (node != nullptr and node->distance < discoveryRadius ) {
 		kad_path basicpath(neighborhoodContact.getPath());
@@ -1749,15 +1755,20 @@ void R2Kademlia::vicinityPathIDCompletion(const KadContact& neighborhoodContact)
 		for (auto childkey : node->children) {
 			if (childkey == nullptr)
 				continue;
-
+			EV_TRACE << "vicinityPathIDCompletion(" << neighborhoodContact.getKey().shortStr() << ") child: " << childkey->nodeKey->shortStr() << endl;
 			kad_path tmppath(basicpath);
-			// extend path by child
-			tmppath.push_back(*childkey->nodeKey);
+			// extend path by child only if it does not lead back
+			// otherwise we may end up in loops
+			// also: all used paths are loop free
+			if (childkey->distance > node->distance and
+			    std::find(tmppath.begin(),tmppath.end(),*childkey->nodeKey) == tmppath.end()) {
+				tmppath.push_back(*childkey->nodeKey);
 
-			KadContact tmpContact(*childkey->nodeKey, tmppath);
-			fwdTablePathID.addEntry(&tmpContact, false, true);
-			// recursive call!
-			vicinityPathIDCompletion(tmpContact);
+				KadContact tmpContact(*childkey->nodeKey, tmppath);
+				fwdTablePathID.addEntry(&tmpContact, false, true);
+				// recursive call!
+				vicinityPathIDCompletion(tmpContact);
+			}
 		}
 	}
 }
