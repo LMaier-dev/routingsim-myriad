@@ -230,7 +230,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 					forwardedPathSetup++;
 				}
 				else { // send back response if path ID already present/installed
-					EV_TRACE << "KadPathSetupReq: PID for path " << packet->getSrcPath(packet->getProgress())
+					EV_TRACE << "KadPathSetupReq: PID for spath " << packet->getSrcPath(packet->getProgress())
 						 << " already present" << endl;
 					const KadPathSetupReq* setupreq = static_cast<const KadPathSetupReq *>(packet.get());
 					sendPacket(makeAnswerKadPathSetupRsp(*setupreq));
@@ -239,7 +239,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 				break;
 
 			case KAD_PathSetupRsp:
-				EV_TRACE << "forwarding PathSetupRsp, origin source path: "
+				EV_TRACE << "forwarding PathSetupRsp, origin spath: "
 					 << packet->reversePath(packet->getSrcPath()) << endl;
 				break;
 
@@ -508,7 +508,7 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt, simtime_t 
 		EV_TRACE << "forwardPacket(): " << packet->getName() << " dest " << packet->getTarget().shortStr()
 			 << " next hop: " << nextHop.shortStr() << " (" << nid << ')'
 			 << " nonce=" << packet->getNonce()
-			 << " path " << packet->getSrcPath() << " progress=" << packet->getProgress() << " delay:" << delay << endl;
+			 << " spath " << packet->getSrcPath() << " progress=" << packet->getProgress() << " delay:" << delay << endl;
 	}
 
 	if (nid != undefined_node) {
@@ -1701,7 +1701,7 @@ void R2Kademlia::applyShortcut(KadPacket& packet)
 
 				// TODO now check for cycles
 				// replace residual path with my known (shorter) route
-				EV_TRACE << "modifying route due to shortcut: old=" << packet.getSrcPath();
+				EV_TRACE << "modifying sroute due to shortcut: old=" << packet.getSrcPath();
 
 				kad_path newpath(knownContact->getPath());
 				newpath.push_back(knownContact->getKey());
@@ -1745,29 +1745,28 @@ void R2Kademlia::vicinityPathIDCompletion(const KadContact& neighborhoodContact)
 {
 	const nodeVicinityNode* node= vicinity.getNode(neighborhoodContact.getKey());
 	EV_TRACE << "vicinityPathIDCompletion(" << neighborhoodContact.getKey().shortStr() << ")" << endl;
-	// 832741 aaed63
 	// check for further PID entries that need to be created starting from this neighborhood contact
 	if (node != nullptr and node->distance < discoveryRadius ) {
 		kad_path basicpath(neighborhoodContact.getPath());
+		basicpath.push_back(neighborhoodContact.getKey());
 
 		// now traverse any children
 		// due to precondition they must be still within the discovery radius
 		for (auto childkey : node->children) {
 			if (childkey == nullptr)
 				continue;
-			EV_TRACE << "vicinityPathIDCompletion(" << neighborhoodContact.getKey().shortStr() << ") child: " << childkey->nodeKey->shortStr() << endl;
-			kad_path tmppath(basicpath);
+			EV_TRACE << "vicinityPathIDCompletion(" << neighborhoodContact.getKey().shortStr() << ") child: " << childkey->nodeKey->shortStr() << " dist=" << childkey->distance << endl;
 			// extend path by child only if it does not lead back
 			// otherwise we may end up in loops
 			// also: all used paths are loop free
 			if (childkey->distance > node->distance and
-			    std::find(tmppath.begin(),tmppath.end(),*childkey->nodeKey) == tmppath.end()) {
-				tmppath.push_back(*childkey->nodeKey);
-
-				KadContact tmpContact(*childkey->nodeKey, tmppath);
+			    std::find(basicpath.begin(),basicpath.end(),*childkey->nodeKey) == basicpath.end()) {
+				KadContact tmpContact(*childkey->nodeKey, basicpath);
 				fwdTablePathID.addEntry(&tmpContact, false, true);
-				// recursive call!
-				vicinityPathIDCompletion(tmpContact);
+				if (tmpContact.getPathLength()+1 < discoveryRadius) { // we can still extend the path
+					// recursive call!
+					vicinityPathIDCompletion(tmpContact);
+				}
 			}
 		}
 	}

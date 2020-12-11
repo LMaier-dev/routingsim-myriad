@@ -160,7 +160,7 @@ FwdTablePathID::addEntry(KadContact_p contact, bool isForeignPID, bool precalc)
 	PIDFwdTable[incomingPathID]= fwdentry;
 
 	EV_TRACE << "addEntry(): inPID: " << incomingPathID << " outPID: "
-		 << fwdentry.outgoingPathID << " path: " << currentpath << endl;
+		 << fwdentry.outgoingPathID << " spath: " << currentpath << endl;
 
 	return incomingPathID;
 }
@@ -253,7 +253,7 @@ bool FwdTablePathID::modEntry(KadContact_p contact, bool isForeignPID)
 	EV_TRACE << "modEntry(): inPID:" << incomingPathID << " outPID:"
 		 << fwdentry.outgoingPathID
 		 << (additionalEntry ? " additional entry" : ((pidentry != NIDPIDTable.end()) ? " replacement" : " new"))
-		 << " path: " << newpath << endl;
+		 << " spath: " << newpath << endl;
 
 	return true;
 }

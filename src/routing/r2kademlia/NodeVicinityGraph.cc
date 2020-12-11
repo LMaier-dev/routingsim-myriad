@@ -9,6 +9,10 @@ nodeVicinityGraph::addNode(const OverlayKey& parentNodeKey, const OverlayKey& ch
 	ASSERT(distance > 0U);
 	bool modified(false);
 
+	// never add own key as child
+	if (childNodeKey == *rootNodeKey)
+		return false;
+
 	if (auto parentnode_it= graph.find(parentNodeKey); parentnode_it != graph.end()) {
 
 		const nodeVicinityNode* childnodeptr(nullptr);
@@ -64,18 +68,24 @@ nodeVicinityGraph::addNode(const OverlayKey& parentNodeKey, const OverlayKey& ch
 	return modified;
 }
 
+
 void
 nodeVicinityGraph::removeNode(const OverlayKey& nodeKey)
 {
+	EV_TRACE << "vicinity.removeNode(): " << nodeKey.shortStr() << endl;
+	// never remove own root node
+	if (nodeKey == *rootNodeKey) {
+		EV_WARN << "vicinity.removeNode(): trying to remove root node" << endl;
+		return;
+	}
+
 	// lookup node
 	if (auto it= graph.find(nodeKey); it != graph.end()) {
 		const nodeVicinityNode* node(&it->second);
 		// now find all nodes at node.distance-1, because they may point to this node as being its child
 		for (auto graphit= graph.begin(); graphit != graph.end(); graphit++) {
-			if (graphit->second.distance+1 == node->distance) {
-				// remove any potential referrals to this node
-				graphit->second.children.remove(node);
-			}
+			// remove any potential referrals to this node
+			graphit->second.children.remove(node);
 		}
 		graph.erase(it);
 	}
