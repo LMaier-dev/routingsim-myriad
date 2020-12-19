@@ -23,6 +23,8 @@ public:
 	void removeNode(const OverlayKey& nodeKey);
 	size_t size() const { return graph.size(); }
 	const nodeVicinityNode* getNode(const OverlayKey& NodeKey) const;
+	auto cbegin() const { return graph.cbegin(); }
+	auto cend() const { return graph.cend(); }
 private:
 	std::unordered_map<OverlayKey,nodeVicinityNode> graph;
 	const OverlayKey* rootNodeKey = nullptr;

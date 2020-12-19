@@ -967,6 +967,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadPNDiscReq> packet) {
 	kad_path path{packet->getSource()};
 	if (packet->getPhyNeighborArraySize() > 0) {
 		for (uint i = 0; i < packet->getPhyNeighborArraySize(); i++) {
+			
 			routingTable.addPath(packet->getPhyNeighbor(i), path,
 					     packet->getPhyNeighborSeqNo(i),
 					     packet->getPhyNeighborAge(i), KadContact::PathProperty::direct);
@@ -1718,61 +1719,6 @@ void R2Kademlia::applyShortcut(KadPacket& packet)
 }
 
 
-// returns false if path already exists, returns true if path was installed
-bool R2Kademlia::checkForPathInstallation(KadPacket& packet)
-{
-	if ( usePathIDs == false )
-		return false;
-	// will install path in data forward direction
-	// ASSERT(packet.hasRemainingHops()); // this will be true because checkForPathInstallation() is called only then
-	KadContact tmpcontact(packet.getTarget(),
-			      packet.getSrcPath(packet.getProgress()+1, packet.getRouteArraySize()-1));
-
-	if (auto incomingPID= fwdTablePathID.addEntry(&tmpcontact, true, tmpcontact.getPathLength() <= discoveryRadius);
-	    incomingPID != PathID::UndefinedPathID) {
-		// no need to install NId to PID mapping as this is no local contact
-		//fwdTablePathID.setNIDtoPIDmapping(tmpcontact.getKey(), incomingPID); 
-		return true;
-	}
-	else
-		return false;
-}
-
-
-// this creates potential additional entries for PathIDs
-// note that the provided contact is of temporary nature and not part of the routing table
-void R2Kademlia::vicinityPathIDCompletion(const KadContact& neighborhoodContact)
-{
-	const nodeVicinityNode* node= vicinity.getNode(neighborhoodContact.getKey());
-	EV_TRACE << "vicinityPathIDCompletion(" << neighborhoodContact.getKey().shortStr() << ")" << endl;
-	// check for further PID entries that need to be created starting from this neighborhood contact
-	if (node != nullptr and node->distance < discoveryRadius ) {
-		kad_path basicpath(neighborhoodContact.getPath());
-		basicpath.push_back(neighborhoodContact.getKey());
-
-		// now traverse any children
-		// due to precondition they must be still within the discovery radius
-		for (auto childkey : node->children) {
-			if (childkey == nullptr)
-				continue;
-			EV_TRACE << "vicinityPathIDCompletion(" << neighborhoodContact.getKey().shortStr() << ") child: " << childkey->nodeKey->shortStr() << " dist=" << childkey->distance << endl;
-			// extend path by child only if it does not lead back
-			// otherwise we may end up in loops
-			// also: all used paths are loop free
-			if (childkey->distance > node->distance and
-			    std::find(basicpath.begin(),basicpath.end(),*childkey->nodeKey) == basicpath.end()) {
-				KadContact tmpContact(*childkey->nodeKey, basicpath);
-				fwdTablePathID.addEntry(&tmpContact, false, true);
-				if (tmpContact.getPathLength()+1 < discoveryRadius) { // we can still extend the path
-					// recursive call!
-					vicinityPathIDCompletion(tmpContact);
-				}
-			}
-		}
-	}
-}
-
-
 void R2Kademlia::fillRTableRsp(KadRTableRsp& packet, const KadContactList& contacts, bool includePaths)
 {
 	ASSERT(packet.getContactArraySize() == 0);
@@ -1809,7 +1755,7 @@ void R2Kademlia::readRTableRsp(const KadRTableRsp& packet) {
 		// TODO optimization: isPathInteresting
 		// Examples: contact 0779b9 via path < ee2741 0de89c > + <->
                 //           contact 06cc5e via path < ee2741 0de89c > + < d9c74f >
-
+		EV_TRACE << "readRTableRsp: contact " <<  packet.getContact(i).shortStr() << " via " << viaPath << " + " << packet.getPath(i) << endl;
 		if ( not(routingTable.addPath(packet.getContact(i), std::move(packet.getPath(i)), packet.getSeqNo(i), packet.getContactAge(i), viaPath)) ) {
 			// even if contact was not interesting for RT, add it as PID entry if within discovery radius
 			// the following condition is correct because the target contact 
@@ -1819,24 +1765,25 @@ void R2Kademlia::readRTableRsp(const KadRTableRsp& packet) {
 				KadContact neighborhoodContact(packet.getContact(i),
 							       routingTable.concatViaPath(viaPath, packet.getPath(i)),
 							       packet.getSeqNo(i));
-				bool nodeOrLinkAdded(false);
-				// still room for one more hop in neighborhood exploration
-				// the same is done for new contacts in RT (see onNewContact)
-				if (viaPath.size() + packet.getPath(i).size() + 1  < discoveryRadius) {
-					// first check for already queried neighbors in vicinity to avoid unnecessary QueryRouteReq
-					if (vicinity.getNode(neighborhoodContact.getKey()) == nullptr) {
-						sendGetPhysicalNeighbors(&neighborhoodContact);
-					}
-					// try to add node
-					nodeOrLinkAdded= vicinity.addNode(neighborhoodContact.getPath().empty() ? myOverlayKey : neighborhoodContact.getPath().back(), // parent node
-							 neighborhoodContact.getKey(), // new child node
-							 neighborhoodContact.getPath().size()+1); // distance of child node to us
-				}
 
+				bool querynode= vicinity.getNode(neighborhoodContact.getKey()) == nullptr;
+					
+				// try to add node
+				bool nodeOrLinkAdded= vicinity.addNode(neighborhoodContact.getPath().empty() ? myOverlayKey : neighborhoodContact.getPath().back(), // parent node
+								  neighborhoodContact.getKey(), // new child node
+								  neighborhoodContact.getPath().size()+1); // distance of child node to us
+
+				// still room for one more hop in neighborhood exploration?
+				// the same is done for new contacts in RT (see onNewContact)
+				//bool expandDiscovery(viaPath.size() + packet.getPath(i).size() + 1  < discoveryRadius);
 				// add PID entry as this neighbor is in our discoveryRadius vicinity
 				if (usePathIDs and nodeOrLinkAdded) {
 					fwdTablePathID.addEntry(&neighborhoodContact, false, true);
 					vicinityPathIDCompletion(neighborhoodContact);
+				}
+
+				if ((viaPath.size() + packet.getPath(i).size() < discoveryRadius) and querynode) {
+					sendGetPhysicalNeighbors(&neighborhoodContact);
 				}
 			}
 		} // endif: new path not added
@@ -2117,7 +2064,7 @@ bool R2Kademlia::checkForResync(const OverlayKey& contact, stateseqno_t newseqno
 void R2Kademlia::schedulePNDiscReq(const OverlayKey& neighbor)
 {
 	if (not PNDiscoverQueue.empty()) {
-		if (find(PNDiscoverQueue.begin(), PNDiscoverQueue.end(), neighbor) != PNDiscoverQueue.end())
+		if (find(PNDiscoverQueue.cbegin(), PNDiscoverQueue.cend(), neighbor) != PNDiscoverQueue.cend())
 			return; // same neighbor already present
 	}
 
