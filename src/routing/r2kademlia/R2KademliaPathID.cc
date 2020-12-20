@@ -158,7 +158,7 @@ void R2Kademlia::vicinityPathIDCompletion(const KadContact& neighborhoodContact)
 		// }
 
 		// now traverse all paths starting from the root node
-		std::list<const OverlayKey*> currentpath= { &myOverlayKey };
+		std::list<const OverlayKey*> currentpath;
 		unsigned int currentLevel= 0;
 		// iterator over children: note that childiter_state[i] iterates over nodes at level i+1!
 		decltype(nodeVicinityNode::children)::const_iterator childiter_state[discoveryRadius];
