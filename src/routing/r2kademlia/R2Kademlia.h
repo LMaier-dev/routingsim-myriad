@@ -363,8 +363,13 @@ private:
 	bool usePathIDs;
 	short probeTimerId;
 	uint8_t probeStrategy;
-	uint8_t rediscoveryFanOutFactor= 2;
+	uint8_t rediscoveryFanOutFactor;
+	uint8_t rediscoveryMaxNotification;
+	uint8_t updateMaxNotification;
+	uint8_t updateNotifyStrategy;
+	uint8_t updatePropagateStrategy;
 	simtime_t rediscoveryWaitTime;
+	simtime_t rediscoveryUrgentWaitTime;
 	simtime_t pathSetupWaitTime;
 	simtime_t updateWaitTime;
 	simtime_t updateWaitTimeFast;

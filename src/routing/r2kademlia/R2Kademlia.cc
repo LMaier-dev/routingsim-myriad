@@ -71,9 +71,15 @@ void R2Kademlia::onInitialize() {
 	probeStrategy = (uint) par("probeStrategy").intValue();
 	detailedRoutingTableStats = par("detailedRoutingTableStats").boolValue();
 	rediscoveryWaitTime = (simtime_t) (par("rediscoveryWaitTime").doubleValue() * 0.001); // given in ms
+	rediscoveryUrgentWaitTime = (simtime_t) (par("rediscoveryUrgentWaitTime").doubleValue() * 0.001); // given in ms
 	updateWaitTime = (simtime_t) (par("updateWaitTime").doubleValue() * 0.001);  // given in ms
-	updateWaitTimeFast = updateWaitTime / 10;
+	updateWaitTimeFast = (simtime_t) (par("updateWaitTimeFast").doubleValue() * 0.001);
 	pathSetupWaitTime = (simtime_t) (par("pathSetupWaitTime").doubleValue() * 0.001);  // given in ms
+	rediscoveryFanOutFactor = (uint) par("rediscoveryFanOutFactor").intValue();
+	rediscoveryMaxNotification = (uint) par("rediscoveryMaxNotification").intValue();
+	updateMaxNotification = (uint) par("updateMaxNotification").intValue();
+	updateNotifyStrategy = (uint) par("updateNotifyStrategy").intValue();
+	updatePropagateStrategy = (uint) par("updatePropagateStrategy").intValue();
 
 	getStatistics().addSample(this);
 	simtime_t probeInterval = (simtime_t) par("probeInterval").doubleValue();

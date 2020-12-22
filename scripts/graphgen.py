@@ -10,6 +10,7 @@ import concurrent.futures
 import os
 import pathlib
 import json
+from random import seed as rd_seed, choice
 
 import networkx
 
@@ -61,6 +62,12 @@ def main():
 
     parser_plc = subparsers.add_parser('graphml', help='read graphml file')
     parser_plc.add_argument('PATH', help='path to graphml file')
+
+    parser_plc_cc = subparsers.add_parser('plc_cc', help='two power law cluster graphs (Holme-Kim), connected with D edges')
+    parser_plc_cc.add_argument('N', type=int, help='number of nodes')
+    parser_plc_cc.add_argument('M', type=int, help='power law: added edges per node')
+    parser_plc_cc.add_argument('C', type=float, help='power law: clustering parameter')
+    parser_plc_cc.add_argument("D", type=int, help="number of connections between clusters", default=1)
 
     opt = parser.parse_args()
 
@@ -128,6 +135,14 @@ def main():
             ["", f"n = {opt.N}; m = {opt.D * opt.N/2}; seed = {opt.seed}"],
             ["time", datetime.now()]]
         G.graph['filename'] = f"gnd_n{opt.N}_d{opt.D}_seed{opt.seed}.txt"
+    elif(opt.type == 'plc_cc'):
+        G, edge_str = generate_plc_cc(opt.N, opt.M, opt.C, opt.D, seed=opt.seed)
+        G.graph['info'] = [
+            ["", f"generated with NetworkX {networkx.__version__}, networkx.powerlaw_cluster_graph"],
+            ["", f"n = {opt.N}; m = {opt.M}; clustering param = {opt.C}; connections between clusters = {opt.D}; seed = {opt.seed}"],
+            ["", f"Connecting edges: {edge_str}"],
+            ["time", datetime.now()]]
+        G.graph['filename'] = f"connected_powerlaw_cluster_graphs_n{opt.N}_m{opt.M}_p{opt.C}_d{opt.D}_seed{opt.seed}.txt"
 
     # NON RANDOM MODELS
     elif(opt.type == 'cft'):
@@ -271,6 +286,37 @@ def clos_fat_tree(k, hosts=False):
                 assert(len(G.edges(node_id)) == k)
     G = networkx.convert_node_labels_to_integers(G)
     return G
+
+def generate_plc_cc(n, m, c, d, seed):
+    # generate two powerlaw clusters
+    F = networkx.generators.random_graphs.powerlaw_cluster_graph(n // 2,m, c, seed)
+    H = networkx.generators.random_graphs.powerlaw_cluster_graph(n // 2,m, c, seed + 1)
+
+    # add connections
+    rd_seed(seed)
+    G_tmp = networkx.union(F,H, rename=('F-', 'H-'))
+    connections = []
+    for d in range(d):
+        random_f = choice(list(F.nodes))
+        random_h = choice(list(H.nodes))
+        G_tmp.add_edge("F-" + str(random_f), "H-" + str(random_h))
+        connections.append(("F-" + str(random_f), "H-" + str(random_h)))
+
+    # Rename nodes to get continuous numbers
+    # does not use convert_node_labels_to_integers, because we also want to return connection between clisters
+    mapping = {}
+    for x in range(n // 2):
+        mapping["F-" + str(x)] = x
+
+    for y in range(n // 2):
+        mapping["H-" + str(y)] = y + (n // 2)
+    G = networkx.relabel_nodes(G_tmp, mapping)
+
+    edge_str = ""
+    for c in connections:
+        edge = str(mapping[c[0]]) + "-" + str(mapping[c[1]]) + "; "
+        edge_str += edge
+    return G, edge_str
 
 
 if __name__ == '__main__':

@@ -71,6 +71,10 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadUpdateRouteReq> packet) {
 			case KAD_Announce:
 				EV_TRACE << "UpdateRouteReq Announce for contact " << contactkey.shortStr() << endl;
 			        routingTable.addPath(contactkey, path, packet->getSeqNo(i), packet->getContactAge(i), source_path);
+				
+				if (updatePropagateStrategy == 2 ||
+						updatePropagateStrategy == 4 ||
+						updatePropagateStrategy == 5) propagateUpdate = true;
 				break;
 
 			case KAD_Withdraw:
@@ -81,6 +85,10 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadUpdateRouteReq> packet) {
 			case KAD_Change:
 				EV_TRACE << "UpdateRouteReq Change for contact " << contactkey.shortStr() << endl;
 			        routingTable.addPath(contactkey, path, packet->getSeqNo(i), packet->getContactAge(i), source_path);
+
+				if (updatePropagateStrategy == 3 ||
+						updatePropagateStrategy == 4 ||
+						updatePropagateStrategy == 5) propagateUpdate = true;
 				break;
 
 			case KAD_Unreachable:
@@ -99,7 +107,8 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadUpdateRouteReq> packet) {
 					EV_TRACE << "ignored news about me or my PN" << endl;
 				}
 
-				propagateUpdate= true;
+				if (updatePropagateStrategy == 1 ||
+						updatePropagateStrategy == 5) propagateUpdate = true;
 				break;
 
 			default:
@@ -123,17 +132,28 @@ void R2Kademlia::scheduleUpdate(const KadContact& affectedContact, KadRouteUpdat
 	// we collect all update information for neighbors
 	// send UpdateRouteReq to ID-wise closest Nodes
 	size_t contactsLen = std::max((size_t)findNodeNumber, routingTable.getSplitSize());
+	OverlayKey notifyKey;
+	switch (updateNotifyStrategy) {
+		case 1:
+			notifyKey = myOverlayKey;
+			break;
+		case 2:
+			notifyKey = affectedContact.getKey();
+			break;
+		default:
+			throw cRuntimeError("unknown updateNotify strategy %i, values from 1 to 2 are allowed");
+	}
 	//KadContactList closeContacts(routingTable.getClosestContacts(affectedContact.getKey(), contactsLen));
-	KadContactList closeContacts(routingTable.getClosestContacts(myOverlayKey, contactsLen, false));
+	KadContactList closeContacts(routingTable.getClosestContacts(notifyKey, contactsLen, false));
 
-	const uint8_t maxNumberOfNotifiedContacts= 10;
+	//const uint8_t maxNumberOfNotifiedContacts= 10;
 	uint8_t numberOfNotifiedContacts = 0;
 	if (closeContacts.size() > 0)
 	{ // if there are contacts left to notify
 		for (const auto& notifyContact : closeContacts)
 		{ // each ID-wise close contact gets an UpdateRouteReq from us
 			// if we reached the maximum fan out, exit the loop
-			if (numberOfNotifiedContacts == maxNumberOfNotifiedContacts)
+			if (numberOfNotifiedContacts == updateMaxNotification)
 				break;
 
 			//EV_TRACE << "scheduleUpdate for " << affectedContact.getKey().shortStr() << " (" << action
@@ -456,7 +476,7 @@ void R2Kademlia::scheduleRediscovery(const OverlayKey& contactkey, bool immediat
 
 
 	if (not urgentRediscoveryScheduled and not urgentRediscoverQueue.empty()) {
-		addTimer(SimTime(1,SIMTIME_MS), 0, std::bind(&R2Kademlia::rediscoverContacts, this));
+		addTimer(rediscoveryUrgentWaitTime, 0, std::bind(&R2Kademlia::rediscoverContacts, this));
 		urgentRediscoveryScheduled= true;
 	}
 
@@ -490,7 +510,7 @@ void R2Kademlia::rediscoverContacts() {
 
 				// it is only useful to store node ids, because later on, those contacts may have been gone already
 				// collect still valid closest contacts to the failed contact
-				auto contacts = routingTable.getClosestContacts(contactkey, findNodeNumber, true);
+				auto contacts = routingTable.getClosestContacts(contactkey, rediscoveryMaxNotification, true);
 				//auto myclosecontacts = routingTable.getClosestContacts(myOverlayKey, findNodeNumber, true);
 				//auto myclosecontacts_it= myclosecontacts.begin();
 				for (auto c : contacts) {

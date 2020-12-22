@@ -19,6 +19,7 @@ package routingsim.foundation;
 simple NetworkDynamics {
     parameters:
         @display("i=block/network2;is=ll");
+	bool oneFailure = default(false);
 	gates:
     	output toManager;
 }
