@@ -54,7 +54,7 @@ simtime_t LinkFailure::scheduleDynamics() {
 	// neighboring nodes must not be isolated by choice of links (stay connected)
 	if (linkSelection == "randomAllButOne") {
 
-		unsigned long max_retries= (3 * ntop.getActiveNumberNodes())/2;
+		unsigned long max_retries= (5 * ntop.getActiveNumberNodes())/2;
 		nodeid_t source = undefined_node;
 		nodeid_t destination = undefined_node;
 
@@ -161,68 +161,6 @@ simtime_t LinkFailure::scheduleDynamics() {
 		}
 	}
 
-	if (linkSelection == "random") {
-
-		unsigned long max_retries= (3 * ntop.getActiveNumberNodes())/2;
-		nodeid_t source = undefined_node;
-		nodeid_t destination = undefined_node;
-
-		std::set<nodeid_t> selectedNodes;
-		EV_TRACE << "linkSelection random(): number of bidirectional links to fail=" <<  numLinksFail << endl;
-		// it can be the case that the graph is connected, but
-		// we cannot remove a single link without partitioning it
-		// therefore we have a maximum number of retries
-		while (max_retries > 0 && scheduledFailures < numLinksFail)
-		{
-			max_retries--;
-			
-			// no more edges available
-			if (ntop.getActiveNumberLinks() == 0) {
-				EV_WARN << "Premature termination of Dynamics Module LinkFailure (not enough active edges!)" << endl;
-				break;
-			}
-
-			// choose source node
-			source = getTopology().getRandomNode(getRNG(0));
-			// if source node already selected: skip
-			if (selectedNodes.find(source) != selectedNodes.end())
-				continue;
-
-			std::vector<nodeid_t> neighbors;
-			ntop.getNeighborNodeIDs(source, neighbors);
-
-			// single link only nodes are not eligible
-			if (neighbors.size() <= 1)
-				continue;
-
-			// check for dependent nodes (those already selected) in the neigborhood:
-			// They are not eligible, otherwise we risk partioning
-			bool eligible= true;
-			for (unsigned int i= 0; i < neighbors.size(); i++)
-				if (selectedNodes.find(neighbors[i]) != selectedNodes.end())
-				{
-					eligible= false;
-					break;
-				}
-			if (not eligible)
-				continue;
-
-			destination = neighbors[intuniform(0, neighbors.size() - 1)];
-			// safety measures: remove all but one link from this node
-			// the neighboring node must have at least one more link
-			// (otherwise we may get two isolated nodes connected to each other)
-			if ( nodeDegrees[source] > 1 and nodeDegrees[destination] > 2)
-			{
-				scheduleLinkFailure(source, destination, period, duration);
-				nodeDegrees[source]--;
-				nodeDegrees[destination]--;
-				scheduledFailures++;
-			}
-			selectedNodes.insert(source);
-		} // end while
-		EV_TRACE << "linkSelection random(): scheduled bidirectional link failures=" << scheduledFailures << endl;
-		return simTime() + period;
-	}
 
 	// other modes
 	while (scheduledFailures < numLinksFail) {
@@ -251,15 +189,31 @@ simtime_t LinkFailure::scheduleDynamics() {
 			source = nodesInDegreeRange[intuniform(0, nodesInDegreeRange.size() - 1)];
 			ntop.getNeighborNodeIDs(source, neighbors);
 			destination = neighbors[intuniform(0, neighbors.size() - 1)];
-		} else {
+		}
+		else
+		if (linkSelection == "random") {
+
+			std::vector<nodeid_t> neighbors;
+
+			source = getTopology().getRandomNode(getRNG(0));
+			ntop.getNeighborNodeIDs(source, neighbors);
+			if (neighbors.size()==0)
+				continue;
+
+			destination = neighbors[intuniform(0, neighbors.size() - 1)];
+		}
+		else {
 			throw cRuntimeError("Invalid Link Failure model!");
 		}
 		scheduleLinkFailure(source, destination, period, duration);
 		scheduledFailures++;
 	}
 
-	/// the failure is repeated each occurrence seconds
-	return simTime() + period;
+	/// the failure is repeated each occurrence seconds, unless oneFailure is true
+	if (oneFailure) {
+		return simTime() + SIMTIME_MAX;
+	} else {
+		return simTime() + period;
+	}
 }
-
 } /* namespace routingsim */
