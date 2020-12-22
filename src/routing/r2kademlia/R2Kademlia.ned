@@ -62,6 +62,9 @@ simple R2Kademlia extends routingsim.foundation.Protocol
 		double updateWaitTimeFast = default(10ms) @unit(ms);
 		/// updatePropagateStrategy 0=none, 1=KAD_Unreachable, 2=KAD_Announce, 3=KAD_Change, 4 =KAD_Announce+KAD_Change, 5=all
 		int updatePropagateStrategy @enum(UpdatePropagateStrategy) = default(1);
+		/// if failureFocussedProbing true: send reachability probes to affected nodes during failures (unless isolated),
+		/// otherwise choose nodes randomly
+		bool failureFocussedProbing = default(true);
 
 		// statistics foo
 		/// if true records avarage path lengths and stretch in routing tables.

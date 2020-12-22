@@ -45,9 +45,9 @@ parameters:
     /// randomAllButOne: random selection of node, removes all links but one if possible, but only if graph stays connected
     string linkSelection @enum("none", "highestDegree", "degreeRange", "random", "randomAllButOne") = default("none");
 
-	/// string with specific edges that should fail
-	/// format: x1:y1;x2:y2 edges separated with ';', nodes of edges separated with ':'
-	string specificLinks;
+    /// string with specific edges that should fail
+    /// format: x1:y1;x2:y2 edges separated with ';', nodes of edges separated with ':'
+    string specificLinks = default("");
     
     int minDegree = 4;
     int maxDegree = 10;

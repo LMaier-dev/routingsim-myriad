@@ -80,6 +80,7 @@ void R2Kademlia::onInitialize() {
 	updateMaxNotification = (uint) par("updateMaxNotification").intValue();
 	updateNotifyStrategy = (uint) par("updateNotifyStrategy").intValue();
 	updatePropagateStrategy = (uint) par("updatePropagateStrategy").intValue();
+	failureFocussedProbing = par("failureFocussedProbing").boolValue();
 
 	getStatistics().addSample(this);
 	simtime_t probeInterval = (simtime_t) par("probeInterval").doubleValue();
@@ -1997,7 +1998,7 @@ void R2Kademlia::doReachabilityTest(short timerID) {
 	bool nodefound= false;
 	do {
 		// during periods of failed links we want to preferably test reachability for affected nodes
-		if (getNetworkManager()->getFailedNodes().size() > 0) {
+		if (failureFocussedProbing and getNetworkManager()->getFailedNodes().size() > 0) {
 			// select random nodes out of set of failed nodes
 			auto nodeit= getNetworkManager()->getFailedNodes().cbegin();
 			for (unsigned int index= intuniform(0, getNetworkManager()->getFailedNodes().size()-1); index > 0; index--)

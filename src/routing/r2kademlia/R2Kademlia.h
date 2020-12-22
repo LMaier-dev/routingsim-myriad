@@ -374,6 +374,7 @@ private:
 	simtime_t updateWaitTime;
 	simtime_t updateWaitTimeFast;
 	bool detailedRoutingTableStats;
+	bool failureFocussedProbing;
 	//@}
 
 	// a list that is used to send rediscover messages
