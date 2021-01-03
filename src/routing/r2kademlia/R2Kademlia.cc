@@ -250,6 +250,15 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 					 << packet->reversePath(packet->getSrcPath()) << endl;
 				break;
 
+			case KAD_ProbeReq:
+			        {
+					const KadProbeReq* probereq= dynamic_cast<const KadProbeReq*>(packet.get());
+					if (usePathIDs and probereq->getPathCheck()) {
+						checkForPathInstallation(*packet);
+					}
+				}
+			break;
+
 			case KAD_UpdateRouteReq: // check for unreachable info
 				evalUpdateReq(static_cast<const KadUpdateRouteReq*>(packet.get()));
 				break;
@@ -834,8 +843,9 @@ const KadContact& R2Kademlia::chooseNextHop(const KadContactList& contacts, cons
 // PING
 void R2Kademlia::sendProbe(KadContact_p contact) {
 	EV_TRACE << "sending ProbeReq from " << myOverlayKey.shortStr() << " to " << contact->getKey().shortStr() << endl;
-	sendRpcCall(
-		makePacket<KadProbeReq>(contact, "KadProbeReq"),
+	auto probereq= makePacket<KadProbeReq>(contact, "KadProbeReq");
+	probereq->setPathCheck(true);
+	sendRpcCall(std::move(probereq),
 		std::bind(&R2Kademlia::handleProbeResponse, this, ph::_1, ph::_2),
 		std::bind(&R2Kademlia::handleProbeResponse, this, ph::_1, ph::_2),
 		std::bind(&R2Kademlia::handleRPCTimeOut, this, ph::_1, ph::_2));
@@ -1482,6 +1492,7 @@ void R2Kademlia::sampleStatistics (Statistics &stats) {
 	stats.value("fwdTableSize", fwdTablePathID.getNumEntries());
 	stats.value("fwdTableValid", fwdTablePathID.getNumValidEntries());
 	stats.value("fwdTableForeign", fwdTablePathID.getNumForeignEntries());
+	stats.value("fwdTableUsedPrecalc", fwdTablePathID.getNumUsedPrecalcEntries());
 }
 // -------------- kad policy -------------
 
@@ -1550,6 +1561,7 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 				// since the contact path excludes the contact itself the above condition includes nodes <= discoveryRadius+1
 				if (auto incomingPID= fwdTablePathID.addEntry(contact, false, true); incomingPID != PathID::UndefinedPathID) {
 					fwdTablePathID.setNIDtoPIDmapping(contact->getKey(), incomingPID);
+					vicinityPathIDCompletion(*contact);
 				}
 			}
 			else

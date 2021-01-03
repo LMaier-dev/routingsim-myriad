@@ -18,6 +18,7 @@ namespace routingsim {
 	private:
 		uint8_t fwdState = State::undefined;
                 uint16_t pathlen = 0; // default: number of hops to destination
+		unsigned long usageCount = 0;
 	public:
 		PathID outgoingPathID = PathID::UndefinedPathID;
 		OverlayKey nextHopNode = OverlayKey::UNSPECIFIED_KEY;
@@ -63,9 +64,11 @@ namespace routingsim {
 
 		bool isUndefined() const { return fwdState == State::undefined; }
 
-
 		void setPathLength(uint16_t plen) { pathlen= plen; }
 		uint16_t getPathLength() const { return pathlen; }
+
+		void incrementUsageCount() { usageCount++; }
+		unsigned long getUsageCount() const { return usageCount; }
 	};
 
 	/* not yet used
@@ -100,6 +103,7 @@ namespace routingsim {
 		size_type getNumEntries() const { return PIDFwdTable.size(); };
 		size_type getNumValidEntries() const;
 		size_type getNumForeignEntries() const;
+		size_type getNumUsedPrecalcEntries() const;
 
 		// from cObject()
 		virtual std::string str() const;

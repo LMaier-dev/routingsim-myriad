@@ -21,7 +21,6 @@ bool R2Kademlia::checkForPathInstallation(KadPacket& packet)
 	if (auto incomingPID= fwdTablePathID.addEntry(&tmpcontact, true, tmpcontact.getPathLength() <= discoveryRadius);
 	    incomingPID != PathID::UndefinedPathID) {
 		// no need to install NId to PID mapping as this is no local contact
-		//fwdTablePathID.setNIDtoPIDmapping(tmpcontact.getKey(), incomingPID); 
 		return true;
 	}
 	else

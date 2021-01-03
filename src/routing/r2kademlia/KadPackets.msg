@@ -132,6 +132,7 @@ packet KadPNDiscRsp extends KadRTableRsp {
 // PROBE
 packet KadProbeReq extends KadPacket {
 	type = KAD_ProbeReq;
+	bool pathCheck = false;
 }
 
 packet KadProbeRsp extends KadAnswer {

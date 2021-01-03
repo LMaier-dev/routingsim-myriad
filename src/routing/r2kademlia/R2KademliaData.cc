@@ -143,6 +143,7 @@ bool R2Kademlia::forwardDataPacketToNextHop(KadDataPacket_p& packet, NodePkt_p& 
 
 	       	nodeid_t nid = neighborTable.getNodeId(nh.nextHopNode);
 		if (nid != undefined_node) {
+			nh.incrementUsageCount();
 			packet->advanceProgress(); // decrease hop limit
 			nodePkt->encapsulate(packet.release());
 			sendToNode(nid, std::move(nodePkt));
