@@ -8,6 +8,7 @@
 #include "foundation.h"
 #include <BaseTypes.h>
 #include <unordered_map>
+#include <tuple>
 
 #include "KadContact.h"
 #include "PathID.h"
@@ -103,7 +104,7 @@ namespace routingsim {
 		size_type getNumEntries() const { return PIDFwdTable.size(); };
 		size_type getNumValidEntries() const;
 		size_type getNumForeignEntries() const;
-		size_type getNumUsedPrecalcEntries() const;
+		std::tuple<size_type, size_type> getNumUsedPrecalcEntries() const;
 
 		// from cObject()
 		virtual std::string str() const;

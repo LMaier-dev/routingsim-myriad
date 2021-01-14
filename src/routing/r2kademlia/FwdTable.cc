@@ -34,18 +34,24 @@ size_type FwdTablePathID::getNumForeignEntries() const
 }
 
 
-// this counts how many of the precalculated entries have been used
-size_type FwdTablePathID::getNumUsedPrecalcEntries() const
+// this counts how many of the precalculated entries exist (first return value) and have been used (2nd return value)
+std::tuple<size_type, size_type> FwdTablePathID::getNumUsedPrecalcEntries() const
 {
-	unsigned long sum= 0;
+	unsigned long total_sum(0);
+	unsigned long used_sum(0);
+
 	for (auto& pidfwdtableentry : PIDFwdTable)
 	{
 		const FwdTableEntry&  fwdentry= pidfwdtableentry.second;
 
-		if (fwdentry.isPrecalc() and fwdentry.getUsageCount()>0)
-			sum++;
+		if (fwdentry.isPrecalc()) {
+			total_sum++;
+			if (fwdentry.getUsageCount()>0) {
+				used_sum++;
+			}
+		}
 	}
-	return sum;
+	return {total_sum,used_sum};
 }
 
 	

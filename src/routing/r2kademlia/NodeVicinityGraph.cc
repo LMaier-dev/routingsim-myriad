@@ -7,8 +7,8 @@ namespace routingsim {
 bool
 nodeVicinityGraph::addNode(const OverlayKey& parentNodeKey, const OverlayKey& childNodeKey, unsigned short distance) {
 	ASSERT(distance > 0U);
-	EV_TRACE << "vicinity.addNode(): " << childNodeKey.shortStr()
-		 << " parent: " << parentNodeKey.shortStr() << " distance:" << distance << endl;
+	// EV_TRACE << "vicinity.addNode(): " << childNodeKey.shortStr()
+	// 	 << " parent: " << parentNodeKey.shortStr() << " distance:" << distance << endl;
 
 	bool modified(false);
 
@@ -25,7 +25,7 @@ nodeVicinityGraph::addNode(const OverlayKey& parentNodeKey, const OverlayKey& ch
 			auto result= graph.insert(std::make_pair(childNodeKey, nodeVicinityNode()));
 			graph[childNodeKey].nodeKey= &(result.first)->first;
 			graph[childNodeKey].distance= distance;
-			EV_TRACE << "vicinity.addNode(): added new node " <<  childNodeKey.shortStr() << endl;
+			// EV_TRACE << "vicinity.addNode(): added new node " <<  childNodeKey.shortStr() << endl;
 			childnodeptr= &graph[childNodeKey];
 			modified= true;
 		}
@@ -33,25 +33,13 @@ nodeVicinityGraph::addNode(const OverlayKey& parentNodeKey, const OverlayKey& ch
 			childnodeptr= &(child_it->second);
 			// in case this node is closer than before, update the distance
 			unsigned int old_distance= child_it->second.distance;
-			EV_TRACE << "vicinity.addNode(): node exists already, distance " <<  old_distance << endl;
+			// EV_TRACE << "vicinity.addNode(): node exists already, distance " <<  old_distance << endl;
 			if (distance < old_distance) {
 				child_it->second.distance= distance;
 				modified= true;
-				// now remove it from any children list in further distance
-				// find all nodes at node.distance-1, because they may point to this node being its child
-				// for (auto graphit= graph.begin(); graphit != graph.end(); graphit++) {
-				// 	if (graphit->second.distance+1U == old_distance) {
-				// 		// remove any potential referrals to this node
-				// 		graphit->second.children.remove(&child_it->second);
-				// 	}
-				// }
 			}
 
 		}
-
-		// add new node as child to parent in case it is not leading back
-		//if (distance <= parentnode_it->second.distance)
-		//	return modified;
 
 		auto child_it= parentnode_it->second.children.cbegin();
 		// check for existing child node in children list of parent (if exists: link already known)
@@ -69,7 +57,7 @@ nodeVicinityGraph::addNode(const OverlayKey& parentNodeKey, const OverlayKey& ch
 		EV_ERROR << "cannot add child " << childNodeKey.shortStr() << ", because parent " << parentNodeKey << " not found" << endl;
 	}
 
-	EV_TRACE << "vicinity.addNode(): " << childNodeKey.shortStr() << (modified ? " modified" : " not modified") << endl;
+	//EV_TRACE << "vicinity.addNode(): " << childNodeKey.shortStr() << (modified ? " modified" : " not modified") << endl;
 
 	return modified;
 }
@@ -78,7 +66,7 @@ nodeVicinityGraph::addNode(const OverlayKey& parentNodeKey, const OverlayKey& ch
 void
 nodeVicinityGraph::removeNode(const OverlayKey& nodeKey)
 {
-	EV_TRACE << "vicinity.removeNode(): " << nodeKey.shortStr() << endl;
+	//EV_TRACE << "vicinity.removeNode(): " << nodeKey.shortStr() << endl;
 	// never remove own root node
 	if (nodeKey == *rootNodeKey) {
 		EV_WARN << "vicinity.removeNode(): trying to remove root node" << endl;

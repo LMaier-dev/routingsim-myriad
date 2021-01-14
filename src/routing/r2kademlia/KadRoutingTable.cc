@@ -252,7 +252,8 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 				}
 			}
 
-			// contact has new state
+			bool recheckPhysicalNeighbors(false);
+			// contact has new state?
 			if (contact->getStateSeqNo() < stateseqno) {
 				// sometimes updates may be received that carry a newer sequence number
 				// from physical neighbors; this indicates that we do not have the latest state about its neighbors
@@ -268,9 +269,11 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 					return false;
 				}
 
-				// if contact is within discover radius, ask again for neighbors
+				// if contact is within discover radius, ask again for its neighbors since something has changed
 				if ( contact->getPathLength()+1 < discoveryRadius or path.size()+1 < discoveryRadius ) {
-					policy->recheckPhysicalNeighbors(*contact);
+					// we "defer" that until new path has been set (see below)
+					// otherwise addNode() in sendGetPhysicalNeighbors will not update correctly
+					recheckPhysicalNeighbors= true;
 				}
 			}
 
@@ -280,6 +283,9 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 			contact->setPathProperty(pathprop);
 			updateCount++;
 
+			// recheck neighbors of that contact because something has changed
+			if (recheckPhysicalNeighbors)
+				policy->recheckPhysicalNeighbors(*contact);
 			// do something on improved path according to policy
 			policy->onImprovement(*contact);
 
@@ -997,14 +1003,14 @@ KadContact_p KadRoutingTable::getContact(const OverlayKey& key) const
 kad_path KadRoutingTable::concatViaPath(const kad_path& viaPath, const kad_path& path) const
 {
 	kad_path newPath{};
-	auto left = viaPath.end();
-	auto right = pathSimplification ? path.rbegin() : path.rend();
-	for (;right != path.rend() and left == viaPath.end(); right++) {
-		left = std::find(viaPath.begin(), viaPath.end(), *right);
+	auto left = viaPath.cend();
+	auto right = pathSimplification ? path.crbegin() : path.crend();
+	for (;right != path.crend() and left == viaPath.cend(); right++) {
+		left = std::find(viaPath.cbegin(), viaPath.cend(), *right);
 	}
-	newPath.reserve((left - viaPath.begin()) + (path.end() - right.base()));
-	std::copy(viaPath.begin(), left, std::back_inserter(newPath));
-	std::copy(right.base(), path.end(), std::back_inserter(newPath));
+	newPath.reserve((left - viaPath.cbegin()) + (path.cend() - right.base()));
+	std::copy(viaPath.cbegin(), left, std::back_inserter(newPath));
+	std::copy(right.base(), path.cend(), std::back_inserter(newPath));
 
 	return newPath;
 }

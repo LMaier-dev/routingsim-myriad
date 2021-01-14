@@ -905,9 +905,13 @@ void R2Kademlia::sendGetPhysicalNeighbors(KadContact_p contact)
 	);
 
 	// update vicinity to avoid future redundant requests
-	vicinity.addNode(contact->getPath().empty() ? myOverlayKey : contact->getPath().back(), // parent
-			 contact->getKey(), // new child
-			 contact->getPath().size()+1);
+	bool nodeOrLinkAdded= vicinity.addNode(contact->getPath().empty() ? myOverlayKey : contact->getPath().back(), // parent
+					       contact->getKey(), // new child
+					       contact->getPath().size()+1);
+	if (usePathIDs and nodeOrLinkAdded) {
+		fwdTablePathID.addEntry(contact, false, true);
+		vicinityPathIDCompletion(*contact);
+	}
 }
 
 
@@ -1492,7 +1496,9 @@ void R2Kademlia::sampleStatistics (Statistics &stats) {
 	stats.value("fwdTableSize", fwdTablePathID.getNumEntries());
 	stats.value("fwdTableValid", fwdTablePathID.getNumValidEntries());
 	stats.value("fwdTableForeign", fwdTablePathID.getNumForeignEntries());
-	stats.value("fwdTableUsedPrecalc", fwdTablePathID.getNumUsedPrecalcEntries());
+	auto [numPrecalcEntries, numUsedPrecalcEntries]= fwdTablePathID.getNumUsedPrecalcEntries();
+	stats.value("fwdTablePrecalc", numPrecalcEntries);
+	stats.value("fwdTableUsedPrecalc", numUsedPrecalcEntries);
 }
 // -------------- kad policy -------------
 
@@ -1586,20 +1592,22 @@ void R2Kademlia::onImprovement(const KadContact& contact) {
 	EV_TRACE << "onImprovement(" << contact.getKey().shortStr() << ") called, SeqNo #" << contact.getStateSeqNo() << ' ' << contact.getPath() << endl;
 
 	//ASSERT( getKadObserver().checkSeqNo(contact.getKey(),contact.getStateSeqNo()) == true );
-	if (contact.isValid())
-	{
-		if (usePathIDs) {
+
+	if (usePathIDs and contact.isValid()) {
+
+		if (contact.getPathProperty() == KadContact::PathProperty::indirect) {
+		   // send a path setup request packet for installing PIDs in intermediate nodes for this indirectly learned route
+		   //EV_TRACE << "Triggering path setup to " << contact.getKey().shortStr() << endl;
+		   // no need to setup routes within discovery radius + 1 distance
+		   // (note/remember: getPathLength() does not include the last hop)
+		   if ( contact.getPathLength() > discoveryRadius ) {
+			   schedulePathSetup(contact.getKey());
+		   }
+		}
+		// path has been changed to shorter one: ensure that PID entry exists
+		if ( contact.getPathLength() <= discoveryRadius ) {
 			fwdTablePathID.modEntry(&contact, false);
 		}
-	}
-
-	if (usePathIDs and contact.isValid() and contact.getPathProperty() == KadContact::PathProperty::indirect)
-	{ // send a path setup request packet for installing PIDs in intermediate nodes for this indirectly learned route
-		//EV_TRACE << "Triggering path setup to " << contact.getKey().shortStr() << endl;
-		// no need to setup routes within discovery radius + 1 distance
-		// (note/remember: getPathLength() does not include the last hop)
-		if ( contact.getPathLength() > discoveryRadius )
-			schedulePathSetup(contact.getKey());
 	}
 
 	// TODO: wait grace period
@@ -1664,6 +1672,9 @@ void R2Kademlia::recordScalars() {
 	recordScalar("fwdTableSize", fwdTablePathID.getNumEntries());
 	recordScalar("fwdTableValid", fwdTablePathID.getNumValidEntries());
 	recordScalar("fwdTableForeign", fwdTablePathID.getNumForeignEntries());
+	auto [numPrecalcEntries, numUsedPrecalcEntries]= fwdTablePathID.getNumUsedPrecalcEntries();
+	recordScalar("fwdTablePrecalc", numPrecalcEntries);
+	recordScalar("fwdTableUsedPrecalc", numUsedPrecalcEntries);
 
 	// EV_TRACE << (shortenedlaterpaths * 100.0) / (double) laterpaths << "% "
 	// 	 << shortenedlaterpaths << "/" << laterpaths << " of later paths shortened. "
@@ -1775,7 +1786,15 @@ void R2Kademlia::readRTableRsp(const KadRTableRsp& packet) {
 		// Examples: contact 0779b9 via path < ee2741 0de89c > + <->
                 //           contact 06cc5e via path < ee2741 0de89c > + < d9c74f >
 		EV_TRACE << "readRTableRsp: contact " <<  packet.getContact(i).shortStr() << " via " << viaPath << " + " << packet.getPath(i) << endl;
-		if ( not(routingTable.addPath(packet.getContact(i), std::move(packet.getPath(i)), packet.getSeqNo(i), packet.getContactAge(i), viaPath)) ) {
+		// check whether contact is not contained in path (avoid cycles)
+		if ( find(viaPath.cbegin(), viaPath.cend(), packet.getContact(i)) != viaPath.cend()
+		     or
+		     find(packet.getPath(i).cbegin(), packet.getPath(i).cend(), packet.getContact(i)) != packet.getPath(i).cend() ) {
+			EV_TRACE << "skipping contact as it occurs already in path" <<  endl;
+			continue;
+		}
+
+		if ( not(routingTable.addPath(packet.getContact(i), packet.getPath(i), packet.getSeqNo(i), packet.getContactAge(i), viaPath)) ) {
 			// even if contact was not interesting for RT, add it as PID entry if within discovery radius
 			// the following condition is correct because the target contact 
 			// is not contained in (viaPath + packet.getPath(i))
