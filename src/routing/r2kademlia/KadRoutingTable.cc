@@ -279,6 +279,8 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 
 			contact->setPath(std::move(path)); // will set contact automatically to valid
 			contact->setStateSeqNo(stateseqno);
+			// update lastseen to that of the originator
+			contact->updateLastSeenTo(simTime()-SimTime(contact_age,SIMTIME_MS));
 
 			contact->setPathProperty(pathprop);
 			updateCount++;
