@@ -123,7 +123,8 @@ void R2Kademlia::vicinityPathIDCompletion(const KadContact& neighborhoodContact)
 				// now iterate over all children of this node (must do this in vicinity graph)
 				for (auto child_node : currentVicinityNode->children) {
 					
-					if (child_node->distance == level) { // check whether child is at the correct level
+					if (child_node->distance == level+1) { // check whether child is at the correct level
+						// in case child is on lesser level, we ignore it now, because shortest path is preferred
 
 						// check if child exists in next level already, otherwise create this node
 						auto existing_child= std::find_if(nodeSet[level+1].cbegin(),

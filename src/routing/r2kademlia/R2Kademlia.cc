@@ -254,7 +254,8 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 			        {
 					const KadProbeReq* probereq= dynamic_cast<const KadProbeReq*>(packet.get());
 					if (usePathIDs and probereq->getPathCheck()) {
-						checkForPathInstallation(*packet);
+						if (checkForPathInstallation(*packet))
+							EV_TRACE << "POST Installed PathID by ProbeReq PathCheck" << endl;
 					}
 				}
 			break;
