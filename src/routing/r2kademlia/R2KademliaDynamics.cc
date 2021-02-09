@@ -35,6 +35,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadUpdateRouteReq> packet) {
 	ASSERT(packet->getContactArraySize() == packet->getActionArraySize());
 
 	receivedRouteUpdates++;
+	receivedPackets++;
 
 	// path to origin of this KadUpdateRouteReq (excluding myself)
 	kad_path source_path= packet->reversePath(packet->getSrcPath(0, packet->getRouteArraySize()-1));
