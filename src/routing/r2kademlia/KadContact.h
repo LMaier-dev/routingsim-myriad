@@ -90,7 +90,7 @@ public:
 	bool isPhysicalNeighbor() const { return physicalNeighbor; }
 
 	/// set contact state
-	inline void setInvalid(const link_t& failed_link, age_t failed_link_age);
+	inline bool setInvalid(const link_t& failed_link, age_t failed_link_age);
 	void setValid() { state= State::valid; rds_p.reset(nullptr); }
 	void setRediscovering() { ASSERT(state == State::invalid); state= State::rediscovering; }
 	void setState(State newstate) { state= newstate; }
@@ -193,12 +193,13 @@ inline KadContact& KadContact::operator=(KadContact&& other)
 	return *this;
 }
 
-
-inline void KadContact::setInvalid(const link_t& failed_link, age_t failed_link_age)
+// returns true in case it is initially set invalid
+inline bool KadContact::setInvalid(const link_t& failed_link, age_t failed_link_age)
 {
 	if (state == State::valid) {
 		state= State::invalid;
 		rds_p= std::make_unique<RediscoveryState>(std::make_pair(failed_link, simTime() - SimTime(failed_link_age,SIMTIME_MS)));
+		return true;
 	}
 	else // already invalid or rediscovering
 	{
@@ -214,6 +215,8 @@ inline void KadContact::setInvalid(const link_t& failed_link, age_t failed_link_
 			}
 		}
 	}
+
+	return false;
 }
 
 

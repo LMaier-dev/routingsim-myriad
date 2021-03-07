@@ -157,6 +157,8 @@ public:
 	virtual void onNewContact(KadContact_p contact) override;
 	/** called when a contact is going to be deleted from routing table*/
 	virtual void onContactRemoval(KadContact_p contact) override;
+	/** called when a contact is invalidated */
+	virtual void onContactInvalidation(KadContact_p contact) override;
 
 	/** called when a route got improved */
 	virtual void onImprovement(const KadContact& contact) override;

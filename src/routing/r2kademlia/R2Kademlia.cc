@@ -1525,6 +1525,16 @@ void R2Kademlia::onContactRemoval(KadContact_p contact)
 }
 
 
+// this is called after invalidation of the contact
+void R2Kademlia::onContactInvalidation(KadContact_p contact)
+{
+	if (contact == nullptr)
+		return;
+
+	if (usePathIDs)
+		fwdTablePathID.invalidateEntry(contact);
+}
+
 void R2Kademlia::onNewContact(KadContact_p contact) {
 
 	EV_TRACE << "onNewContact(" << contact->getKey().shortStr() << ") called, SeqNo #" << contact->getStateSeqNo() << endl;
@@ -1605,10 +1615,8 @@ void R2Kademlia::onImprovement(const KadContact& contact) {
 			   schedulePathSetup(contact.getKey());
 		   }
 		}
-		// path has been changed to shorter one: ensure that PID entry exists
-		if ( contact.getPathLength() <= discoveryRadius ) {
-			fwdTablePathID.modEntry(&contact, false);
-		}
+		// for any path (also within discovery radius or direct paths): update the PID entry
+		fwdTablePathID.modEntry(&contact, false);
 	}
 
 	// TODO: wait grace period
