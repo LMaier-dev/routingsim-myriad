@@ -15,7 +15,7 @@
 
 /**
  * @file KadRoutingTable.cc
- * @author Jakob Thomas
+ * @author Jakob Thomas, Roland Bless
  */
 
 #include "KadRoutingTable.h"
@@ -797,7 +797,9 @@ void KadRoutingTable::invalidateContact(KadContact& contact, const link_t& faile
 
 			if (contact.isValid()) {
 
-				contact.setInvalid(failedLink, failedLinkAge);
+				if (contact.setInvalid(failedLink, failedLinkAge)) {
+					policy->onContactInvalidation(&contact);
+				}
 				contact.updateLastSeen();
 
 				EV_TRACE << "Set Contact to invalid due to failed link " << failedLink
@@ -810,7 +812,7 @@ void KadRoutingTable::invalidateContact(KadContact& contact, const link_t& faile
 			if (contact.isInvalid()) { // contact already invalid or rediscovering
 				// add potentially further failed link
 				contact.setInvalid(failedLink, failedLinkAge);
-					contact.updateLastSeen();
+				contact.updateLastSeen();
 			}
 		}
 	}

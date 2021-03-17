@@ -31,7 +31,8 @@ namespace routingsim {
 			local         = 2, // locally wanted (contact or neighbor)
 			foreign       = 4, // PID wanted by KadPathSetup
 			obsolete      = 8,
-			precalc       = 16 // typically all paths in the discovery radius
+			precalc       = 16, // typically all paths in the discovery radius
+			deleted       = 32
 		};
 
 		enum class Action {
@@ -62,6 +63,9 @@ namespace routingsim {
 		void unsetPrecalc() { fwdState &= ~State::precalc; };
 		void setPrecalc() { fwdState |= State::precalc; unsetForeign(); };
 		bool isPrecalc() const { return fwdState & State::precalc; };
+
+		void setDeleted() { fwdState |= State::deleted; setInvalid(); };
+		bool isDeleted() const { return fwdState & State::deleted; };
 
 		bool isUndefined() const { return fwdState == State::undefined; }
 
@@ -98,6 +102,8 @@ namespace routingsim {
 		// modify PID for path to contact
 		bool modEntry(KadContact_p contact, bool foreignPID);
 		void delEntry(KadContact_p contact);
+		void invalidateEntry(KadContact_p contact);
+
 		void delPIDEntry(PathID pid);
 
 		// for gathering statistics

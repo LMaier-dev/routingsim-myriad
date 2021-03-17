@@ -186,6 +186,29 @@ FwdTablePathID::addEntry(KadContact_p contact, bool isForeignPID, bool precalc)
 }
 
 
+// this invalidates the PID entry that corresponds to the current path
+void FwdTablePathID::invalidateEntry(KadContact_p contact)
+{
+	if (contact == nullptr)
+		return;
+
+	kad_path currentpath(contact->getPath());
+	// add destination node ID to end of the path (will never be empty then)
+	currentpath.push_back(contact->getKey());
+
+	// prepend own nodeID for incoming PathID
+	PathID incomingPathID(getPathID(*ownNodeID, currentpath));
+
+	if (auto it= PIDFwdTable.find(incomingPathID); it != PIDFwdTable.end()) {
+		FwdTableEntry& fwdentry= it->second;
+		fwdentry.setInvalid();
+	}
+	else {
+		EV_ERROR << "no FwdTable entry found for PID " << incomingPathID << endl;
+	}
+}
+
+
 // returns false if entry is not accepted (e.g., path is longer)
 bool FwdTablePathID::modEntry(KadContact_p contact, bool isForeignPID)
 {
@@ -235,7 +258,8 @@ bool FwdTablePathID::modEntry(KadContact_p contact, bool isForeignPID)
 					if (it->second.isObsolete())
 					{ // remove entry before priorPathID
 						//EV_TRACE << "deleting PID entry " << priorfwdentry.prevPathID << endl;
-						//PIDFwdTable.erase(it);
+						//if (not it->second.isPrecalc() and not it->second.isForeign())
+						//	PIDFwdTable.erase(it);
 					}
 					else
 						EV_WARN << "PID entry before prior penultimate entry not obsolete";
@@ -245,11 +269,12 @@ bool FwdTablePathID::modEntry(KadContact_p contact, bool isForeignPID)
 	}
 
 	FwdTableEntry fwdentry;
-	// if PID already exists, just re-enable mapping
+	// if PID already exists, just re-enable mapping and set to valid
 	if (auto it= PIDFwdTable.find(incomingPathID); it != PIDFwdTable.end())
 	{
 		EV_TRACE << "modEntry(): inPID " << incomingPathID << " already existed" << endl;
 		fwdentry= it->second;
+		fwdentry.setValid();
 	}
 	else
 	{ // create new entry in FwdTable
@@ -287,9 +312,15 @@ void FwdTablePathID::delPIDEntry(PathID pid)
 
 	if ( auto it= PIDFwdTable.find(pid); it != PIDFwdTable.end() )
 	{ // entry exists
+		// detect any cycles: stop recursion here
+		if (it->second.isDeleted())
+			return;
+
 		// delete all related PID entries (prior entries)
 		if (it->second.prevPathID != PathID::UndefinedPathID)
 		{ // recurse here
+			// mark for deletion
+			it->second.setDeleted();
 			delPIDEntry(it->second.prevPathID);
 			it->second.prevPathID= PathID::UndefinedPathID;
 		}
@@ -316,19 +347,30 @@ void FwdTablePathID::delEntry(KadContact_p contact)
 	if ( auto pidentry= NIDPIDTable.find(contact->getKey()); pidentry != NIDPIDTable.end() )
 	{
 		// delete all PID entries related to this contact except when they were precalculated
-		PathID currentPathID= pidentry->second;
+		if (PathID currentPathID= pidentry->second; currentPathID != PathID::UndefinedPathID) {
+			std::unordered_set<PathID> alreadySeenPIDSet;
+			// get fwdentry and remove local flag for related PIDs because the local contact gets deleted
+			for (auto fwdentry_it= PIDFwdTable.find(currentPathID);
+			     fwdentry_it != PIDFwdTable.end() and fwdentry_it->first != PathID::UndefinedPathID;
+			     fwdentry_it= PIDFwdTable.find(fwdentry_it->second.prevPathID)) {
+				// if the next condition hold, we got a cycle
+				if (alreadySeenPIDSet.find(fwdentry_it->first) != alreadySeenPIDSet.end()) {
+					EV_TRACE << "CYCLE detected, fwdentry: " << fwdentry_it->first
+						 << endl;
+					break;
+				}
 
-		// get fwdentry and remove local flag for related PIDs because the local contact gets deleted
-		for (auto fwdentry_it= PIDFwdTable.find(currentPathID);
-		     fwdentry_it != PIDFwdTable.end();
-		     fwdentry_it= PIDFwdTable.find(fwdentry_it->second.prevPathID)) {
-			fwdentry_it->second.unsetLocal();
-			if (fwdentry_it->second.prevPathID == PathID::UndefinedPathID)
-				break;
+				alreadySeenPIDSet.insert(fwdentry_it->first);
+
+				fwdentry_it->second.unsetLocal();
+				if (fwdentry_it->second.prevPathID == PathID::UndefinedPathID)
+					break;
+			}
+
+			// now try to delete the PID entries
+			delPIDEntry(currentPathID);
 		}
 
-		// now try to delete the PID entries
-		delPIDEntry(currentPathID);
 		// delete anchor entry in NIDPIDTable
 		NIDPIDTable.erase(pidentry);
 		EV_WARN << "delEntry(): NIDPID entry for " << contact->getKey().shortStr() << " deleted" << endl;

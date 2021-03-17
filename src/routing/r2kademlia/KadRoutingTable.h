@@ -82,6 +82,8 @@ public:
 	virtual void onImprovement(const KadContact& contact) = 0;
 	/** called when a contact is about to being removed */
 	virtual void onContactRemoval(KadContact_p contact) = 0;
+	/** called when a contact is invalidated */
+	virtual void onContactInvalidation(KadContact_p contact) = 0;
 	/** called when physical neighbors may be out of synch with their sequence numbers **/
 	virtual void reSyncPN(const KadContact& contact) = 0;
 	/** called when physical neighbors in discoveryradius may be out of synch with their sequence numbers **/
