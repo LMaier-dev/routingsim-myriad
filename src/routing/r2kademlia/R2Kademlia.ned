@@ -53,9 +53,9 @@ simple R2Kademlia extends routingsim.foundation.Protocol
 		/// rediscoveryMaxNotification
 		int rediscoveryMaxNotification = default(findNodeNumber);
 		/// waiting time until urgent rediscovery is scheduled
-		double rediscoveryUrgentWaitTime = default(1ms) @unit(ms);
+		double rediscoveryUrgentWaitTime = default(10ms) @unit(ms);
 		/// updateMaxNotification
-		int updateMaxNotification = default(10);
+		int updateMaxNotification = default(4);
 		/// updateNotifyStrategy 1=close to own key, 2=close to affected key
 		int updateNotifyStrategy @enum(UpdateNotifyStrategy) = default(1);
 		/// waiting time until scheduled urgent routing updates are sent

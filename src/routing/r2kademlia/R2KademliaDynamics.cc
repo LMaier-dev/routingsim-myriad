@@ -477,12 +477,12 @@ void R2Kademlia::scheduleRediscovery(const OverlayKey& contactkey, bool immediat
 
 
 	if (not urgentRediscoveryScheduled and not urgentRediscoverQueue.empty()) {
-		addTimer(rediscoveryUrgentWaitTime, 0, std::bind(&R2Kademlia::rediscoverContacts, this));
+		addTimer(uniform(rediscoveryUrgentWaitTime/2,rediscoveryUrgentWaitTime*1.5), 0, std::bind(&R2Kademlia::rediscoverContacts, this));
 		urgentRediscoveryScheduled= true;
 	}
 
 	if (not rediscoveryScheduled and not rediscoverQueue.empty()) {
-		addTimer(rediscoveryWaitTime, 0, std::bind(&R2Kademlia::rediscoverContacts, this));
+		addTimer(uniform(rediscoveryWaitTime/2,rediscoveryWaitTime*1.5), 0, std::bind(&R2Kademlia::rediscoverContacts, this));
 		rediscoveryScheduled= true;
 	}
 }
@@ -494,7 +494,9 @@ void R2Kademlia::rediscoverContacts() {
 	// recheck status and set to rediscover
 	EV_TRACE << "rediscoverContacts called, urgent queued: " << urgentRediscoverQueue.size() << " normal queued: " << rediscoverQueue.size() << endl;
 	rediscoverQueueClass& rediscoverQ= urgentRediscoverQueue.empty() ? rediscoverQueue : urgentRediscoverQueue;
-	while (!rediscoverQ.empty())
+	unsigned short sent(0U);
+	constexpr unsigned short max_rediscovery_msg_batch= 5U;
+	while (!rediscoverQ.empty() and sent < max_rediscovery_msg_batch)
 	{
 		auto& contactkey= rediscoverQ.top();
 		// check for current status of scheduled contact
@@ -534,6 +536,7 @@ void R2Kademlia::rediscoverContacts() {
 				EV_TRACE << "rediscoverContacts(): number of via contacts: " << contacts.size() << endl;
 				if (rt_contact->getRDS().retryCounter == 0 and contacts.size() > 0) { // immediate rediscovery
 					sendRediscovery(rt_contact->getKey(), rediscoveryFanOutFactor);
+					sent++;
 				}
 				else {
 					// schedule rediscovery for later (max backoffFactor arbitrarily set to 1024)
@@ -548,15 +551,27 @@ void R2Kademlia::rediscoverContacts() {
 			}
 		}
 		rediscoverQ.pop();
-	}
+	} // end while
 
 	// next call of this procedure will be scheduled on demand
-	if (urgentRediscoverQueue.empty())
+	if (urgentRediscoverQueue.empty()) {
 		urgentRediscoveryScheduled= false;
+	}
+	else {
+		// do not use rediscoveryUrgentWaitTime
+		// to dampen the rediscovery rate
+		addTimer(uniform(rediscoveryWaitTime/4,rediscoveryWaitTime*3/4), 0, std::bind(&R2Kademlia::rediscoverContacts, this));
+		urgentRediscoveryScheduled= true;
+		return;
+	}
 
-	if (rediscoverQueue.empty())
+	if (rediscoverQueue.empty()) {
 		rediscoveryScheduled= false;
-
+	}
+	else {
+		addTimer(uniform(rediscoveryWaitTime/2,rediscoveryWaitTime*1.5), 0, std::bind(&R2Kademlia::rediscoverContacts, this));
+		rediscoveryScheduled= true;
+	}
 }
 
 
