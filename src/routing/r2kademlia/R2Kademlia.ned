@@ -43,9 +43,9 @@ simple R2Kademlia extends routingsim.foundation.Protocol
 		/// 0=none, 1=random, 2=exiting, 3=bucket_expand, 4=random_suffix, 5=suffix_expand, 6=random_bucket
 		int probeStrategy @enum(ProbeStrategy) = default(3);
 		/// waiting time until rediscovery is scheduled
-		double rediscoveryWaitTime = default(200ms) @unit(ms);
+		double rediscoveryWaitTime = default(400ms) @unit(ms);
 		/// waiting time until scheduled routing updates are sent
-		double updateWaitTime = default(100ms) @unit(ms);
+		double updateWaitTime = default(200ms) @unit(ms);
 		/// waiting time until path setup messages are sent
 		double pathSetupWaitTime = default(100ms) @unit(ms);
 		/// maxFanOut for rediscovery
@@ -53,7 +53,7 @@ simple R2Kademlia extends routingsim.foundation.Protocol
 		/// rediscoveryMaxNotification
 		int rediscoveryMaxNotification = default(findNodeNumber);
 		/// waiting time until urgent rediscovery is scheduled
-		double rediscoveryUrgentWaitTime = default(10ms) @unit(ms);
+		double rediscoveryUrgentWaitTime = default(100ms) @unit(ms);
 		/// updateMaxNotification
 		int updateMaxNotification = default(4);
 		/// updateNotifyStrategy 1=close to own key, 2=close to affected key
