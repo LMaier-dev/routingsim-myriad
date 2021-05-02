@@ -65,7 +65,9 @@ packet KadPacket {
 	OverlayKey route[];
 	bool active[];
 	uint16_t progress = 0;
+	// state seq number from source node
 	pathseqno_t stateSeqNo= invalidSeqNo;
+	// target seq number (only used for overhearing forward paths)
 	pathseqno_t targetSeqNo= invalidSeqNo;
 	nonce_t nonce= 0;
 	uint8_t type enum(KadPDUType);

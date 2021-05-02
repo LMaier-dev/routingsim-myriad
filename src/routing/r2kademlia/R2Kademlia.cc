@@ -287,6 +287,8 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 				routingTable.addPath(packet->getSource(), path_of_interest, packet->getStateSeqNo(), 0, KadContact::PathProperty::indirect);
 			}
 
+			// the rest of the source routing path can be used for improvement
+			// only in case the targetSeqNo is newer
 			// see comment above: rediscovery messages cannot be used for improving routing information
 			if (not is_rediscovery)
 			{
@@ -326,7 +328,9 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 
 		};
 
-		if (packet->getType() != KAD_PNDiscRsp)
+		// for packets from physical neighbors: check need for resynchronization:
+		// in case the packet indicates a newer state seq no, resynch with neighbor
+		if (packet->getType() != KAD_PNDiscRsp and neighborTable.isNeighbor(packet->getSource()))
 			checkForResync(packet->getSource(), packet->getStateSeqNo());
 
 		// evaluate return path for routing table
@@ -1606,15 +1610,14 @@ void R2Kademlia::onImprovement(const KadContact& contact) {
 
 	if (usePathIDs and contact.isValid()) {
 
-		if (contact.getPathProperty() == KadContact::PathProperty::indirect) {
-		   // send a path setup request packet for installing PIDs in intermediate nodes for this indirectly learned route
-		   //EV_TRACE << "Triggering path setup to " << contact.getKey().shortStr() << endl;
-		   // no need to setup routes within discovery radius + 1 distance
-		   // (note/remember: getPathLength() does not include the last hop)
-		   if ( contact.getPathLength() > discoveryRadius ) {
-			   schedulePathSetup(contact.getKey());
-		   }
+		// no need to setup routes within discovery radius + 1 distance
+		// (note/remember: getPathLength() does not include the last hop)
+		if ( contact.getPathLength() > discoveryRadius ) {
+			// send a path setup request packet for installing PIDs in intermediate nodes for this route
+			//EV_TRACE << "Triggering path setup to " << contact.getKey().shortStr() << endl;
+			schedulePathSetup(contact.getKey());
 		}
+
 		// for any path (also within discovery radius or direct paths): update the PID entry
 		fwdTablePathID.modEntry(&contact, false);
 	}
@@ -2088,6 +2091,7 @@ void R2Kademlia::doReachabilityTest(short timerID) {
 }
 
 
+// check whether we need to resync with physical neighbor
 bool R2Kademlia::checkForResync(const OverlayKey& contact, stateseqno_t newseqno) {
 	if (KadContact* contact_p= const_cast<KadContact*>(routingTable.getContact(contact)); contact_p != nullptr and contact_p->isPhysicalNeighbor()) {
 		contact_p->updateLastSeen();

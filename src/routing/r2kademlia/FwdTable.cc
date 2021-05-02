@@ -240,7 +240,13 @@ bool FwdTablePathID::modEntry(KadContact_p contact, bool isForeignPID)
 		}
 		else if (priorPathID == incomingPathID)
 		{ // same PathID already existed, just return
-			EV_TRACE << "modEntry(): same PID entry for contact already existed" << endl;
+			EV_TRACE << "modEntry(): same PID entry " << incomingPathID << " for contact already existed" << endl;
+			if (auto it= PIDFwdTable.find(incomingPathID); it != PIDFwdTable.end())
+			{
+				auto& fwdentry= it->second;
+				fwdentry.setValid();
+			}
+
 			return false;
 		}
 		else
