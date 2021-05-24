@@ -147,7 +147,6 @@ void R2Kademlia::scheduleUpdate(const KadContact& affectedContact, KadRouteUpdat
 	//KadContactList closeContacts(routingTable.getClosestContacts(affectedContact.getKey(), contactsLen));
 	KadContactList closeContacts(routingTable.getClosestContacts(notifyKey, contactsLen, false));
 
-	//const uint8_t maxNumberOfNotifiedContacts= 10;
 	uint8_t numberOfNotifiedContacts = 0;
 	if (closeContacts.size() > 0)
 	{ // if there are contacts left to notify

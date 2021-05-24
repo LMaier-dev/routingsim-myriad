@@ -292,7 +292,7 @@ const OverlayKey& KadObserver::getClosestExistingKey(const OverlayKey& key) cons
 }
 
 
-// This corresponds to the shortest path distance. A value of zero means that there no path exists.
+// This corresponds to the shortest path distance. A value of zero means that no path exists.
 uint KadObserver::getPhysicalDistance(const OverlayKey& from, const OverlayKey& to) const {
 	ASSERT(exists(from));
 	ASSERT(exists(to));
