@@ -765,7 +765,8 @@ void R2Kademlia::sendPacket(KadPacket_p packet, simtime_t delay) {
 	if (packet->getType() == KAD_FindNodeReq) {
 		const KadFindNodeReq* tmp_packet= check_and_cast<KadFindNodeReq*>(packet.get());
 		// it doesn't make sense to count packets destined to isolated nodes: they cannot be reached
-		if (tmp_packet->getExact() and tmp_packet->getRediscovery()==false and
+		if (tmp_packet->getExact() and tmp_packet->getRediscovery()==false and tmp_packet->getTracked()
+		    and
 		    getKadObserver().getPhysicalDistance(myOverlayKey, tmp_packet->getDstNodeID()) > 0) {
 				getKadObserver().registerPacket(*packet);
 				getStatistics().registerMessage(nodePkt.get());
@@ -1129,7 +1130,7 @@ bool R2Kademlia::handleQueryRouteResponse(KadPacket_p answer, RPCState& rpcState
 
 
 // FIND NODE
-void R2Kademlia::sendFindNode(const OverlayKey& key, bool exact) {
+void R2Kademlia::sendFindNode(const OverlayKey& key, bool exact, bool track) {
 	EV_TRACE << "sendFindNode for " << key.shortStr() << (exact ? " (NID)" : (key == myOverlayKey ? " (JOIN)" : " (RID)")) << endl; // Node ID or Resource ID?
 
 	//ASSERT(contacts.size() > 0);
@@ -1147,6 +1148,7 @@ void R2Kademlia::sendFindNode(const OverlayKey& key, bool exact) {
 		auto packet = makePacket<KadFindNodeReq>(contact, "FindNode");
 		packet->setDstNodeID(key);
 		packet->setExact(exact);
+		packet->setTracked(track);
 		EV_TRACE << "sending KadFindNodeReq" << endl;
 		sendRpcCall(
 			std::move(packet),
@@ -2084,7 +2086,7 @@ void R2Kademlia::doReachabilityTest(short timerID) {
 
 	if (key != nullptr) {
 		EV_TRACE << "Reachability Test to " << key->shortStr() << endl;
-		sendFindNode(*key, true);
+		sendFindNode(*key, true, true);
 	}
 	else
 		EV_WARN << "Reachability Test cannot be performed (key==nullptr)" << endl;

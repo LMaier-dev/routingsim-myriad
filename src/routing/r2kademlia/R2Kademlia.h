@@ -131,7 +131,7 @@ class R2Kademlia : public RPCProtocol, public KadPolicy, public StatisticSample
 	/// sends a PNDisc Request to the Physical Neighbor
 	void sendDiscoveryReq(KadContact_p contact);
 	/// sends a find node call to find this node
-	void sendFindNode(const OverlayKey& key, bool exact=false);
+	void sendFindNode(const OverlayKey& key, bool exact=false, bool track=false);
 	/// sends a find node call for rediscovery, possibly using "not via" failed link
 	void sendRediscovery(OverlayKey failedcontact, uint8_t maxFanOut);
 
