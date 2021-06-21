@@ -84,7 +84,7 @@ discoid_t &DiscoObserver::getNodeAddress(nodeid_t id ) {
 	exit(1);
 }
 
-float DiscoObserver::getDistance(discoid_t source, discoid_t destination) {
+float DiscoObserver::getDistance(discoid_t source, discoid_t destination) const {
 	Node *sourceNode=NULL, *destinationNode=NULL;
 
 	for(unsigned int i=0; i<entries.size(); i++) {
@@ -103,11 +103,11 @@ float DiscoObserver::getDistance(discoid_t source, discoid_t destination) {
 	return networkMgr->getDistance(sourceNode->getNodeId(), destinationNode->getNodeId());
 }
 
-int DiscoObserver::getNetworkSize() {
+int DiscoObserver::getNetworkSize() const {
 	return getNetworkManager()->getNetworkSize();
 }
 
-int DiscoObserver::getNumLandmarks() {
+int DiscoObserver::getNumLandmarks() const {
 	int sum=0;
 	for(unsigned int i=0; i<entries.size(); i++) {
 		Disco *currentNode = dynamic_cast<Disco *>(getSimulation()->getModule(entries[i]));
@@ -130,7 +130,11 @@ DiscoObserver *getDiscoObserver() {
 	return observer;
 }
 
-int DiscoObserver::getNumofLandmarkAnnouncements()
+
+
+	//void DiscoObserver::sampleLaterPath(const OverlayKey& originKey, const kad_path& path) {}
+
+int DiscoObserver::getNumofLandmarkAnnouncements() const
 {
 	return NumofLandmarkAnnoucements;
 }

@@ -13,9 +13,9 @@ const int BetterPathPkt = 350;
 
 /// Timings
 const int landmarkAnnouncementInterval = 10;
-const int vicinityAnnouncementInterval = 30;
+const int vicinityAnnouncementInterval = 15;
 const int cooldownTime = 300;
-const int sendDataPacketsStart = 120;
+const int sendDataPacketsStart = 60;
 
 namespace routingsim {
 
@@ -66,18 +66,16 @@ void Disco::onSelfMessage(cMessage* msg) {
 		// periodic landmark annoucnements
 		if (np == landmarkAnnouncementTimer) {
 			sendLandmarkAnnouncement();
-			//sendVicinityAnnouncement();
+			// sendVicinityAnnouncement();
 
-			//Nur für dynamische Netze
-			//scheduleAt(simTime()+landmarkAnnouncementInterval, landmarkAnnouncementTimer);
+			scheduleAt(simTime()+landmarkAnnouncementInterval, landmarkAnnouncementTimer);
 		}
 
 		// periodic vicinity announcements
 		if (np == vicinityAnnouncementTimer) {
 			sendVicinityAnnouncement();
 
-			//Nur für dynamische Netze
-			//scheduleAt(simTime()+vicinityAnnouncementInterval, vicinityAnnouncementTimer);
+			scheduleAt(simTime()+vicinityAnnouncementInterval, vicinityAnnouncementTimer);
 		}
 
 		if (np == cooldownTimer) {
@@ -118,9 +116,6 @@ void Disco::onSelfMessage(cMessage* msg) {
 					   landmarkAnnouncementTimer);
 			}
 
-			// 			XXX: Shouldn't every node announce itself for the vicinity?
-			//			else
-			//			{
 			vicinityAnnouncementTimer = new NodePkt();
 			vicinityAnnouncementTimer->setName("vicinityAnnouncementTimer");
 			scheduleAt(simTime()+uniform(0.5*vicinityAnnouncementInterval, 1.5*vicinityAnnouncementInterval),
@@ -136,18 +131,24 @@ void Disco::onSelfMessage(cMessage* msg) {
 			if (p < probingNodeFraction) {
 				sendDataPacketsTimer = new NodePkt();
 				sendDataPacketsTimer->setName("sendDataPacketsTimer");
-				scheduleAt(simTime()+uniform(0.5*probeInterval,1.5*probeInterval), sendDataPacketsTimer);
+				scheduleAt(simTime()+sendDataPacketsStart+uniform(0.5*probeInterval,1.5*probeInterval), sendDataPacketsTimer);
 			}
 
 			cancelAndDelete(initialTimer);
+			return;
 		}
 
 		if (np == sendDataPacketsTimer) {
 			// send packets to random destinations
-			for (int i=0; i<(observer->getNetworkSize()*probePacketDestinationFraction); i++) {
+			//for (int i=0; i<(observer->getNetworkSize()*probePacketDestinationFraction); i++) {
+			if (observer->getNetworkSize() > 1) { // cannot send packet to myself
 				discoid_t addr = observer->getRandomNodeAddress();
+				while (addr == myAddr) {
+					addr = observer->getRandomNodeAddress();
+				} // since network size > 1 will not loop forever
 				sendPktToNode(addr);
 			}
+			scheduleAt(simTime()+uniform(0.5*probeInterval,1.5*probeInterval), sendDataPacketsTimer);
 		}
 		return;
 	}
@@ -187,12 +188,12 @@ void Disco::onMessage(NodePkt *np) {
 
 void Disco::printLandmarks() {
 	EV << " Path to all Landmarks known to Node: " << localNodeId.origin << endl;
-	for (unsigned int x = 0; x<landmarkVector.size() ; x++)
+	for (const auto &l : landmarkSet)
 	{
-		EV << "Path to " << landmarkVector[x].landmarkID.origin << " -> ";
-		for (unsigned int y = 0; y < landmarkVector[x].PathVector.size(); y++)
+		EV << "Path to " << l.second.landmarkID.origin << " -> ";
+		for (unsigned int y = 0; y < l.second.PathVector.size(); y++)
 		{
-			EV<< landmarkVector[x].PathVector[y].origin << ";";
+			EV<< l.second.PathVector[y].origin << ";";
 		}
 		EV<< endl;
 	}
@@ -202,10 +203,10 @@ void Disco::printLandmarks() {
 
 void Disco::printVicinity() {
 	EV << " Path to all Nodes in the Vicinity of Node: " << localNodeId.origin << endl;
-	for(unsigned int x = 0; x < vicinityVector.size() ; x++) {
-		EV << "Path to " << vicinityVector[x].landmarkID.origin << " -> ";
-		for(unsigned int y = 0; y < vicinityVector[x].PathVector.size(); y++) {
-			EV << vicinityVector[x].PathVector[y].origin << ";";
+	for(const auto &v : vicinitySet) {
+		EV << "Path to " << v.second.landmarkID.origin << " -> ";
+		for(unsigned int y = 0; y < v.second.PathVector.size(); y++) {
+			EV << v.second.PathVector[y].origin << ";";
 		}
 		EV << endl;
 	}
@@ -222,14 +223,16 @@ void Disco::printVicinity() {
 
 
 void Disco::printRoutingPath(StandardPkt* stdp) {
-	EV << " Path from" << stdp->getSource().origin <<" to " << stdp->getDestination().origin << "via Landmark " << stdp->getVia_Landmark().origin << endl;
-	for(unsigned int x= stdp->getRoutingPathArraySize() ; x>0 ; x--) {
+	EV << " Path from " << stdp->getSource().origin <<" to " << stdp->getDestination().origin << " via Landmark " << stdp->getVia_Landmark().origin << endl;
+	for (unsigned int x= stdp->getRoutingPathArraySize() ; x>0 ; x--) {
 		EV << stdp->getRoutingPath(x-1).origin << "; ";
 	}
 }
 
 
 void Disco::handleLandmarkAnnouncement(NodePkt *np) {
+	// Every node needs to know every landmark and a path to it
+
 	LandmarkAnnouncementsReceived++;
 	DiscoPkt *dp = dynamic_cast<DiscoPkt *>(np->getEncapsulatedPacket());
 	Node_ID landmark_ID = dp->getPathVector(0);
@@ -237,15 +240,13 @@ void Disco::handleLandmarkAnnouncement(NodePkt *np) {
 	int hop_count = dp->getPathVectorArraySize();
 
 	// Do we know this landmark?
-	if(isKnownLandmark(landmark_ID)) {
-		unsigned int posInLandmarkVector = getLandmarkIdx(landmark_ID);
-		if(landmarkVector[posInLandmarkVector].hops > hop_count) {
-			// found better path -> erase old, save new
-			landmarkVector.erase(landmarkVector.begin()+(posInLandmarkVector));
+	if (isKnownLandmark(landmark_ID)) {
+		if (landmarkSet[landmark_ID].hops > hop_count) {
+			// found better path -> update
 			saveAddAndSendPackage(np, dp);
 		} else {
-			// path is not better -> ignore path & delete package
-			EV << "the path to this landmark is longer or equally long as the previous one -> ignore package" << endl;
+			// path is not better -> ignore path & delete packet
+			EV << "the path to this landmark is longer or equally long as the previous one -> ignore packet" << endl;
 		}
 	} else {
 		// Landmark is not known -> save path to new landmark
@@ -278,10 +279,10 @@ void Disco::nodeStatistics() {
 
 
 void Disco::vicinityStatistics() {
-	vicinitySize.record(vicinityVector.size());
+	vicinitySize.record(vicinitySet.size());
 	double vicinityCosts=0;
-	foreach (landmarkPath &p, vicinityVector) {
-		vicinityCosts+=p.hops;
+	for (const auto &p : vicinitySet) {
+		vicinityCosts+= p.second.hops;
 	}
 	vicinityCost.record(vicinityCosts);
 
@@ -290,9 +291,9 @@ void Disco::vicinityStatistics() {
 
 
 void Disco::landmarkStatistics() {
-	if (myAddr.valid && getLandmarkIdx(myAddr.landmark) != -1) {
+	if (myAddr.valid and isKnownLandmark(myAddr.landmark)) {
 		landmarkID.record(myAddr.landmark.id);
-		landmarkDistance.record(landmarkVector[getLandmarkIdx(myAddr.landmark)].PathVector.size());
+		landmarkDistance.record(landmarkSet[myAddr.landmark].PathVector.size());
 	}
 }
 
@@ -307,19 +308,35 @@ void Disco::messageStatistics() {
 	statVicinityAnnouncementsForwarded.record(VicinityAnnouncementsForwarded);
 }
 
+
+Node_ID Disco::getVicinityMaxEntry() const
+{
+	ASSERT(not vicinitySet.empty());
+	// normally this will be only called if the vicinitySet has reached its max size
+	int maxhops(-1);
+	Node_ID maxentry;
+	for (auto cit= vicinitySet.cbegin(); cit != vicinitySet.cend(); cit++)
+	{
+		if (cit->second.hops > maxhops) {
+			maxentry= cit->first; // store key
+			maxhops= cit->second.hops;
+		}
+	}
+	return maxentry;
+}
+
+
 void Disco::handleVicinityPacket(NodePkt *np) {
 	VicinityAnnouncementsReceived++;
 	DiscoPkt *dp = dynamic_cast<DiscoPkt *>(np->getEncapsulatedPacket());
-	Node_ID node = dp->getPathVector(0);
-	int hop_count = dp->getPathVectorArraySize();
-	EV << "Node ID << node.id at distance " << hop_count << endl;
+	Node_ID node(dp->getPathVector(0));
+	int hop_count(dp->getPathVectorArraySize());
+	EV << "Node ID " << node.id << " at distance " << hop_count << endl;
 
 	if (NodeInVicinity(node)) {
 		// Node is already known
-		unsigned int posInVicinityVector = getVicinityIdx(node);
-		if (vicinityVector[posInVicinityVector].hops > hop_count) {
-			// found better path -> erase old, save new
-			vicinityVector.erase(vicinityVector.begin()+(posInVicinityVector));
+		if (vicinitySet[node].hops > hop_count) {
+			// found better path: update
 			saveAddAndSendPackage(np,dp);
 		} else {
 			// path is not better -> ignore path
@@ -328,13 +345,14 @@ void Disco::handleVicinityPacket(NodePkt *np) {
 	} else {
 		// Node is not known
 		// check if the vicinity limit is not yet reached -> save Path
-		if (vicinityVector.size() < (sqrt(networkSize*(log10(networkSize)/log10(2))))) {
+		if (vicinitySet.size() < (sqrt(networkSize*(log10(networkSize)/log10(2))))) {
 			saveAddAndSendPackage(np,dp);
 		} else {
 			// check if #hops to Node is smaller than the max
-			if (vicinityVector[getWorstVicinityEntryIdx()].hops > hop_count) {
+			Node_ID maxentry(getVicinityMaxEntry()); 
+			if (vicinitySet[maxentry].hops > hop_count) {
 				// erase the Node which is further away; save new
-				vicinityVector.erase(vicinityVector.begin()+(getWorstVicinityEntryIdx()));
+				vicinitySet.erase(maxentry);
 				saveAddAndSendPackage(np,dp);
 			} else {
 				EV << " Node not in the vicinity of this Node" << endl;
@@ -353,61 +371,39 @@ void Disco::saveNewPathVector(int type,DiscoPkt *dp) {
 		path.PathVector.push_back(dp->getPathVector(i));
 	}
 
+	ASSERT(not path.PathVector.empty());
 	// save path
 	switch(type) {
-	case landmarkAnnouncement:
-		landmarkVector.push_back(path);
-		break;
-	case vicinityAnnouncement:
-		vicinityVector.push_back(path);
-		break;
-	case BetterPathPkt:
-		shortcutVector.push_back(path);
-		break;
+		case landmarkAnnouncement:
+			landmarkSet[path.landmarkID]= path;
+			break;
+		case vicinityAnnouncement:
+			vicinitySet[path.landmarkID]= path;
+			break;
+		case BetterPathPkt:
+			shortcutSet[path.landmarkID]= path;
+			break;
 	}
 }
 
-unsigned int Disco::getWorstVicinityEntryIdx() {
-	unsigned int posOfMaxHops = 0;
-	int max = 0;
-	for (unsigned int x= 0; x< vicinityVector.size(); x++) {
-		if (vicinityVector[x].hops > max) {
-			max = vicinityVector[x].hops;
-			posOfMaxHops = x;
-		}
-	}
-	return posOfMaxHops;
-}
 
 /// Determine whether the landmark is known to the local node
-bool Disco::isKnownLandmark(Node_ID landmark_ID) {
-	for (unsigned int x= 0; x< landmarkVector.size(); x++) {
-		if (landmarkVector[x].PathVector[0].id == landmark_ID.id) {
-			return true;
-		}
-	}
-	return false;
+bool Disco::isKnownLandmark(const Node_ID landmark_ID) {
+	return landmarkSet.find(landmark_ID) != landmarkSet.cend();
 }
+
 
 /// Determine whether a node is contained in the vicinity
 bool Disco::NodeInVicinity(Node_ID node) {
-	for (unsigned int x=0; x< vicinityVector.size(); x++) {
-		if (vicinityVector[x].PathVector[0].id == node.id) {
-			return true;
-		}
-	}
-	return false;
+	return vicinitySet.find(node) != vicinitySet.cend();
 }
+
 
 /// Determine whether a node is contained in the ShortCutVector
 bool Disco::NodeInShortCutVector(Node_ID node) {
-	for (unsigned int x=0; x< shortcutVector.size(); x++) {
-		if (shortcutVector[x].PathVector.back().id == node.id) {
-			return true;
-		}
-	}
-	return false;
+	return shortcutSet.find(node) != shortcutSet.cend();
 }
+
 
 /// Determine whether a node is contained in the Address-Vector of a StandardPkt
 bool Disco::nodeInAddress(StandardPkt* stdp) {
@@ -418,6 +414,7 @@ bool Disco::nodeInAddress(StandardPkt* stdp) {
 	}
 	return false;
 }
+
 
 unsigned int Disco::getOwnAddrIdx(StandardPkt* stdp) {
 	for (unsigned int x = stdp->getRoutingPathArraySize(); x>0; x--) {
@@ -430,7 +427,8 @@ unsigned int Disco::getOwnAddrIdx(StandardPkt* stdp) {
 	return -1;
 }
 
-unsigned int Disco::getAddrIdx(StandardPkt* stdp,Node_ID node) {
+
+unsigned int Disco::getAddrIdx(StandardPkt* stdp, Node_ID node) {
 	for (unsigned int x = stdp->getRoutingPathArraySize(); x>0; x--) {
 		if (node.id == stdp->getRoutingPath(x-1).id) {
 			return x-1;
@@ -441,22 +439,21 @@ unsigned int Disco::getAddrIdx(StandardPkt* stdp,Node_ID node) {
 	return -1;
 }
 
-// Returns true is one of the Nodes in the Address-Path is in the Node's vicinity
+// Returns true if one of the Nodes in the Address-Path is in the Node's vicinity
 // AND the vicinity-Path to this Node is shorter than the original one
 // begin with Destination (the End of the Path) and continue towards the Landmark (the Beginning of the Path)
 bool Disco::nodeInVector(StandardPkt* stdp) {
 	for (unsigned int x=stdp->getRoutingPathArraySize(); x>0 ; x--) {
 		if (NodeInVicinity(stdp->getRoutingPath(x-1))) {
 			if (stdp->getPastLandmark()) {
-				//Packet is already on the shortest route to the destination
+				// Packet is already on the shortest route to the destination
 				return false;
-			} else {
-				if(localNodeId.id == stdp->getVia_Landmark().id) {
+			}
+			else {
+				if (localNodeId.id == stdp->getVia_Landmark().id) {
 					return false;
 				}
-				unsigned int posInLandVector = getLandmarkIdx(stdp->getVia_Landmark());
-				unsigned int posInVicinityVector = getVicinityIdx(stdp->getRoutingPath(x-1));
-				if (landmarkVector[posInLandVector].PathVector.size()+x-1 > vicinityVector[posInVicinityVector].PathVector.size()) {
+				if (landmarkSet[stdp->getVia_Landmark()].PathVector.size()+x-1 > vicinitySet[stdp->getRoutingPath(x-1)].PathVector.size()) {
 					return true;
 				}
 			}
@@ -465,50 +462,53 @@ bool Disco::nodeInVector(StandardPkt* stdp) {
 	return false;
 }
 
-unsigned int Disco::getNodeIdx(StandardPkt* stdp) {
-	for (unsigned int x=stdp->getRoutingPathArraySize(); x>0 ; x--) {
-		if (NodeInVicinity(stdp->getRoutingPath(x-1))) {
-			return getVicinityIdx(stdp->getRoutingPath(x-1));
-		}
-	}
-	EV << __func__ << ": could not find Node in Routing-Vector" << endl;
-	return -1;
-}
 
-unsigned int Disco::getShortCutIdx(Node_ID Node) {
-	for (unsigned int x= 0; x< shortcutVector.size(); x++) {
-		if (shortcutVector[x].PathVector.back().id == Node.id) {
-			return x;
-		}
-	}
-	EV << __func__ << ": could not find Node in shortcut vector" << endl;
-	return -1;
-}
+// int Disco::getNodeIdx(StandardPkt* stdp) {
+// 	for (unsigned int x=stdp->getRoutingPathArraySize(); x>0 ; x--) {
+// 		if (NodeInVicinity(stdp->getRoutingPath(x-1))) {
+// 			return getVicinityIdx(stdp->getRoutingPath(x-1));
+// 		}
+// 	}
+// 	EV_WARN << __func__ << ": could not find Node in Routing-Vector" << endl;
+// 	return -1;
+// }
 
-unsigned int Disco::getLandmarkIdx(Node_ID landmark) {
-	for (unsigned int x= 0; x< landmarkVector.size(); x++) {
-		if (landmarkVector[x].PathVector[0].id == landmark.id) {
-			return x;
-		}
-	}
-	EV << __func__ << ": could not find landmark in landmark vector" << endl;
-	return -1;
-}
 
-unsigned int Disco::getVicinityIdx(Node_ID node) {
-	for (unsigned int x= 0; x< vicinityVector.size(); x++) {
-		if (vicinityVector[x].PathVector[0].id == node.id) {
-			return x;
-		}
-	}
-	EV << __func__ << ": could not find node " << node.id << " in vicinity vector" << endl;
-	return -1;
-}
+// int Disco::getShortCutIdx(Node_ID Node) {
+// 	for (unsigned int x= 0; x< shortcutSet.size(); x++) {
+// 		if (shortcutSet[x].PathVector.back().id == Node.id) {
+// 			return x;
+// 		}
+// 	}
+// 	EV_WARN << __func__ << ": could not find Node in shortcut vector" << endl;
+// 	return -1;
+// }
+
+
+// int Disco::getLandmarkIdx(Node_ID landmark) {
+// 	for (unsigned int x= 0; x< landmarkSet.size(); x++) {
+// 		if (landmarkSet[x].PathVector[0].id == landmark.id) {
+// 			return x;
+// 		}
+// 	}
+// 	EV_WARN << __func__ << ": could not find landmark in landmark vector" << endl;
+// 	return -1;
+// }
+
+
+// int Disco::getVicinityIdx(Node_ID node) {
+// 	for (unsigned int x= 0; x< vicinitySet.size(); x++) {
+// 		if (vicinitySet[x].PathVector[0].id == node.id) {
+// 			return x;
+// 		}
+// 	}
+// 	EV_WARN << __func__ << ": could not find node " << node.id << " in vicinity vector" << endl;
+// 	return -1;
+// }
 
 void Disco::sendToOtherNeighbors(NodePkt *np) {
 	// we are the last node in the path, extract the node before us
 	DiscoPkt *dp = dynamic_cast<DiscoPkt *>(np->getEncapsulatedPacket());
-	int size = dp->getPathVectorArraySize();
 	Node_ID origin_Id = dp->getPathVector(dp->getPathVectorArraySize()-2);
 
 	// send packet to all other neighbors
@@ -521,13 +521,14 @@ void Disco::sendToOtherNeighbors(NodePkt *np) {
 	}
 }
 
+
 Disco::~Disco() {
 	// set to nullptr as otherwise the old value is used on rebuilding the network -> segfault
 	observer = nullptr;
 
 	write_in_file.close();
 
-	if(isLandmark) {
+	if (isLandmark) {
 		cancelAndDelete(landmarkAnnouncementTimer);
 	}
 
@@ -535,6 +536,7 @@ Disco::~Disco() {
 	cancelAndDelete(cooldownTimer);
 	cancelAndDelete(sendDataPacketsTimer);
 }
+
 
 /// Initialize
 void Disco::onInitialize()
@@ -612,15 +614,17 @@ void Disco::onInitialize()
 	initialTimer->setName("initialTimer");
 	scheduleAt(SIMTIME_ZERO, initialTimer);
 
-	WATCH_VECTOR(landmarkVector);
-	WATCH_VECTOR(vicinityVector);
-	WATCH_VECTOR(shortcutVector);
+	WATCH(landmarkSet);
+	WATCH(vicinitySet);
+	WATCH(shortcutSet);
 }
+
 
 /// called when a new node is connected
 void Disco::onConnect(nodeid_t nid) {
 	//EV << "connected to "<< nid << endl;
 }
+
 
 /// called when a node is disconnected
 void Disco::onDisconnect( nodeid_t nid )
@@ -629,9 +633,11 @@ void Disco::onDisconnect( nodeid_t nid )
 
 }
 
+
 void Disco::reset() {
 
 }
+
 
 void Disco::sampleStatistics( Statistics& stats ) {
 	//vicinityStatistics();
@@ -641,19 +647,16 @@ void Disco::sampleStatistics( Statistics& stats ) {
 	//nodeStatistics();
 }
 
+
 bool Disco::addressInLandmarks(discoid_t addr) {
-	for (unsigned int i=0; i<landmarkVector.size(); i++) {
-		if (landmarkVector[i].PathVector[0] == addr.landmark) {
-			return true;
-		}
-	}
-	return false;
+	return isKnownLandmark(addr.landmark);
 }
+
 
 void Disco::becomeLandmark() {
 	double p = uniform(0,1);
 	if (p < sqrt((log10(networkSize)/log10(2))/networkSize)) {
-		EV << "becoming a landmark" << endl;
+		EV << "becoming a landmark, id=" << localNodeId.id << endl;
 		isLandmark = true;
 		//write Landmark_ID in File
 		write_in_file.open("Landmark_ID.txt",ios::out|ios::app);
@@ -691,7 +694,7 @@ void Disco::sendPktToNode(discoid_t addr) {
 		destination = addr.pathToNode.back();
 	}
 
-	// Generate new Pkt and set basic informations
+	// Generate new Pkt and set basic information
 	NodePkt *np = new NodePkt();
 	np->setType(dataPacket);
 	np->setName("Data Packet");
@@ -704,56 +707,57 @@ void Disco::sendPktToNode(discoid_t addr) {
 	// register data packet at statistics module
 	getStatistics().registerMessage(np);
 
-	if (NodeInVicinity(destination) && to_Destination_Shortcutting) {
+	if (NodeInVicinity(destination) and to_Destination_Shortcutting) {
 		// Node in Vicinity
-		// Save direct Path in Packet (but in reverse order) and set pastLandmarkt true
+		// Save direct Path in Packet (but in reverse order) and set pastLandmark true
 		// TODO: send via direct, known path
-		unsigned int posInVicinityVector = getVicinityIdx(destination);
-		int m_size = vicinityVector[posInVicinityVector].PathVector.size();
-		stdp->setRoutingPathArraySize(vicinityVector[posInVicinityVector].PathVector.size());
+		int m_size = vicinitySet[destination].PathVector.size();
+		stdp->setRoutingPathArraySize(m_size);
 		for (unsigned int x=m_size; x>0  ; x--) {
-			stdp->setRoutingPath(m_size-x,vicinityVector[posInVicinityVector].PathVector[x-1]);
+			stdp->setRoutingPath(m_size-x,vicinitySet[destination].PathVector[x-1]);
 		}
 
 		stdp->setPastLandmark(true);
 		np->encapsulate(stdp);
-		sendToNode(vicinityVector[posInVicinityVector].PathVector.back().id, np);
-	} else if (NodeInShortCutVector(destination)) {
+		sendToNode(vicinitySet[destination].PathVector.back().id, np);
+	}
+	else if (NodeInShortCutVector(destination)) {
 		// This is not the first Packet and there is a better Path to the Destination, take this better path
 		// set PastLandmark true, so the following Nodes will route along the better Path
-		EV << "Found Node in ShortCutVektor -> Shortcut" << endl;
-		unsigned int posInShortcutVektor = getShortCutIdx(destination);
-		stdp->setRoutingPathArraySize(shortcutVector[posInShortcutVektor].PathVector.size());
-		for (unsigned int x=0; x< shortcutVector[posInShortcutVektor].PathVector.size() ; x++) {
-			stdp->setRoutingPath(x,shortcutVector[posInShortcutVektor].PathVector[x]);
+		EV << "Found Node in ShortCutVector -> Shortcut" << endl;
+		stdp->setRoutingPathArraySize(shortcutSet[destination].PathVector.size());
+		for (unsigned int x=0; x< shortcutSet[destination].PathVector.size() ; x++) {
+			stdp->setRoutingPath(x,shortcutSet[destination].PathVector[x]);
 		}
 		stdp->setPastLandmark(true);
 		np->encapsulate(stdp);
-		sendToNode(shortcutVector[posInShortcutVektor].PathVector[0].id,np);
-	} else if (isKnownLandmark(landmark)) {
+		sendToNode(shortcutSet[destination].PathVector[0].id,np);
+	}
+	else if (isKnownLandmark(landmark)) {
 		// No shortcuts were found, follow the usual Protocol.
 		// Save Address-Path and send Packet towards the Address-Landmark
-		unsigned int posInLandmarkVector = getLandmarkIdx(landmark);
-		int addr_size = addr.pathToNode.size();
+		unsigned int addr_size(addr.pathToNode.size());
 		stdp->setRoutingPathArraySize(addr_size);
-		for (unsigned y = 0; y<addr.pathToNode.size() ; y++) {
+		for (unsigned y = 0; y<addr_size; y++) {
 			stdp->setRoutingPath(y,addr.pathToNode[y]);
 		}
 		stdp->setPastLandmark(false);
 		np->encapsulate(stdp);
-		sendToNode(landmarkVector[posInLandmarkVector].PathVector.back().id,np);
-	} else if(addr.landmark.id == localNodeId.id) {
+		sendToNode(landmarkSet[landmark].PathVector.back().id,np);
+	}
+	else if (addr.landmark.id == localNodeId.id) {
 		// I am the Address-Landmark -> send Packet along the Address-Path
 		// set pastLandmark true as an indicator that every Node has to follow the given Route to the Destination
-		int addr_size = addr.pathToNode.size();
+		unsigned int addr_size = addr.pathToNode.size();
 		stdp->setRoutingPathArraySize(addr_size);
-		for(unsigned y = 0; y<addr.pathToNode.size() ; y++) {
+		for (unsigned y = 0; y<addr_size; y++) {
 			stdp->setRoutingPath(y,addr.pathToNode[y]);
 		}
 		stdp->setPastLandmark(true);
 		np->encapsulate(stdp);
 		sendToNode(addr.pathToNode[1].id,np);
-	} else {
+	}
+	else {
 		// ERROR!! The Address-Landmark is unknown and there is no other known Path to the Destination
 		EV_ERROR << "Landmark " << addr.landmark << " is unknown, dropping packet!" << endl;
 		getStatistics().dropMessage(np, stdp->getDestination().id);
@@ -761,6 +765,7 @@ void Disco::sendPktToNode(discoid_t addr) {
 		delete(stdp);
 	}
 }
+
 
 void Disco::handleDataPacket(NodePkt *np) {
 	StandardPkt *stdp = dynamic_cast<StandardPkt *>(np->getEncapsulatedPacket());
@@ -785,27 +790,40 @@ void Disco::handleDataPacket(NodePkt *np) {
 	}
 
 
-	if (to_Destination_Shortcutting && NodeInVicinity(stdp->getDestination())) {
+	if (to_Destination_Shortcutting and NodeInVicinity(stdp->getDestination())) {
 		// Vicinity Shortcut enabled && Node in Vicinity
 		// Route directly to destination, no Path-Change necessary,
 		// because every Node will have the destination in its vicinity
 		EV_TRACE << "Node " << localNodeId.id << ": Destination " << stdp->getDestination().id << " in Vicinity --> Shortcut" << endl;
-		unsigned int posInViciniVector = getVicinityIdx(stdp->getDestination());
 		stdp->setHops(stdp->getHops()+1);
-		EV<<vicinityVector[posInViciniVector];
-		sendToNode(vicinityVector[posInViciniVector].PathVector.back().id, np);
-	} else if (up_Down_Stream_Shortcutting && nodeInVector(stdp)) {
+		EV << vicinitySet[stdp->getDestination()];
+		sendToNode(vicinitySet[stdp->getDestination()].PathVector.back().id, np);
+	}
+	else
+	if (up_Down_Stream_Shortcutting and nodeInVector(stdp)) {
 		// Shortcut enabled && one Node along the Route is in Vicinity.
 		// Route to this Node, change the Path: save Path to known Node as stored in the vicinity vector
 		// and add the rest of the old Address-Path
 		EV_TRACE << "Node: " << localNodeId.id << " Found Shortcut to Node " << stdp->getDestination().id << " along the Route" << endl;
 		stdp->setHops(stdp->getHops()+1);
-		unsigned int posInViciniVector=getNodeIdx(stdp);
-		unsigned int posInAddr = getAddrIdx(stdp,vicinityVector[posInViciniVector].PathVector[0]);
-		unsigned int vicinity_size = vicinityVector[posInViciniVector].PathVector.size();
+		ASSERT(stdp->getRoutingPathArraySize()>0);
 
-		//calculate new Path-Size
-		unsigned int new_size = vicinity_size + stdp->getRoutingPathArraySize()-posInAddr-1;
+		Node_ID lastnode(stdp->getRoutingPath(stdp->getRoutingPathArraySize()-1));
+		unsigned int vicinity_path_size(0);
+		unsigned int posInAddr(0);
+		for (unsigned int x = stdp->getRoutingPathArraySize(); x > 0; x--) {
+			lastnode= stdp->getRoutingPath(x-1);
+			if (NodeInVicinity(lastnode)) {
+				vicinity_path_size = vicinitySet[lastnode].PathVector.size();
+				posInAddr = getAddrIdx(stdp,vicinitySet[lastnode].PathVector[0]);
+				break;
+			}
+		}
+
+		ASSERT(vicinity_path_size > 0);
+
+		// calculate new Path-Size
+		unsigned int new_size = vicinity_path_size + stdp->getRoutingPathArraySize()-posInAddr-1;
 
 		//copy old Path XXX: MEMORY LEAK, trying dirty delete below after cstdp usage
 		StandardPkt* cstdp = new StandardPkt();
@@ -814,19 +832,20 @@ void Disco::handleDataPacket(NodePkt *np) {
 			cstdp->setRoutingPath(x,stdp->getRoutingPath(x));
 		}
 
-		//save new Path, beginning with the vicinity vector entries in reverse order...
+		// save new Path, beginning with the vicinity vector entries in reverse order...
 		stdp->setRoutingPathArraySize(new_size);
-		for (unsigned int x = 0 ; x<vicinity_size; x++) {
-			stdp->setRoutingPath(x,vicinityVector[posInViciniVector].PathVector[vicinity_size-1-x]);
+		for (unsigned int x = 0 ; x<vicinity_path_size; x++) {
+			stdp->setRoutingPath(x,vicinitySet[lastnode].PathVector[vicinity_path_size-1-x]);
 		}
 		//...followed by the rest of the old Address-Path
-		for (unsigned int y = 0; y< new_size-vicinity_size; y++) {
-			stdp->setRoutingPath(vicinity_size+y,cstdp->getRoutingPath(posInAddr+1+y));
+		for (unsigned int y = 0; y< new_size-vicinity_path_size; y++) {
+			stdp->setRoutingPath(vicinity_path_size+y,cstdp->getRoutingPath(posInAddr+1+y));
 		}
 		delete cstdp;
 		stdp->setPastLandmark(true);
-		sendToNode(vicinityVector[posInViciniVector].PathVector.back().id,np);
-	} else if (localNodeId.id == stdp->getVia_Landmark().id) {
+		sendToNode(vicinitySet[lastnode].PathVector.back().id,np);
+	}
+	else if (localNodeId.id == stdp->getVia_Landmark().id) {
 		// Node is the Address-Landmark to the destination Node
 		// set pastLandmark true as an indicator that every Node has to follow the given Route to the Destination
 		// and that this Route is already the shortest way to the destination
@@ -840,7 +859,8 @@ void Disco::handleDataPacket(NodePkt *np) {
 		}
 		EV_TRACE << endl;
 		sendToNode(stdp->getRoutingPath(posInVector+1).id,np);
-	} else if(stdp->getPastLandmark()) {
+	}
+	else if (stdp->getPastLandmark()) {
 		// Follow the given Route to the destination
 		stdp->setHops(stdp->getHops()+1);
 		unsigned int posInVector = getOwnAddrIdx(stdp);
@@ -850,7 +870,7 @@ void Disco::handleDataPacket(NodePkt *np) {
 	}
 
 	// ERROR: Node doesn't know Address-Landmark -> Refresh Landmark announcements
-	else if(!isKnownLandmark(stdp->getVia_Landmark()))
+	else if (!isKnownLandmark(stdp->getVia_Landmark()))
 	{
 		getStatistics().dropMessage(np, dynamic_cast<StandardPkt *>(np->getEncapsulatedPacket())->getDestination().id);
 		delete(np);
@@ -858,8 +878,7 @@ void Disco::handleDataPacket(NodePkt *np) {
 	} else {
 		// Packet is still on its Way to the Address-Landmark, Route towards to Address-Landmark
 		stdp->setHops(stdp->getHops()+1);
-		unsigned int posInLandVector = getLandmarkIdx(stdp->getVia_Landmark());
-		sendToNode(landmarkVector[posInLandVector].PathVector.back().id,np);
+		sendToNode(landmarkSet[stdp->getVia_Landmark()].PathVector.back().id,np);
 	}
 }
 
@@ -867,36 +886,36 @@ void Disco::findShortcut(StandardPkt *stdp) {
 	// Source is in the Vicinity of the Destination
 	if (NodeInVicinity(stdp->getSource())) {
 		// if path Destination->Source is shorter, send BetterPathPkt
-		unsigned int posInViciniVector = getVicinityIdx(stdp->getSource());
-		if (stdp->getHops()> vicinityVector[posInViciniVector].hops) {
+		if (stdp->getHops()> vicinitySet[stdp->getSource()].hops) {
 			NodePkt *np = new NodePkt();
 			np->setType(BetterPathPkt);
 			np->setName("I'm a BetterPathPkt (Vicinity)");
 			DiscoPkt *dp = new DiscoPkt();
-			unsigned int path_size = vicinityVector[posInViciniVector].PathVector.size();
+			unsigned int path_size = vicinitySet[stdp->getSource()].PathVector.size();
 			dp->setPathVectorArraySize(path_size+1);
 
 			for (unsigned int x=0; x<path_size; x++) {
-				dp->setPathVector(x,vicinityVector[posInViciniVector].PathVector[x]);
+				dp->setPathVector(x,vicinitySet[stdp->getSource()].PathVector[x]);
 			}
 			dp->setPathVector(path_size,localNodeId);
 
 			np->encapsulate(dp);
-			sendToNode(vicinityVector[posInViciniVector].PathVector.back().id, np);
+			sendToNode(vicinitySet[stdp->getSource()].PathVector.back().id, np);
 		}
 	}
 }
+
 
 // no_Path_Knowledge_Shortcutting: The Destination checks if the Path Destination-to-Source is shorter
 // if this is the case then it will send a BetterPathPkt to inform the Source that there is a shorter Path
 void Disco::checkForShorterPath(Node_ID source, unsigned int hops) {
 	discoid_t addr;
 	addr = observer->getNodeAddress(source.id);
-	for (unsigned int x = 0; x< landmarkVector.size(); x++) {
-		if (landmarkVector[x].landmarkID.id == addr.landmark.id) {
+	for (auto lit= landmarkSet.cbegin(); lit != landmarkSet.cend(); lit++) {
+		if (lit->second.landmarkID.id == addr.landmark.id) {
 			// Sender is a Landmark
 			if(addr.pathToNode.empty()) {
-				unsigned int numofhops = landmarkVector[x].PathVector.size();
+				unsigned int numofhops = lit->second.PathVector.size();
 				if (numofhops < hops) {
 					NodePkt *np = new NodePkt();
 					np->setType(BetterPathPkt);
@@ -904,16 +923,16 @@ void Disco::checkForShorterPath(Node_ID source, unsigned int hops) {
 					DiscoPkt *dp = new DiscoPkt();
 
 					dp->setPathVectorArraySize(numofhops);
-					for (unsigned int y=0; y<landmarkVector[x].PathVector.size(); y++) {
-						dp->setPathVector(y, landmarkVector[x].PathVector[y]);
+					for (unsigned int y=0; y<lit->second.PathVector.size(); y++) {
+						dp->setPathVector(y, lit->second.PathVector[y]);
 					}
 					np->encapsulate(dp);
-					sendToNode(landmarkVector[x].PathVector.back().id, np);
+					sendToNode(lit->second.PathVector.back().id, np);
 				}
 				break;
 			} else {
-				//Not a Landmark
-				unsigned int numofhops = landmarkVector[x].PathVector.size()+addr.pathToNode.size()-1;
+				// Not a Landmark
+				unsigned int numofhops = lit->second.PathVector.size()+addr.pathToNode.size()-1;
 				if (numofhops < hops) {
 					NodePkt *np = new NodePkt();
 					np->setType(BetterPathPkt);
@@ -926,14 +945,14 @@ void Disco::checkForShorterPath(Node_ID source, unsigned int hops) {
 						id = addr.pathToNode[y-1];
 						dp->setPathVector(addr.pathToNode.size()-y,id);
 					}
-					for (unsigned int y=1; y< landmarkVector[x].PathVector.size(); y++) {
+					for (unsigned int y=1; y< lit->second.PathVector.size(); y++) {
 						Node_ID id;
-						id = landmarkVector[x].PathVector[y];
+						id = lit->second.PathVector[y];
 						dp->setPathVector(y+addr.pathToNode.size()-1,id);
 					}
 
 					np->encapsulate(dp);
-					sendToNode(landmarkVector[x].PathVector.back().id,np);
+					sendToNode(lit->second.PathVector.back().id,np);
 				}
 				break;
 			}
@@ -941,6 +960,7 @@ void Disco::checkForShorterPath(Node_ID source, unsigned int hops) {
 		}
 	}
 }
+
 
 void Disco::handleBetterPathPkt(NodePkt* np) {
 	DiscoPkt *dp = dynamic_cast<DiscoPkt *>(np->getEncapsulatedPacket());
@@ -962,28 +982,29 @@ void Disco::handleBetterPathPkt(NodePkt* np) {
 	}
 }
 
+
 void Disco::generateAddr() {
 	if (isLandmark) {
 		myAddr.landmark = localNodeId;
 		myAddr.valid = true;
 	} else {
 		int min = numeric_limits<int>::max();
-		int pos;
 
 		// no landmarks --> no address
-		if (landmarkVector.size() == 0) {
+		if (landmarkSet.size() == 0) {
 			EV_WARN << "address not determined yet, no landmarks known" << endl;
 			myAddr.valid = false;
 		} else {
 			// determine address depending on next landmark
-			for (unsigned int x = 0 ; x < landmarkVector.size(); x++) {
-				if (min > landmarkVector[x].hops) {
-					min = landmarkVector[x].hops;
-					pos = x;
+			auto litpos(landmarkSet.cbegin());
+			for (auto lit= landmarkSet.cbegin() ; lit != landmarkSet.cend(); lit++) {
+				if (min > lit->second.hops) {
+					min= lit->second.hops;
+					litpos= lit;
 				}
 			}
-			myAddr.landmark = landmarkVector[pos].landmarkID;
-			myAddr.pathToNode = landmarkVector[pos].PathVector;
+			myAddr.landmark = litpos->second.landmarkID;
+			myAddr.pathToNode = litpos->second.PathVector;
 			myAddr.pathToNode.push_back(localNodeId);
 			myAddr.valid = true;
 		}
@@ -1012,6 +1033,15 @@ void Disco::displayAddr() {
 
 	node().getDisplayString().setTagArg("t", 0, s);
 }
+
+std::ostream& operator<<(std::ostream &os, std::unordered_map<Node_ID,landmarkPath> nodeSet)
+{
+	for (auto &n : nodeSet) {
+		os << n.first << ": " << n.second << endl;
+	}
+	return os;
+}
+
 
 
 } //namespace

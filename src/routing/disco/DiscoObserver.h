@@ -58,15 +58,15 @@ private:
 
     /// return the cost / distance between two nodes identified by their
     /// discoid_t
-    float getDistance(discoid_t source, discoid_t destination);
+    float getDistance(discoid_t source, discoid_t destination) const;
 
     /// return network size
-    int getNetworkSize();
+    int getNetworkSize() const;
 
     /// return number of landmarks
-    int getNumLandmarks();
+    int getNumLandmarks() const;
 
-    int getNumofLandmarkAnnouncements();
+    int getNumofLandmarkAnnouncements() const;
     void setNumofLandmarkAnnouncements();
     void setNumofLandmarkAnnouncements(int n);
 

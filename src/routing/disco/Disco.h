@@ -1,5 +1,7 @@
 /*
  * Disco.h
+ * 
+ * According to the Paper Singla et al.: "Scalable Routing on Flat Names"
  *
  *  Created on: Jun 23, 2011
  *      Author: Preis
@@ -18,9 +20,7 @@
 #include <algorithm>
 #include <vector>
 #include <fstream>
-#include <boost/foreach.hpp>
-
-// #define foreach         BOOST_FOREACH
+#include <unordered_map>
 
 
 
@@ -34,12 +34,29 @@
 
 #define TEXT(X,Y) CSTR(X,Y); node().getDisplayString().setTagArg("t",0,X);
 
+// Node_ID is declared in DiscoPkt.msg
+namespace std {
+	template<> class hash<routingsim::Node_ID>
+	{
+	public:
+		size_t operator()(const routingsim::Node_ID& k) const;
+	};
+
+
+	inline
+	std::size_t std::hash<routingsim::Node_ID>::operator()(const routingsim::Node_ID& k) const {
+			using std::size_t;
+			
+			return k.id;
+	};
+
+}
 
 namespace routingsim {
 
 using namespace std;
 
-	
+
 class landmarkPath // find better name -> used not only for landmarks but also for the vicinity and shortcuts
 {
 public:
@@ -58,24 +75,21 @@ public:
 	}
 };
 
-
-
-/// nur dummy-definition, um den observer reinzubauen
-/// Datentyp braucht Vergleichsoperator
+/// Dummy definition, to integrate observer
 class discoid_t {
-	//path from landmark to node
+	// path from landmark to node
 public:
 	Node_ID landmark;
 	vector<Node_ID> pathToNode; /// TODO: check that landmark is not put (redundantly) into vector
 	bool valid;
 
-	bool operator==(discoid_t &t) const { return this->landmark.id == t.landmark.id; }
+	bool operator==(const discoid_t &t) const { return this->landmark.id == t.landmark.id; }
 	
 	friend ostream &operator<<(ostream& out, const discoid_t &disco) {
 		if ( !disco.pathToNode.empty() ) {
 			out << "Destination: Node " << (disco.pathToNode.size() > 0 ? disco.pathToNode.back().id : -1) << " (non-landmark)" << endl;
 			out << "Landmark: Node " << disco.landmark.id;
-			out << "Path from Landmark to Node:";
+			out << " Path from Landmark to Node:";
 			for(unsigned int i=0; i<disco.pathToNode.size(); i++) {
 				out << " " << disco.pathToNode[i].id;
 			}
@@ -127,14 +141,14 @@ protected:
 
 private:
 	/// Timers
-	NodePkt *landmarkAnnouncementTimer;
-	NodePkt *vicinityAnnouncementTimer;
-	NodePkt *cooldownTimer;
-	NodePkt *sendDataPacketsTimer;
-	NodePkt *initialTimer;
+	NodePkt *landmarkAnnouncementTimer = nullptr;
+	NodePkt *vicinityAnnouncementTimer = nullptr;
+	NodePkt *cooldownTimer = nullptr;
+	NodePkt *sendDataPacketsTimer = nullptr;
+	NodePkt *initialTimer = nullptr;
 
 	/// is the local node a landmark?
-	bool isLandmark;
+	bool isLandmark = false;
 
 	/// Parameters to switch Shortcuts on/off
 	bool to_Destination_Shortcutting;
@@ -146,20 +160,22 @@ private:
 	double probePacketDestinationFraction;
 	simtime_t probeInterval;
 
-	int networkSize;
+	int networkSize = 0;
 	//bool knownLandmark;
 	//bool knownNode;
 	//int posInLandVector;
 	//int posInViciniVector;
-	//int posOfMaxHops;
+	;
+
 	fstream write_in_file;
 	Node_ID localNodeId;
 	vector_set<nodeid_t> neighbor_set;
 	discoid_t myAddr;
 	DiscoObserver *observer;
-	vector <landmarkPath> landmarkVector;
-	vector <landmarkPath> vicinityVector;
-	vector <landmarkPath> shortcutVector;
+	std::unordered_map<Node_ID,landmarkPath> landmarkSet;
+	std::unordered_map<Node_ID,landmarkPath> vicinitySet;
+	std::unordered_map<Node_ID,landmarkPath> shortcutSet;
+	
 
 	// statistics
 	cOutVector vicinitySize; // number of nodes in vicinity
@@ -190,8 +206,6 @@ private:
 	int VicinityAnnouncementsReceived;
 	int VicinityAnnouncementsForwarded;
 
-
-
 	~Disco();
 	void becomeLandmark();
 	void sendPktToNode(discoid_t pktAddr);
@@ -207,15 +221,15 @@ private:
 	void saveNewPathVector(int type,DiscoPkt *dp);
 
 	/// return the index of the worst (by hop distance) entry in the vicinity
-	unsigned int getWorstVicinityEntryIdx();
+	Node_ID getVicinityMaxEntry() const;
 
 	/// return the index of the landmark in the landmark vector
-	unsigned int getLandmarkIdx(Node_ID landmark);
+	//int getLandmarkIdx(Node_ID landmark);
 
 	/// return the index of the node in the vicinity vector
-	unsigned int getVicinityIdx(Node_ID node);
-	unsigned int getShortCutIdx(Node_ID node);
-	unsigned int getNodeIdx(StandardPkt* stdp);
+	//int getVicinityIdx(Node_ID node);
+	//int getShortCutIdx(Node_ID node);
+	//int getNodeIdx(StandardPkt* stdp);
 	unsigned int getOwnAddrIdx(StandardPkt* stdp);
 	unsigned int getAddrIdx(StandardPkt* stdp,Node_ID node);
 
@@ -248,6 +262,8 @@ private:
 	vector<landmarkPath> stat;
 
 };
+
+std::ostream& operator<<(std::ostream &os, std::unordered_map<Node_ID,landmarkPath> nodeSet);
 
 } //namespace
 
