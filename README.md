@@ -27,8 +27,18 @@ afterwards
 or `make -j 4 MODE=debug`
 to create a debug built.
 
+Create a symbolic link in src/ to the topologies directory:
+
+    cd src/
+	ln -s ../simulations/topologies .
+
 To start a simulation you can change to src/
 and type in
-`./RoutingSim_dbg ../simulations/r2kademlia/thesis.ini`
+
+    ./RoutingSim_dbg ../simulations/r2kademlia/eval.ini
+
 Simulations for evaluations should run with the Cmdenv interface
 and compiled with MODE=release.
+
+Result files are stored in ../simulations/r2kademlia/results
+for the example above.
