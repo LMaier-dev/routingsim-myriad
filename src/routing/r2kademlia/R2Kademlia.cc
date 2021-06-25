@@ -82,6 +82,7 @@ void R2Kademlia::onInitialize() {
 	updatePropagateStrategy = (uint) par("updatePropagateStrategy").intValue();
 	failureFocussedProbing = par("failureFocussedProbing").boolValue();
 
+	// register this module for statistics
 	getStatistics().addSample(this);
 	simtime_t probeInterval = (simtime_t) par("probeInterval").doubleValue();
 	// doProbeSelf is required for joining (will do exponential backoff)
@@ -1478,8 +1479,10 @@ void R2Kademlia::onErrorPacket(KadError& error) {
 }
 
 
-// this is called periodically for all sampled modules in Statistics::sample()
+// this is called periodically for all modules in Statistics::sample()
 void R2Kademlia::sampleStatistics (Statistics &stats) {
+	// every value here will contribute to the average, min, max,
+	// avgDiffQuot and quantiles, a histogram is also created
 	stats.value("forwardedPackets", forwardedPackets);
 	stats.value("sentPackets", sentPackets);
 	stats.value("receivedPackets", receivedPackets);
@@ -1658,6 +1661,9 @@ void R2Kademlia::onContactCheck(const KadContact& contact) {
 }
 
 
+// gets called from KadObserver::recordStatistics()
+// in finish() during sampling statistics from nodes
+// (this is usually a reduced set, not all nodes!)
 void R2Kademlia::recordScalars() {
 	recordScalar("forwardedPackets", forwardedPackets);
 	recordScalar("droppedPackets", droppedPackets);

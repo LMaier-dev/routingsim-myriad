@@ -42,14 +42,12 @@ namespace std {
 		size_t operator()(const routingsim::Node_ID& k) const;
 	};
 
-
 	inline
 	std::size_t std::hash<routingsim::Node_ID>::operator()(const routingsim::Node_ID& k) const {
 			using std::size_t;
 			
 			return k.id;
 	};
-
 }
 
 namespace routingsim {
@@ -161,6 +159,16 @@ private:
 	simtime_t probeInterval;
 
 	int networkSize = 0;
+
+	uint forwardedPackets = 0;
+	uint droppedPackets = 0;
+	uint sentPackets = 0;
+	uint receivedPackets = 0;
+	uint forwardedDataPackets = 0;
+	uint droppedDataPackets = 0;
+	uint sentDataPackets = 0;
+	uint receivedDataPackets = 0;
+
 	//bool knownLandmark;
 	//bool knownNode;
 	//int posInLandVector;
@@ -178,25 +186,11 @@ private:
 	
 
 	// statistics
-	cOutVector vicinitySize; // number of nodes in vicinity
-	cOutVector vicinityCost; // sum over hop-distance to all nodes in the vicinity
-	cOutVector landmarkID; // id of the node's landmark
-	cOutVector landmarkDistance; // distance to the node's landmark
+	void recordScalars();
 
-	cOutVector activeNeighbors; //current node degree
-
-	cOutVector statLandmarkAnnouncementsOriginated;
-	cOutVector statLandmarkAnnouncementsReceived;
-	cOutVector statLandmarkAnnouncementsForwarded;
-
-	cOutVector statVicinityAnnouncementsOriginated;
-	cOutVector statVicinityAnnouncementsReceived;
-	cOutVector statVicinityAnnouncementsForwarded;
-
-	void vicinityStatistics();
-	void landmarkStatistics();
-	void messageStatistics();
-	void nodeStatistics();
+	void vicinityStatistics(Statistics &stats);
+	void messageStatistics(Statistics &stats);
+	void nodeStatistics(Statistics &stats);
 
 	int LandmarkAnnouncementsOriginated;
 	int LandmarkAnnouncementsReceived;
@@ -218,33 +212,27 @@ private:
 
 	void sendLandmarkAnnouncement();
 	void sendVicinityAnnouncement();
-	void saveNewPathVector(int type,DiscoPkt *dp);
+	void saveNewPathVector(int type, DiscoPkt *dp);
 
 	/// return the index of the worst (by hop distance) entry in the vicinity
 	Node_ID getVicinityMaxEntry() const;
 
-	/// return the index of the landmark in the landmark vector
-	//int getLandmarkIdx(Node_ID landmark);
-
 	/// return the index of the node in the vicinity vector
-	//int getVicinityIdx(Node_ID node);
-	//int getShortCutIdx(Node_ID node);
-	//int getNodeIdx(StandardPkt* stdp);
 	unsigned int getOwnAddrIdx(StandardPkt* stdp);
 	unsigned int getAddrIdx(StandardPkt* stdp,Node_ID node);
 
-	bool nodeInVector(StandardPkt* stdp);
-	bool nodeInAddress(StandardPkt* stdp);
+	bool nodeInVector(const StandardPkt* stdp);
+	bool nodeInAddress(const StandardPkt* stdp) const;
 	/// generate the node's disco address
 	void generateAddr();
 	/// Determine whether the landmark is known to the local node
-	bool isKnownLandmark(Node_ID landmark_ID);
+	bool isKnownLandmark(Node_ID landmark_ID) const;
 	/// Determine whether a node is contained in the vicinity
-	bool NodeInVicinity(Node_ID node);
+	bool NodeInVicinity(Node_ID node) const;
 	/// Determine whether a node is contained in the vicinity
-	bool NodeInShortCutVector(Node_ID node);
+	bool NodeInShortCutVector(Node_ID node) const;
 
-	bool addressInLandmarks(discoid_t addr);
+	bool addressInLandmarks(discoid_t addr) const;
 	void printLandmarks();
 	void printVicinity();
 	void printRoutingPath(StandardPkt* stdp);
@@ -262,6 +250,12 @@ private:
 	vector<landmarkPath> stat;
 
 };
+
+inline
+bool Disco::addressInLandmarks(discoid_t addr) const {
+	return isKnownLandmark(addr.landmark);
+}
+
 
 std::ostream& operator<<(std::ostream &os, std::unordered_map<Node_ID,landmarkPath> nodeSet);
 

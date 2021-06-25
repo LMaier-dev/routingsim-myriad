@@ -233,6 +233,7 @@ void Disco::printRoutingPath(StandardPkt* stdp) {
 void Disco::handleLandmarkAnnouncement(NodePkt *np) {
 	// Every node needs to know every landmark and a path to it
 
+	receivedPackets++;
 	LandmarkAnnouncementsReceived++;
 	DiscoPkt *dp = dynamic_cast<DiscoPkt *>(np->getEncapsulatedPacket());
 	Node_ID landmark_ID = dp->getPathVector(0);
@@ -272,40 +273,33 @@ void Disco::saveAddAndSendPackage(NodePkt *np, DiscoPkt *dp) {
 }
 
 
-void Disco::nodeStatistics() {
-	//known landmarks, vicinity size, ...
-	activeNeighbors.record(node().getNeighbors().size());
+void Disco::nodeStatistics(Statistics &stats) {
+	// known landmarks, vicinity size, ...
+	stats.value("routingTableEntries", landmarkSet.size()+vicinitySet.size()+shortcutSet.size());
+	stats.value("routingTableShortCuts", shortcutSet.size());
+	stats.value("neighbors", node().getNeighbors().size()); 
 }
 
 
-void Disco::vicinityStatistics() {
-	vicinitySize.record(vicinitySet.size());
-	double vicinityCosts=0;
-	for (const auto &p : vicinitySet) {
-		vicinityCosts+= p.second.hops;
-	}
-	vicinityCost.record(vicinityCosts);
+void Disco::vicinityStatistics(Statistics &stats) {
+	stats.value("vicinitySize", vicinitySet.size());
+	// double vicinityCosts=0;
+	// for (const auto &p : vicinitySet) {
+	// 	vicinityCosts+= p.second.hops;
+	// }
+	// vicinityCost.record(vicinityCosts);
 
 	// landmark in vicinity?
 }
 
 
-void Disco::landmarkStatistics() {
-	if (myAddr.valid and isKnownLandmark(myAddr.landmark)) {
-		landmarkID.record(myAddr.landmark.id);
-		landmarkDistance.record(landmarkSet[myAddr.landmark].PathVector.size());
-	}
-}
-
-
-void Disco::messageStatistics() {
-	statLandmarkAnnouncementsOriginated.record(LandmarkAnnouncementsOriginated);
-	statLandmarkAnnouncementsReceived.record(LandmarkAnnouncementsReceived);
-	statLandmarkAnnouncementsForwarded.record(LandmarkAnnouncementsForwarded);
-
-	statVicinityAnnouncementsOriginated.record(VicinityAnnouncementsOriginated);
-	statVicinityAnnouncementsReceived.record(VicinityAnnouncementsReceived);
-	statVicinityAnnouncementsForwarded.record(VicinityAnnouncementsForwarded);
+void Disco::messageStatistics(Statistics &stats) {
+	stats.value("forwardedPackets", forwardedPackets);
+	stats.value("sentPackets", sentPackets);
+	stats.value("receivedPackets", receivedPackets);
+	stats.value("forwardedDataPackets", forwardedDataPackets);
+	stats.value("sentDataPackets", sentDataPackets);
+	stats.value("receivedDataPackets", receivedDataPackets);
 }
 
 
@@ -327,6 +321,7 @@ Node_ID Disco::getVicinityMaxEntry() const
 
 
 void Disco::handleVicinityPacket(NodePkt *np) {
+	receivedPackets++;
 	VicinityAnnouncementsReceived++;
 	DiscoPkt *dp = dynamic_cast<DiscoPkt *>(np->getEncapsulatedPacket());
 	Node_ID node(dp->getPathVector(0));
@@ -342,19 +337,22 @@ void Disco::handleVicinityPacket(NodePkt *np) {
 			// path is not better -> ignore path
 			EV << " Node already in the vicinity of this Node" << endl;
 		}
-	} else {
+	}
+	else {
 		// Node is not known
 		// check if the vicinity limit is not yet reached -> save Path
 		if (vicinitySet.size() < (sqrt(networkSize*(log10(networkSize)/log10(2))))) {
 			saveAddAndSendPackage(np,dp);
-		} else {
+		}
+		else {
 			// check if #hops to Node is smaller than the max
 			Node_ID maxentry(getVicinityMaxEntry()); 
 			if (vicinitySet[maxentry].hops > hop_count) {
 				// erase the Node which is further away; save new
 				vicinitySet.erase(maxentry);
 				saveAddAndSendPackage(np,dp);
-			} else {
+			}
+			else {
 				EV << " Node not in the vicinity of this Node" << endl;
 			}
 		}
@@ -388,25 +386,25 @@ void Disco::saveNewPathVector(int type,DiscoPkt *dp) {
 
 
 /// Determine whether the landmark is known to the local node
-bool Disco::isKnownLandmark(const Node_ID landmark_ID) {
+bool Disco::isKnownLandmark(const Node_ID landmark_ID) const {
 	return landmarkSet.find(landmark_ID) != landmarkSet.cend();
 }
 
 
 /// Determine whether a node is contained in the vicinity
-bool Disco::NodeInVicinity(Node_ID node) {
+bool Disco::NodeInVicinity(Node_ID node) const {
 	return vicinitySet.find(node) != vicinitySet.cend();
 }
 
 
 /// Determine whether a node is contained in the ShortCutVector
-bool Disco::NodeInShortCutVector(Node_ID node) {
+bool Disco::NodeInShortCutVector(Node_ID node) const {
 	return shortcutSet.find(node) != shortcutSet.cend();
 }
 
 
 /// Determine whether a node is contained in the Address-Vector of a StandardPkt
-bool Disco::nodeInAddress(StandardPkt* stdp) {
+bool Disco::nodeInAddress(const StandardPkt* stdp) const {
 	for (unsigned int x = stdp->getRoutingPathArraySize(); x>0; x--) {
 		if (localNodeId.id == stdp->getRoutingPath(x-1).id) {
 			return true;
@@ -442,7 +440,7 @@ unsigned int Disco::getAddrIdx(StandardPkt* stdp, Node_ID node) {
 // Returns true if one of the Nodes in the Address-Path is in the Node's vicinity
 // AND the vicinity-Path to this Node is shorter than the original one
 // begin with Destination (the End of the Path) and continue towards the Landmark (the Beginning of the Path)
-bool Disco::nodeInVector(StandardPkt* stdp) {
+bool Disco::nodeInVector(const StandardPkt* stdp) {
 	for (unsigned int x=stdp->getRoutingPathArraySize(); x>0 ; x--) {
 		if (NodeInVicinity(stdp->getRoutingPath(x-1))) {
 			if (stdp->getPastLandmark()) {
@@ -463,48 +461,6 @@ bool Disco::nodeInVector(StandardPkt* stdp) {
 }
 
 
-// int Disco::getNodeIdx(StandardPkt* stdp) {
-// 	for (unsigned int x=stdp->getRoutingPathArraySize(); x>0 ; x--) {
-// 		if (NodeInVicinity(stdp->getRoutingPath(x-1))) {
-// 			return getVicinityIdx(stdp->getRoutingPath(x-1));
-// 		}
-// 	}
-// 	EV_WARN << __func__ << ": could not find Node in Routing-Vector" << endl;
-// 	return -1;
-// }
-
-
-// int Disco::getShortCutIdx(Node_ID Node) {
-// 	for (unsigned int x= 0; x< shortcutSet.size(); x++) {
-// 		if (shortcutSet[x].PathVector.back().id == Node.id) {
-// 			return x;
-// 		}
-// 	}
-// 	EV_WARN << __func__ << ": could not find Node in shortcut vector" << endl;
-// 	return -1;
-// }
-
-
-// int Disco::getLandmarkIdx(Node_ID landmark) {
-// 	for (unsigned int x= 0; x< landmarkSet.size(); x++) {
-// 		if (landmarkSet[x].PathVector[0].id == landmark.id) {
-// 			return x;
-// 		}
-// 	}
-// 	EV_WARN << __func__ << ": could not find landmark in landmark vector" << endl;
-// 	return -1;
-// }
-
-
-// int Disco::getVicinityIdx(Node_ID node) {
-// 	for (unsigned int x= 0; x< vicinitySet.size(); x++) {
-// 		if (vicinitySet[x].PathVector[0].id == node.id) {
-// 			return x;
-// 		}
-// 	}
-// 	EV_WARN << __func__ << ": could not find node " << node.id << " in vicinity vector" << endl;
-// 	return -1;
-// }
 
 void Disco::sendToOtherNeighbors(NodePkt *np) {
 	// we are the last node in the path, extract the node before us
@@ -567,22 +523,6 @@ void Disco::onInitialize()
 	// add sampler
 	addStatisticSample(this);
 
-	vicinitySize.setName("Vicinity Size");
-	vicinityCost.setName("Vicinity Cost (Sum Distance)");
-
-	landmarkDistance.setName("Distance to closest landmark");
-	landmarkID.setName("ID of closest landmark");
-
-	activeNeighbors.setName("Active Neighbors (==Degree)");
-
-	statLandmarkAnnouncementsOriginated.setName("Number of LandmarkAnnouncements originated");
-	statLandmarkAnnouncementsReceived.setName("Number of LandmarkAnnouncements received");
-	statLandmarkAnnouncementsForwarded.setName("Number of LandmarkAnnouncements forwarded");
-
-	statVicinityAnnouncementsOriginated.setName("Number of VicinityAnnouncements originated");
-	statVicinityAnnouncementsReceived.setName("Number of VicinityAnnouncements received");
-	statVicinityAnnouncementsForwarded.setName("Number of VicinityAnnouncements forwarded");
-
 	LandmarkAnnouncementsOriginated=0;
 	LandmarkAnnouncementsReceived=0;
 	LandmarkAnnouncementsForwarded=0;
@@ -642,15 +582,39 @@ void Disco::reset() {
 void Disco::sampleStatistics( Statistics& stats ) {
 	//vicinityStatistics();
 	//landmarkStatistics();
-	//XXX: massive overhead... do we need this? Granularity?
-	//messageStatistics();
-	//nodeStatistics();
+	messageStatistics(stats);
+	nodeStatistics(stats);
 }
 
 
-bool Disco::addressInLandmarks(discoid_t addr) {
-	return isKnownLandmark(addr.landmark);
+// gets called from DiscoObserver::recordStatistics()
+// in finish() during sampling statistics from nodes
+// (this is usually a reduced set, not all nodes!)
+void Disco::recordScalars() {
+	recordScalar("vicinitySize", vicinitySet.size());
+	if (myAddr.valid and isKnownLandmark(myAddr.landmark)) {
+		// id of the node's landmark
+		recordScalar("landmarkID", myAddr.landmark.id);
+		// distance to the node's landmark
+		recordScalar("landmarkDistance", landmarkSet[myAddr.landmark].PathVector.size());
+	}
+	else {
+		recordScalar("landmarkID", -1);
+		recordScalar("landmarkDistance", -1);
+	}	
+
+	recordScalar("activeNeighbors", node().getNeighbors().size()); //current node degree
+
+	recordScalar("LandmarkAnnouncementsOriginated", LandmarkAnnouncementsOriginated);
+	recordScalar("LandmarkAnnouncementsReceived", LandmarkAnnouncementsReceived);
+	recordScalar("LandmarkAnnouncementsForwarded", LandmarkAnnouncementsForwarded);
+
+	recordScalar("VicinityAnnouncementsOriginated", VicinityAnnouncementsOriginated);
+	recordScalar("VicinityAnnouncementsReceived", VicinityAnnouncementsReceived); 
+	recordScalar("VicinityAnnouncementsForwarded", VicinityAnnouncementsForwarded);
 }
+
+
 
 
 void Disco::becomeLandmark() {
@@ -683,7 +647,8 @@ void Disco::sendPktToNode(discoid_t addr) {
 		}
 		// set destination
 		destination = addr.landmark;
-	} else {
+	}
+	else {
 		// Check that sender is not also destination
 		if (addr.pathToNode.back().id == localNodeId.id) {
 			EV << "Not sending packet (destination == source)" << endl;
@@ -703,6 +668,9 @@ void Disco::sendPktToNode(discoid_t addr) {
 	stdp->setSource(localNodeId);
 	stdp->setDestination(destination);
 	stdp->setVia_Landmark(landmark);
+
+	sentDataPackets++;
+	sentPackets++;
 
 	// register data packet at statistics module
 	getStatistics().registerMessage(np);
@@ -784,11 +752,14 @@ void Disco::handleDataPacket(NodePkt *np) {
 			checkForShorterPath(stdp->getSource(),stdp->getHops());
 		}
 
+		receivedDataPackets++;
+
 		// free the packet as it is not required anymore
 		delete np;
 		return;
 	}
 
+	forwardedDataPackets++;
 
 	if (to_Destination_Shortcutting and NodeInVicinity(stdp->getDestination())) {
 		// Vicinity Shortcut enabled && Node in Vicinity
@@ -868,10 +839,8 @@ void Disco::handleDataPacket(NodePkt *np) {
 		//EV << "Past Landmark, next hop: " << stdp->getRoutingPath(stdp->getHops()).id<< endl;
 		sendToNode(stdp->getRoutingPath(posInVector+1).id,np);
 	}
-
-	// ERROR: Node doesn't know Address-Landmark -> Refresh Landmark announcements
 	else if (!isKnownLandmark(stdp->getVia_Landmark()))
-	{
+	{ // ERROR: Node doesn't know Address-Landmark -> Refresh Landmark announcements
 		getStatistics().dropMessage(np, dynamic_cast<StandardPkt *>(np->getEncapsulatedPacket())->getDestination().id);
 		delete(np);
 		EV_ERROR << "Unknown Landmark!!-> refresh landmark announcements" << endl;
@@ -967,11 +936,14 @@ void Disco::handleBetterPathPkt(NodePkt* np) {
 
 	if (dp->getPathVector(0).id == localNodeId.id) {
 		// Packet has reached it destination
+		receivedPackets++;
 		EV_TRACE << "Better Path is saved" << endl;
 		saveNewPathVector(np->getType(),dp);
 		delete np;
 		return;
 	} else {
+		forwardedPackets++;
+
 		// Not the destination, send packet along the route
 		for (unsigned int x=0 ; x < dp->getPathVectorArraySize(); x++) {
 			if (dp->getPathVector(x).id == localNodeId.id) {

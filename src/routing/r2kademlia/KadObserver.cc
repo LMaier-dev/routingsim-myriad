@@ -140,10 +140,13 @@ void KadObserver::finish() {
 	observer = NULL;
 }
 
+
 void KadObserver::handleMessage(cMessage *msg) {
 	delete msg;
 }
 
+
+// returns a randomly chosen set of nodes of size n
 std::set<nodeid_t> KadObserver::sampleNodes(int n) {
 	if (n < 0 or (size_type) n > nodes.size())
 		n = nodes.size();
@@ -188,7 +191,9 @@ void KadObserver::recordLinkUsage() const {
 }
 
 
+// this will only be called at KadObserver::finish()
 void KadObserver::recordStatistics() {
+	// record statistics for a sample set of nodes
 	for (nodeid_t nid : sampleNodes(par("nodeSample").intValue()))
 		getR2Kademlia(nid).recordScalars();
 	for (nodeid_t nid : sampleNodes(par("routingTableSample").intValue()))

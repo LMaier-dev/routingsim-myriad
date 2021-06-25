@@ -103,7 +103,14 @@ void addStatisticSample( StatisticSample* sample, const char* name = NULL );
 /// gets a preconfigured cHistogram in integer mode
 cHistogram* getIntHistogram(const char* name, int rangeLower = 0, int rangeUpper = 128, int numBins = 128);
 
+inline
+void addStatisticSample(StatisticSample* sample, const char* name ) {
+	getStatistics(name).addSample(sample);
+}
+
 
 } //namespace
+
+
 
 #endif

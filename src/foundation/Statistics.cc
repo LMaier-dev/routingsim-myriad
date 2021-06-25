@@ -50,6 +50,8 @@ cHistogram* getIntHistogram(const char* name, int rangeLower, int rangeUpper, in
 
 
 // this class describes a mean sampling value
+// if updated by every module/node, it will represent
+// avg, min, max over all nodes (in the sample set)
 class Statistics::Value {
 public:
 	static constexpr unsigned short qvaluenumber = 10;
@@ -336,6 +338,7 @@ const char* deliveryRatioStr = "messageDeliveryRatio";
 const char* messagesDeliveredStr = "messagesDelivered";
 const char* messagesDroppedStr = "messagesDropped";
 
+// this is called periodically
 void Statistics::sample() {
 	if ((messagesDelivered+messagesDropped)!=0) {
 		deliveryRatio->record((double)messagesDelivered/((double)messagesDelivered+(double)messagesDropped));
@@ -471,8 +474,5 @@ Statistics& getStatistics( const char* name ) {
 	return *stats;
 }
 
-void addStatisticSample(StatisticSample* sample, const char* name ) {
-	getStatistics(name).addSample(sample);
-}
 
 } //namespace

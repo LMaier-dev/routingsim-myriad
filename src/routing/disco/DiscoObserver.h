@@ -36,7 +36,7 @@ class DiscoObserver : public cSimpleModule
 private:
 	vector<int> entries;
 	NetworkManager *networkMgr;
-    int NumofLandmarkAnnoucements;
+    int NumofLandmarkAnnouncements;
   protected:
     virtual void initialize();
     virtual void handleMessage(cMessage *msg);
@@ -51,10 +51,10 @@ private:
 
 
     /// return a random node by its discoid_t from the available nodes
-    discoid_t &getRandomNodeAddress();
+    discoid_t &getRandomNodeAddress() const;
 
     /// return the address of a node to a given node id
-    discoid_t &getNodeAddress(nodeid_t id );
+    discoid_t &getNodeAddress(nodeid_t id ) const;
 
     /// return the cost / distance between two nodes identified by their
     /// discoid_t
