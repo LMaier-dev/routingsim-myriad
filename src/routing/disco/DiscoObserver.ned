@@ -21,4 +21,5 @@ package routingsim.routing.disco;
 simple DiscoObserver
 {
     @display("i=misc/globe,white,0;is=l");
+    int nodeSample = default(-1);
 }

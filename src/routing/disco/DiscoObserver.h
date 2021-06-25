@@ -37,9 +37,16 @@ private:
 	vector<int> entries;
 	NetworkManager *networkMgr;
     int NumofLandmarkAnnouncements;
+
+	std::set<int> sampleNodes(int n);
+	Disco* getDisco(int id) const;
+
   protected:
-    virtual void initialize();
-    virtual void handleMessage(cMessage *msg);
+    virtual void initialize() override;
+    virtual void finish() override;
+    virtual void handleMessage(cMessage *msg) override;
+
+    void recordStatistics();
 
   public:
 

@@ -42,6 +42,15 @@ void DiscoObserver::initialize()
 	getNetworkManager()->getTopology().getNodeDegrees(retDegreeMap);
 }
 
+
+void DiscoObserver::finish()
+{
+	// write scalars
+	recordStatistics();
+}
+
+
+
 void DiscoObserver::handleMessage(cMessage *msg)
 {
 	//  currently not used
@@ -75,7 +84,29 @@ discoid_t &DiscoObserver::getRandomNodeAddress() const {
 }
 
 
-discoid_t &DiscoObserver::getNodeAddress(nodeid_t id ) const {
+// returns a randomly chosen set of nodes of size n
+std::set<int> DiscoObserver::sampleNodes(int n) {
+	if (n < 0 or (size_t) n > entries.size())
+		n = entries.size();
+	std::set<int> sample{};
+	// use all nodes if n larger than 80% of all nodes (then sampling is not useful anymore)
+	if (n > entries.size() * 0.8) {
+		for (auto entry : entries)
+			sample.insert(entry);
+	}
+	while (sample.size() < (size_t) n) {
+		int nid = entries[intuniform(0,entries.size()-1)];
+		sample.insert(nid);
+	}
+	while (sample.size() > (size_t) n)
+		sample.erase(entries[intuniform(0,entries.size()-1)]);
+
+	return sample;
+}
+
+
+
+discoid_t& DiscoObserver::getNodeAddress(nodeid_t id) const {
 	for (unsigned int x=0; x<entries.size(); x++)
 	{
 		Disco *selectedNode = dynamic_cast<Disco *>(getSimulation()->getModule(entries[x]));
@@ -113,7 +144,7 @@ int DiscoObserver::getNetworkSize() const {
 
 int DiscoObserver::getNumLandmarks() const {
 	int sum=0;
-	for(unsigned int i=0; i<entries.size(); i++) {
+	for (unsigned int i=0; i<entries.size(); i++) {
 		Disco *currentNode = dynamic_cast<Disco *>(getSimulation()->getModule(entries[i]));
 		if (currentNode->isLandmark)
 			sum+=1;
@@ -135,8 +166,23 @@ DiscoObserver *getDiscoObserver() {
 }
 
 
+Disco* DiscoObserver::getDisco(int id) const
+{
+	Disco *currentNode = dynamic_cast<Disco *>(getSimulation()->getModule(id));
+	ASSERT(currentNode != nullptr);
+	return currentNode;
+}
 
-	//void DiscoObserver::sampleLaterPath( path) {}
+
+void DiscoObserver::recordStatistics() {
+	// record statistics for a sample set of nodes
+	for (auto nid : sampleNodes(par("nodeSample").intValue())) {
+		getDisco(nid)->recordScalars();
+	}
+
+	recordScalar("simTime", simTime());
+}
+
 
 int DiscoObserver::getNumofLandmarkAnnouncements() const
 {
