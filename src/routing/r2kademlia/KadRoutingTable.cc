@@ -238,14 +238,16 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 					return false;
 				}
 
-				// in case the path had a failure, check whether the supposed new path actually avoids the broken link
+				// in case the path had a failure, check whether the supposed new path actually avoids all broken links
 				// note that this check will fail in case the path was repaired,
-				// but then the sequence number must be newer
+				// but then contact_age must be newer
 				if (contact->isInvalid())
 				{
 					for (const auto& failedlink : contact->getRDS().failedLinkList) {
-						if (static_cast<unsigned long>((simTime() - failedlink.second).inUnit(SIMTIME_MS)) < contact->getAge() and containsUndirectedLink(myKey, contact->getKey(), path, failedlink.first)) {
-							// provided path does not repair broken link
+						if (static_cast<unsigned long>((simTime() - failedlink.second).inUnit(SIMTIME_MS)) < contact_age
+						    and containsUndirectedLink(myKey, contact->getKey(), path, failedlink.first)) {
+							// only if contact_age is not newer and
+							// provided new path does not repair broken link
 							return false;
 						}
 					} // end for

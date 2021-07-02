@@ -288,17 +288,8 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 				routingTable.addPath(packet->getSource(), path_of_interest, packet->getStateSeqNo(), 0, KadContact::PathProperty::indirect);
 			}
 
-			// the rest of the source routing path can be used for improvement
-			// only in case the targetSeqNo is newer
-			// see comment above: rediscovery messages cannot be used for improving routing information
-			if (not is_rediscovery)
-			{
-				path_of_interest= packet->getSrcPath(packet->getProgress()+1, packet->getRouteArraySize()-1);
-				if (path_of_interest.size() > 0)
-				{
-					routingTable.addPath(packet->getTarget(), path_of_interest, packet->getTargetSeqNo(), 0, KadContact::PathProperty::indirect);
-				}
-			}
+			// NOTE: the rest of the source routing path should not be used for improvement
+			// we will probably get the path back in the response message
 		}
 
 		forwardPacket(std::move(packet), std::move(pkt));
@@ -334,7 +325,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		if (packet->getType() != KAD_PNDiscRsp and neighborTable.isNeighbor(packet->getSource()))
 			checkForResync(packet->getSource(), packet->getStateSeqNo());
 
-		// evaluate return path for routing table
+		// evaluate return path for routing table (packet came to us this way, so path was recently working)
 		routingTable.addPath(packet->getSource(), packet->reversePath(packet->getIntermediatePath()), packet->getStateSeqNo(), 0, pathproperty);
 
 		// these types may forward packets, so they count themselves

@@ -46,6 +46,7 @@ void DiscoObserver::initialize()
 void DiscoObserver::finish()
 {
 	// write scalars
+	recordLinkUsage();
 	recordStatistics();
 }
 
@@ -171,6 +172,28 @@ Disco* DiscoObserver::getDisco(int id) const
 	Disco *currentNode = dynamic_cast<Disco *>(getSimulation()->getModule(id));
 	ASSERT(currentNode != nullptr);
 	return currentNode;
+}
+
+
+void DiscoObserver::recordLinkUsage() const {
+	cHistogram linkUsageHist("linkUsage");
+	//hist->setRange(rangeLower, rangeUpper);
+	//hist->setNumBinsHint(numBins);
+	linkUsageHist.setMode(cHistogram::MODE_INTEGERS);
+	NetworkTopology& topo = getNetworkManager()->getTopology();
+
+	for (nodeid_t nid=0; nid < entries.size(); nid++) {
+		if (const Node *np= topo.getNodeModule(nid); np != nullptr) {
+			// traverse all outgoing links to neighbors
+			unsigned long long sum= 0;
+			for (auto& neighbor : np->getLinkUsageMap()) {
+				linkUsageHist.collect(neighbor.second);
+				sum += neighbor.second;
+			}
+			//EV_TRACE << "Node " <<  nid << " linkusage sum:" << sum << endl;
+		}
+	}
+	linkUsageHist.record();
 }
 
 

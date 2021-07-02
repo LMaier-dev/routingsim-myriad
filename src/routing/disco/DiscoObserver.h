@@ -47,8 +47,11 @@ private:
     virtual void handleMessage(cMessage *msg) override;
 
     void recordStatistics();
+    void recordLinkUsage() const;
 
   public:
+    DiscoObserver();
+    ~DiscoObserver();
 
     /// add a node to the observer's entries
     void registerNode(Disco *DiscoModule);
@@ -77,10 +80,6 @@ private:
     void setNumofLandmarkAnnouncements();
     void setNumofLandmarkAnnouncements(int n);
 
-
-
-    ~DiscoObserver();
-    DiscoObserver();
 };
 
 DiscoObserver *getDiscoObserver();
