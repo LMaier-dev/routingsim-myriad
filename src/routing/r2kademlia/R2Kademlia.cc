@@ -1577,6 +1577,7 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 				// (and without signaling one can extend this by one hop)
 				// since the contact path excludes the contact itself the above condition includes nodes <= discoveryRadius+1
 				if (auto incomingPID= fwdTablePathID.addEntry(contact, false, true); incomingPID != PathID::UndefinedPathID) {
+					// PID was added, it can directly be used, because no path setup necessary within discovery
 					fwdTablePathID.setNIDtoPIDmapping(contact->getKey(), incomingPID);
 					vicinityPathIDCompletion(*contact);
 				}
@@ -1611,11 +1612,13 @@ void R2Kademlia::onImprovement(const KadContact& contact) {
 		if ( contact.getPathLength() > discoveryRadius ) {
 			// send a path setup request packet for installing PIDs in intermediate nodes for this route
 			//EV_TRACE << "Triggering path setup to " << contact.getKey().shortStr() << endl;
+			// modentry() will be called by handlePathSetupResponse
 			schedulePathSetup(contact.getKey());
 		}
-
-		// for any path (also within discovery radius or direct paths): update the PID entry
-		fwdTablePathID.modEntry(&contact, false);
+		else {
+			// for paths within discovery radius: update the PID entry
+			fwdTablePathID.modEntry(&contact, false);
+		}
 	}
 
 	// TODO: wait grace period

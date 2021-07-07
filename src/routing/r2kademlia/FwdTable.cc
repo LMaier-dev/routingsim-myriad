@@ -299,6 +299,7 @@ bool FwdTablePathID::modEntry(KadContact_p contact, bool isForeignPID)
 	}
 
 	// activate new mapping for replacements (or new entries)
+	// only if path setup is not required
 	NIDPIDTable[contact->getKey()]= incomingPathID;
 
 	EV_TRACE << "modEntry(): inPID:" << incomingPathID << " outPID:"
