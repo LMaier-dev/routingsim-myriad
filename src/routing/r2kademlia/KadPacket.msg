@@ -65,16 +65,14 @@ packet KadPacket {
 	OverlayKey route[];
 	bool active[];
 	uint16_t progress = 0;
+	uint16_t hopLimit = 255;
 	// state seq number from source node
 	pathseqno_t stateSeqNo= invalidSeqNo;
-	// target seq number (only used for overhearing forward paths)
-	pathseqno_t targetSeqNo= invalidSeqNo;
 	nonce_t nonce= 0;
 	uint8_t type enum(KadPDUType);
 	bool notVia = false;
 	link_t failedLink[];
 	age_t failedLinkAge[]; // age of link info in ms
-	uint16_t hopLimit = 255;
 }
 
 class noncobject PathID;

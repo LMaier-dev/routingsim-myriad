@@ -581,7 +581,6 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt, simtime_t 
 			// rerouting makes this intermediate node to overlay hop
 			packet->setActive(packet->getProgress(), true);
 			packet->modRoute(newpath);
-			// note: targetSeqNo does not need to be adapted as the final hop is not modified
 
 			EV_TRACE << "forwardPacket(): reroute path <";
 			for (unsigned int i= 0; i < packet->getRouteArraySize(); i++)
@@ -691,7 +690,6 @@ void R2Kademlia::reroutePacket(const OverlayKey& finaldest, KadPacket_p packet, 
 			// rerouting makes this intermediate node to overlay hop
 			packet->setActive(packet->getProgress(), true);
 			packet->modRoute(newpath);
-			packet->setTargetSeqNo(contact.getStateSeqNo());
 			EV_TRACE << "reroutePacket(): contact "
 				 << contact <<	" resulting path <";
 			for (unsigned int i= 0; i < packet->getRouteArraySize(); i++)
@@ -1225,7 +1223,6 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 			}
 			ASSERT((contact.getKey() ^ query) < (myOverlayKey ^ query));
 			packet->appendRoute(contact);
-			packet->setTargetSeqNo(contact.getStateSeqNo());
 			ASSERT(packet->getRouteArraySize() - packet->getProgress() <= packet->getHopLimit());
 			resendPacket(std::move(packet));
 			if (is_rediscovery)
@@ -1751,8 +1748,6 @@ void R2Kademlia::applyShortcut(KadPacket& packet)
 				kad_path newpath(knownContact->getPath());
 				newpath.push_back(knownContact->getKey());
 				packet.modRoute(newpath);
-				packet.setTargetSeqNo(knownContact->getStateSeqNo());
-
 
 				EV_TRACE << " new=" << packet.getSrcPath() << endl;
 			}

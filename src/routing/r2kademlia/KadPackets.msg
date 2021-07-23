@@ -18,12 +18,12 @@ cplusplus {{
 #include "OverlayKey.h"
 
 
-#include "KadPacket.h"
 #include <memory>
 #include <vector>
+#include "KadPacket.h"
+#include "stateseqno.h"
 class KadPacket;
 typedef std::vector<OverlayKey> key_vector_t;
-typedef uint16_t stateseqno_t;
 typedef uint32_t age_t;
 }}
 
