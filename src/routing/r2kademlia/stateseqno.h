@@ -3,6 +3,14 @@
 
 #include <cstdint>
 
+/**
+ *
+ * this class realizes a 16-bit sequence number
+ * with wrap around and special comparison
+ * (comparison only works within 15-bit window)
+ *
+ **/
+
 class stateseqno_t {
 private:	
 	uint16_t seqnumber= 0u;

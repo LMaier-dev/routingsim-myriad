@@ -1474,9 +1474,11 @@ void R2Kademlia::sampleStatistics (Statistics &stats) {
 	stats.value("forwardedPackets", forwardedPackets);
 	stats.value("sentPackets", sentPackets);
 	stats.value("receivedPackets", receivedPackets);
-	stats.value("forwardedDataPackets", forwardedDataPackets);
-	stats.value("sentDataPackets", sentDataPackets);
-	stats.value("receivedDataPackets", receivedDataPackets);
+	if (sendDataPackets) {
+		stats.value("forwardedDataPackets", forwardedDataPackets);
+		stats.value("sentDataPackets", sentDataPackets);
+		stats.value("receivedDataPackets", receivedDataPackets);
+	}
 	stats.value("sentRouteUpdates", sentRouteUpdates);
 	stats.value("receivedRouteUpdates", receivedRouteUpdates);
 	stats.value("sentPathSetup", sentPathSetup);
@@ -1486,7 +1488,7 @@ void R2Kademlia::sampleStatistics (Statistics &stats) {
 	stats.value("routingTableBuckets", routingTable.getNumBuckets());
 	stats.value("routingTableUpdates", routingTable.getUpdateCount());
 	stats.value("routingTableReplacements", routingTable.getReplacementCount());
-	if(detailedRoutingTableStats) {
+	if (detailedRoutingTableStats) {
 		stats.value("routingTablePathLength", routingTable.getAveragePathLength());
 		stats.value("routingTablePathStretch", routingTable.getAveragePathStretch());
 	}
@@ -1660,10 +1662,14 @@ void R2Kademlia::recordScalars() {
 	recordScalar("droppedPackets", droppedPackets);
 	recordScalar("sentPackets", sentPackets);
 	recordScalar("receivedPackets", receivedPackets);
-	recordScalar("forwardedDataPackets", forwardedDataPackets);
-	recordScalar("droppedDataPackets", droppedDataPackets);
-	recordScalar("sentDataPackets", sentDataPackets);
-	recordScalar("receivedDataPackets", receivedDataPackets);
+
+	if (sendDataPackets) {
+		recordScalar("forwardedDataPackets", forwardedDataPackets);
+		recordScalar("droppedDataPackets", droppedDataPackets);
+		recordScalar("sentDataPackets", sentDataPackets);
+		recordScalar("receivedDataPackets", receivedDataPackets);
+	}
+
 	recordScalar("rediscoverySent", sentRediscovery);
 	recordScalar("rediscoverySuccess", succeededRediscovery);
 	recordScalar("rediscoveryFailed", droppedRediscovery);
