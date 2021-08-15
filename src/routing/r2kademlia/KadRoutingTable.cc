@@ -279,19 +279,26 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 				}
 			}
 
-			// only update paths of equal length if XORsum of new path is closer to own ID
+			// only update paths of equal length if HashSum of new path is closer to own ID
 			// this should allow for better path diversity without route flapping
 			bool samepathlen(false);
 			if (path.size() > 0 and path.size() == contact->getPathLength()) {
-				if (not contact->isInvalid())
+				if (not contact->isInvalid()) {
 					samepathlen= true;
 
-				if ((HashSum(path) ^ myKey) > (HashSum(contact->getPath()) ^  myKey)) {
-					EV_TRACE << "discarding path of same length: " << path << endl;
+					// exactly the same path (may be ok in case of recovered link)
+					if (path == contact->getPath())
+						return false;
+				}
+				// now check for XOR distance to own ID of Path Hash
+				if ((HashSum(path) ^ myKey) >= (HashSum(contact->getPath()) ^  myKey)) {
+					EV_TRACE << "for contact " << key.shortStr() << " discarding path of same length: " << path << endl;
 					return false;
 				}
-				else
-					EV_TRACE << "replacing path of same length with: " << path << endl;
+				else {
+					EV_TRACE << "for contact " << key.shortStr()
+						 << " replacing path of same length with: " << path << endl;
+				}
 			}
 
 			contact->setPath(std::move(path)); // will set contact automatically to valid
