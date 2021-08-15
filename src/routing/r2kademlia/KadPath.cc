@@ -1,4 +1,5 @@
 #include "KadPath.h"
+#include "SHA1.h"
 
 namespace routingsim {
 
@@ -78,6 +79,31 @@ bool containsUndirectedLink(const kad_path& path, const OverlayKey& firstNodeKey
 	{
 		return false;
 	}
+}
+
+
+OverlayKey HashSum(const kad_path& path)
+{
+	if (path.size() > 0)
+	{
+		constexpr uint8_t sha1len= 20;
+		uint8_t temp[sha1len]; // SHA1 result
+		CSHA1 sha1;
+
+		sha1.Reset();
+		// hash all keys of the given path
+		const auto keylen(OverlayKey::getLength() / 8 + ((OverlayKey::getLength() % 8) != 0 ? 1 : 0));
+		for (const auto& key : path)
+		{
+			sha1.Update(key.getRawKey(), keylen);
+		}
+		sha1.Final();
+		sha1.GetHash(temp);
+
+		return OverlayKey(temp, keylen <= sha1len ? keylen : sha1len);
+	}
+	else
+		return OverlayKey();
 }
 
 }

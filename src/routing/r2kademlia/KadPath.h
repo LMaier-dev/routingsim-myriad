@@ -14,8 +14,9 @@ using link_t = std::pair<OverlayKey,OverlayKey> ;
 /// some paths exclude source and target nodes, e.g., those stored for KadContacts
 bool containsUndirectedLink(const OverlayKey& source, const OverlayKey& target, const kad_path& path, const link_t link);
 
-
 bool containsUndirectedLink(const kad_path& path, const OverlayKey& firstNodeKey, const OverlayKey& secondNodeKey);
+
+OverlayKey HashSum(const kad_path& path);
 
 std::ostream& operator<<(std::ostream& os, const kad_path& c);
 

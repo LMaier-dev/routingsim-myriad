@@ -226,7 +226,7 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 		if (bool seqno_is_ok(contact->getStateSeqNo() <= stateseqno);
 		    (contact->isInvalid() and seqno_is_ok)
 		    or
-		    (seqno_is_ok and path.size() < contact->getPathLength())
+		    (seqno_is_ok and path.size() <= contact->getPathLength())
 		    or
 		    (contact->getStateSeqNo() < stateseqno) )
 		{
@@ -279,6 +279,21 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 				}
 			}
 
+			// only update paths of equal length if XORsum of new path is closer to own ID
+			// this should allow for better path diversity without route flapping
+			bool samepathlen(false);
+			if (path.size() > 0 and path.size() == contact->getPathLength()) {
+				if (not contact->isInvalid())
+					samepathlen= true;
+
+				if ((HashSum(path) ^ myKey) > (HashSum(contact->getPath()) ^  myKey)) {
+					EV_TRACE << "discarding path of same length: " << path << endl;
+					return false;
+				}
+				else
+					EV_TRACE << "replacing path of same length with: " << path << endl;
+			}
+
 			contact->setPath(std::move(path)); // will set contact automatically to valid
 			contact->setStateSeqNo(stateseqno);
 			// update lastseen to that of the originator
@@ -290,11 +305,15 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 			// recheck neighbors of that contact because something has changed
 			if (recheckPhysicalNeighbors)
 				policy->recheckPhysicalNeighbors(*contact);
-			// do something on improved path according to policy
-			policy->onImprovement(*contact);
 
-			// try to improve other paths with newly improved contact path
-			updatePaths(*contact);
+			// do something on improved path according to policy
+			// (only if path has been improved actually)
+			if (not samepathlen) {
+				policy->onImprovement(*contact);
+
+				// try to improve other paths with newly improved contact path
+				updatePaths(*contact);
+			}
 
 			return true;
 		}

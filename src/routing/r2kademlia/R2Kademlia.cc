@@ -218,18 +218,10 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	if (packet->hasRemainingHops()) {
 		// we are not the recipient
 
-		bool is_rediscovery(false);
 		//TODO ERROR OVERHEARING, more overhearing
 		// special actions while forwarding packets
 		switch (packet->getType())
 		{
-			case KAD_FindNodeReq:
-			        {
-					// check for rediscovery packet
-					const KadFindNodeReq* findnodereq= dynamic_cast<const KadFindNodeReq*>(packet.get());
-					is_rediscovery= findnodereq->getRediscovery();
-			        }
-				break;
 
 			case KAD_PathSetupReq:
 				// as intermediate node I need to check to path ID installation
