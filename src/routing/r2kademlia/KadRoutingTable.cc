@@ -291,7 +291,11 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 						return false;
 				}
 				// now check for XOR distance to own ID of Path Hash
-				if ((HashSum(path) ^ myKey) >= (HashSum(contact->getPath()) ^  myKey)) {
+				kad_path newpath(path);
+				newpath.push_back(key);
+				kad_path oldpath(contact->getPath());
+				oldpath.push_back(key);
+				if ((HashSum(newpath) ^ myKey) >= (HashSum(oldpath) ^  myKey)) {
 					EV_TRACE << "for contact " << key.shortStr() << " discarding path of same length: " << path << endl;
 					return false;
 				}
