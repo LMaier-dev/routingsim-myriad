@@ -222,16 +222,19 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 		// contact is invalid: only if we have newer information (higher sequence number)
 		//                     or the same seq# (the path may have changed though and reenabling the contact is important)
 		// or: we learn a shorter path (seq# no must be same or newer) -> update anyways
-
-		if (bool seqno_is_ok(contact->getStateSeqNo() <= stateseqno);
+		bool newer_seqno(contact->getStateSeqNo() < stateseqno);
+		bool same_seqno(contact->getStateSeqNo() == stateseqno);
+		bool shorter_path(path.size() < contact->getPathLength());
+		bool equivalent_path(path.size() == contact->getPathLength());
+		if (bool seqno_is_ok(same_seqno or newer_seqno);
 		    (contact->isInvalid() and seqno_is_ok)
 		    or
-		    (seqno_is_ok and path.size() <= contact->getPathLength())
+		    (seqno_is_ok and (shorter_path or equivalent_path))
 		    or
-		    (contact->getStateSeqNo() < stateseqno) )
+		    newer_seqno )
 		{
 			// special case for non updated sequence number
-			if (contact->getStateSeqNo() == stateseqno) {
+			if (same_seqno) {
 				// check for age information if seq no is equal
 				if (contact->getAge() < contact_age) {
 					EV_TRACE << "ignoring older contact info: mine " << contact->getAge() << " other " << contact_age << endl;
@@ -256,7 +259,7 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 
 			bool recheckPhysicalNeighbors(false);
 			// contact has new state?
-			if (contact->getStateSeqNo() < stateseqno) {
+			if (newer_seqno) {
 				// sometimes updates may be received that carry a newer sequence number
 				// from physical neighbors; this indicates that we do not have the latest state about its neighbors
 				// if PN link is still up, we ignore this for now and initiate a resynch
@@ -281,29 +284,51 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 
 			// only update paths of equal length if HashSum of new path is closer to own ID
 			// this should allow for better path diversity without route flapping
-			bool samepathlen(false);
-			if (path.size() > 0 and path.size() == contact->getPathLength()) {
-				if (not contact->isInvalid()) {
-					samepathlen= true;
-
-					// exactly the same path (may be ok in case of recovered link)
+			bool pathimproved(newer_seqno or contact->isInvalid() or shorter_path);
+			if (path.size() == 0) {
+				if (equivalent_path and not contact->isInvalid()) {
+					if (not newer_seqno) {
+						// this is an identical path, ignore
+						return false;
+					}
+					else { // just higher seq no, not necessary to send updates etc.
+						pathimproved= false;
+					}
+				}
+				// in case of path improvement or prior contact invalidity or newer seq no
+				// we need to update this contact
+			}
+			else // path.size() > 0
+			if (equivalent_path) {
+				// path is actually improved in case we
+				// learn a shorter path or path was invalid before
+				if (not contact->isInvalid()) { // path is currently valid
+					// is it exactly the same path => not interesting
+					// (may be ok in case of recovered link, but path is valid now)
 					if (path == contact->getPath())
 						return false;
+					// we have a different path of same length
+					pathimproved= false;
 				}
-				// now check for XOR distance to own ID of Path Hash
-				kad_path newpath(path);
-				newpath.push_back(key);
-				kad_path oldpath(contact->getPath());
-				oldpath.push_back(key);
-				if ((HashSum(newpath) ^ myKey) >= (HashSum(oldpath) ^  myKey)) {
-					EV_TRACE << "for contact " << key.shortStr() << " discarding path of same length: " << path << endl;
-					return false;
-				}
-				else {
-					EV_TRACE << "for contact " << key.shortStr()
-						 << " replacing path of same length with: " << path << endl;
+				// check for eligibility of new path with same length
+				if (path.size() > 0) {
+					// now check for XOR distance to own ID of Path Hash
+					kad_path newpath(path);
+					newpath.push_back(key);
+					kad_path oldpath(contact->getPath());
+					oldpath.push_back(key);
+					if ((HashSum(newpath) ^ myKey) >= (HashSum(oldpath) ^  myKey)) {
+						EV_TRACE << "for contact " << key.shortStr() << " discarding path of same length: " << path << endl;
+						return false;
+					}
+					else {
+						EV_TRACE << "for contact " << key.shortStr()
+							 << " replacing path of same length with: " << path << endl;
+					}
 				}
 			}
+			EV_TRACE << "for contact " << key.shortStr()
+				 << " updating old path " << contact->getPath() << " with new " << path << endl;
 
 			contact->setPath(std::move(path)); // will set contact automatically to valid
 			contact->setStateSeqNo(stateseqno);
@@ -319,7 +344,7 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 
 			// do something on improved path according to policy
 			// (only if path has been improved actually)
-			if (not samepathlen) {
+			if (pathimproved) {
 				policy->onImprovement(*contact);
 
 				// try to improve other paths with newly improved contact path
