@@ -287,7 +287,6 @@ void R2Kademlia::propagateUpdateReq(std::unique_ptr<KadUpdateRouteReq> packet)
 	if ( contact.isValid() and (contact.getKey() ^ myOverlayKey) > (contact.getKey() ^ destContactKey) and not packet->isOverlayHopInPath(contact.getKey()) )
 	{
 		packet->appendRoute(contact);
-		packet->setTargetSeqNo(contact.getStateSeqNo());
 		EV_TRACE << "propagateUpdateReq(): final dest: " << destContactKey.shortStr() << ", next dest: " << contact << endl;
 	        resendPacket(std::move(packet));
 	}

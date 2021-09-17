@@ -494,7 +494,6 @@ std::unique_ptr<T> R2Kademlia::makePacket(const KadContact* contact, const char 
 	packet->setSource(myOverlayKey);
 	packet->setHopLimit(hopLimit);
 	packet->appendRoute(contact);
-	packet->setTargetSeqNo(contact->getStateSeqNo());
 	packet->setStateSeqNo(getGLSSeqNo());
 	return packet;
 }
@@ -504,8 +503,10 @@ template<typename T>
 std::unique_ptr<T> R2Kademlia::makeAnswer(const KadPacket& original) {
 	auto answer = std::make_unique<T>();
 	answer->setName((std::string(original.getName()) + std::string("Answer")).c_str());
-	if (routingTable.usePathSimplification())
+	if (routingTable.usePathSimplification()) {
 		answer->setShortened(answer->setSimplifiedReturnPathFrom(original));
+		// optional: shorten return path
+	}
 	else
 	{
 		answer->setReturnPathFrom(original);
@@ -515,7 +516,6 @@ std::unique_ptr<T> R2Kademlia::makeAnswer(const KadPacket& original) {
 	ASSERT(answer->getSource() == myOverlayKey);
 	answer->setNonce(original.getNonce());
 	answer->setStateSeqNo(getGLSSeqNo());
-	answer->setTargetSeqNo(original.getStateSeqNo());
 	// now copy the notvia information to let the source update its obsolete routes, too
 	if (original.getNotVia()) {
 		answer->setNotVia(true);
