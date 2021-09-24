@@ -195,7 +195,7 @@ public:
 	void recordRoutingTable();
 
 	//@}
-	pathseqno_t getGLSSeqNo() const { return glsseqno; }
+	stateseqno_t getGLSSeqNo() const { return glsseqno; }
 
 	static constexpr unsigned long ContactAgeThreshold = 2000UL;
 
@@ -328,7 +328,7 @@ private:
 	OverlayKey myOverlayKey;
 
 	/// Node Global Link State Sequence Number
-	pathseqno_t glsseqno= 0;
+	stateseqno_t glsseqno= 0;
 	/// Table of direct physical neighbors
 	NeighborTable neighborTable;
 	/// Kademlia-like Routing Table containing Paths to contacts

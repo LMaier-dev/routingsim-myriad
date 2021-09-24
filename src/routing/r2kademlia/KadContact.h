@@ -21,6 +21,7 @@
 #include <vector>
 #include <algorithm>
 #include "KadPath.h"
+#include "stateseqno.h"
 
 /**
  * @file KadContact.h
@@ -32,10 +33,9 @@ namespace routingsim {
 // type definitions
 
 using size_type = std::size_t;
-using stateseqno_t = uint16_t;
+	//using stateseqno_t = uint16_t;
 using age_t = uint32_t;
 
-constexpr stateseqno_t invalidSeqNo= 0xffff;
 constexpr unsigned short int maxRediscoveryRetries= 6;
 
 class RediscoveryState {
@@ -74,7 +74,7 @@ public:
 				     physicalNeighbor(k.physicalNeighbor),
 				     rds_p(std::move(k.rds_p)) {};
         explicit KadContact(const OverlayKey& key): key(key), lastseen(SIMTIME_ZERO), path(), state(State::undefined), rds_p(nullptr) {};
-        KadContact(const OverlayKey& key, kad_path opath, stateseqno_t seqno= invalidSeqNo) :
+        KadContact(const OverlayKey& key, kad_path opath, stateseqno_t seqno= stateseqno_t::invalidSeqNo) :
 		key(key), lastseen(SIMTIME_ZERO), path(std::move(opath)), seqno(seqno),
 		state(State::valid), physicalNeighbor(path.empty() == true), rds_p(nullptr) // simply path.empty() doesn't work correctly!
 		{};
@@ -122,9 +122,9 @@ public:
 	void setPathProperty(PathProperty newprop) { pathproperty= newprop; }
 	stateseqno_t getStateSeqNo() const { return seqno; }
 	void setStateSeqNo(stateseqno_t newseqno) {
-		//if (not (seqno == invalidSeqNo or (seqno != invalidSeqNo and newseqno >= seqno)))
-		//	EV_ERROR << "Contact: " << key.shortStr() << " setPathSeqNo: old=" << seqno << " new=" << newseqno << endl;
-		ASSERT(newseqno != invalidSeqNo); ASSERT(seqno == invalidSeqNo or (seqno != invalidSeqNo and newseqno >= seqno));
+		if (not (seqno.isInvalid() or (not seqno.isInvalid() and newseqno >= seqno)))
+			EV_ERROR << "Contact: " << key.shortStr() << " setPathSeqNo: old=" << seqno << " new=" << newseqno << endl;
+		ASSERT(not newseqno.isInvalid()); ASSERT(seqno.isInvalid() or (not seqno.isInvalid() and newseqno >= seqno));
 		seqno= newseqno; }
 	bool isContainedinPath(const OverlayKey& myOverlayKey, const link_t& link) const;
 	/// Common stdc++ console output method
@@ -136,7 +136,7 @@ private:
 	simtime_t lastseen; /// time of last direct contact or path update (could stem from other node, too)
 	/// the following path does neither contain the source (myself) nor the target node
 	kad_path path;	   /// the best known source routing path to reach this contact
-	stateseqno_t seqno= invalidSeqNo; /// sequence number for the path state (announced by origin)
+	stateseqno_t seqno= stateseqno_t::invalidSeqNo; /// sequence number for the path state (announced by origin)
 	State state= State::undefined; /// the state of the contact
 	PathProperty pathproperty= PathProperty::undefined; /// the path property
 	bool physicalNeighbor= false; /// true if we have a direct physical link to this neighbor
@@ -187,7 +187,7 @@ inline KadContact& KadContact::operator=(KadContact&& other)
 		pathproperty= other.pathproperty;
 		physicalNeighbor= other.physicalNeighbor;
 		other.path.clear();
-		other.seqno= invalidSeqNo;
+		other.seqno= stateseqno_t::invalidSeqNo;
 		other.state= State::undefined;
 	}
 	return *this;

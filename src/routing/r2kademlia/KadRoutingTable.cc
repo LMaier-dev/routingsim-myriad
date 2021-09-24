@@ -327,8 +327,9 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 					}
 				}
 			}
-			EV_TRACE << "for contact " << key.shortStr()
-				 << " updating old path " << contact->getPath() << " with new " << path << endl;
+			EV_TRACE << "for contact " << key.shortStr() << " seq#" << contact->getStateSeqNo()
+				 << " updating old path " << contact->getPath() << " with new " << path
+				 << " seq#"  << stateseqno << endl;
 
 			contact->setPath(std::move(path)); // will set contact automatically to valid
 			contact->setStateSeqNo(stateseqno);

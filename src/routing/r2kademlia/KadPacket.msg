@@ -15,13 +15,12 @@
 cplusplus {{
 #include "BaseTypes.h"
 #include "OverlayKey.h"
+#include "stateseqno.h"
 #include "PathID.h"
 #include "RPC.h"
 #include <memory>
 #include <utility>
 typedef std::pair<OverlayKey,OverlayKey> link_t;
-typedef uint16_t pathseqno_t;
-constexpr pathseqno_t invalidSeqNo= 0xffff;
 
 typedef uint32_t age_t;
 }}
@@ -56,7 +55,7 @@ class noncobject OverlayKey;
 class noncobject nodeid_t;
 class noncobject nonce_t;
 class noncobject link_t;
-class noncobject pathseqno_t;
+class noncobject stateseqno_t;
 class noncobject age_t;
 
 // a KAD control packet
@@ -67,7 +66,7 @@ packet KadPacket {
 	uint16_t progress = 0;
 	uint16_t hopLimit = 255;
 	// state seq number from source node
-	pathseqno_t stateSeqNo= invalidSeqNo;
+	stateseqno_t stateSeqNo= stateseqno_t::invalidSeqNo;
 	nonce_t nonce= 0;
 	uint8_t type enum(KadPDUType);
 	bool notVia = false;
