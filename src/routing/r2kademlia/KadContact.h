@@ -54,7 +54,8 @@ public:
 		undefined     = 0,
 		valid         = 1,
 		rediscovering = 2,
-		invalid       = 3
+		invalid       = 3,
+		dead          = 4
 	};
 
 	enum class PathProperty : uint8_t {
@@ -64,18 +65,19 @@ public:
 		invalid       = 3  // path is invalid
 	};
 
-	KadContact(const KadContact& o) : key(o.key), lastseen(o.lastseen), path(o.path), seqno(o.seqno),
-					  state(o.state), pathproperty(o.pathproperty),
+	KadContact(const KadContact& o) : key(o.key), lastseen(o.lastseen), path(o.path), pathHashSum(o.pathHashSum),
+					  seqno(o.seqno), state(o.state), pathproperty(o.pathproperty),
 					  physicalNeighbor(o.physicalNeighbor),
 					  rds_p(o.rds_p == nullptr ? nullptr :
 						std::make_unique<RediscoveryState>(*o.rds_p)) {};
         KadContact(KadContact&& k) : key(std::move(k.key)), lastseen(std::move(k.lastseen)), path(std::move(k.path)),
+				     pathHashSum(std::move(k.pathHashSum)),
 				     seqno(k.seqno), state(k.state), pathproperty(k.pathproperty),
 				     physicalNeighbor(k.physicalNeighbor),
 				     rds_p(std::move(k.rds_p)) {};
         explicit KadContact(const OverlayKey& key): key(key), lastseen(SIMTIME_ZERO), path(), state(State::undefined), rds_p(nullptr) {};
         KadContact(const OverlayKey& key, kad_path opath, stateseqno_t seqno= stateseqno_t::invalidSeqNo) :
-		key(key), lastseen(SIMTIME_ZERO), path(std::move(opath)), seqno(seqno),
+		key(key), lastseen(SIMTIME_ZERO), path(std::move(opath)), pathHashSum(HashSum(path,key)), seqno(seqno),
 		state(State::valid), physicalNeighbor(path.empty() == true), rds_p(nullptr) // simply path.empty() doesn't work correctly!
 		{};
         KadContact& operator=(const KadContact &other); // copy assignment
@@ -114,10 +116,11 @@ public:
 	/// i.e., the _intermediate hops_ between me and this contact
 	size_t getPathLength() const { return path.size(); }
 	/// sets new path (originally checked for repair of failed links, too)
-	void updatePath(const OverlayKey& myOverlayKey, kad_path newpath) { setPath(newpath); }
+	void updatePath(const OverlayKey& myOverlayKey, kad_path newpath) { setPath(newpath, HashSum(newpath,key)); }
 	/// sets the path to reach this contact (will implicitly set status to valid)
-	void setPath(kad_path path) { this->path = std::move(path); setValid(); }
+	void setPath(kad_path path, OverlayKey&& HashSum) { this->path = std::move(path); setValid(); pathHashSum= HashSum; }
 	const kad_path& getPath() const { return path; }
+	const OverlayKey& getPathHashSum() const { return pathHashSum; }
 	PathProperty getPathProperty() const { return pathproperty; } 
 	void setPathProperty(PathProperty newprop) { pathproperty= newprop; }
 	stateseqno_t getStateSeqNo() const { return seqno; }
@@ -136,6 +139,7 @@ private:
 	simtime_t lastseen; /// time of last direct contact or path update (could stem from other node, too)
 	/// the following path does neither contain the source (myself) nor the target node
 	kad_path path;	   /// the best known source routing path to reach this contact
+	OverlayKey pathHashSum; /// the hash sum of the path
 	stateseqno_t seqno= stateseqno_t::invalidSeqNo; /// sequence number for the path state (announced by origin)
 	State state= State::undefined; /// the state of the contact
 	PathProperty pathproperty= PathProperty::undefined; /// the path property
@@ -166,6 +170,7 @@ inline KadContact& KadContact::operator=(const KadContact& other)
 		key= other.key;
 		lastseen = other.lastseen;
 		path= other.path;
+		pathHashSum= other.pathHashSum;
 		seqno= other.seqno;
 		state= other.state;
 		pathproperty= other.pathproperty;
@@ -182,6 +187,7 @@ inline KadContact& KadContact::operator=(KadContact&& other)
 		key= other.key;
 		lastseen = other.lastseen;
 		path= other.path;
+		pathHashSum= other.pathHashSum;
 		state= other.state;
 		seqno= other.seqno;
 		pathproperty= other.pathproperty;
