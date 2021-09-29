@@ -53,7 +53,6 @@ void R2Kademlia::onInitialize() {
 		par("accelerationFactor").intValue(),
 		par("bucketSize").intValue(),
 		par("proximityNeighborSelection").boolValue(),
-		par("pathSimplification").boolValue(),
 		discoveryRadius);
 
 	ASSERT(par("findNodeNumber").intValue() > 0);
@@ -89,14 +88,17 @@ void R2Kademlia::onInitialize() {
 	// calculation for first timer is: initialOffset - duration/2 + random([0..duration])
 	// start after 100ms, use 250ms, 500ms, 1s, 2s, 4s, 8s, 16s, 32s, 64s, 128s, 256s, 300s as intervals
 	probeTimerId= addTimer(SimTime(225,SIMTIME_MS), SimTime(250,SIMTIME_MS), std::bind(&R2Kademlia::doProbeSelf, this, ph::_1));
-	// regularly probe for closest neighbors
+
+	// regularly probe for closest (overlay/ID-wise)  neighbors
 	addTimer(std::max(probeInterval, SimTime(1000,SIMTIME_MS)), probeInterval*2, std::bind(&R2Kademlia::doProbeNeighbors, this, ph::_1));
 	// regularly probe for non PN contacts to test path liveliness
 	addTimer(std::max(probeInterval/2, SimTime(1000,SIMTIME_MS)), probeInterval, std::bind(&R2Kademlia::doProbeContacts, this, ph::_1));
 	// regularly send FindNodeReq to randomly chosen IDs
 	addTimer(probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doProbe, this, ph::_1));
+
 	// check whether other existing nodes can be reached (uses KadObserver)
 	addTimer(probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doReachabilityTest, this, ph::_1));
+
 	// resend Hello packets to keep state sequence numbers in synch
 	addTimer(SimTime(225,SIMTIME_MS), SimTime(250,SIMTIME_MS), std::bind(&R2Kademlia::doSendHello, this, ph::_1));
 
@@ -106,6 +108,7 @@ void R2Kademlia::onInitialize() {
 	  addTimer(getSimulation()->getWarmupPeriod()+probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doDataProbe, this, ph::_1));
 	}
 
+	// expose the following variables in GUI for inspection
 	WATCH(myOverlayKey);
 	WATCH(glsseqno);
 	WATCH(neighborTable);
@@ -1511,8 +1514,11 @@ void R2Kademlia::onContactRemoval(KadContact_p contact)
 	if (usePathIDs)
 		fwdTablePathID.delEntry(contact);
 
+	// TODO: the following is probably not useful
+	// (node may still be present in vicinity, but was evicted from bucket)
 	// remove from vicinity node set (in case of later rendezvous again)
-	vicinity.removeNode(contact->getKey());
+	if (contact->getPathLength() < discoveryRadius)
+		vicinity.removeNode(contact->getKey());
 }
 
 

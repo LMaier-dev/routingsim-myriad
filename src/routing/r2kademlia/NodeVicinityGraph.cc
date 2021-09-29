@@ -84,7 +84,7 @@ nodeVicinityGraph::removeNode(const OverlayKey& nodeKey)
 		graph.erase(it);
 	}
 	else {
-		EV_WARN << "removeNode(): " << nodeKey.shortStr() << " node not found" << endl;
+		EV_WARN << "vicinity.removeNode(): " << nodeKey.shortStr() << " node not found" << endl;
 	}
 		
 }

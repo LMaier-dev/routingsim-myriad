@@ -106,7 +106,7 @@ public:
 	void init(const OverlayKey& myKey,
 		  KadPolicy* policy,
 		  size_type accelerationFactor, size_type bucketSize,
-		  bool proximityNeighborSelection, bool pathSimplification=true, uint8_t discoveryRadius= 1);
+		  bool proximityNeighborSelection, uint8_t discoveryRadius= 1);
 
 	void clear() { buckets.clear(); myKey= OverlayKey::UNSPECIFIED_KEY; };
 	
@@ -209,8 +209,6 @@ public:
 
 	// update all contact paths that are affected by improved contact path
 	void updatePaths(const KadContact& improvedContact);
-	/// pathSimplification on?
-	bool usePathSimplification() const { return pathSimplification; }
 	/// tries to find shortcuts using own routing table entries
 	bool shortenPath(kad_path& path) const;
 	/// concatenates the two paths
@@ -267,8 +265,6 @@ private:
 	KadPolicy* policy = nullptr;
 	/// turns on Proximity Neighbor Selection
 	bool proximityNeighborSelection;
-	/// if false new paths are not checked for loops or duplicates
-	bool pathSimplification;
 	/// counts the number of contact replacements
 	uint replacementCount = 0;
 	/// counts the number of improvements made to contact paths

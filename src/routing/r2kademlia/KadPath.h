@@ -16,7 +16,19 @@ bool containsUndirectedLink(const OverlayKey& source, const OverlayKey& target, 
 
 bool containsUndirectedLink(const kad_path& path, const OverlayKey& firstNodeKey, const OverlayKey& secondNodeKey);
 
-OverlayKey HashSum(const kad_path& path);
+inline
+bool are_equal_r(const kad_path& first_path, const kad_path& second_path) {
+	auto it_second= second_path.crbegin();
+	for (auto it_first= first_path.crbegin(); it_first != first_path.crend(); it_first++) {
+		if ( *it_first != *it_second )
+			return false;
+		it_second++;
+	}
+	return true;
+};
+
+// calculates a SHA1sum of path and destkey
+OverlayKey HashSum(const kad_path& path, const OverlayKey& destkey);
 
 std::ostream& operator<<(std::ostream& os, const kad_path& c);
 

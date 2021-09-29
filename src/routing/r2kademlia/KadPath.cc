@@ -82,28 +82,27 @@ bool containsUndirectedLink(const kad_path& path, const OverlayKey& firstNodeKey
 }
 
 
-OverlayKey HashSum(const kad_path& path)
+// calculates SHA1sum of path and destkey
+// the hashsum is returned as OverlayKey to be able to calculate the XOR distance
+OverlayKey HashSum(const kad_path& path, const OverlayKey& destkey)
 {
-	if (path.size() > 0)
+	constexpr uint8_t sha1len= 20;
+	uint8_t temp[sha1len]; // SHA1 result
+	CSHA1 sha1;
+
+	sha1.Reset();
+	// hash all keys of the given path
+	const auto keylen(OverlayKey::getLength() / 8 + ((OverlayKey::getLength() % 8) != 0 ? 1 : 0));
+	for (const auto& key : path)
 	{
-		constexpr uint8_t sha1len= 20;
-		uint8_t temp[sha1len]; // SHA1 result
-		CSHA1 sha1;
-
-		sha1.Reset();
-		// hash all keys of the given path
-		const auto keylen(OverlayKey::getLength() / 8 + ((OverlayKey::getLength() % 8) != 0 ? 1 : 0));
-		for (const auto& key : path)
-		{
-			sha1.Update(key.getRawKey(), keylen);
-		}
-		sha1.Final();
-		sha1.GetHash(temp);
-
-		return OverlayKey(temp, keylen <= sha1len ? keylen : sha1len);
+		sha1.Update(key.getRawKey(), keylen);
 	}
-	else
-		return OverlayKey();
+
+	sha1.Update(destkey.getRawKey(), keylen);
+	sha1.Final();
+	sha1.GetHash(temp);
+
+	return OverlayKey(temp, keylen <= sha1len ? keylen : sha1len);
 }
 
 }

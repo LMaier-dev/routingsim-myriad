@@ -503,15 +503,7 @@ template<typename T>
 std::unique_ptr<T> R2Kademlia::makeAnswer(const KadPacket& original) {
 	auto answer = std::make_unique<T>();
 	answer->setName((std::string(original.getName()) + std::string("Answer")).c_str());
-	if (routingTable.usePathSimplification()) {
-		answer->setShortened(answer->setSimplifiedReturnPathFrom(original));
-		// optional: shorten return path
-	}
-	else
-	{
-		answer->setReturnPathFrom(original);
-		answer->setShortened(false);
-	}
+	answer->setShortened(answer->setSimplifiedReturnPathFrom(original));
 
 	ASSERT(answer->getSource() == myOverlayKey);
 	answer->setNonce(original.getNonce());
