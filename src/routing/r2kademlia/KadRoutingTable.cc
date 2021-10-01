@@ -31,7 +31,9 @@ constexpr unsigned int exploreMinRadius = 10;
 
 void KadRoutingTable::init(const OverlayKey& myKey, KadPolicy* policy,
 			   size_type accelerationFactor, size_type bucketSize,
-			   bool proximityNeighborSelection, uint8_t discoveryRadius)
+			   bool proximityNeighborSelection,
+			   bool enableSinglePathDiversity,
+			   uint8_t discoveryRadius)
 {
 	ASSERT(this->myKey.isUnspecified());
 	ASSERT(not myKey.isUnspecified());
@@ -40,6 +42,8 @@ void KadRoutingTable::init(const OverlayKey& myKey, KadPolicy* policy,
 	this->bucketSize = bucketSize;
 	this->policy = policy;
 	this->proximityNeighborSelection = proximityNeighborSelection;
+	this->enableSinglePathDiversity = enableSinglePathDiversity;
+
 	this->discoveryRadius= discoveryRadius;
 	ASSERT(buckets.size() == 0);
 	//TODO optimization: implement adaptively
@@ -136,7 +140,7 @@ size_type KadRoutingTable::getBucketIndex(const OverlayKey& key) const
 
 
 /// @returns true in case path was added
-bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t stateseqno, age_t contact_age, KadContact::PathProperty pathprop)
+bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t stateseqno, age_t pathinfo_age, KadContact::PathProperty pathprop)
 {
 	if (key == myKey) return false;
 
@@ -203,38 +207,41 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 		}
 
 		// update path if:
-		// always when sequence number is actually higher
-		// contact is invalid: only if we have newer information (higher sequence number)
-		//                     or the same seq# (the path may have changed though and reenabling the contact is important)
-		// or: we learn a shorter path (seq# no must be same or newer) -> update anyways
+		// 1) (always) when sequence number is actually higher
+		// 2) contact is invalid: only if we have newer information (higher sequence number)
+		//                        or the same seq# (the path may have changed though and reenabling the contact is important)
+		//                        however, path information must be more recent if same seq#
+		// 3) we learn a shorter path (seq# must be same or newer) -> update anyways
+
 		bool newer_seqno(contact->getStateSeqNo() < stateseqno); // contact has newer state for its physical neighbors
 		bool same_seqno(contact->getStateSeqNo() == stateseqno); // same contact state
 		bool shorter_path(path.size() < contact->getPathLength()); // new path is shorter than old path
 		bool equivalent_path(path.size() == contact->getPathLength()); // path of same length (or distance metric)
-		if (bool seqno_is_ok(same_seqno or newer_seqno);
-		    (contact->isInvalid() and seqno_is_ok)
-		    or
-		    (seqno_is_ok and (shorter_path or equivalent_path))
-		    or
-		    newer_seqno )
+		bool path_is_eligible(enableSinglePathDiversity ? shorter_path or equivalent_path : shorter_path);
+
+		if (
+			newer_seqno
+			or
+			(same_seqno and (contact->isInvalid() or path_is_eligible))
+		   )
 		{
 			// special case for non updated sequence number
 			if (same_seqno) {
 				// check for age information if seq no is equal
-				if (contact->getAge() < contact_age) {
-					EV_TRACE << "ignoring older contact info: mine " << contact->getAge() << " other " << contact_age << endl;
+				if (contact->getAge() < pathinfo_age) {
+					EV_TRACE << "ignoring older contact info: mine " << contact->getAge() << " other " << pathinfo_age << endl;
 					return false;
 				}
 
 				// in case the path had a failure, check whether the supposed new path actually avoids all broken links
 				// note that this check will fail in case the path was repaired,
-				// but then contact_age must be newer
+				// but then pathinfo_age must be newer
 				if (contact->isInvalid())
 				{
 					for (const auto& failedlink : contact->getRDS().failedLinkList) {
-						if (static_cast<unsigned long>((simTime() - failedlink.second).inUnit(SIMTIME_MS)) < contact_age
+						if (static_cast<unsigned long>((simTime() - failedlink.second).inUnit(SIMTIME_MS)) < pathinfo_age
 						    and containsUndirectedLink(myKey, contact->getKey(), path, failedlink.first)) {
-							// only if contact_age is not newer and
+							// only if pathinfo_age is not newer and
 							// provided new path does not repair broken link
 							return false;
 						}
@@ -341,7 +348,7 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 			// update sequence numer
 			contact->setStateSeqNo(stateseqno);
 			// update lastseen to that of the originator
-			contact->updateLastSeenTo(simTime()-SimTime(contact_age,SIMTIME_MS));
+			contact->updateLastSeenTo(simTime()-SimTime(pathinfo_age,SIMTIME_MS));
 
 			contact->setPathProperty(pathprop);
 			updateCount++;
@@ -367,13 +374,13 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 	}
 	else // contact is new
 	{
-		return handleNewContact(key, std::move(path), stateseqno, contact_age, pathprop);
+		return handleNewContact(key, std::move(path), stateseqno, pathinfo_age, pathprop);
 	}
 }
 
 
 /// @returns true in case path was added
-bool KadRoutingTable::addPath(const OverlayKey& key, const kad_path& path, stateseqno_t stateseqno, age_t contact_age, const kad_path& viaPath)
+bool KadRoutingTable::addPath(const OverlayKey& key, const kad_path& path, stateseqno_t stateseqno, age_t pathinfo_age, const kad_path& viaPath)
 {
 	if (key == myKey)
 		return false;
@@ -384,7 +391,7 @@ bool KadRoutingTable::addPath(const OverlayKey& key, const kad_path& path, state
 		                               KadContact::PathProperty::indirect;
 
 	// concatenated paths are direct if learned from neighborhood within discovery radius
-	return addPath(key, concatViaPath(viaPath, path), stateseqno, contact_age, pathPropHint);
+	return addPath(key, concatViaPath(viaPath, path), stateseqno, pathinfo_age, pathPropHint);
 }
 
 
@@ -440,7 +447,7 @@ bool KadRoutingTable::shortenPath(kad_path& path) const
 
 
 // @returns true if contact was inserted into routing table, false if not
-bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, stateseqno_t stateseqno, age_t contact_age, KadContact::PathProperty pathprop)
+bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, stateseqno_t stateseqno, age_t pathinfo_age, KadContact::PathProperty pathprop)
 {
 	ASSERT(key != myKey); // never insert myself
 	// get responsible bucket for contact
@@ -452,7 +459,7 @@ bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, sta
 	if (isSplittable(bucket)) {
 		splitLastBucket();
 		// we recurse to get the new bucket after the split
-		return handleNewContact(key, std::move(path), stateseqno, contact_age, pathprop);
+		return handleNewContact(key, std::move(path), stateseqno, pathinfo_age, pathprop);
 	}
 
 	bool isPhysicalNeighbor(path.empty() == true);
@@ -460,7 +467,7 @@ bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, sta
 	contact->setPathProperty(pathprop); // use hint from caller
 	contact->setStateSeqNo(stateseqno);
 	// TODO should be corrected by RTT
-	contact->updateLastSeenTo(simTime()-SimTime(contact_age,SIMTIME_MS));
+	contact->updateLastSeenTo(simTime()-SimTime(pathinfo_age,SIMTIME_MS));
 
 	// physical neighbors get always inserted as contact
 	if (isPhysicalNeighbor)
@@ -745,12 +752,12 @@ size_type KadRoutingTable::getNumIndirectPaths() const
 
 void KadRoutingTable::updatePaths(const KadContact& improvedContact)
 {
-	// iterate over all buckets and contacts (not PNcontacts, because this )
+	// iterate over all buckets and contacts (not PNcontacts, because this does not make any sense)
 	for (KadBucket& b : buckets) {
 		for (auto& contact : b.contacts) {
-			// check for existence of contact and replace path
+			// check for existence of improvedContact in path and replace path
 			// (either shorter or more current)
-			if (auto& path= contact->getPath(); path.size()>0) {
+			if (auto& path= contact->getPath(); path.size() > 0 and contact->isValid()) {
 				bool found(false);
 				for (auto revpathit= path.rbegin(); revpathit!= path.rend() and !found; revpathit++) {
 					if (*revpathit == improvedContact.getKey()) {
@@ -767,6 +774,7 @@ void KadRoutingTable::updatePaths(const KadContact& improvedContact)
 							newpath.push_back(*fwdpathit);
 						}
 						// set new path (must be more current than old one)
+						// note: this will set the contact to be valid
 						contact->updatePath( myKey, newpath );
 						// call onImprovement(contact) also for updating PID
 						policy->onImprovement(*contact);

@@ -53,6 +53,7 @@ void R2Kademlia::onInitialize() {
 		par("accelerationFactor").intValue(),
 		par("bucketSize").intValue(),
 		par("proximityNeighborSelection").boolValue(),
+		par("enableSinglePathDiversity").boolValue(),
 		discoveryRadius);
 
 	ASSERT(par("findNodeNumber").intValue() > 0);

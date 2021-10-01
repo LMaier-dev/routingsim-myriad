@@ -376,6 +376,7 @@ private:
 	simtime_t updateWaitTime;
 	simtime_t updateWaitTimeFast;
 	bool detailedRoutingTableStats;
+	// send reachability test packets only to nodes with failed links
 	bool failureFocussedProbing;
 	//@}
 

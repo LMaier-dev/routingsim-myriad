@@ -38,6 +38,8 @@ simple R2Kademlia extends routingsim.foundation.Protocol
 		bool pathSnooping = default(true);
 		bool sendDataPackets = default(true);
 		bool usePathIDs = default(true);
+		// enable special extension that also selects paths of equal length to be deterministically "better"
+		bool enableSinglePathDiversity = default(false);
 		double probeInterval = default(2s) @unit(s);
 		/// 0=none, 1=random, 2=exiting, 3=bucket_expand, 4=random_suffix, 5=suffix_expand, 6=random_bucket
 		int probeStrategy @enum(ProbeStrategy) = default(3);
