@@ -225,6 +225,7 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 			(same_seqno and (contact->isInvalid() or path_is_eligible))
 		   )
 		{
+			bool recheckPhysicalNeighbors(false);
 			// special case for non updated sequence number
 			if (same_seqno) {
 				// check for age information if seq no is equal
@@ -248,10 +249,8 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 					} // end for
 				}
 			}
-
-			bool recheckPhysicalNeighbors(false);
-			// contact has new state?
-			if (newer_seqno) {
+			else // must be newer_seqno due to surrounding if 
+			{ // contact has new state?
 				// sometimes updates may be received that carry a newer sequence number
 				// from physical neighbors; this indicates that we do not have the latest state about its neighbors
 				// if PN link is still up, we ignore this for now and initiate a resynch
@@ -272,7 +271,7 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 					// otherwise addNode() in sendGetPhysicalNeighbors will not update correctly
 					recheckPhysicalNeighbors= true;
 				}
-			} // endif newer_seqno
+			} // end else newer_seqno
 
 			// for valid paths:
 			// only update paths of equal length if HashSum of new path is closer to own ID
