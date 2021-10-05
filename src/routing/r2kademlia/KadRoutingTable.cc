@@ -288,6 +288,7 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 						}
 						else { // just higher seq no, not necessary to send updates etc.
 							pathimproved= false;
+							identical_path= true;
 						}
 					}
 					// in case of path improvement or prior contact invalidity or newer seq no

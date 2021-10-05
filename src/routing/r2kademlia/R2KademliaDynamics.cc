@@ -637,6 +637,7 @@ void R2Kademlia::sendRediscovery(OverlayKey failedcontactkey, uint8_t maxFanOut)
 			// do not remove physical contacts
 			if (failedcontact->isInvalid() and failedcontact->isPhysicalNeighbor() == false) {
 				EV_TRACE << "rediscovery finally failed, removing contact " << failedcontact->getKey().shortStr() << endl;
+				failedcontact->setState(KadContact::State::dead);
 				routingTable.removeContact(failedcontact);
 			}
 		}

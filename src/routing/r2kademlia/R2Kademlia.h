@@ -195,7 +195,7 @@ public:
 	void recordRoutingTable();
 
 	//@}
-	stateseqno_t getGLSSeqNo() const { return glsseqno; }
+	stateseqno_t getLSSeqNo() const { return lsseqno; }
 
 	static constexpr unsigned long ContactAgeThreshold = 2000UL;
 
@@ -321,14 +321,14 @@ private:
 	bool handleFindNodeResponse(KadPacket_p answer, RPCState& rpcState);
 	bool handleRPCTimeOut(KadPacket_p answer, RPCState& rpcState);
 	//@}
-	void incGLSSeqNo() { glsseqno++; }
+	void incLSSeqNo() { lsseqno++; }
 private:
 	~R2Kademlia() { updateQueue.clear(); pathSetupQueue.clear(); stopAllTimers(); }
 	/// the overlay key of this node
 	OverlayKey myOverlayKey;
 
-	/// Node Global Link State Sequence Number
-	stateseqno_t glsseqno= 0;
+	/// Node-wide Link State Sequence Number (unique inside the node)
+	stateseqno_t lsseqno= 0;
 	/// Table of direct physical neighbors
 	NeighborTable neighborTable;
 	/// Kademlia-like Routing Table containing Paths to contacts
@@ -495,7 +495,7 @@ std::unique_ptr<T> R2Kademlia::makePacket(const KadContact* contact, const char 
 	packet->setSource(myOverlayKey);
 	packet->setHopLimit(hopLimit);
 	packet->appendRoute(contact);
-	packet->setStateSeqNo(getGLSSeqNo());
+	packet->setStateSeqNo(getLSSeqNo());
 	return packet;
 }
 
@@ -508,7 +508,7 @@ std::unique_ptr<T> R2Kademlia::makeAnswer(const KadPacket& original) {
 
 	ASSERT(answer->getSource() == myOverlayKey);
 	answer->setNonce(original.getNonce());
-	answer->setStateSeqNo(getGLSSeqNo());
+	answer->setStateSeqNo(getLSSeqNo());
 	// now copy the notvia information to let the source update its obsolete routes, too
 	if (original.getNotVia()) {
 		answer->setNotVia(true);

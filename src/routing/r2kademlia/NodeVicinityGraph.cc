@@ -5,7 +5,7 @@ namespace routingsim {
 // adds a new childnode to the parent or at least the link if the childnode is already known
 // @returns whether something has been changed (link or node added)
 bool
-nodeVicinityGraph::addNode(const OverlayKey& parentNodeKey, const OverlayKey& childNodeKey, unsigned short distance) {
+nodeVicinityGraph::addNode(const OverlayKey& parentNodeKey, const OverlayKey& childNodeKey, stateseqno_t stateseqno, unsigned short distance) {
 	ASSERT(distance > 0U);
 	// EV_TRACE << "vicinity.addNode(): " << childNodeKey.shortStr()
 	// 	 << " parent: " << parentNodeKey.shortStr() << " distance:" << distance << endl;
@@ -24,6 +24,7 @@ nodeVicinityGraph::addNode(const OverlayKey& parentNodeKey, const OverlayKey& ch
 			// must create new node for child
 			auto result= graph.insert(std::make_pair(childNodeKey, nodeVicinityNode()));
 			graph[childNodeKey].nodeKey= &(result.first)->first;
+			graph[childNodeKey].stateseqno= stateseqno;
 			graph[childNodeKey].distance= distance;
 			// EV_TRACE << "vicinity.addNode(): added new node " <<  childNodeKey.shortStr() << endl;
 			childnodeptr= &graph[childNodeKey];
@@ -38,7 +39,11 @@ nodeVicinityGraph::addNode(const OverlayKey& parentNodeKey, const OverlayKey& ch
 				child_it->second.distance= distance;
 				modified= true;
 			}
-
+			// update sequence number if necessary
+			if (child_it->second.stateseqno < stateseqno) {
+				child_it->second.stateseqno= stateseqno;
+				modified= true;
+			}
 		}
 
 		auto child_it= parentnode_it->second.children.cbegin();

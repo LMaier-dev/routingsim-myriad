@@ -111,7 +111,7 @@ void R2Kademlia::onInitialize() {
 
 	// expose the following variables in GUI for inspection
 	WATCH(myOverlayKey);
-	WATCH(glsseqno);
+	WATCH(lsseqno);
 	WATCH(neighborTable);
 	WATCH_OBJ(routingTable);
 	WATCH_OBJ(fwdTablePathID);
@@ -136,7 +136,7 @@ void R2Kademlia::onDisconnect( nodeid_t nid ) {
 	ASSERT(neighborTable.getNodeId(key) == nid );
 
 	// change in physical neighbor hood increases the Sequence Number
-	incGLSSeqNo();
+	incLSSeqNo();
 	neighborTable.removeNeighbor(nid);
 	ASSERT(neighborTable.getNodeId(key) == undefined_node);
 	// set contact invalid (was routingTable.removeContact(key))
@@ -407,7 +407,7 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 
 	if (neighborTable.addNeighbor(packet->getSourceId(), packet->getSource())) {
 		// physical neighborhood changed -> increase local state variable
-		incGLSSeqNo();
+		incLSSeqNo();
 
 		//EV_TRACE << "neighbor table: "<< neighborTable << endl;
 
@@ -899,6 +899,7 @@ void R2Kademlia::sendGetPhysicalNeighbors(KadContact_p contact)
 	// update vicinity to avoid future redundant requests
 	bool nodeOrLinkAdded= vicinity.addNode(contact->getPath().empty() ? myOverlayKey : contact->getPath().back(), // parent
 					       contact->getKey(), // new child
+					       contact->getStateSeqNo(),
 					       contact->getPath().size()+1);
 	if (usePathIDs and nodeOrLinkAdded) {
 		fwdTablePathID.addEntry(contact, false, true);
@@ -929,7 +930,7 @@ void R2Kademlia::sendGetOverlayNeighbors(KadContact_p contact)
 void R2Kademlia::sendDiscoveryReq(KadContact_p contact)
 {
 	ASSERT(contact != nullptr);
-	EV_TRACE << "sending PNDiscReq to " << *contact << " mystate: " << getGLSSeqNo() << endl;
+	EV_TRACE << "sending PNDiscReq to " << *contact << " mystate: " << getLSSeqNo() << endl;
 	auto req = makePacket<KadPNDiscReq>(contact, "KadPNDiscReq");
 	req->setSourceId(node().getNodeId());
 	req->setNeighborhood(1); // get only physical neighbors (1 hop away)
@@ -957,7 +958,7 @@ void R2Kademlia::sendDiscoveryReq(KadContact_p contact)
 		std::bind(&R2Kademlia::handleRPCTimeOut, this, ph::_1, ph::_2)
 	);
 	// add physical neighbor to my vicinity
-	vicinity.addNode(myOverlayKey, contact->getKey(), 1);
+	vicinity.addNode(myOverlayKey, contact->getKey(), contact->getStateSeqNo(), 1);
 }
 
 
@@ -970,11 +971,11 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadPNDiscReq> packet) {
 	// since this is physical neighbor add it to our neighbortable
 	if (neighborTable.addNeighbor(packet->getSourceId(), packet->getSource())) {
 		// new neighbor -> increase sequence number
-		incGLSSeqNo();
+		incLSSeqNo();
 	}
 
 	// add physical neighbor to my vicinity
-	vicinity.addNode(myOverlayKey, packet->getSource(), 1);
+	vicinity.addNode(myOverlayKey, packet->getSource(), packet->getStateSeqNo(), 1);
 
 	// check for physical neighbors sent with
 	kad_path path{packet->getSource()};
@@ -1518,7 +1519,7 @@ void R2Kademlia::onContactRemoval(KadContact_p contact)
 	// TODO: the following is probably not useful
 	// (node may still be present in vicinity, but was evicted from bucket)
 	// remove from vicinity node set (in case of later rendezvous again)
-	if (contact->getPathLength() < discoveryRadius)
+	if (contact->getPathLength() < discoveryRadius and contact->getState() == KadContact::State::dead)
 		vicinity.removeNode(contact->getKey());
 }
 
@@ -1723,7 +1724,7 @@ NodePkt_p R2Kademlia::makeHelloPacket()
 	hello->setHopLimit(hopLimit);
 	hello->setSourceId(node().getNodeId());
 	hello->setNonce(0);
-	hello->setStateSeqNo(getGLSSeqNo());
+	hello->setStateSeqNo(getLSSeqNo());
 	NodePkt_p nodePkt = std::make_unique<NodePkt>(hello->getName());
 	nodePkt->setType(KAD_CTRL_PACKET_TYPE);
 	nodePkt->encapsulate(hello.release());
@@ -1818,11 +1819,20 @@ void R2Kademlia::readRTableRsp(const KadRTableRsp& packet) {
 							       routingTable.concatViaPath(viaPath, packet.getPath(i)),
 							       packet.getSeqNo(i));
 
-				bool querynode= vicinity.getNode(neighborhoodContact.getKey()) == nullptr;
-					
+				bool querynode(false);
+				if (auto vn= vicinity.getNode(neighborhoodContact.getKey()); vn == nullptr) {
+					querynode= true;
+				}
+				else {
+					// newer sequence number for existing neighbor? reget PNs
+					if (vn->stateseqno < neighborhoodContact.getStateSeqNo())
+						querynode= true;
+				}
+
 				// try to add node
 				bool nodeOrLinkAdded= vicinity.addNode(neighborhoodContact.getPath().empty() ? myOverlayKey : neighborhoodContact.getPath().back(), // parent node
 								  neighborhoodContact.getKey(), // new child node
+								  neighborhoodContact.getStateSeqNo(),
 								  neighborhoodContact.getPath().size()+1); // distance of child node to us
 
 				// still room for one more hop in neighborhood exploration?
