@@ -197,7 +197,8 @@ public:
 	//@}
 	stateseqno_t getLSSeqNo() const { return lsseqno; }
 
-	static constexpr unsigned long ContactAgeThreshold = 2000UL;
+	// do not probe if information is newer that PathInfoAgeThreshold
+	static constexpr unsigned long PathInfoAgeThreshold = 2000UL;
 
 private:
 	/** @name message generation */

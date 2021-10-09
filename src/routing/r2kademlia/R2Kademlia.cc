@@ -1009,11 +1009,11 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadPNDiscReq> packet) {
 	response->setContactArraySize(neighbors.size());
 	response->setPathArraySize(neighbors.size());
 	response->setSeqNoArraySize(neighbors.size());
-	response->setContactAgeArraySize(neighbors.size());
+	response->setPathInfoAgeArraySize(neighbors.size());
 	for (uint i = 0; i < neighbors.size(); i++) {
 		response->setContact(i, neighbors[i]);
 		response->setSeqNo(i, routingTable.getContact(neighbors[i])->getStateSeqNo());
-		response->setContactAge(i,routingTable.getContact(neighbors[i])->getAge());
+		response->setPathInfoAge(i,routingTable.getContact(neighbors[i])->getAge());
 	}
 	sendPacket(std::move(response));
 }
@@ -1040,13 +1040,13 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadQueryRouteReq> packet) {
 		response->setContactArraySize(neighbors.size());
 		response->setPathArraySize(neighbors.size());
 		response->setSeqNoArraySize(neighbors.size());
-		response->setContactAgeArraySize(neighbors.size());
+		response->setPathInfoAgeArraySize(neighbors.size());
 		for (uint i = 0; i < neighbors.size(); i++) {
 			if (routingTable.getContact(neighbors[i]) != nullptr)
 			{
 				response->setContact(i, neighbors[i]);
 				response->setSeqNo(i, routingTable.getContact(neighbors[i])->getStateSeqNo());
-				response->setContactAge(i,routingTable.getContact(neighbors[i])->getAge());
+				response->setPathInfoAge(i,routingTable.getContact(neighbors[i])->getAge());
 			}
 			else
 				EV_ERROR << "Physical neighbor " << neighbors[i].shortStr() << " not present in routing table!" << endl;
@@ -1059,13 +1059,13 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadQueryRouteReq> packet) {
 		response->setContactArraySize(allcontacts.size());
 		response->setPathArraySize(allcontacts.size());
 		response->setSeqNoArraySize(allcontacts.size());
-		response->setContactAgeArraySize(allcontacts.size());
+		response->setPathInfoAgeArraySize(allcontacts.size());
 		for (uint i = 0; i < allcontacts.size(); i++)
 		{
 			response->setContact(i, allcontacts[i]->getKey());
 			response->setPath(i, allcontacts[i]->getPath());
 			response->setSeqNo(i, allcontacts[i]->getStateSeqNo());
-			response->setContactAge(i, allcontacts[i]->getAge());
+			response->setPathInfoAge(i, allcontacts[i]->getAge());
 		}
 	}
 
@@ -1076,14 +1076,14 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadQueryRouteReq> packet) {
 		response->setContactArraySize(ovlyneighbors.size());
 		response->setPathArraySize(ovlyneighbors.size());
 		response->setSeqNoArraySize(ovlyneighbors.size());
-		response->setContactAgeArraySize(ovlyneighbors.size());
+		response->setPathInfoAgeArraySize(ovlyneighbors.size());
 
 		for (uint i = 0; i < ovlyneighbors.size(); i++)
 		{
 			response->setContact(i, ovlyneighbors[i]->getKey());
 			response->setPath(i, ovlyneighbors[i]->getPath());
 			response->setSeqNo(i, ovlyneighbors[i]->getStateSeqNo());
-			response->setContactAge(i, ovlyneighbors[i]->getAge());
+			response->setPathInfoAge(i, ovlyneighbors[i]->getAge());
 		}
 	}
 
@@ -1775,14 +1775,14 @@ void R2Kademlia::fillRTableRsp(KadRTableRsp& packet, const KadContactList& conta
 		if (includePaths) {
 			packet.setPathArraySize(contacts.size());
 			packet.setSeqNoArraySize(contacts.size());
-			packet.setContactAgeArraySize(contacts.size());
+			packet.setPathInfoAgeArraySize(contacts.size());
 		}
 		for (size_t i = 0; i < contacts.size(); i++) {
 			packet.setContact(i, contacts[i]->getKey());
 			if (includePaths) {
 				packet.setPath(i, contacts[i]->getPath());
 				packet.setSeqNo(i, contacts[i]->getStateSeqNo());
-				packet.setContactAge(i, contacts[i]->getAge());
+				packet.setPathInfoAge(i, contacts[i]->getAge());
 			}
 		}
 	}
@@ -1809,7 +1809,7 @@ void R2Kademlia::readRTableRsp(const KadRTableRsp& packet) {
 			continue;
 		}
 
-		if ( not(routingTable.addPath(packet.getContact(i), packet.getPath(i), packet.getSeqNo(i), packet.getContactAge(i), viaPath)) ) {
+		if ( not(routingTable.addPath(packet.getContact(i), packet.getPath(i), packet.getSeqNo(i), packet.getPathInfoAge(i), viaPath)) ) {
 			// even if contact was not interesting for RT, add it as PID entry if within discovery radius
 			// the following condition is correct because the target contact 
 			// is not contained in (viaPath + packet.getPath(i))
@@ -1948,7 +1948,7 @@ void R2Kademlia::doProbeNeighbors(short timerId) {
 		// check for reachability of neighbors
 		// do not probe in case contact not found or too young
 		if (auto contactp= routingTable.getContact(probeNeighborQueue.front());
-		    contactp != nullptr and contactp->getAge() > R2Kademlia::ContactAgeThreshold) {
+		    contactp != nullptr and contactp->getAge() > R2Kademlia::PathInfoAgeThreshold) {
 			EV_TRACE << "probing for neighbor: " << probeNeighborQueue.front() << endl;
 			sendFindNode(probeNeighborQueue.front(), true);
 			probed= true;
@@ -1975,7 +1975,7 @@ void R2Kademlia::doProbeContacts(short timerId) {
 	{
 		// do not probe in case contact not found or too young
 		if (auto contactp= routingTable.getContact(probeContactQueue.front());
-		    contactp != nullptr and contactp->getAge() > R2Kademlia::ContactAgeThreshold) {
+		    contactp != nullptr and contactp->getAge() > R2Kademlia::PathInfoAgeThreshold) {
 			EV_TRACE << "probing for contact: " << probeContactQueue.front() << endl;
 			sendFindNode(probeContactQueue.front(), true);
 			probed= true;

@@ -74,7 +74,7 @@ packet KadRTableRsp extends KadAnswer {
 	OverlayKey contact[];
 	key_vector_t path[];
 	stateseqno_t seqNo[];
-	age_t contactAge[];
+	age_t pathInfoAge[];
 	// bool unknownFlag[];
 	// bool intermediateFlag[];
 }
@@ -88,7 +88,7 @@ packet KadUpdateRouteReq extends KadPacket {
        OverlayKey contact[];
        key_vector_t path[];
        stateseqno_t seqNo[];
-       age_t contactAge[];
+       age_t pathInfoAge[];
        uint8_t action[] enum(KadRouteUpdateAction);
 }
 

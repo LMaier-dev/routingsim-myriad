@@ -686,14 +686,14 @@ KadContactList KadRoutingTable::getAllValidContacts(bool noPN) const
 // However, contacts that have recent information <1s will not be selected
 void KadRoutingTable::getOldestValidContacts(std::list<OverlayKey>& result) const
 {
-	// do not consider contacts younger than R2Kademlia::ContactAgeThreshold
+	// do not consider contacts younger than R2Kademlia::PathInfoAgeThreshold
 
 	for (auto& bucket : buckets)
 	{
 		KadContact_p oldest(nullptr);
 		KadContact_p secondoldest(nullptr);
 		for (auto it = bucket.contacts.begin(); it != bucket.contacts.end(); it++) {
-			if ( *it != nullptr and it->get()!= nullptr and it->get()->getAge() > R2Kademlia::ContactAgeThreshold ) {
+			if ( *it != nullptr and it->get()!= nullptr and it->get()->getAge() > R2Kademlia::PathInfoAgeThreshold ) {
 				if (oldest != nullptr) {
 					// older entry? then replace oldest
 					if (oldest->getAge() < it->get()->getAge()) {
