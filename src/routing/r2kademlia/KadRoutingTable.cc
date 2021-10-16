@@ -159,8 +159,8 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 	}
 
 	bool path_was_simplified= false;
-	// find other cycles/duplicates
-	path_was_simplified= simplifyPath(path);
+	// find other cycles/duplicates (note: path may even be empty afterwards)
+	path_was_simplified= simplifyPath(path, &key);
 
 	// try to shorten the path using local routing table
 	if (path.size() > 0 and shortenPath(path)) {
@@ -177,9 +177,6 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 
 	if (path_was_simplified) // override the given argument if path was simplified here
 		pathprop= KadContact::PathProperty::indirect;
-
-	// sanity check: either path was empty before or it was not and is not empty after simplification
-	ASSERT(pathWasNotEmpty==false or (pathWasNotEmpty and path.empty()==false));
 
 	KadContact *contact = getContactInternal(key);
 	if (contact) {
@@ -396,20 +393,39 @@ bool KadRoutingTable::addPath(const OverlayKey& key, const kad_path& path, state
 
 
 /// @returns true if path was simplified, false if not
-bool KadRoutingTable::simplifyPath(kad_path& path) const
+bool KadRoutingTable::simplifyPath(kad_path& path, const OverlayKey* destination) const
 {
-	if (path.size() < 2)
+	if (path.size() < 2) // nothing to optimize here
 		return false;
-	
+
+	if (destination != nullptr)
+		path.push_back(*destination);
+
+	bool modified(false);
 	for (auto right = path.end()-1; right != path.begin(); right--) {
+		// find element starting from the left
 		auto left = std::find(path.begin(), right, *right);
-		if (left != right) {
-			ASSERT(*left == *right);
-			path.erase(left, right);
-			return true;
+		if (left != right) { // element found, erase sequence
+			// erase returns new location of the element that followed
+			// the last element erased by the function call
+			right= path.erase(left, right);
+			modified= true;
+			// special case if only one element left
+			if (right == path.begin()) {
+				// remove destination again
+				if (destination != nullptr) {
+					path.pop_back();
+				}
+				return modified;
+			}
 		}
 	}
-	return false;
+
+	// remove destination again
+	if (destination != nullptr) {
+		path.pop_back();
+	}
+	return modified;
 }
 
 

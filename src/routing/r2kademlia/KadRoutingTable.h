@@ -216,7 +216,7 @@ public:
 	/// concatenates the two paths
 	kad_path concatViaPath(const kad_path& viaPath, const kad_path& path) const;
 	/// removes duplicates and loops from a path
-	bool simplifyPath(kad_path& path) const;
+	bool simplifyPath(kad_path& path, const OverlayKey* destination) const;
 
 protected:
 	/// adds a new contact, called by addPath, returns true if contact was added
