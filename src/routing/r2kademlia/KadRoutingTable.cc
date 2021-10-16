@@ -179,200 +179,198 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 		pathprop= KadContact::PathProperty::indirect;
 
 	KadContact *contact = getContactInternal(key);
-	if (contact) {
-		// contact is known
-
-		// there may be the rare case when we learned the new contact from someone else
-		// before we heard the Hello
-		if (!contact->isPhysicalNeighbor() and path.empty()==true)
-		{
-			contact->setPhysicalNeighbor();
-			contact->setPathProperty(KadContact::PathProperty::direct);
-			contact->updateLastSeen();
-
-			// move over to PNcontacts			
-			KadBucket& bucket = getBucket(key);
-			auto it = bucket.findContact(key);
-			if (it != bucket.contacts.end()) {
-				bucket.PNContacts.push_back(std::move(*it));
-				bucket.contacts.erase(it);
-			}
-			else
-				EV_ERROR << "Contact existed already, but not found" << endl;
-			
-			//EV_TRACE << "Contact existed already, but seems to be a PN now: " << *contact << endl;
-		}
-
-		// update path if:
-		// 1) (always) when sequence number is actually higher
-		// 2) contact is invalid: only if we have newer information (higher sequence number)
-		//                        or the same seq# (the path may have changed though and reenabling the contact is important)
-		//                        however, path information must be more recent if same seq#
-		// 3) we learn a shorter path (seq# must be same or newer) -> update anyways
-
-		bool newer_seqno(contact->getStateSeqNo() < stateseqno); // contact has newer state for its physical neighbors
-		bool same_seqno(contact->getStateSeqNo() == stateseqno); // same contact state
-		bool shorter_path(path.size() < contact->getPathLength()); // new path is shorter than old path
-		bool equivalent_path(path.size() == contact->getPathLength()); // path of same length (or distance metric)
-		bool path_is_eligible(enableSinglePathDiversity ? shorter_path or equivalent_path : shorter_path);
-
-		if (
-			newer_seqno
-			or
-			(same_seqno and (contact->isInvalid() or path_is_eligible))
-		   )
-		{
-			bool recheckPhysicalNeighbors(false);
-			// special case for non updated sequence number
-			if (same_seqno) {
-				// check for age information if seq no is equal
-				if (contact->getAge() < pathinfo_age) {
-					EV_TRACE << "ignoring older contact info: mine " << contact->getAge() << " other " << pathinfo_age << endl;
-					return false;
-				}
-
-				// in case the path had a failure, check whether the supposed new path actually avoids all broken links
-				// note that this check will fail in case the path was repaired,
-				// but then pathinfo_age must be newer
-				if (contact->isInvalid())
-				{
-					for (const auto& failedlink : contact->getRDS().failedLinkList) {
-						if (static_cast<unsigned long>((simTime() - failedlink.second).inUnit(SIMTIME_MS)) < pathinfo_age
-						    and containsUndirectedLink(myKey, contact->getKey(), path, failedlink.first)) {
-							// only if pathinfo_age is not newer and
-							// provided new path does not repair broken link
-							return false;
-						}
-					} // end for
-				}
-			}
-			else // must be newer_seqno due to surrounding if 
-			{ // contact has new state?
-				// sometimes updates may be received that carry a newer sequence number
-				// from physical neighbors; this indicates that we do not have the latest state about its neighbors
-				// if PN link is still up, we ignore this for now and initiate a resynch
-				if ( contact->isPhysicalNeighbor() and
-				     neighbortable.isNeighbor(contact->getKey()) and
-				     contact->getPathLength() == 0 and
-				     path.size() > 0) {
-					// try to resynchronize with physical neighbor
-					EV_TRACE << "resync required for " << contact->getKey().shortStr() << " new: "
-						 << stateseqno << " old: " << contact->getStateSeqNo() << endl;
-					policy->reSyncPN(*contact);
-					return false;
-				}
-
-				// if contact is within discovery radius, ask again for its neighbors since something has changed
-				if ( contact->getPathLength()+1 < discoveryRadius or path.size()+1 < discoveryRadius ) {
-					// we "defer" that until new path has been set (see below)
-					// otherwise addNode() in sendGetPhysicalNeighbors will not update correctly
-					recheckPhysicalNeighbors= true;
-				}
-			} // end else newer_seqno
-
-			// for valid paths:
-			// only update paths of equal length if HashSum of new path is closer to own ID
-			// this should allow for better path diversity without route flapping
-			bool pathimproved(newer_seqno or contact->isInvalid() or shorter_path);
-			bool identical_path(false);
-			OverlayKey pathHashSum;
-			if (contact->isValid()) {
-				if (path.size() == 0) {
-					if (equivalent_path) {
-						if (not newer_seqno) {
-							// this is an identical path, ignore
-							return false;
-						}
-						else { // just higher seq no, not necessary to send updates etc.
-							pathimproved= false;
-							identical_path= true;
-						}
-					}
-					// in case of path improvement or prior contact invalidity or newer seq no
-					// we need to update this contact
-				}
-				else // path.size() > 0
-				{ // it is not a direct neighbor
-					if (equivalent_path) {
-						// this is the condition where we check for updating with a diverse path
-
-						// the are_equal_r comparison operator starts at the end
-						// if paths diverge, they will do this more likely at their end
-						identical_path= are_equal_r(path, contact->getPath());
-						// path is actually improved in case we
-						// learn a shorter path (not here) or path was invalid before
-
-						// if it is exactly the same path => not interesting,
-						// except if sequence number was increased
-						// (may be ok in case of recovered link, but path is valid now)
-						if (identical_path and not newer_seqno)
-							return false;
-						// we have a different path of same length
-						pathimproved= false;
-
-						// check for eligibility of new path with same length
-						// now check for XOR distance to own ID of Path Hash
-						pathHashSum= HashSum(path, key);
-						if ((pathHashSum ^ myKey) >= (contact->getPathHashSum() ^  myKey)) {
-							EV_TRACE << "for contact " << key.shortStr() << " discarding path of same length: " << path << endl;
-							return false;
-						}
-						else {
-							EV_TRACE << "for contact " << key.shortStr()
-								 << " replacing path of same length with: " << path << endl;
-						}
-					} // end if equivalent_path (otherwise path is shorter)
-				} // end else if path.size() > 0
-			} // endif contact is valid
-
-			EV_TRACE << "for contact " << key.shortStr() << " seq#" << contact->getStateSeqNo()
-				 << " updating old path " << contact->getPath() << " with new " << path
-				 << " seq#"  << stateseqno << " identical: " << (identical_path ? 'T' : 'F') << endl;
-
-			if (not identical_path) { // avoid to overwrite identical paths
-				// valid and identical paths were checked above already
-
-				// must calculate PathHashSum unless this has been done already
-				if (pathHashSum.isUnspecified())
-				       pathHashSum= HashSum(path, key);
-				contact->setPath(std::move(path), std::move(pathHashSum)); // will set contact automatically to valid
-			}
-			else { // new path is identical with old path
-				// need to set this to valid state again
-				contact->setValid();
-			}
-
-			// update sequence numer
-			contact->setStateSeqNo(stateseqno);
-			// update lastseen to that of the originator
-			contact->updateLastSeenTo(simTime()-SimTime(pathinfo_age,SIMTIME_MS));
-
-			contact->setPathProperty(pathprop);
-			updateCount++;
-
-			// recheck neighbors of that contact because something has changed
-			if (recheckPhysicalNeighbors)
-				policy->recheckPhysicalNeighbors(*contact);
-
-			// do something on improved path according to policy
-			// (only if path has been improved actually)
-			if (pathimproved) {
-				policy->onImprovement(*contact);
-
-				// try to improve other paths with newly improved contact path
-				updatePaths(*contact);
-			}
-
-			return true;
-		}
-		// else contact exists, but new path is not interesting
-
-		return false;
-	}
-	else // contact is new
-	{
+	if (contact == nullptr) { // contact is new
 		return handleNewContact(key, std::move(path), stateseqno, pathinfo_age, pathprop);
 	}
+
+	// contact is known
+
+	// there may be the rare case when we learned the new contact from someone else
+	// before we heard the Hello
+	if (!contact->isPhysicalNeighbor() and path.empty()==true)
+	{
+		contact->setPhysicalNeighbor();
+		contact->setPathProperty(KadContact::PathProperty::direct);
+		contact->updateLastSeen();
+
+		// move over to PNcontacts
+		KadBucket& bucket = getBucket(key);
+		auto it = bucket.findContact(key);
+		if (it != bucket.contacts.end()) {
+			bucket.PNContacts.push_back(std::move(*it));
+			bucket.contacts.erase(it);
+		}
+		else
+			EV_ERROR << "Contact existed already, but not found" << endl;
+
+		//EV_TRACE << "Contact existed already, but seems to be a PN now: " << *contact << endl;
+	}
+
+	// update path if:
+	// 1) (always) when sequence number is actually higher
+	// 2) contact is invalid: only if we have newer information (higher sequence number)
+	//                        or the same seq# (the path may have changed though and reenabling the contact is important)
+	//                        however, path information must be more recent if same seq#
+	// 3) we learn a shorter path (seq# must be same or newer) -> update anyways
+
+	bool newer_seqno(contact->getStateSeqNo() < stateseqno); // contact has newer state for its physical neighbors
+	bool same_seqno(contact->getStateSeqNo() == stateseqno); // same contact state
+	bool shorter_path(path.size() < contact->getPathLength()); // new path is shorter than old path
+	bool equivalent_path(path.size() == contact->getPathLength()); // path of same length (or distance metric)
+	bool path_is_eligible(enableSinglePathDiversity ? shorter_path or equivalent_path : shorter_path);
+
+	if ( not newer_seqno and not (same_seqno and (contact->isInvalid() or path_is_eligible)) ) {
+		//  contact exists, but new path is not interesting
+		return false;
+	}
+
+	// from here on the following condition holds:
+	// newer_seqno or (same_seqno and (contact->isInvalid() or path_is_eligible))
+
+	bool recheckPhysicalNeighbors(false);
+	// special case for non updated sequence number
+	if (same_seqno) {
+		// check for age information if seq no is equal
+		if (contact->getAge() < pathinfo_age) {
+			EV_TRACE << "ignoring older contact info: mine " << contact->getAge() << " other " << pathinfo_age << endl;
+			return false;
+		}
+
+		// in case the path had a failure, check whether the supposed new path actually avoids all broken links
+		// note that this check will fail in case the path was repaired,
+		// but then pathinfo_age must be newer
+		if (contact->isInvalid())
+		{
+			for (const auto& failedlink : contact->getRDS().failedLinkList) {
+				if (static_cast<unsigned long>((simTime() - failedlink.second).inUnit(SIMTIME_MS)) < pathinfo_age
+				    and containsUndirectedLink(myKey, contact->getKey(), path, failedlink.first)) {
+					// only if pathinfo_age is not newer and
+					// provided new path does not repair broken link
+					return false;
+				}
+			} // end for
+		}
+	}
+	else // must be newer_seqno due to surrounding if
+	{ // contact has new state?
+		// sometimes updates may be received that carry a newer sequence number
+		// from physical neighbors; this indicates that we do not have the latest state about its neighbors
+		// if PN link is still up, we ignore this for now and initiate a resynch
+		if ( contact->isPhysicalNeighbor() and
+		     neighbortable.isNeighbor(contact->getKey()) and
+		     contact->getPathLength() == 0 and
+		     path.size() > 0) {
+			// try to resynchronize with physical neighbor
+			EV_TRACE << "resync required for " << contact->getKey().shortStr() << " new: "
+				 << stateseqno << " old: " << contact->getStateSeqNo() << endl;
+			policy->reSyncPN(*contact);
+			return false;
+		}
+
+		// if contact is within discovery radius, ask again for its neighbors since something has changed
+		if ( contact->getPathLength()+1 < discoveryRadius or path.size()+1 < discoveryRadius ) {
+			// we "defer" that until new path has been set (see below)
+			// otherwise addNode() in sendGetPhysicalNeighbors will not update correctly
+			recheckPhysicalNeighbors= true;
+		}
+	} // end else newer_seqno
+
+	// for valid paths:
+	// only update paths of equal length if HashSum of new path is closer to own ID
+	// this should allow for better path diversity without route flapping
+	bool pathimproved(newer_seqno or contact->isInvalid() or shorter_path);
+	bool identical_path(false);
+	OverlayKey pathHashSum;
+	if (contact->isValid()) {
+		if (path.size() == 0) {
+			if (equivalent_path) {
+				if (not newer_seqno) {
+					// this is an identical path, ignore
+					return false;
+				}
+				else { // just higher seq no, not necessary to send updates etc.
+					pathimproved= false;
+					identical_path= true;
+				}
+			}
+			// in case of path improvement or prior contact invalidity or newer seq no
+			// we need to update this contact
+		}
+		else // path.size() > 0
+		{ // it is not a direct neighbor
+			if (equivalent_path) {
+				// this is the condition where we check for updating with a diverse path
+
+				// the are_equal_r comparison operator starts at the end
+				// if paths diverge, they will do this more likely at their end
+				identical_path= are_equal_r(path, contact->getPath());
+				// path is actually improved in case we
+				// learn a shorter path (not here) or path was invalid before
+
+				// if it is exactly the same path => not interesting,
+				// except if sequence number was increased
+				// (may be ok in case of recovered link, but path is valid now)
+				if (identical_path and not newer_seqno)
+					return false;
+				// we have a different path of same length
+				pathimproved= false;
+
+				// check for eligibility of new path with same length
+				// now check for XOR distance to own ID of Path Hash
+				pathHashSum= HashSum(path, key);
+				if ((pathHashSum ^ myKey) >= (contact->getPathHashSum() ^  myKey)) {
+					EV_TRACE << "for contact " << key.shortStr() << " discarding path of same length: " << path << endl;
+					return false;
+				}
+				else {
+					EV_TRACE << "for contact " << key.shortStr()
+						 << " replacing path of same length with: " << path << endl;
+				}
+			} // end if equivalent_path (otherwise path is shorter)
+		} // end else if path.size() > 0
+	} // endif contact is valid
+
+	EV_TRACE << "for contact " << key.shortStr() << " seq#" << contact->getStateSeqNo()
+		 << " updating old path " << contact->getPath() << " with new " << path
+		 << " seq#"  << stateseqno << " identical: " << (identical_path ? 'T' : 'F') << endl;
+
+	if (not identical_path) { // avoid to overwrite identical paths
+		// valid and identical paths were checked above already
+
+		// must calculate PathHashSum unless this has been done already
+		if (pathHashSum.isUnspecified())
+			pathHashSum= HashSum(path, key);
+
+		contact->setPath(std::move(path), std::move(pathHashSum)); // will set contact automatically to valid
+	}
+	else { // new path is identical with old path
+		// need to set this to valid state again
+		contact->setValid();
+	}
+
+	// update sequence numer
+	contact->setStateSeqNo(stateseqno);
+	// update lastseen to that of the originator
+	contact->updateLastSeenTo(simTime()-SimTime(pathinfo_age,SIMTIME_MS));
+
+	contact->setPathProperty(pathprop);
+	updateCount++;
+
+	// recheck neighbors of that contact because something has changed
+	if (recheckPhysicalNeighbors)
+		policy->recheckPhysicalNeighbors(*contact);
+
+	// do something on improved path according to policy
+	// (only if path has been improved actually)
+	if (pathimproved) {
+		policy->onImprovement(*contact);
+
+		// try to improve other paths with newly improved contact path
+		updatePaths(*contact);
+	}
+
+	return true;
+
 }
 
 
