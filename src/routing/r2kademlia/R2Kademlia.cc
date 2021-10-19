@@ -122,7 +122,9 @@ void R2Kademlia::onInitialize() {
 
 
 void R2Kademlia::onConnect( nodeid_t nid ) {
-	sendToNode(nid, makeHelloPacket(), SimTime(10,SIMTIME_US));
+	auto packet(makeHelloPacket());
+	sentVolume+= packet->getByteLength();
+	sendToNode(nid, std::move(packet), SimTime(10,SIMTIME_US));
 	sentPackets++;
 }
 
@@ -404,6 +406,7 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 	EV << "received hello packet from " << packet->getSource().shortStr() << " StateSeq#" << packet->getStateSeqNo() << endl;
 
 	receivedPackets++;
+	receivedVolume+= packet->getByteLength();
 
 	if (neighborTable.addNeighbor(packet->getSourceId(), packet->getSource())) {
 		// physical neighborhood changed -> increase local state variable
@@ -458,7 +461,8 @@ void R2Kademlia::handlePacket(KadAnswer_p packet) {
 
 		}
 
-		getKadObserver().sampleAnswer(*packet);
+		if (packet->isTracked())
+			getKadObserver().sampleAnswer(*packet);
 		// try to shorten the return path (we exclude ourselves first)
 		kad_path returnpath(packet->reversePath(packet->getSrcPath(0,packet->getProgress())));
 		EV_TRACE << "answer packet: path to replier " << returnpath; 
@@ -469,7 +473,8 @@ void R2Kademlia::handlePacket(KadAnswer_p packet) {
 			EV_TRACE << " shortened " << returnpath;
 		}
 		EV_TRACE << endl;
-		getKadObserver().sampleLaterPath(getOverlayKey(),returnpath);
+		if (packet->isTracked())
+			getKadObserver().sampleLaterPath(getOverlayKey(),returnpath);
 
 	        // uint pathlen= returnpath.size();
 		// // start from farthest node to find potential PID entry
@@ -745,13 +750,13 @@ void R2Kademlia::sendPacket(KadPacket_p packet, simtime_t delay) {
 		EV_ERROR << "sendPacket: not sending packet destined to myself" << endl;
 		return;
 	}
-
+	auto packetsize(packet->getByteLength());
 	auto nodePkt = std::make_unique<NodePkt>(packet->getName());
 	nodePkt->setType(KAD_CTRL_PACKET_TYPE);
 	if (packet->getType() == KAD_FindNodeReq) {
 		const KadFindNodeReq* tmp_packet= check_and_cast<KadFindNodeReq*>(packet.get());
 		// it doesn't make sense to count packets destined to isolated nodes: they cannot be reached
-		if (tmp_packet->getExact() and tmp_packet->getRediscovery()==false and tmp_packet->getTracked()
+		if (tmp_packet->getExact() and tmp_packet->getRediscovery()==false and tmp_packet->isTracked()
 		    and
 		    getKadObserver().getPhysicalDistance(myOverlayKey, tmp_packet->getDstNodeID()) > 0) {
 				getKadObserver().registerPacket(*packet);
@@ -760,6 +765,7 @@ void R2Kademlia::sendPacket(KadPacket_p packet, simtime_t delay) {
 	}
 	// EV_TRACE << "sendPacket(): " << packet->getName() << ", " << (int) packet->getType() << endl;
 	sentPackets++;
+	sentVolume+= packetsize;
 	forwardPacket(std::move(packet), std::move(nodePkt), delay);
 }
 
@@ -967,6 +973,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadPNDiscReq> packet) {
 	EV_TRACE << "received PNDiscReq from " << packet->getSource().shortStr() << " w/ " << packet->getPhyNeighborArraySize() << " neighbors" << endl;
 
 	receivedPackets++;
+	receivedVolume+= packet->getByteLength();
 
 	// since this is physical neighbor add it to our neighbortable
 	if (neighborTable.addNeighbor(packet->getSourceId(), packet->getSource())) {
@@ -1135,7 +1142,8 @@ void R2Kademlia::sendFindNode(const OverlayKey& key, bool exact, bool track) {
 		auto packet = makePacket<KadFindNodeReq>(contact, "FindNode");
 		packet->setDstNodeID(key);
 		packet->setExact(exact);
-		packet->setTracked(track);
+		if (track)
+			packet->markTracked();
 		EV_TRACE << "sending KadFindNodeReq" << endl;
 		sendRpcCall(
 			std::move(packet),
@@ -1285,12 +1293,16 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 
 	// answer request
 	auto answer = makeAnswer<KadFindNodeRsp>(*packet);
+	if (packet->isTracked()) {
+		EV_TRACE << "packet was tracked, setTracked for answer" << endl;
+		answer->markTracked();
+	}
 	fillRTableRsp(*answer, contacts);
 	countReceived(*packet);
 	if (is_rediscovery)
 		succeededRediscovery++;
 	
-	EV_TRACE << "KadFindNodeReq query for " << query.shortStr() << " answering with list size " << contacts.size() << endl;
+	EV_TRACE << "KadFindNodeReq query for " << query.shortStr() << " answering with list size " << contacts.size() << " Tracked: " << (answer->isTracked() ? 'T' : 'F') << endl;
 	sendPacket(std::move(answer));
 }
 
@@ -1471,6 +1483,9 @@ void R2Kademlia::sampleStatistics (Statistics &stats) {
 	stats.value("forwardedPackets", forwardedPackets);
 	stats.value("sentPackets", sentPackets);
 	stats.value("receivedPackets", receivedPackets);
+	stats.value("sentVolume", sentVolume);
+	stats.value("receivedVolume", receivedVolume);
+
 	if (sendDataPackets) {
 		stats.value("forwardedDataPackets", forwardedDataPackets);
 		stats.value("sentDataPackets", sentDataPackets);
@@ -1662,6 +1677,8 @@ void R2Kademlia::recordScalars() {
 	recordScalar("droppedPackets", droppedPackets);
 	recordScalar("sentPackets", sentPackets);
 	recordScalar("receivedPackets", receivedPackets);
+	recordScalar("sentVolume", sentVolume);
+	recordScalar("receivedVolume", receivedVolume);
 
 	if (sendDataPackets) {
 		recordScalar("forwardedDataPackets", forwardedDataPackets);
@@ -1925,7 +1942,9 @@ void R2Kademlia::doSendHello(short timerId) {
 		timerDuration[timerId] = std::min(2 * timerDuration[timerId], maxDuration);
 	}
 
-	sendToNeighbors(makeHelloPacket());
+	auto hellopkt(makeHelloPacket());
+	sentVolume+= neighborTable.size() * hellopkt->getByteLength();
+	sendToNeighbors(std::move(hellopkt));
 	sentPackets+= neighborTable.size();
 }
 
@@ -2058,7 +2077,7 @@ void R2Kademlia::doReachabilityTest(short timerID) {
 			auto nodeit= getNetworkManager()->getFailedNodes().cbegin();
 			for (unsigned int index= intuniform(0, getNetworkManager()->getFailedNodes().size()-1); index > 0; index--)
 				nodeit++;
-			
+
 			if (nodeit != getNetworkManager()->getFailedNodes().end()) {
 				nodeid_t nodecandidate(*nodeit);
 				// if node is active and not isolated
@@ -2175,6 +2194,9 @@ void R2Kademlia::sendScheduledPNDiscReq() {
 void R2Kademlia::countReceived(KadPacket& packet) {
 	//EV_TRACE << "countReceived: tracked=" << packet.isTracked() << endl;
 	receivedPackets++;
+	receivedVolume+= packet.getByteLength();
+
+	// registerPacketDelivered will also count first packet stretch
 	getKadObserver().registerPacketDelivered(packet);
 	ASSERT(packet.getControlInfo() != nullptr);
 	getStatistics().deliveredMessage(

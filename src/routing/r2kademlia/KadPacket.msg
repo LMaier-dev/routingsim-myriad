@@ -62,12 +62,12 @@ class noncobject age_t;
 packet KadPacket {
 	@customize(true);
 	OverlayKey route[];
-	bool active[];
+	bool active[]; // simulator internal only
 	uint16_t progress = 0;
 	uint16_t hopLimit = 255;
 	// state seq number from source node
 	stateseqno_t stateSeqNo= stateseqno_t::invalidSeqNo;
-	nonce_t nonce= 0;
+	nonce_t nonce= 0; // simulator internal only
 	uint8_t type enum(KadPDUType);
 	bool notVia = false;
 	link_t failedLink[];

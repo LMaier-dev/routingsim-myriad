@@ -23,6 +23,7 @@ void KadPacket::setSource(const OverlayKey & source) {
 		appendHop(source);
 	else
 		setRoute(0, source);
+	addBitLength(OverlayKey::getLength());
 };
 
 
@@ -34,6 +35,7 @@ void KadPacket::appendRoute(const kad_path& path) {
 		setRoute(old_size + i, path[i]);
 		setActive(old_size + i, false);
 	}
+	addBitLength(OverlayKey::getLength()*path.size());
 }
 
 
@@ -47,6 +49,7 @@ void KadPacket::modRoute(const kad_path& newpath) {
 	{ // this creates an enlarged copy beforehand
 		setRouteArraySize(newsize);
 		setActiveArraySize(newsize);
+		addBitLength(OverlayKey::getLength()*(newsize-old_size));
 	}
 
 	for (size_t i = 0; i < newpath.size(); i++) {
@@ -61,6 +64,7 @@ void KadPacket::modRoute(const kad_path& newpath) {
 	{
 		setRouteArraySize(newsize);
 		setActiveArraySize(newsize);
+		addBitLength(OverlayKey::getLength()*(newsize-old_size));
 	}
 }
 
@@ -71,6 +75,7 @@ void KadPacket::appendHop(const OverlayKey& key) {
 	setActiveArraySize(index+1);
 	setRoute(index, key);
 	setActive(index, true);
+	addBitLength(OverlayKey::getLength());
 }
 
 void KadPacket::appendRoute(const KadContact& contact) {
@@ -84,6 +89,7 @@ void KadPacket::appendRoute(const KadContact& contact) {
 	}
 	setRoute(getRouteArraySize() - 1, contact.getKey());
 	setActive(getRouteArraySize() - 1, true);
+	addBitLength(OverlayKey::getLength()*(contact.getPathLength() + 1));
 }
 
 kad_path KadPacket::getSrcPath(uint from, uint to) const {
@@ -108,6 +114,7 @@ void KadPacket::setReturnPathFrom(const KadPacket& other) {
 		setRoute(i, other.getRoute(other.progress - i));
 		setActive(i, false);
 	}
+	addBitLength(OverlayKey::getLength()*(other.progress + 1));
 }
 
 
@@ -147,6 +154,8 @@ bool KadPacket::setSimplifiedReturnPathFrom(const KadPacket& other) {
 	for (uint i= 0; i < index; i++)
 		setRoute(i, resultpath[i]);
 
+	addBitLength(OverlayKey::getLength()*index);
+
 	return index < otherPathLen;
 }
 
@@ -179,6 +188,8 @@ void KadPacket::addNotViaLink(const link_t& failedlink, age_t failedlinkAge) {
 
 		if (i==0) // indicate NotVia for the first added link
 			setNotVia(true);
+
+		addBitLength(OverlayKey::getLength()*2+sizeof(age_t)*8); // two keys + age
 	}
 }
 

@@ -181,12 +181,14 @@ public:
 	uint getDroppedPackets() const { return droppedPackets; }
 	uint getSentPackets() const { return sentPackets; }
 	uint getReceivedPackets() const { return receivedPackets; }
+	unsigned long getSentVolume() const { return sentVolume; }
+	unsigned long getReceivedVolume() const { return sentVolume; }
 
  	uint getForwardedPathSetup() const { return forwardedPathSetup; }
 	uint getSentPathSetup() const { return sentPathSetup; }
 	uint getReceivedPathSetup() const { return receivedPathSetup; }
 	uint getReceivedPathTeardown() const { return receivedPathTeardown; }
-	
+
  	uint getForwardedDataPackets() const { return forwardedDataPackets; }
 	uint getDroppedDataPackets() const { return droppedDataPackets; }
 	uint getSentDataPackets() const { return sentDataPackets; }
@@ -432,6 +434,8 @@ private:
 	uint droppedPackets = 0;
 	uint sentPackets = 0;
 	uint receivedPackets = 0;
+	unsigned long sentVolume = 0; /// sent data by control messages in bytes
+	unsigned long receivedVolume = 0; /// received data by control messages in bytes
 	uint forwardedDataPackets = 0;
 	uint droppedDataPackets = 0;
 	uint sentDataPackets = 0;

@@ -36,6 +36,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadUpdateRouteReq> packet) {
 
 	receivedRouteUpdates++;
 	receivedPackets++;
+	receivedVolume+= packet->getByteLength();
 
 	// path to origin of this KadUpdateRouteReq (excluding myself)
 	kad_path source_path= packet->reversePath(packet->getSrcPath(0, packet->getRouteArraySize()-1));

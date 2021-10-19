@@ -28,7 +28,9 @@ class KadPacket : public KadPacket_Base
 public:
 	/** @name member functions needed for minimal implementation */
 	//@{
-	KadPacket(const char *name=nullptr, short kind=0) : KadPacket_Base(name, kind) {}
+	KadPacket(const char *name=nullptr, short kind=0) : KadPacket_Base(name, kind) {
+		setByteLength(3+4); // type (8), hop limit (8), src route index (8), state seq (32)
+	}
 	KadPacket(const KadPacket& other) : KadPacket_Base(other), overlayHops(other.overlayHops),
 					    tracked(other.tracked) {}
 	~KadPacket() { };
@@ -113,7 +115,9 @@ public:
 	/** @name member functions needed for minimal implementation */
 	//@{
         KadDataPacket(const char *name=nullptr, short kind=0) :
-      	KadDataPacket_Base(name, kind)  { }
+		KadDataPacket_Base(name, kind)  {
+		setByteLength(2+16); // type, hop limit, 1 PathID, 2 NodeIDs
+	}
         KadDataPacket(const KadDataPacket& other) : KadDataPacket_Base(other), overlayHops(other.overlayHops), tracked(other.tracked) {}
 	~KadDataPacket() { };
 	KadDataPacket& operator=(const KadDataPacket& other)

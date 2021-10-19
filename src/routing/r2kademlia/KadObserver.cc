@@ -391,7 +391,13 @@ void KadObserver::registerPacketDropped(KadDataPacket& packet, const OverlayKey&
 
 
 void KadObserver::registerPacketDelivered(KadPacket& packet) {
-	if (not packet.isTracked()) return;
+	if (not packet.isTracked())
+		return;
+	// answer packets are also markedTrack, but the should not
+	// count as first packet stretch
+	if (packet.getType() != KAD_FindNodeReq)
+		return;
+
 	if (simTime() < getSimulation()->getWarmupPeriod()) return;
 	deliveredPackets++;
 	const OverlayKey fromKey = packet.getSource();
