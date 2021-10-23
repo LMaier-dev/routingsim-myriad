@@ -576,8 +576,9 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt, simtime_t 
 			// newpath may now contain a cycle, try to cut this
 			// example: path <49d984 b20388 d65e04 2550d> is modified to
 			//               < 49d984 b20388 f8d1e5 2550d5 d65e04 2550d5 4f5cc2 >
-			// due to broken link < b20388 d65e04 > substituted by <f8d1e5 2550d5 d65e04>
-			routingTable.simplifyPath(newpath, finaldestination);
+			// due to broken link < b20388 d65e04 > sustituted by <f8d1e5 2550d5 d65e04>
+			// destination node is already contained in path
+			routingTable.simplifyPath(newpath, nullptr);
 			EV_TRACE << "forwardPacket(): reroute PN, contact " << *contact << endl;
 			// rerouting makes this intermediate node to overlay hop
 			packet->setActive(packet->getProgress(), true);
