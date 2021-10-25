@@ -182,7 +182,8 @@ public:
 	uint getSentPackets() const { return sentPackets; }
 	uint getReceivedPackets() const { return receivedPackets; }
 	unsigned long getSentVolume() const { return sentVolume; }
-	unsigned long getReceivedVolume() const { return sentVolume; }
+	unsigned long getReceivedVolume() const { return receivedVolume; }
+	unsigned long getForwardedVolume() const { return forwardedVolume; }
 
  	uint getForwardedPathSetup() const { return forwardedPathSetup; }
 	uint getSentPathSetup() const { return sentPathSetup; }
@@ -436,6 +437,7 @@ private:
 	uint receivedPackets = 0;
 	unsigned long sentVolume = 0; /// sent data by control messages in bytes
 	unsigned long receivedVolume = 0; /// received data by control messages in bytes
+	unsigned long forwardedVolume = 0; /// forwarded data by control messages in bytes
 	uint forwardedDataPackets = 0;
 	uint droppedDataPackets = 0;
 	uint sentDataPackets = 0;

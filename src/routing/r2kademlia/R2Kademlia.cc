@@ -530,6 +530,7 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt, simtime_t 
 		if (not packetorigin) {
 			forwardedPackets++;
 			//EV_TRACE << "forwardPacket(): Node" << node().getNodeId() << " " << packet->getName() << " nonce=" << packet->getNonce() << " progress:" << packet->getProgress() << " route:" << packet->getSrcPath() << " delay:" << delay << endl;
+			forwardedVolume+= packet->getByteLength();
 		}
 
 		nodePkt->encapsulate(packet.release());
@@ -600,6 +601,7 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt, simtime_t 
 					if (not packetorigin) {
 						forwardedPackets++;
 						//EV_TRACE << "forwardPacket(): Node" << node().getNodeId() << " " << packet->getName() << " nonce=" << packet->getNonce() << " progress:" << packet->getProgress() << " route:" << packet->getSrcPath() << endl;
+						forwardedVolume+= packet->getByteLength();
 					}
 
 					nodePkt->encapsulate(packet.release());
@@ -707,6 +709,7 @@ void R2Kademlia::reroutePacket(const OverlayKey& finaldest, KadPacket_p packet, 
 				if (not packetorigin) {
 					forwardedPackets++;
 					//EV_TRACE << "forwardPacket(): Node" << node().getNodeId() << " " << packet->getName() << " nonce=" << packet->getNonce() << " progress:" << packet->getProgress() << " route:" << packet->getSrcPath() << endl;
+					forwardedVolume+= packet->getByteLength();
 				}
 				nodePkt->encapsulate(packet.release());
 				sendToNode(nid, std::move(nodePkt), delay);
@@ -1486,6 +1489,7 @@ void R2Kademlia::sampleStatistics (Statistics &stats) {
 	stats.value("receivedPackets", receivedPackets);
 	stats.value("sentVolume", sentVolume);
 	stats.value("receivedVolume", receivedVolume);
+	stats.value("forwardedVolume", forwardedVolume);
 
 	if (sendDataPackets) {
 		stats.value("forwardedDataPackets", forwardedDataPackets);
@@ -1743,9 +1747,11 @@ NodePkt_p R2Kademlia::makeHelloPacket()
 	hello->setSourceId(node().getNodeId());
 	hello->setNonce(0);
 	hello->setStateSeqNo(getLSSeqNo());
+	hello->addByteLength(OverlayKey::getLength()+8+32);
 	NodePkt_p nodePkt = std::make_unique<NodePkt>(hello->getName());
 	nodePkt->setType(KAD_CTRL_PACKET_TYPE);
 	nodePkt->encapsulate(hello.release());
+
 	return nodePkt;
 }
 
@@ -1801,8 +1807,11 @@ void R2Kademlia::fillRTableRsp(KadRTableRsp& packet, const KadContactList& conta
 				packet.setPath(i, contacts[i]->getPath());
 				packet.setSeqNo(i, contacts[i]->getStateSeqNo());
 				packet.setPathInfoAge(i, contacts[i]->getAge());
+				packet.addBitLength(contacts[i]->getPath().size()*OverlayKey::getLength()+32+sizeof(age_t)*8);
+
 			}
 		}
+		packet.addBitLength(contacts.size()*OverlayKey::getLength());
 	}
 }
 
