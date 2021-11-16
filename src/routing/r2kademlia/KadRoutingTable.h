@@ -170,6 +170,9 @@ public:
 	/// returns the number of paths in buckets
 	size_type getNumIndirectPaths() const;
 
+	/// returns a pointer random valid contact
+	KadContact_p getRandomContact() const;
+
 	/// if failed link is in contact's path send a ProbeReq to check for path validity
 	void checkContact(KadContact& contact, const link_t& failed_link);
 	/// do not invalidate valid contacts, but test path validity

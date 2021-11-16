@@ -695,6 +695,30 @@ KadContactList KadRoutingTable::getAllValidContacts(bool noPN) const
 }
 
 
+KadContact_p KadRoutingTable::getRandomContact() const
+{
+	size_type numContacts(getNumContacts());
+
+	constexpr unsigned int max_retries= 3U;
+	unsigned int randomContactIndex(intuniform(getEnvir()->getRNG(0), 0, numContacts > 0 ? numContacts-1 : 0));
+	unsigned int index(0);
+	for (unsigned int retry= 0; retry < max_retries; retry++)
+	{
+		for (const auto& bucket : buckets)
+		{
+			if ((index + bucket.size()) > randomContactIndex) { // the contact must be in the current bucket
+				auto contact_p= bucket.contacts[randomContactIndex-index].get();
+				if (contact_p != nullptr and contact_p->isValid()) {
+					return contact_p;
+				}
+			}
+		} // end for
+	}
+
+	return nullptr;
+}
+
+
 // returns the two oldest entries from each bucket, deepest contacts first and oldest before newer (per bucket)
 // only non PN contacts will be returned
 // However, contacts that have recent information <1s will not be selected

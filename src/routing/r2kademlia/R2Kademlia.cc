@@ -85,6 +85,8 @@ void R2Kademlia::onInitialize() {
 	// register this module for statistics
 	getStatistics().addSample(this);
 	simtime_t probeInterval = (simtime_t) par("probeInterval").doubleValue();
+	simtime_t exploreInterval = (simtime_t) par("exploreInterval").doubleValue();
+
 	// doProbeSelf is required for joining (will do exponential backoff)
 	// calculation for first timer is: initialOffset - duration/2 + random([0..duration])
 	// start after 100ms, use 250ms, 500ms, 1s, 2s, 4s, 8s, 16s, 32s, 64s, 128s, 256s, 300s as intervals
@@ -94,11 +96,16 @@ void R2Kademlia::onInitialize() {
 	addTimer(std::max(probeInterval, SimTime(1000,SIMTIME_MS)), probeInterval*2, std::bind(&R2Kademlia::doProbeNeighbors, this, ph::_1));
 	// regularly probe for non PN contacts to test path liveliness
 	addTimer(std::max(probeInterval/2, SimTime(1000,SIMTIME_MS)), probeInterval, std::bind(&R2Kademlia::doProbeContacts, this, ph::_1));
-	// regularly send FindNodeReq to randomly chosen IDs
+	// regularly send FindNodeReq to _randomly_ chosen IDs, i.e., key-IDs but not node-IDs
+	// the advantage is to discover new and better contacts and/or paths
 	addTimer(probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doProbe, this, ph::_1));
 
-	// check whether other existing nodes can be reached (uses KadObserver)
+	// Reachability Test: check whether other _existing_ nodes can be reached (uses KadObserver)
 	addTimer(probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doReachabilityTest, this, ph::_1));
+
+	// For path exploration
+	if (exploreInterval > 0)
+		addTimer(exploreInterval*1.5, exploreInterval, std::bind(&R2Kademlia::doSendExplorePathPacket, this, ph::_1));
 
 	// resend Hello packets to keep state sequence numbers in synch
 	addTimer(SimTime(225,SIMTIME_MS), SimTime(250,SIMTIME_MS), std::bind(&R2Kademlia::doSendHello, this, ph::_1));
@@ -1128,14 +1135,14 @@ bool R2Kademlia::handleQueryRouteResponse(KadPacket_p answer, RPCState& rpcState
 
 
 // FIND NODE
-void R2Kademlia::sendFindNode(const OverlayKey& key, bool exact, bool track) {
-	EV_TRACE << "sendFindNode for " << key.shortStr() << (exact ? " (NID)" : (key == myOverlayKey ? " (JOIN)" : " (RID)")) << endl; // Node ID or Resource ID?
+void R2Kademlia::sendFindNode(const OverlayKey& destkey, bool exact, bool track) {
+	EV_TRACE << "sendFindNode for " << destkey.shortStr() << (exact ? " (NID)" : (destkey == myOverlayKey ? " (JOIN)" : " (RID)")) << endl; // Node ID or Resource ID?
 
 	//ASSERT(contacts.size() > 0);
-	if (auto contacts = routingTable.getClosestContacts(key, findNodeNumber, true); contacts.size() > 0)
+	if (auto contacts = routingTable.getClosestContacts(destkey, findNodeNumber, true); contacts.size() > 0)
 	{
 		// use several contacts to send multiple Rediscovery requests in parallel
-		const KadContact& contact = chooseNextHop(contacts, key);
+		const KadContact& contact = chooseNextHop(contacts, destkey);
 		ASSERT(contact.isValid());
 		ASSERT(!contact.getKey().isUnspecified());
 		if (contact.getKey() == myOverlayKey)
@@ -1144,7 +1151,7 @@ void R2Kademlia::sendFindNode(const OverlayKey& key, bool exact, bool track) {
 			return;
 		}
 		auto packet = makePacket<KadFindNodeReq>(contact, "FindNode");
-		packet->setDstNodeID(key);
+		packet->setDstNodeID(destkey);
 		packet->setExact(exact);
 		if (track)
 			packet->markTracked();
@@ -1162,6 +1169,39 @@ void R2Kademlia::sendFindNode(const OverlayKey& key, bool exact, bool track) {
 	}
 }
 
+
+// FIND NODE
+void R2Kademlia::sendFindNodeVia(const OverlayKey& destkey, KadContact_p viacontact_p, bool exact, bool track) {
+	EV_TRACE << "sendFindNode for " << destkey.shortStr() << (exact ? " (NID)" : (destkey == myOverlayKey ? " (JOIN)" : " (RID)"))
+		 << " via contact " << viacontact_p->getKey().shortStr() << endl; // Node ID or Resource ID?
+
+	if (viacontact_p == nullptr) {
+		EV_ERROR << "viacontact null - internal error" << endl;
+		return;
+	}
+
+	ASSERT(viacontact_p->isValid());
+	ASSERT(!contact->getKey().isUnspecified());
+	if (viacontact_p->getKey() == myOverlayKey)
+	{
+		EV_ERROR << "I'm the next hop for the destination. Will not send anything." << endl;
+		return;
+	}
+	auto packet = makePacket<KadFindNodeReq>(*viacontact_p, "FindNode");
+	packet->setDstNodeID(destkey);
+	packet->setExact(exact);
+	if (track)
+		packet->markTracked();
+
+	EV_TRACE << "sending KadFindNodeReq" << endl;
+	sendRpcCall(
+		std::move(packet),
+		std::bind(&R2Kademlia::handleFindNodeResponse, this, ph::_1, ph::_2),
+		std::bind(&R2Kademlia::handleFindNodeResponse, this, ph::_1, ph::_2),
+		std::bind(&R2Kademlia::handleRPCTimeOut, this, ph::_1, ph::_2)
+		);
+
+}
 
 
 void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
@@ -1374,111 +1414,6 @@ bool R2Kademlia::handleRPCTimeOut(KadPacket_p answer_, RPCState& rpcState) {
 	return true;
 }
 
-// ------------------------- policy foo --------------------------------------
-
-void R2Kademlia::onMissingNeighbor(KadPacket_p packet, NodePkt_p pkt) {
-//  	getStatistics().dropMessage(pkt, undefined_node);
-	EV_WARN << "onMissingNeighbor called - packet next hop should be " << packet->getNextHop().shortStr() << endl;
-	droppedPackets++;
-	// do not generate Error packets for Error or UpdateRoute packets
-	switch (packet->getType()) {
-		case KAD_Error:
-		case KAD_UpdateRouteReq:
-		case KAD_QueryRouteRsp:
-		case KAD_FindNodeRsp:	
-			EV << "not generating error packet for packet type " << packet->getName() << "(" << (unsigned int) packet->getType() << ")" << endl;
-			break;
-		default:
-		{
-			if (packet->getSource() == myOverlayKey)
-			{
-				EV_DEBUG << "I'm the source, so not returning any message" << endl;
-				return;
-			}
-			else
-				returnToSender(KAD_SegmentFailure, std::move(packet));
-		}
-	} // end switch
-}
-
-
-
-
-void R2Kademlia::onErrorPacket(KadError& error) {
-
-	EV_INFO << "received ERROR packet (" << (unsigned int) error.getErrorType() << ") ";
-	switch (error.getErrorType()) {
-		case KAD_NoError:
-			EV_INFO << "No Error";
-			break;
-		case KAD_HopLimitExceeded:
-			EV_INFO << "HopLimitExceeded";
-			break;
-		case KAD_SegmentFailure:
-			EV_INFO << "SegmentFailure";
-			break;
-		case KAD_NodeUnreachable:
-			EV_INFO << "NodeUnreachable";
-			break;
-		case KAD_PathIDUnknown:
-			EV_INFO << "PathIDUnkown";
-			break;
-		case KAD_RouteFailureDeadEnd:
-			EV_INFO << "RouteFailureDeadEnd";
-			break;
-	}
-	EV_INFO	<< endl;
-	
-	ASSERT(error.getEncapsulatedPacket() != nullptr);
-	KadPacket* original = check_and_cast<KadPacket *>(error.getEncapsulatedPacket());
-	ASSERT(original->getNonce() == error.getNonce());
-	ASSERT(original->getSource() == myOverlayKey);
-	switch (error.getErrorType()) {
-
-		// the following errors indicate a problem with the route to the contact
-		case KAD_SegmentFailure:
-		case KAD_NodeUnreachable:
-		{ // Invalidate contact as the error information is current
-
-			// find out the failed link
-		        auto reportingNode(error.getSource());
-		        const auto originalPath(original->getSrcPath());
-			// use progress in original path to find the correct link
-			// just finding the reporting node in the source path isn't safe due to cycles in forwarding path!
-		        short unsigned int index(original->getProgress());
-			// the following should be true, otherwise we are getting
-			// an error from some off path node
-			ASSERT(originalPath[index] == reportingNode and index+1U < originalPath.size());
-			// the next hop is the one that failed
-			if (index+1U < originalPath.size()) {
-				auto failedNextHop = originalPath[index+1];
-				link_t failedlink(reportingNode, failedNextHop);
-				EV_INFO << "Check for invalid contacts because of failed link " << failedlink << " in error packet" << endl;
-				// this segment or node error is current and should invalidate all affected contacts
-				// a rediscovery will be triggered automatically if necessary
-				routingTable.invalidateContacts(failedlink, (simTime()-error.getCreationTime()).inUnit(SIMTIME_MS));
-			}
-			else
-				EV_ERROR << "onErrorPacket: failed link collapsed to node " << reportingNode << " path:" << originalPath << endl;
-		};
-		break;
-
-		case KAD_PathIDUnknown:
-		{ // KAD_PathIDUnknown: we should try to resetup the path
-			auto affectedContact= routingTable.getContact(original->getTarget());
-			if (affectedContact and affectedContact->isValid() and affectedContact->getPathLength() > discoveryRadius)
-			{
-				schedulePathSetup(affectedContact->getKey());
-			}
-		};
-		break;
-
-		default:
-			// currently there are no more error types to handle
-			break;
-	} // end switch
-}
-
 
 // this is called periodically for all modules in Statistics::sample()
 void R2Kademlia::sampleStatistics (Statistics &stats) {
@@ -1516,161 +1451,6 @@ void R2Kademlia::sampleStatistics (Statistics &stats) {
 	auto [numPrecalcEntries, numUsedPrecalcEntries]= fwdTablePathID.getNumUsedPrecalcEntries();
 	stats.value("fwdTablePrecalc", numPrecalcEntries);
 	stats.value("fwdTableUsedPrecalc", numUsedPrecalcEntries);
-}
-// -------------- kad policy -------------
-
-void R2Kademlia::onBucketEmpty(KadBucket& bucket) {
-	EV << "bucket empty" << endl;
-}
-
-
-// this is called before deletion of the contact
-void R2Kademlia::onContactRemoval(KadContact_p contact)
-{
-	//EV_TRACE << "onContactRemoval(" << ((contact != nullptr) ? contact->getKey().shortStr() : "nullptr") << ") called" << endl;
-	if (contact == nullptr)
-		return;
-
-	// delete from Forwarding table PID
-	// TODO: this can be scheduled for happening later
-	if (usePathIDs)
-		fwdTablePathID.delEntry(contact);
-
-	// TODO: the following is probably not useful
-	// (node may still be present in vicinity, but was evicted from bucket)
-	// remove from vicinity node set (in case of later rendezvous again)
-	if (contact->getPathLength() < discoveryRadius and contact->getState() == KadContact::State::dead)
-		vicinity.removeNode(contact->getKey());
-}
-
-
-// this is called after invalidation of the contact
-void R2Kademlia::onContactInvalidation(KadContact_p contact)
-{
-	if (contact == nullptr)
-		return;
-
-	if (usePathIDs)
-		fwdTablePathID.invalidateEntry(contact);
-}
-
-void R2Kademlia::onNewContact(KadContact_p contact) {
-
-	EV_TRACE << "onNewContact(" << contact->getKey().shortStr() << ") called, SeqNo #" << contact->getStateSeqNo() << endl;
-	//ASSERT( getKadObserver().checkSeqNo(contact->getKey(),contact->getStateSeqNo()) == true );
-
-	// physical neighbor, may have been heard of its existence by some third node!
-	// avoid further actions until we hear a HELLO
-	if (contact->getPathLength() == 0) 
-	{ 	if (not neighborTable.isNeighbor(contact->getKey()))
-		{
-			EV_DEBUG << "onNewContact: will ignore supposed physical neighbor not being in Neighbor table yet" << endl;
-			return;
-		}
-	}
-
-	// ask for physical neighbors if new contact is within discovery radius
-	// contact->getPathLength() excludes the destination, so path length = 0 
-	// holds for PhyNeighbors (their Physical Neighbors are already discovered by PNDiscReq/Rsp)
-	// getPathLength()+1 corresponds to the number of hops from me to the contact.
-	// Thus, contact->getPathLength()+1 < discoveryRadius is correct, because we ask
-	// those contacts about their PNs which is even one hop further away
-	if (contact->getPathLength() > 0 and contact->getPathLength()+1 < discoveryRadius)
-	{
-		// sends a QueryRouteReq requesting their 1 hop neighborhood
-		sendGetPhysicalNeighbors(contact);
-	}
-
-	if (contact->isValid())
-	{
-		// request info about overlay neighbors near my node ID from nodes in our deepest bucket
-		if (routingTable.isInLastBucket(contact->getKey()))
-		{
-			//EV_TRACE << "New contact is in deepest bucket, will ask for contacts close to me" << endl;
-			sendGetOverlayNeighbors(contact);
-		}
-
-		if (usePathIDs) {
-			if (contact->getPathLength() <= discoveryRadius) {
-				// it is required to add all PIDs to nodes within the discovery radius
-				// (and without signaling one can extend this by one hop)
-				// since the contact path excludes the contact itself the above condition includes nodes <= discoveryRadius+1
-				if (auto incomingPID= fwdTablePathID.addEntry(contact, false, true); incomingPID != PathID::UndefinedPathID) {
-					// PID was added, it can directly be used, because no path setup necessary within discovery
-					fwdTablePathID.setNIDtoPIDmapping(contact->getKey(), incomingPID);
-					vicinityPathIDCompletion(*contact);
-				}
-			}
-			else
-			if (contact->getPathLength() > discoveryRadius)
-			{  // send a path setup request packet for installing PIDs in intermediate nodes for this route
-				// only do this for paths longer than (discovery radius+1) (e.g., for dr=3 -> contacts 5 hops away) hops:
-				// the next node precalculated already all path IDs within its own discovery radius and
-				// we are just one hop away, so only required setup for paths longer than (discovery radius+1)
-				// note that the contact->getPath() excludes the contact itself
-				EV_TRACE << "Triggering path setup to " << contact->getKey().shortStr() << ": " << contact->getPath() << endl;
-				schedulePathSetup(contact->getKey());
-			}
-		}
-	}
-
-	scheduleUpdate(*contact, KAD_Announce);
-}
-
-
-void R2Kademlia::onImprovement(const KadContact& contact) {
-	// path got improved for this contact -> potentially send UpdateRouteReq
-	EV_TRACE << "onImprovement(" << contact.getKey().shortStr() << ") called, SeqNo #" << contact.getStateSeqNo() << ' ' << contact.getPath() << endl;
-
-	//ASSERT( getKadObserver().checkSeqNo(contact.getKey(),contact.getStateSeqNo()) == true );
-
-	if (usePathIDs and contact.isValid()) {
-
-		// no need to setup routes within discovery radius + 1 distance
-		// (note/remember: getPathLength() does not include the last hop)
-		if ( contact.getPathLength() > discoveryRadius ) {
-			// send a path setup request packet for installing PIDs in intermediate nodes for this route
-			//EV_TRACE << "Triggering path setup to " << contact.getKey().shortStr() << endl;
-			// modentry() will be called by handlePathSetupResponse
-			schedulePathSetup(contact.getKey());
-		}
-		else {
-			// for paths within discovery radius: update the PID entry
-			fwdTablePathID.modEntry(&contact, false);
-		}
-	}
-
-	// TODO: wait grace period
-	if ( neighborTable.isNeighbor(contact.getKey()) )
-	{ // this is true after re-enabling a physical neighbor
-		if (not contact.isPhysicalNeighbor())
-			EV_WARN << "reenabling physical contact is not flagged as being neighbor" << endl;
-
-		scheduleUpdate(contact, KAD_Announce);
-	}
-	else
-		scheduleUpdate(contact, KAD_Change);
-}
-
-
-void R2Kademlia::recheckPhysicalNeighbors(const KadContact& contact) {
-	// simply recheck the physical Neighbors
-	EV_TRACE << "recheckPhysicalNeighbors triggered for " << contact.getKey().shortStr() << endl;
-	sendGetPhysicalNeighbors(&contact);
-}
-
-
-void R2Kademlia::reSyncPN(const KadContact& contact) {
-	// simply trigger a PNDiscReq to update any sequence number
-	EV_TRACE << "reSyncPN triggered for " << contact.getKey().shortStr() << endl;
-	schedulePNDiscReq(contact.getKey());
-}
-
-
-
-void R2Kademlia::onContactCheck(const KadContact& contact) {
-	EV_TRACE << "contact check triggered for " << contact.getKey().shortStr() << endl;
-	sendProbe(&contact);
 }
 
 
@@ -1880,256 +1660,6 @@ void R2Kademlia::readRTableRsp(const KadRTableRsp& packet) {
 }
 
 
-/* if duration is 0, this is a one shot timer */
-short R2Kademlia::addTimer(simtime_t initialOffset, simtime_t duration, std::function<void(short timerId)> callback) {
-	ASSERT(timerDuration.size() == timerMsg.size());
-	ASSERT(timerDuration.size() < (size_type) std::numeric_limits<short int>::max());
-	ASSERT(duration >= 0);
-	if (duration > 0)
-		timerDuration.push_back(duration);
-
-	short int ntimerId(duration == 0 ? -1 : timerDuration.size()-1);
-	cMessage *msg = new cMessage("TimerMsg", ntimerId);
-	msg->setContextPointer( reinterpret_cast<void *>( new auto(callback) ) );
-
-	if (duration > 0)
-		timerMsg.push_back(msg);
-
-	simtime_t scatter = uniform(0, duration);
-	scheduleAt(simTime() + initialOffset - duration/2 + scatter, msg);
-	//EV_TRACE << "scheduled timer message " << msg << ( (duration != 0) ? " with duration " : " after ")
-	//	 <<   ((duration != 0) ? duration : initialOffset) <<  endl;
-	return ntimerId;
-}
-
-
-void R2Kademlia::stopTimer(short timerId)
-{
-	if (timerId > 0 and (size_type) timerId < timerMsg.size()) {
-		cMessage* timermsg= timerMsg[timerId];
-		timerMsg[timerId]= nullptr;
-		// cancel potentially scheduled message (nothing happens if it was not)
-		cancelEvent(timermsg);
-		// remove callback function
-		cbfunc_t* cbfunc_p(static_cast<cbfunc_t*>(timermsg->getContextPointer()));
-		delete(cbfunc_p);
-		timermsg->setContextPointer(nullptr);
-		delete timermsg;
-	}
-}
-
-
-void R2Kademlia::resetTimer(short timerId, simtime_t duration)
-{
-	if (timerId > 0 and (size_type) timerId < timerMsg.size()) {
-		cMessage* timermsg= timerMsg[timerId];
-		// save callback function pointer
-		cbfunc_t* cbfunc_p(static_cast<cbfunc_t*>(timermsg->getContextPointer()));
-		// cancel potentially scheduled message (nothing happens if it was not)
-		timerMsg[timerId]= nullptr;
-		cancelEvent(timermsg);
-		if (duration > 0) {
-			timerDuration[timerId]= duration;
-			cMessage *msg = new cMessage("TimerMsg", timerId);
-			msg->setContextPointer( reinterpret_cast<void *>( cbfunc_p ) );
-			scheduleAt(simTime() + uniform(duration, duration/2*3), msg);
-		}
-	}
-}
-
-
-// periodically send a Hello packet to keep state seq no in synch
-void R2Kademlia::doSendHello(short timerId) {
-	if (neighborTable.size() == 0)
-		return; // node is isolated
-
-	ASSERT(timerId >= 0);
-	static const simtime_t maxDuration(30); // check every 30 seconds
-
-	// exponential backoff double duration until we reached maxDuration
-	if (timerDuration[timerId] < maxDuration)
-	{ // double waiting time for next call until maxDuration is reached
-		timerDuration[timerId] = std::min(2 * timerDuration[timerId], maxDuration);
-	}
-
-	auto hellopkt(makeHelloPacket());
-	sentVolume+= neighborTable.size() * hellopkt->getByteLength();
-	sendToNeighbors(std::move(hellopkt));
-	sentPackets+= neighborTable.size();
-}
-
-
-// probe for closest (overlay/ID-wise) neighbors, i.e., those in the deepest buckets
-void R2Kademlia::doProbeNeighbors(short timerId) {
-	if (neighborTable.size() == 0)
-		return; // node is isolated
-
-	if ( probeNeighborQueue.empty() )
-	{
-		// fill queue with current neighbors
-		auto contacts= routingTable.getClosestContacts(myOverlayKey, routingTable.getSplitSize(), false);
-		for (auto contactp : contacts)
-			probeNeighborQueue.push_back(contactp->getKey());
-	}
-
-	bool probed(false);
-	while (probeNeighborQueue.size() > 0 and !probed) {
-		// check for reachability of neighbors
-		// do not probe in case contact not found or too young
-		if (auto contactp= routingTable.getContact(probeNeighborQueue.front());
-		    contactp != nullptr and contactp->getAge() > R2Kademlia::PathInfoAgeThreshold) {
-			EV_TRACE << "probing for neighbor: " << probeNeighborQueue.front() << endl;
-			sendFindNode(probeNeighborQueue.front(), true);
-			probed= true;
-		}
-		probeNeighborQueue.pop_front();
-	} // end while
-}
-
-
-// check for path validity
-void R2Kademlia::doProbeContacts(short timerId) {
-	if (neighborTable.size() == 0)
-		return; // node is isolated
-
-	if ( probeContactQueue.empty() )
-	{
-		// fill queue with current oldest neighbors (2 for each bucket)
-		routingTable.getOldestValidContacts(probeContactQueue);
-	}
-
-	// check for reachability of neighbors
-	bool probed(false);
-	while (probeContactQueue.size() > 0 and !probed)
-	{
-		// do not probe in case contact not found or too young
-		if (auto contactp= routingTable.getContact(probeContactQueue.front());
-		    contactp != nullptr and contactp->getAge() > R2Kademlia::PathInfoAgeThreshold) {
-			EV_TRACE << "probing for contact: " << probeContactQueue.front() << endl;
-			sendFindNode(probeContactQueue.front(), true);
-			probed= true;
-		}
-		else
-			EV_TRACE << "skipped contact: " << probeContactQueue.front() << endl; 
-
-		probeContactQueue.pop_front();
-	};
-}
-
-
-
-void R2Kademlia::doProbe(short timerId) {
-	if (neighborTable.size() == 0) return; // we are isolated
-	OverlayKey probeKey;
-	bool exact = false;
-	uint32_t index = 0;
-	switch (probeStrategy) {
-		case 0:
-			return;
-		case 1:
-			probeKey = OverlayKey::random(getRNG(0));
-			break;
-		case 2:
-			probeKey = getKadObserver().getRandomNodeKey();
-			break;
-		case 3:
-			index = std::min<size_type>(intuniform(1, 1 + routingTable.getDepth()*2),
-					myOverlayKey.getLength());
-			probeKey = myOverlayKey;
-			probeKey[myOverlayKey.getLength() - index] ^= 1;
-			break;
-		case 4:
-			index = routingTable.getDepth();
-			probeKey = myOverlayKey.randomSuffix(myOverlayKey.getLength() - index, getRNG(0));
-			break;
-		case 5:
-			index = std::min<size_type>(intuniform(1, 1 + routingTable.getDepth()*2),
-					myOverlayKey.getLength());
-			probeKey = myOverlayKey.randomSuffix(myOverlayKey.getLength() - index, getRNG(0));
-			break;
-		case 6:
-			index = intuniform(1, 1 + routingTable.getDepth());
-			probeKey = myOverlayKey.randomSuffix(myOverlayKey.getLength() - index, getRNG(0));
-			break;
-		default:
-			throw cRuntimeError("unknown probe strategy %i, values from 0 to 6 are allowed");
-	}
-	if (probeKey == myOverlayKey) probeKey[0] ^= 1;
-	sendFindNode(probeKey, exact);
-}
-
-
-void R2Kademlia::doProbeSelf(short timerId) {
-	ASSERT(timerId >= 0);
-	static const simtime_t maxDuration(300); // check every 5 minutes
-
-	// exponential backoff double duration until we reached maxDuration
-	if (timerDuration[timerId] < maxDuration)
-	{ // double waiting time for next call until maxDuration is reached
-		timerDuration[timerId] = std::min(2 * timerDuration[timerId], maxDuration);
-	}
-
-	if (neighborTable.size() == 0) return; // we are isolated
-
-	sendFindNode(myOverlayKey, false);
-}
-
-
-void R2Kademlia::doReachabilityTest(short timerID) {
-	if (neighborTable.size() == 0) return; // we are isolated
-	const OverlayKey* key(nullptr);
-	unsigned int maxtries= 10;
-	bool nodefound= false;
-	do {
-		// during periods of failed links we want to preferably test reachability for affected nodes
-		if (failureFocussedProbing and getNetworkManager()->getFailedNodes().size() > 0) {
-			// select random nodes out of set of failed nodes
-			auto nodeit= getNetworkManager()->getFailedNodes().cbegin();
-			for (unsigned int index= intuniform(0, getNetworkManager()->getFailedNodes().size()-1); index > 0; index--)
-				nodeit++;
-
-			if (nodeit != getNetworkManager()->getFailedNodes().end()) {
-				nodeid_t nodecandidate(*nodeit);
-				// if node is active and not isolated
-				if (getNetworkManager()->getTopology().isActive(nodecandidate) == true and
-				    getNetworkManager()->getTopology().getNodeDegree(nodecandidate) > 0) {
-					if (getNetworkManager()->getFailedNodes().size() > 1) { // not the only choice
-						// try this failed node
-						key = &getKadObserver().getNodeKey(nodecandidate);
-						nodefound= true;
-					}
-				}
-			}
-		}
-
-		if (not nodefound) { // try different non affected node as alternative
-			key = &getKadObserver().getRandomNodeKey();
-		}
-
-		// check whether destination node is actually reachable
-		if (key != nullptr) {
-			if (getKadObserver().getPhysicalDistance(myOverlayKey, *key) == 0) {
-				EV_TRACE << "Node " << key->shortStr() << " not reachable" << endl;
-				nodefound= false;
-			}
-			else { // node is reachable
-				nodefound= true;
-			}
-		}
-		else {
-			nodefound= false;
-		}
-
-		maxtries--;
-	} while ( nodefound == false and maxtries > 0 );
-
-	if (key != nullptr) {
-		EV_TRACE << "Reachability Test to " << key->shortStr() << endl;
-		sendFindNode(*key, true, true);
-	}
-	else
-		EV_WARN << "Reachability Test cannot be performed (key==nullptr)" << endl;
-}
 
 
 // check whether we need to resync with physical neighbor
