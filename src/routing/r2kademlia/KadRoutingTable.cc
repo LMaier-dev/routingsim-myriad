@@ -697,20 +697,24 @@ KadContactList KadRoutingTable::getAllValidContacts(bool noPN) const
 
 KadContact_p KadRoutingTable::getRandomContact() const
 {
-	size_type numContacts(getNumContacts());
+	size_type numContacts(getNumContactsWithoutPNs());
 
 	constexpr unsigned int max_retries= 3U;
 	unsigned int randomContactIndex(intuniform(getEnvir()->getRNG(0), 0, numContacts > 0 ? numContacts-1 : 0));
+	EV_TRACE << "getRandomContact() random contact index = " << randomContactIndex << endl;
 	unsigned int index(0);
 	for (unsigned int retry= 0; retry < max_retries; retry++)
 	{
 		for (const auto& bucket : buckets)
 		{
-			if ((index + bucket.size()) > randomContactIndex) { // the contact must be in the current bucket
+			if ((index + bucket.sizeWithoutPNContacts()) > randomContactIndex) { // the contact must be in the current bucket
 				auto contact_p= bucket.contacts[randomContactIndex-index].get();
 				if (contact_p != nullptr and contact_p->isValid()) {
 					return contact_p;
 				}
+			}
+			else {
+				index += bucket.sizeWithoutPNContacts();
 			}
 		} // end for
 	}
@@ -771,6 +775,15 @@ size_type KadRoutingTable::getNumContacts() const
 	size_type sum = 0;
 	for (const KadBucket& b : buckets)
 		sum += b.size();
+	return sum;
+}
+
+
+size_type KadRoutingTable::getNumContactsWithoutPNs() const
+{
+	size_type sum = 0;
+	for (const KadBucket& b : buckets)
+		sum += b.sizeWithoutPNContacts();
 	return sum;
 }
 

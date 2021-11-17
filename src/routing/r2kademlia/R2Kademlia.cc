@@ -1181,7 +1181,7 @@ void R2Kademlia::sendFindNodeVia(const OverlayKey& destkey, KadContact_p viacont
 	}
 
 	ASSERT(viacontact_p->isValid());
-	ASSERT(!contact->getKey().isUnspecified());
+	ASSERT(!viacontact_p->getKey().isUnspecified());
 	if (viacontact_p->getKey() == myOverlayKey)
 	{
 		EV_ERROR << "I'm the next hop for the destination. Will not send anything." << endl;

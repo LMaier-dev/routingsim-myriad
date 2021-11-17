@@ -47,8 +47,10 @@ public:
 	inline bool removeContact(const OverlayKey& key);
 	/** returns true if the contact list is empty */
 	inline bool empty() { return contacts.empty() && PNContacts.empty(); }
-	/** returns the size of the contact list */
+	/** returns the size of the contact list including PNcontacts */
 	inline size_type size() const { return contacts.size() + PNContacts.size(); }
+	/** returns the size of the contact list without PNcontacts */
+	inline size_type sizeWithoutPNContacts() const { return contacts.size(); }
 	/// Common stdc++ console output method
 	friend std::ostream& operator<<(std::ostream& os, const KadBucket& b) {
 		return os << b.contacts.size()+ b.PNContacts.size() << " contacts (PN: " << b.PNContacts.size() << ")";
@@ -166,6 +168,8 @@ public:
 
 	/// returns the number of contacts in buckets
 	size_type getNumContacts() const;
+	/// returns the number of contacts in buckets without physical neighbors
+	size_type getNumContactsWithoutPNs() const;
 
 	/// returns the number of paths in buckets
 	size_type getNumIndirectPaths() const;
