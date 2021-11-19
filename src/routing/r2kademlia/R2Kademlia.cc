@@ -483,22 +483,6 @@ void R2Kademlia::handlePacket(KadAnswer_p packet) {
 		if (packet->isTracked())
 			getKadObserver().sampleLaterPath(getOverlayKey(),returnpath);
 
-	        // uint pathlen= returnpath.size();
-		// // start from farthest node to find potential PID entry
-		// for (auto keyit= returnpath.crbegin(); keyit != returnpath.crend(); keyit++) {
-		// 	if ( fwdTablePathID.NIDPIDTable.find(*keyit) != fwdTablePathID.NIDPIDTable.end() )
-		// 	{
-		// 		EV_TRACE << "LaterPath: found a PID for " << pathlen << "/" << returnpath.size() << endl;
-		// 		// the end of this path is only useful
-		// 		if (routingTable.distance(*keyit,returnpath.back())<routingTable.distance(returnpath.back()))
-		// 		{
-		// 			viablePIDpaths++;
-		// 			break;
-		// 		}
-		// 	}
-		// 	pathlen--;
-		// } // end for
-
 	}
 
 	// the following call handles the RPC answer
@@ -1445,6 +1429,7 @@ void R2Kademlia::sampleStatistics (Statistics &stats) {
 		stats.value("routingTablePathStretch", routingTable.getAveragePathStretch());
 	}
 	stats.value("routingTableIndirectPaths", routingTable.getNumIndirectPaths());
+	//stats.value("routingTableFoundEquivalentPaths", routingTable.getNumFoundEquivPaths());
 	stats.value("fwdTableSize", fwdTablePathID.getNumEntries());
 	stats.value("fwdTableValid", fwdTablePathID.getNumValidEntries());
 	stats.value("fwdTableForeign", fwdTablePathID.getNumForeignEntries());

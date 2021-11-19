@@ -22,6 +22,8 @@
 #include <cmath>
 #include <algorithm>
 #include <utility>
+//#include <unordered_set> // only required for pathSet
+
 #include "KadContact.h"
 /**
  * @file KadRoutingTable.h
@@ -174,6 +176,9 @@ public:
 	/// returns the number of paths in buckets
 	size_type getNumIndirectPaths() const;
 
+	/// returns the number of found equivalent paths
+	///size_type getNumFoundEquivPaths() const { return pathSet.size(); };
+
 	/// returns a pointer random valid contact
 	KadContact_p getRandomContact() const;
 
@@ -282,6 +287,8 @@ private:
 	uint8_t discoveryRadius = 1;
 	/// enable special extension that also selects paths of equal length to be "better"
 	bool enableSinglePathDiversity = false;
+
+	///std::unordered_set<OverlayKey> pathSet; // only used for statistics
 };
 
 
