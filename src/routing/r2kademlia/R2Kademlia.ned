@@ -46,24 +46,24 @@ simple R2Kademlia extends routingsim.foundation.Protocol
 		double probeInterval = default(2s) @unit(s);
 		/// 0=none, 1=random, 2=exiting, 3=bucket_expand, 4=random_suffix, 5=suffix_expand, 6=random_bucket
 		int probeStrategy @enum(ProbeStrategy) = default(3);
+		/// waiting time until urgent rediscovery is scheduled
+		double rediscoveryUrgentWaitTime = default(500ms) @unit(ms);
 		/// waiting time until rediscovery is scheduled
-		double rediscoveryWaitTime = default(400ms) @unit(ms);
+		double rediscoveryWaitTime = default(1000ms) @unit(ms);
+		/// waiting time until scheduled urgent routing updates are sent
+		double updateWaitTimeFast = default(250ms) @unit(ms);
 		/// waiting time until scheduled routing updates are sent
-		double updateWaitTime = default(200ms) @unit(ms);
+		double updateWaitTime = default(500ms) @unit(ms);
 		/// waiting time until path setup messages are sent
 		double pathSetupWaitTime = default(100ms) @unit(ms);
 		/// maxFanOut for rediscovery
 		int rediscoveryFanOutFactor = default(2);
 		/// rediscoveryMaxNotification
 		int rediscoveryMaxNotification = default(findNodeNumber);
-		/// waiting time until urgent rediscovery is scheduled
-		double rediscoveryUrgentWaitTime = default(100ms) @unit(ms);
 		/// updateMaxNotification
 		int updateMaxNotification = default(4);
 		/// updateNotifyStrategy 1=close to own key, 2=close to affected key
 		int updateNotifyStrategy @enum(UpdateNotifyStrategy) = default(1);
-		/// waiting time until scheduled urgent routing updates are sent
-		double updateWaitTimeFast = default(10ms) @unit(ms);
 		/// updatePropagateStrategy 0=none, 1=KAD_Unreachable, 2=KAD_Announce, 3=KAD_Change, 4 =KAD_Announce+KAD_Change, 5=all
 		int updatePropagateStrategy @enum(UpdatePropagateStrategy) = default(1);
 		/// if failureFocussedProbing true: send reachability probes to affected nodes during failures (unless isolated),

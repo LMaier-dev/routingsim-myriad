@@ -1680,7 +1680,7 @@ void R2Kademlia::schedulePNDiscReq(const OverlayKey& neighbor)
 	if (not pndiscScheduled)
 	{
 		EV_TRACE << "scheduling PNDiscReq for " << neighbor.shortStr() << endl;
-		addTimer(SimTime(2,SIMTIME_MS), 0, std::bind(&R2Kademlia::sendScheduledPNDiscReq, this));
+		addTimer(SimTime(20,SIMTIME_MS), 0, std::bind(&R2Kademlia::sendScheduledPNDiscReq, this));
 		pndiscScheduled= true;
 	}
 }
