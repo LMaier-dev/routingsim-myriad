@@ -290,7 +290,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 			kad_path path_of_interest(packet->reversePath(packet->getSrcPath(1, packet->getProgress())));
 			if (path_of_interest.size() > 0)
 			{
-				routingTable.addPath(packet->getSource(), path_of_interest, packet->getStateSeqNo(), 0, KadContact::PathProperty::indirect);
+				routingTable.addPath(packet->getSource(), path_of_interest, packet->getStateSeqNo(), 0);
 			}
 
 			// NOTE: the rest of the source routing path should not be used for improvement
@@ -306,24 +306,6 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		// learn route from packet
 		//TODO optimization use isPathInteresting
 
-		// Paths learned from incoming requests are forced by source routing and thus not directly learned
-		KadContact::PathProperty pathproperty= KadContact::PathProperty::undefined;
-		switch (packet->getType()) {
-			case KAD_FindNodeRsp:
-			case KAD_QueryRouteRsp:
-			case KAD_ProbeRsp:
-			case KAD_PathSetupRsp:
-			{
-				const KadAnswer* answer= dynamic_cast<const KadAnswer*>(packet.get());
-				ASSERT(answer);
-				pathproperty= answer->getShortened() ? KadContact::PathProperty::indirect : KadContact::PathProperty::direct;
-				break;
-			}
-			default:
-				pathproperty= KadContact::PathProperty::indirect;
-				break;
-
-		};
 
 		// for packets from physical neighbors: check need for resynchronization:
 		// in case the packet indicates a newer state seq no, resynch with neighbor
@@ -331,7 +313,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 			checkForResync(packet->getSource(), packet->getStateSeqNo());
 
 		// evaluate return path for routing table (packet came to us this way, so path was recently working)
-		routingTable.addPath(packet->getSource(), packet->reversePath(packet->getIntermediatePath()), packet->getStateSeqNo(), 0, pathproperty);
+		routingTable.addPath(packet->getSource(), packet->reversePath(packet->getIntermediatePath()), packet->getStateSeqNo(), 0);
 
 		// these types may forward packets, so they count themselves
 		if (handleIfFitting<KadFindNodeReq>(packet)) return;
@@ -427,7 +409,7 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 		KadContact neighborcontact(packet->getSource(), kad_path());
 
 		// try to add neighbor to routing table
-		if (routingTable.addPath(packet->getSource(), kad_path(), packet->getStateSeqNo(), 0, KadContact::PathProperty::direct))
+		if (routingTable.addPath(packet->getSource(), kad_path(), packet->getStateSeqNo(), 0))
 		{
 			EV_TRACE << "adding neighbor successful, its seq#" << packet->getStateSeqNo() << endl;
 		}
@@ -986,7 +968,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadPNDiscReq> packet) {
 			
 			routingTable.addPath(packet->getPhyNeighbor(i), path,
 					     packet->getPhyNeighborSeqNo(i),
-					     packet->getPhyNeighborAge(i), KadContact::PathProperty::direct);
+					     packet->getPhyNeighborAge(i));
 		}
 	}
 	else {
@@ -996,7 +978,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadPNDiscReq> packet) {
 	EV_TRACE << "neighbor table: "<< neighborTable << endl;
 
 	// add physical contact to routing table or update sequence number
-	routingTable.addPath(packet->getSource(), kad_path(), packet->getStateSeqNo(), 0, KadContact::PathProperty::direct);
+	routingTable.addPath(packet->getSource(), kad_path(), packet->getStateSeqNo(), 0);
 
 	// update lastseen of origin contact
 	if (KadContact* contact_p= const_cast<KadContact*>(routingTable.getContact(packet->getSource())); contact_p != nullptr) {
@@ -1101,7 +1083,7 @@ bool R2Kademlia::handlePNDiscResponse(KadPacket_p answer, RPCState& rpcState)
 		 << " neighbors SeqNo#" << response->getStateSeqNo() << endl;
 
 	// update sequence number or restore direct link
-	routingTable.addPath(response->getSource(), kad_path(), response->getStateSeqNo(), 0, KadContact::PathProperty::direct);
+	routingTable.addPath(response->getSource(), kad_path(), response->getStateSeqNo(), 0);
 
 	readRTableRsp(*response);
 	return true;
@@ -1428,7 +1410,6 @@ void R2Kademlia::sampleStatistics (Statistics &stats) {
 		stats.value("routingTablePathLength", routingTable.getAveragePathLength());
 		stats.value("routingTablePathStretch", routingTable.getAveragePathStretch());
 	}
-	stats.value("routingTableIndirectPaths", routingTable.getNumIndirectPaths());
 	//stats.value("routingTableFoundEquivalentPaths", routingTable.getNumFoundEquivPaths());
 	stats.value("fwdTableSize", fwdTablePathID.getNumEntries());
 	stats.value("fwdTableValid", fwdTablePathID.getNumValidEntries());
@@ -1467,7 +1448,6 @@ void R2Kademlia::recordScalars() {
 	recordScalar("routingTablePathStretch", routingTable.getAveragePathStretch());
 	recordScalar("routingTableUpdates", routingTable.getUpdateCount());
 	recordScalar("routingTableReplacements", routingTable.getReplacementCount());
-	recordScalar("routingTableIndirectPaths", routingTable.getNumIndirectPaths());
 	recordScalar("discoveredVicinitySize", vicinity.size());
 	nodeid_t nid =  Node::getNode(this)->getNodeId();
 	recordScalar("nodeId", nid);

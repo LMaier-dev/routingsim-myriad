@@ -140,7 +140,7 @@ size_type KadRoutingTable::getBucketIndex(const OverlayKey& key) const
 
 
 /// @returns true in case path was added
-bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t stateseqno, age_t pathinfo_age, KadContact::PathProperty pathprop)
+bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t stateseqno, age_t pathinfo_age)
 {
 	if (key == myKey) return false;
 
@@ -158,14 +158,12 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 		return false;
 	}
 
-	bool path_was_simplified= false;
 	// find other cycles/duplicates (note: path may even be empty afterwards)
-	path_was_simplified= simplifyPath(path, &key);
+	simplifyPath(path, &key);
 
 	// try to shorten the path using local routing table
-	if (path.size() > 0 and shortenPath(path)) {
-		path_was_simplified= true;
-	}
+	if (path.size() > 0)
+		shortenPath(path);
 
 	// sanity check: do not use paths that lead via an invalid neighbor as first hop
 	if (path.size() > 0 and not neighbortable.isNeighbor(path[0]))
@@ -175,12 +173,9 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 		return false;
 	}
 
-	if (path_was_simplified) // override the given argument if path was simplified here
-		pathprop= KadContact::PathProperty::indirect;
-
 	KadContact *contact = getContactInternal(key);
 	if (contact == nullptr) { // contact is new
-		return handleNewContact(key, std::move(path), stateseqno, pathinfo_age, pathprop);
+		return handleNewContact(key, std::move(path), stateseqno, pathinfo_age);
 	}
 
 	// contact is known
@@ -190,7 +185,6 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 	if (!contact->isPhysicalNeighbor() and path.empty()==true)
 	{
 		contact->setPhysicalNeighbor();
-		contact->setPathProperty(KadContact::PathProperty::direct);
 		contact->updateLastSeen();
 
 		// move over to PNcontacts
@@ -354,7 +348,6 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 	// update lastseen to that of the originator
 	contact->updateLastSeenTo(simTime()-SimTime(pathinfo_age,SIMTIME_MS));
 
-	contact->setPathProperty(pathprop);
 	updateCount++;
 
 	// recheck neighbors of that contact because something has changed
@@ -381,13 +374,8 @@ bool KadRoutingTable::addPath(const OverlayKey& key, const kad_path& path, state
 	if (key == myKey)
 		return false;
 
-	// if viaPath.size()+path.size()+1 hop (for contact) <= discoveryRadius we can assume that PathID is available there
-	KadContact::PathProperty pathPropHint= (viaPath.size()+path.size() < discoveryRadius) ?
-		                               KadContact::PathProperty::direct :
-		                               KadContact::PathProperty::indirect;
-
 	// concatenated paths are direct if learned from neighborhood within discovery radius
-	return addPath(key, concatViaPath(viaPath, path), stateseqno, pathinfo_age, pathPropHint);
+	return addPath(key, concatViaPath(viaPath, path), stateseqno, pathinfo_age);
 }
 
 
@@ -462,7 +450,7 @@ bool KadRoutingTable::shortenPath(kad_path& path) const
 
 
 // @returns true if contact was inserted into routing table, false if not
-bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, stateseqno_t stateseqno, age_t pathinfo_age, KadContact::PathProperty pathprop)
+bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, stateseqno_t stateseqno, age_t pathinfo_age)
 {
 	ASSERT(key != myKey); // never insert myself
 	// get responsible bucket for contact
@@ -474,12 +462,11 @@ bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, sta
 	if (isSplittable(bucket)) {
 		splitLastBucket();
 		// we recurse to get the new bucket after the split
-		return handleNewContact(key, std::move(path), stateseqno, pathinfo_age, pathprop);
+		return handleNewContact(key, std::move(path), stateseqno, pathinfo_age);
 	}
 
 	bool isPhysicalNeighbor(path.empty() == true);
 	auto contact = std::make_unique<KadContact>(key, std::move(path));
-	contact->setPathProperty(pathprop); // use hint from caller
 	contact->setStateSeqNo(stateseqno);
 	// TODO should be corrected by RTT
 	contact->updateLastSeenTo(simTime()-SimTime(pathinfo_age,SIMTIME_MS));
@@ -487,9 +474,6 @@ bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, sta
 	// physical neighbors get always inserted as contact
 	if (isPhysicalNeighbor)
 	{
-		if (pathprop != KadContact::PathProperty::direct)
-			EV_WARN << "handleNewContact(): inconsistent path property, should be direct, but is " << (uint8_t) pathprop << endl;
-		contact->setPathProperty(KadContact::PathProperty::direct);
 		contact->updateLastSeen();
 		policy->onNewContact(contact.get()); // this should be safe even when contact is not yet added to bucket
 		bucket.PNContacts.push_back(std::move(contact));
@@ -789,19 +773,6 @@ size_type KadRoutingTable::getNumContactsWithoutPNs() const
 }
 
 
-size_type KadRoutingTable::getNumIndirectPaths() const
-{
-	size_type sum = 0;
-	for (const KadBucket& b : buckets)
-		for (const auto& contact : b.contacts) {
-			if (contact->getPathProperty() == KadContact::PathProperty::indirect)
-				sum++;
-		}
-	// no need to check for PNcontacts: they are always direct...
-	return sum;
-}
-
-
 void KadRoutingTable::updatePaths(const KadContact& improvedContact)
 {
 	// iterate over all buckets and contacts (not PNcontacts, because this does not make any sense)
@@ -1009,6 +980,7 @@ double KadRoutingTable::getAveragePathStretch() const
 	double sum = 0;
 	for (const KadBucket& b : buckets) {
 		for (auto& contact : b.contacts) {
+			// TODO: check for any broken links in current path, if so skip this path
 			if (getKadObserver().getPhysicalDistance(myKey, contact->getKey()) > 0) {
 				sum += (contact->getPathLength()+1) / getKadObserver().getPhysicalDistance(myKey, contact->getKey());
 				count++;

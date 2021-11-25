@@ -36,19 +36,6 @@ std::ostream& operator<<(std::ostream& os, const KadContact& c) {
 		os << "/P";
 	}
 	os << ")";
-	switch(c.getPathProperty()) {
-		case KadContact::PathProperty::undefined: os << 'u';
-			break;
-		case KadContact::PathProperty::direct: os << 'd';
-			break;
-		case KadContact::PathProperty::indirect: os << 'i';
-			break;
-		case KadContact::PathProperty::invalid: os << '*';
-			break;
-		default:
-			os << '?';
-			break;
-	} // end switch
 	os << " #" << c.getStateSeqNo() << " t=" << c.lastseen.trunc(SIMTIME_MS) << ' ';
 	os << c.getPath();
 	return os;

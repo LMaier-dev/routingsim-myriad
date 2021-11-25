@@ -58,21 +58,14 @@ public:
 		dead          = 4
 	};
 
-	enum class PathProperty : uint8_t {
-		undefined     = 0,
-		direct        = 1, // path was directly learned, i.e., traversed
-		indirect      = 2, // path was indirectly learned
-		invalid       = 3  // path is invalid
-	};
-
 	KadContact(const KadContact& o) : key(o.key), lastseen(o.lastseen), path(o.path), pathHashSum(o.pathHashSum),
-					  seqno(o.seqno), state(o.state), pathproperty(o.pathproperty),
+					  seqno(o.seqno), state(o.state),
 					  physicalNeighbor(o.physicalNeighbor),
 					  rds_p(o.rds_p == nullptr ? nullptr :
 						std::make_unique<RediscoveryState>(*o.rds_p)) {};
         KadContact(KadContact&& k) : key(std::move(k.key)), lastseen(std::move(k.lastseen)), path(std::move(k.path)),
 				     pathHashSum(std::move(k.pathHashSum)),
-				     seqno(k.seqno), state(k.state), pathproperty(k.pathproperty),
+				     seqno(k.seqno), state(k.state),
 				     physicalNeighbor(k.physicalNeighbor),
 				     rds_p(std::move(k.rds_p)) {};
         explicit KadContact(const OverlayKey& key): key(key), lastseen(SIMTIME_ZERO), path(), state(State::undefined), rds_p(nullptr) {};
@@ -121,8 +114,6 @@ public:
 	void setPath(kad_path path, OverlayKey&& HashSum) { this->path = std::move(path); setValid(); pathHashSum= HashSum; }
 	const kad_path& getPath() const { return path; }
 	const OverlayKey& getPathHashSum() const { return pathHashSum; }
-	PathProperty getPathProperty() const { return pathproperty; } 
-	void setPathProperty(PathProperty newprop) { pathproperty= newprop; }
 	stateseqno_t getStateSeqNo() const { return seqno; }
 	void setStateSeqNo(stateseqno_t newseqno) {
 		if (not (seqno.isInvalid() or (not seqno.isInvalid() and newseqno >= seqno)))
@@ -142,7 +133,6 @@ private:
 	OverlayKey pathHashSum; /// the hash sum of the path
 	stateseqno_t seqno= stateseqno_t::invalidSeqNo; /// sequence number for the path state (announced by origin)
 	State state= State::undefined; /// the state of the contact
-	PathProperty pathproperty= PathProperty::undefined; /// the path property
 	bool physicalNeighbor= false; /// true if we have a direct physical link to this neighbor
 	std::unique_ptr<RediscoveryState> rds_p= nullptr;
 };
@@ -173,7 +163,6 @@ inline KadContact& KadContact::operator=(const KadContact& other)
 		pathHashSum= other.pathHashSum;
 		seqno= other.seqno;
 		state= other.state;
-		pathproperty= other.pathproperty;
 		physicalNeighbor= other.physicalNeighbor;
 	}
 	return *this;
@@ -190,7 +179,6 @@ inline KadContact& KadContact::operator=(KadContact&& other)
 		pathHashSum= other.pathHashSum;
 		state= other.state;
 		seqno= other.seqno;
-		pathproperty= other.pathproperty;
 		physicalNeighbor= other.physicalNeighbor;
 		other.path.clear();
 		other.seqno= stateseqno_t::invalidSeqNo;

@@ -123,7 +123,7 @@ public:
 	 * add a potentially new path, adds a contacts or updates an existing one
 	 * @returns true if path was added
 	 */
-	bool addPath(const OverlayKey& key, kad_path path, stateseqno_t pathseqno, age_t pathinfo_age, KadContact::PathProperty prop);
+	bool addPath(const OverlayKey& key, kad_path path, stateseqno_t pathseqno, age_t pathinfo_age);
 	/**
 	 * add a potentially new path, adds a contact or updates an existing one
 	 * @returns true if path was added
@@ -172,9 +172,6 @@ public:
 	size_type getNumContacts() const;
 	/// returns the number of contacts in buckets without physical neighbors
 	size_type getNumContactsWithoutPNs() const;
-
-	/// returns the number of paths in buckets
-	size_type getNumIndirectPaths() const;
 
 	/// returns the number of found equivalent paths
 	///size_type getNumFoundEquivPaths() const { return pathSet.size(); };
@@ -232,7 +229,7 @@ public:
 
 protected:
 	/// adds a new contact, called by addPath, returns true if contact was added
-	virtual bool handleNewContact(const OverlayKey& key, kad_path path, stateseqno_t pathseqno, age_t pathinfo_age, KadContact::PathProperty prop);
+	virtual bool handleNewContact(const OverlayKey& key, kad_path path, stateseqno_t pathseqno, age_t pathinfo_age);
 	/** @name bucket access */
 	//@{
 	/** returns the index of the bucket corresponding to the given overlay key. */
