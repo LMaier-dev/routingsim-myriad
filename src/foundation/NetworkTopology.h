@@ -246,16 +246,16 @@ public:
 	bool isActive(nodeid_t node) const { return (*BGLtopology)[node].active; }
 
 	// are the two nodes directly connected with an active link
-	bool isConnected(nodeid_t node1, nodeid_t node2);
+	bool isConnected(nodeid_t node1, nodeid_t node2) const;
 
 	/// Returns true, if the network is connected
-	bool isConnected();
+	bool isConnected() const;
 
 	/// Returns the current number of partitions in the network
-	unsigned int getNumPartitions();
+	unsigned int getNumPartitions() const;
 
 	/// Returns the number of ACTIVE nodes in the network
-	unsigned int getNetworkSize();
+	unsigned int getNetworkSize() const;
 
 	/// Returns the TOTAL number of nodes irregarding their state (active/inactive)
 	inline unsigned int getNumberNodes() const { return num_vertices(*BGLtopology); }

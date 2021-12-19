@@ -829,8 +829,11 @@ void KadRoutingTable::invalidateContact(KadContact& contact, const link_t& faile
 				EV_TRACE << "Set Contact to invalid due to failed link " << failedLink
 					 << " (age: " << failedLinkAge << ") " << contact << endl;
 				// if contact is important neighbor: send rediscovery immediately
-				// otherwise schedule normal rediscovery
-				policy->scheduleRediscovery(contact.getKey(), isInLastBucket(contact.getKey()));
+				// otherwise schedule slow rediscovery
+				if (isInLastBucket(contact.getKey()))
+					policy->scheduleUrgentRediscovery(contact.getKey());
+				else
+					policy->scheduleSlowRediscovery(contact.getKey());
 			}
 			else
 			if (contact.isInvalid()) { // contact already invalid or rediscovering
@@ -913,8 +916,11 @@ void KadRoutingTable::invalidateContactsPN(const OverlayKey& failedNodeKey)
 					if (contact->isValid()) {
 						contact->setInvalid({failedNodeKey, myKey},0);
 						EV_TRACE << "Set Contact to invalid due to PN first hop failure: "  << *contact << endl;
-						// will schedule this for rediscovery later
-						policy->scheduleRediscovery(contact->getKey(), isInLastBucket(contact->getKey()));
+						// will schedule this for regular rediscovery later
+						if (isInLastBucket(contact->getKey()))
+							policy->scheduleUrgentRediscovery(contact->getKey());
+						else
+							policy->scheduleRegularRediscovery(contact->getKey());
 					}
 					else
 					if (contact->isInvalid()) { // contact already invalid or rediscovering
@@ -936,7 +942,10 @@ void KadRoutingTable::invalidateContactsPN(const OverlayKey& failedNodeKey)
 						contact->setInvalid({failedNodeKey, myKey},0);
 						EV_TRACE << "Set Contact to invalid due to PN first hop failure: "  << *contact << endl;
 						// will schedule this for rediscovery later
-						policy->scheduleRediscovery(contact->getKey(), isInLastBucket(contact->getKey()));
+						if (isInLastBucket(contact->getKey()))
+							policy->scheduleUrgentRediscovery(contact->getKey());
+						else
+							policy->scheduleRegularRediscovery(contact->getKey());
 					}
 					else
 					if (contact->isInvalid()) { // contact already invalid or rediscovering
@@ -980,24 +989,31 @@ double KadRoutingTable::getAveragePathStretch() const
 	double sum = 0;
 	for (const KadBucket& b : buckets) {
 		for (auto& contact : b.contacts) {
-			// TODO: check for any broken links in current path, if so skip this path
-			if (getKadObserver().getPhysicalDistance(myKey, contact->getKey()) > 0) {
-				sum += (contact->getPathLength()+1) / getKadObserver().getPhysicalDistance(myKey, contact->getKey());
+			if (uint phy_distance(getKadObserver().getPhysicalDistance(myKey, contact->getKey())); phy_distance > 0) {
+				if (getNetworkManager()->getFailedNodes().size() > 0) {
+					// in case of failed links or nodes: check path validity of contact path
+				}
+
+				sum += (contact->getPathLength()+1) / phy_distance;
 				count++;
 			}
 			else
-				EV_WARN << "Physical Distance = " << getKadObserver().getPhysicalDistance(myKey, contact->getKey())
+				EV_WARN << "Physical Distance = " << phy_distance
 					<< ": " << myKey << " to " << contact->getKey().shortStr() << endl;
 		}
 
 		for (auto& contact : b.PNContacts) {
 			// stored paths exclude the destination node
-			if (getKadObserver().getPhysicalDistance(myKey, contact->getKey()) > 0) {
-				sum += (contact->getPathLength()+1) / getKadObserver().getPhysicalDistance(myKey, contact->getKey());
+			if (uint phy_distance(getKadObserver().getPhysicalDistance(myKey, contact->getKey())); phy_distance > 0) {
+				if (getNetworkManager()->getFailedNodes().size() > 0) {
+					// in case of failed links or nodes: check path validity of contact path
+				}
+
+				sum += (contact->getPathLength()+1) / phy_distance;
 				count++;
 			}
 			else
-				EV_WARN << "Physical Distance = " << getKadObserver().getPhysicalDistance(myKey, contact->getKey())
+				EV_WARN << "Physical Distance = " << phy_distance
 					<< ": " << myKey << " to " << contact->getKey().shortStr() << endl;
 		}
 	}

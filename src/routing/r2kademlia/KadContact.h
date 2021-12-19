@@ -38,12 +38,24 @@ using age_t = uint32_t;
 
 constexpr unsigned short int maxRediscoveryRetries= 6;
 
+// see R2Kademlia.h
+
+class R2Kademlia;
+
+
 class RediscoveryState {
 public:
+	enum class rediscoverQ_type : uint8_t {
+		undefined     = 0,
+		urgent        = 1,
+		regular       = 2,
+		slow          = 3
+	};
 	RediscoveryState(const std::pair<link_t, simtime_t>& failedlink) : failedLinkList({failedlink}) {};
 	std::list<std::pair<link_t, simtime_t>> failedLinkList; // the currently failed links
 	std::list<OverlayKey> viaContacts; // these nodes should be considered for rediscovery actions for this contact
 	unsigned short int retryCounter= 0;
+	rediscoverQ_type rediscoverQtype= rediscoverQ_type::undefined;
 };
 
 

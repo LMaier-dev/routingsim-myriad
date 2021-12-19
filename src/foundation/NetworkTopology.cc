@@ -66,7 +66,7 @@ void NetworkTopology::readTopology(string path, string topologytype, bool useOnl
 	if (!topologyFile) {
 		string msg("Could not open topology file ");
 		msg+=path;
-		throw cRuntimeError(msg.c_str());
+		throw cRuntimeError("While reading topology: %s",msg.c_str());
 	}
 
 	if (!topologytype.compare("SELF_DEFINED")) {
@@ -664,7 +664,7 @@ void NetworkTopology::addLink(nodeid_t from, nodeid_t to) {
 	topologyAltered = true; // requires shortest path recalculation
 }
 
-bool NetworkTopology::isConnected(nodeid_t node1, nodeid_t node2) {
+bool NetworkTopology::isConnected(nodeid_t node1, nodeid_t node2) const {
 	BGLEdgeDesc e;
 	bool edgeExists;
 	tie(e, edgeExists) = edge(node1, node2, *BGLtopology);
@@ -675,11 +675,11 @@ bool NetworkTopology::isConnected(nodeid_t node1, nodeid_t node2) {
 	}
 }
 
-bool NetworkTopology::isConnected() {
+bool NetworkTopology::isConnected() const {
 	return ( getNumPartitions() ==  1 );
 }
 
-unsigned int NetworkTopology::getNumPartitions() {
+unsigned int NetworkTopology::getNumPartitions() const {
 	FilteredGraph fg(*BGLtopology, activeEdges<topologyGraph>(*BGLtopology), activeNodes<topologyGraph>(*BGLtopology));
 	std::vector<int> component(num_vertices(fg));
 
@@ -972,7 +972,7 @@ void NetworkTopology::enableNode(nodeid_t n) {
 	}
 }
 
-unsigned int NetworkTopology::getNetworkSize() {
+unsigned int NetworkTopology::getNetworkSize() const {
 	return getActiveNumberNodes();
 }
 
