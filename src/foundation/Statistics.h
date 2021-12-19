@@ -53,7 +53,7 @@ private:
 
 	// message delivery ratio accounting
 	std::unordered_set<cMessage*> msgs;
-	cOutVector* deliveryRatio;
+	cOutVector* messagesDeliveryRatio;
 	cOutVector* messagesDroppedVector;
 	cOutVector* messagesDeliveredVector;
 	cHistogram* hopCount;
@@ -62,7 +62,7 @@ private:
 	cHistogram* mulStretch;
 	unsigned int messagesDropped;
 	unsigned int messagesDelivered;
-	cOutVector* shortestPathDeliveryRatio;
+	cOutVector* shortestPathMessagesDeliveryRatio;
 	cOutVector* shortestPathMessagesDroppedVector;
 	cOutVector* shortestPathMessagesDeliveredVector;
 	unsigned int shortestPathMessagesDropped;

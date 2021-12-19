@@ -291,7 +291,7 @@ void R2Kademlia::doReachabilityTest(short timerID) {
 		maxtries--;
 	} while ( nodefound == false and maxtries > 0 );
 
-	if (key != nullptr) {
+	if (key != nullptr and nodefound == true) {
 		EV_TRACE << "Reachability Test to " << key->shortStr() << endl;
 		sendFindNode(*key, true, true);
 	}

@@ -246,10 +246,10 @@ int Statistics::numInitStages() const {
 
 Statistics::Statistics() {
 	samplingTimer = nullptr;
-	deliveryRatio = nullptr;
+	messagesDeliveryRatio = nullptr;
 	messagesDeliveredVector = nullptr;
 	messagesDroppedVector = nullptr;
-	shortestPathDeliveryRatio = nullptr;
+	shortestPathMessagesDeliveryRatio = nullptr;
 	shortestPathMessagesDeliveredVector = nullptr;
 	shortestPathMessagesDroppedVector = nullptr;
 	hopCount = nullptr;
@@ -268,11 +268,11 @@ void Statistics::initialize(int stage) {
 		messagesDropped = 0;
 		shortestPathMessagesDelivered = 0;
 		shortestPathMessagesDropped = 0;
-		deliveryRatio = new cOutVector("deliveryRatio");
+		messagesDeliveryRatio = new cOutVector("messagesDeliveryRatio");
 		messagesDeliveredVector = new cOutVector("messagesDelivered");
 		messagesDroppedVector = new cOutVector("messagesDropped");
 		if (recordShortestPathDeliveryRatio) {
-			shortestPathDeliveryRatio = new cOutVector("shortestPathDeliveryRatio");
+			shortestPathMessagesDeliveryRatio = new cOutVector("shortestPathMessagesDeliveryRatio");
 			shortestPathMessagesDeliveredVector = new cOutVector("shortestPathMessagesDelivered");
 			shortestPathMessagesDroppedVector = new cOutVector("shortestPathMessagesDropped");
 		}
@@ -307,10 +307,10 @@ void Statistics::finish() {
 Statistics::~Statistics() {
 	cancelAndDelete(samplingTimer);
 
-	delete deliveryRatio;
+	delete messagesDeliveryRatio;
 	delete messagesDeliveredVector;
 	delete messagesDroppedVector;
-	delete shortestPathDeliveryRatio;
+	delete shortestPathMessagesDeliveryRatio;
 	delete shortestPathMessagesDeliveredVector;
 	delete shortestPathMessagesDroppedVector;
 	delete hopCount;
@@ -334,18 +334,18 @@ Statistics::~Statistics() {
 		stats = nullptr;
 }
 
-const char* deliveryRatioStr = "messageDeliveryRatio";
+const char* messagesDeliveryRatioStr = "messagesDeliveryRatio";
 const char* messagesDeliveredStr = "messagesDelivered";
 const char* messagesDroppedStr = "messagesDropped";
 
 // this is called periodically
 void Statistics::sample() {
 	if ((messagesDelivered+messagesDropped)!=0) {
-		deliveryRatio->record((double)messagesDelivered/((double)messagesDelivered+(double)messagesDropped));
+		messagesDeliveryRatio->record((double)messagesDelivered/((double)messagesDelivered+(double)messagesDropped));
 		messagesDeliveredVector->record(messagesDelivered);
 		messagesDroppedVector->record(messagesDropped);
 		if (recordShortestPathDeliveryRatio) {
-			shortestPathDeliveryRatio->record((double)shortestPathMessagesDelivered/((double)shortestPathMessagesDelivered+(double)shortestPathMessagesDropped));
+			shortestPathMessagesDeliveryRatio->record((double)shortestPathMessagesDelivered/((double)shortestPathMessagesDelivered+(double)shortestPathMessagesDropped));
 			shortestPathMessagesDeliveredVector->record(shortestPathMessagesDelivered);
 			shortestPathMessagesDroppedVector->record(shortestPathMessagesDropped);
 		}

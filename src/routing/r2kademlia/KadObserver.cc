@@ -519,7 +519,11 @@ void KadObserver::sampleStatistics (Statistics &stats) {
 	// delivery ratio control packets
 	if (deliveredPackets > 0)
 		addOutVectors[deliveryRatioV]->record(deliveredPackets/((double)deliveredPackets + droppedPackets));
-	
+
+	addOutVectors[deliveredPacketsV]->record(deliveredPackets);
+	addOutVectors[droppedPacketsV]->record(droppedPackets);
+	addOutVectors[roamingPacketsV]->record(registeredPackets - deliveredPackets - droppedPackets);
+
 	// delivery ratio data packets
 	if (deliveredDataPackets > 0)
 		addOutVectors[deliveryRatioDataV]->record(deliveredDataPackets/((double)deliveredDataPackets + droppedDataPackets));
