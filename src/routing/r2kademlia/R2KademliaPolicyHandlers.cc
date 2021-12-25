@@ -160,6 +160,8 @@ void R2Kademlia::onContactInvalidation(KadContact_p contact)
 		fwdTablePathID.invalidateEntry(contact);
 }
 
+
+
 void R2Kademlia::onNewContact(KadContact_p contact) {
 
 	EV_TRACE << "onNewContact(" << contact->getKey().shortStr() << ") called, SeqNo #" << contact->getStateSeqNo() << endl;

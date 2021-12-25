@@ -220,7 +220,7 @@ void R2Kademlia::doProbe(short timerId) {
 			probeKey = myOverlayKey.randomSuffix(myOverlayKey.getLength() - index, getRNG(0));
 			break;
 		default:
-			throw cRuntimeError("unknown probe strategy %i, values from 0 to 6 are allowed");
+			throw cRuntimeError("unknown probe strategy %u, values from 0 to 6 are allowed", probeStrategy);
 	}
 	if (probeKey == myOverlayKey) probeKey[0] ^= 1;
 	sendFindNode(probeKey, exact);

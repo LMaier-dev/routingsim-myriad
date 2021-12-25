@@ -70,8 +70,9 @@ void R2Kademlia::onInitialize() {
 	}
 	probeStrategy = (uint) par("probeStrategy").intValue();
 	detailedRoutingTableStats = par("detailedRoutingTableStats").boolValue();
-	rediscoveryWaitTime = (simtime_t) (par("rediscoveryWaitTime").doubleValue() * 0.001); // given in ms
-	rediscoveryUrgentWaitTime = (simtime_t) (par("rediscoveryUrgentWaitTime").doubleValue() * 0.001); // given in ms
+	urgentRediscoveryWaitTime = (simtime_t) (par("urgentRediscoveryWaitTime").doubleValue() * 0.001); // given in ms
+	regularRediscoveryWaitTime = (simtime_t) (par("regularRediscoveryWaitTime").doubleValue() * 0.001); // given in ms
+	slowRediscoveryWaitTime = (simtime_t) (par("slowRediscoveryWaitTime").doubleValue() * 0.001); // given in ms
 	updateWaitTime = (simtime_t) (par("updateWaitTime").doubleValue() * 0.001);  // given in ms
 	updateWaitTimeFast = (simtime_t) (par("updateWaitTimeFast").doubleValue() * 0.001);
 	pathSetupWaitTime = (simtime_t) (par("pathSetupWaitTime").doubleValue() * 0.001);  // given in ms
@@ -139,12 +140,14 @@ void R2Kademlia::onConnect( nodeid_t nid ) {
 void R2Kademlia::onDisconnect( nodeid_t nid ) {
 	//EV_TRACE << "onDisconnect " << nid << endl;
 	// if this node is taken down, the packets arrive after the reset
-	if(neighborTable.size() == 0) return;
+	if (neighborTable.size() == 0)
+		return;
+
 	OverlayKey key = neighborTable.getOverlayKey(nid);
 	ASSERT(not key.isUnspecified());
 	ASSERT(neighborTable.getNodeId(key) == nid );
 
-	// change in physical neighbor hood increases the Sequence Number
+	// change in physical neighborhood increases the Sequence Number
 	incLSSeqNo();
 	neighborTable.removeNeighbor(nid);
 	ASSERT(neighborTable.getNodeId(key) == undefined_node);
@@ -154,10 +157,14 @@ void R2Kademlia::onDisconnect( nodeid_t nid ) {
 		EV_ERROR << "missing contact " << nid << " " << key << " on node " << node().getNodeId() << endl;
 		return;
 	}
-	
+
 	// Try to rediscover that contact
 	// after grace period (otherwise more links may fail immediately after this)
-	scheduleRediscovery(key, routingTable.isInLastBucket(key));
+	if (routingTable.isInLastBucket(key))
+		scheduleUrgentRediscovery(key);
+	else
+		scheduleRegularRediscovery(key);
+
 
 	// contacts from routing table with this neighbor as next hop are not usable until rediscovered
 	routingTable.invalidateContactsPN(key);
@@ -169,7 +176,7 @@ void R2Kademlia::onDisconnect( nodeid_t nid ) {
 
 
 void R2Kademlia::onMessage( NodePkt_p pkt ) {
-		
+
 	ASSERT(pkt->getType() == KAD_CTRL_PACKET_TYPE || pkt->getType() == KAD_DATA_PACKET_TYPE);
 
 	if ( pkt->getType() == KAD_DATA_PACKET_TYPE )
@@ -196,8 +203,8 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		countDropped(*packet, packet->getTarget(), travelledDisabledLink);
 		return;
 	}
-	
-	
+
+
 	KadPacket_p packet = \
 		std::unique_ptr<KadPacket>(check_and_cast<KadPacket*>(pkt->decapsulate()));
 	/*
@@ -405,7 +412,6 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 
 		// PNDiscovery should be sent before any further messages to avoid missing neighbors
 		// send back PNDiscReq to get contacts from physical neighbor
-		//TODO wait random time
 		KadContact neighborcontact(packet->getSource(), kad_path());
 
 		// try to add neighbor to routing table
@@ -1331,13 +1337,23 @@ bool R2Kademlia::handleFindNodeResponse(KadPacket_p answer_, RPCState& rpcState)
 	}
 
 	// the following should also be executed in case we had an error (not RPC_SUCCESS)
+	// try next via contact from RDS list of contact
 	// if this was a rediscovery packet, check for its success
 	if (findnodereq->getRediscovery() == true) {
 		if (auto contactp= routingTable.getContact(findnodereq->getDstNodeID()); contactp != nullptr) {
-			if (contactp->isRediscovering()) { // not successful yet
+			if (contactp->isRediscovering()) { // rediscovery not successful yet
 				EV_TRACE << "Rediscovery not successful for contact " << *contactp << ", next try." << endl;
+				// must trigger next rediscovery
 				// send a new find node req
-				sendRediscovery(contactp->getKey(), 1);
+				// fanout set to one, because each failed rediscovery request
+				// should only trigger a single new retry
+				ASSERT(contactp->getRDS().rediscoverQtype != RediscoveryState::rediscoverQ_type::undefined);
+				simtime_t rediscoveryWaitTime((contactp->getRDS().rediscoverQtype == RediscoveryState::rediscoverQ_type::urgent) ? urgentRediscoveryWaitTime :
+							      (contactp->getRDS().rediscoverQtype == RediscoveryState::rediscoverQ_type::regular) ? regularRediscoveryWaitTime : slowRediscoveryWaitTime);
+				rediscoverQueueClass& rediscoverQ((contactp->getRDS().rediscoverQtype == RediscoveryState::rediscoverQ_type::urgent) ? urgentRediscoverQueue :
+								  ((contactp->getRDS().rediscoverQtype == RediscoveryState::rediscoverQ_type::regular) ? regularRediscoverQueue : slowRediscoverQueue));
+				addTimer(SimTime(100,SIMTIME_MS), 0, std::bind(&R2Kademlia::sendRediscovery, this, contactp->getKey(), 1, rediscoverQ, rediscoveryWaitTime));
+				//sendRediscovery(contactp->getKey(), 1, rediscoverQ, rediscoveryWaitTime);
 			}
 		}
 	}

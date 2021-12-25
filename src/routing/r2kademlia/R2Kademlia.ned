@@ -47,9 +47,11 @@ simple R2Kademlia extends routingsim.foundation.Protocol
 		/// 0=none, 1=random, 2=exiting, 3=bucket_expand, 4=random_suffix, 5=suffix_expand, 6=random_bucket
 		int probeStrategy @enum(ProbeStrategy) = default(3);
 		/// waiting time until urgent rediscovery is scheduled
-		double rediscoveryUrgentWaitTime = default(500ms) @unit(ms);
+		double urgentRediscoveryWaitTime = default(500ms) @unit(ms);
 		/// waiting time until rediscovery is scheduled
-		double rediscoveryWaitTime = default(1000ms) @unit(ms);
+		double regularRediscoveryWaitTime = default(1000ms) @unit(ms);
+		/// waiting time until rediscovery is scheduled
+		double slowRediscoveryWaitTime = default(2000ms) @unit(ms);
 		/// waiting time until scheduled urgent routing updates are sent
 		double updateWaitTimeFast = default(250ms) @unit(ms);
 		/// waiting time until scheduled routing updates are sent
