@@ -22,6 +22,7 @@
 #include <boost/unordered_set.hpp>
 #include <map>
 #include <fstream>
+#include <sstream>
 #include <cmodule.h>
 
 namespace routingsim {
@@ -36,25 +37,29 @@ using std::vector;
 // ============================================================================
 
 NetworkTopology::NetworkTopology() :
-	BGLtopology(0), topologyAltered(false), spath(0), spathMatrixSize(0), spathAvailable(false) { }
+	BGLtopology(nullptr), topologyAltered(false), spath(nullptr), spathMatrixSize(0), spathAvailable(false) { }
 
 /// destructor
 NetworkTopology::~NetworkTopology() {
-	delete BGLtopology;
-
 	if (spathAvailable) {
-		if (spath != NULL) {
+		if (spath != nullptr) {
 			for  (int i=0; i<spathMatrixSize; i++) {
 				delete[] spath[i];
 			}
 			delete[] spath;
 		}
+		else {
+			EV_ERROR << "inconsistent state for spath" << endl;
+		}
 	}
+
+	delete BGLtopology;
 }
+
 
 void NetworkTopology::readTopology(string path, string topologytype, bool useOnlyLargestConnectedComponent, bool makeLinksBidirectional, bool allowNodeIdRemapping, bool compressNodeIDs) {
 	// store edges of topology
-	vector< pair<long long, long long> > edgesRead;
+	vector< pair<nodeid_t, nodeid_t> > edgesRead;
 	// store node properties
 	boost::unordered_map < nodeid_t, properties_t > nodeproperties;
 	// sanity check for number of nodes
@@ -79,19 +84,18 @@ void NetworkTopology::readTopology(string path, string topologytype, bool useOnl
 		throw cRuntimeError("Unknown topology type!");
 	}
 
-	long long maxVectorEntries = edgesRead.max_size();
-	long long maxElement=*max_element(nodeset.begin(), nodeset.end());
+	nodeid_t maxVectorEntries = edgesRead.max_size();
+	nodeid_t maxElement=*max_element(nodeset.begin(), nodeset.end());
 	// if there are ids that would lead to an exception when inserting into the
 	// BGLtopology (nodes are stored in a vector), remap them.
 	// edgesRead is taken as a general vector -  better way to access limit?
-	if (allowNodeIdRemapping &&
-			maxElement > maxVectorEntries) {
+	if (allowNodeIdRemapping and maxElement > maxVectorEntries) {
 		do {
-			long long newID;
+			nodeid_t newID;
 			bool foundID=false;
 
 			// find lowest available node id
-			for (long long i=0; i<maxVectorEntries; i++) {
+			for (nodeid_t i=0; i<maxVectorEntries; i++) {
 				if (nodeset.find(i)==nodeset.end()) {
 					newID = i;
 					foundID = true;
@@ -105,7 +109,7 @@ void NetworkTopology::readTopology(string path, string topologytype, bool useOnl
 			}
 
 			// replace any occurrence of maxElement by newID
-			vector< pair<long long, long long> >::iterator edgeIt;
+			vector< pair<nodeid_t, nodeid_t> >::iterator edgeIt;
 			for(edgeIt = edgesRead.begin(); edgeIt!= edgesRead.end(); edgeIt++) {
 				if (edgeIt->first == maxElement)
 					edgeIt->first = newID;
@@ -128,16 +132,16 @@ void NetworkTopology::readTopology(string path, string topologytype, bool useOnl
 	// as direct indices into our graph structures and therefore high node ids lead to large
 	// data structures and exorbitant memory consumption during shortest path calculation
 	if (compressNodeIDs) {
-		long long maxVectorEntries = edgesRead.max_size();
+		nodeid_t maxVectorEntries = edgesRead.max_size();
 		bool continueLoop=true;
 
 		do {
-			long long newID;
+			nodeid_t newID;
 			bool foundID=false;
-			long long maxElement=*max_element(nodeset.begin(), nodeset.end());
+			nodeid_t maxElement=*max_element(nodeset.begin(), nodeset.end());
 
 			// find lowest available node id
-			for (long long i=0; i<maxVectorEntries; i++) {
+			for (nodeid_t i=0; i<maxVectorEntries; i++) {
 				if (nodeset.find(i)==nodeset.end()) {
 					newID = i;
 					foundID=true;
@@ -150,7 +154,7 @@ void NetworkTopology::readTopology(string path, string topologytype, bool useOnl
 				continueLoop=false;
 			} else {
 				// replace any occurrence of maxElement by newID
-				vector< pair<long long, long long> >::iterator edgeIt;
+				vector< pair<nodeid_t, nodeid_t> >::iterator edgeIt;
 				for(edgeIt = edgesRead.begin(); edgeIt!= edgesRead.end(); edgeIt++) {
 					if (edgeIt->first == maxElement)
 						edgeIt->first = newID;
@@ -225,7 +229,7 @@ void NetworkTopology::readTopology(string path, string topologytype, bool useOnl
 
 		if (numComponents > 1) {
 			EV_INFO << "Determining Largest Connected Component of overall " << numComponents << " components" << endl;
-			vector<long long> partitionSizes(numComponents, 0);
+			vector<nodeid_t> partitionSizes(numComponents, 0);
 
 			// determine partition sizes
 			for (vit=component.begin(); vit!=component.end(); vit++) {
@@ -233,7 +237,7 @@ void NetworkTopology::readTopology(string path, string topologytype, bool useOnl
 			}
 
 			// determine size of max partition and its index
-			long long maxPartitionSize = *(max_element(partitionSizes.begin(), partitionSizes.end()));
+			nodeid_t maxPartitionSize = *(max_element(partitionSizes.begin(), partitionSizes.end()));
 			int maxPartitionId;
 
 			for (int i=0; i<numComponents; i++) {
@@ -304,7 +308,7 @@ void NetworkTopology::readTopology(string path, string topologytype, bool useOnl
 //     Lines starting with a single # may contain additional information and comments
 //     The remainder of the file contains the edges as in header version 0:
 //     (int \t int) describing the "from" and "to" of an edge
-void NetworkTopology::readSelfDefinedTopology(std::ifstream &topologyFile, std::set<nodeid_t> &nodeset, vector< pair<long long, long long> > &edges, boost::unordered_map < nodeid_t, properties_t > &nodeproperties) {
+void NetworkTopology::readSelfDefinedTopology(std::ifstream &topologyFile, std::set<nodeid_t> &nodeset, vector< pair<nodeid_t, nodeid_t> > &edges, boost::unordered_map < nodeid_t, properties_t > &nodeproperties) {
 	string line;
 	unsigned int numNodes = 0, numLinks = 0; // as given by header
 	nodeid_t fromNode, toNode;
@@ -327,7 +331,7 @@ void NetworkTopology::readSelfDefinedTopology(std::ifstream &topologyFile, std::
 			tokenNumber++;
 
 			// determine header type
-			if (lineNumber==1 && tokenNumber==1) {
+			if (lineNumber==1 and tokenNumber==1) {
 				if (boost::lexical_cast<string>(*it).compare("###") == 0) {
 					headerVersion=1;
 					EV << "Detected Topology File Header Version " << headerVersion << endl;
@@ -341,18 +345,18 @@ void NetworkTopology::readSelfDefinedTopology(std::ifstream &topologyFile, std::
 			}
 
 			// new header
-			if (headerVersion == 1 && lineNumber == 1 && ((tokenNumber == 2) || (tokenNumber==4))) {
+			if (headerVersion == 1 and lineNumber == 1 and ((tokenNumber == 2) || (tokenNumber==4))) {
 				continue;
 			}
-			if (headerVersion == 1 && lineNumber == 1 && tokenNumber == 3) {
+			if (headerVersion == 1 and lineNumber == 1 and tokenNumber == 3) {
 				numNodes = boost::lexical_cast<int>(*it);
 				continue;
 			}
-			if (headerVersion == 1 && lineNumber == 1 && tokenNumber == 5) {
+			if (headerVersion == 1 and lineNumber == 1 and tokenNumber == 5) {
 				numLinks = boost::lexical_cast<int>(*it);
 				continue;
 			}
-			if (headerVersion == 1 && lineNumber == 1 && tokenNumber == 7) {
+			if (headerVersion == 1 and lineNumber == 1 and tokenNumber == 7) {
 				if ( string(*it) == string("True") ||
 						string(*it) == string("true") ||
 						string(*it) == string("1") ) {
@@ -367,11 +371,11 @@ void NetworkTopology::readSelfDefinedTopology(std::ifstream &topologyFile, std::
 
 
 			// old header
-			if (headerVersion == 0 && lineNumber == 1 && tokenNumber == 1) {
+			if (headerVersion == 0 and lineNumber == 1 and tokenNumber == 1) {
 				numNodes = boost::lexical_cast<int>(*it);
 				continue;
 			}
-			if (headerVersion == 0 && lineNumber == 1 && tokenNumber == 2) {
+			if (headerVersion == 0 and lineNumber == 1 and tokenNumber == 2) {
 				numLinks = boost::lexical_cast<int>(*it);
 				undirectedGraph = true;
 				EV << "Old header version, assuming network topology is an undirected graph!" << endl;
@@ -379,7 +383,7 @@ void NetworkTopology::readSelfDefinedTopology(std::ifstream &topologyFile, std::
 			}
 
 			// skip comment lines in new header format
-			if (headerVersion == 1 && lineNumber > 1 && tokenNumber == 1) {
+			if (headerVersion == 1 and lineNumber > 1 and tokenNumber == 1) {
 				if (boost::lexical_cast<string>(*it).compare(0,1,"#") == 0) {
 					break;
 				}
@@ -389,19 +393,19 @@ void NetworkTopology::readSelfDefinedTopology(std::ifstream &topologyFile, std::
 			if (tokenNumber == 1) {
 				if (*it=="node") nodep = true;
 				else {
-					fromNode = boost::lexical_cast<long long>(*it);
+					fromNode = boost::lexical_cast<nodeid_t>(*it);
 					nodeset.insert(fromNode);
 				}
 			}
 
-			if (tokenNumber == 2 && !nodep) {
-				toNode = boost::lexical_cast<long long>(*it);
+			if (tokenNumber == 2 and !nodep) {
+				toNode = boost::lexical_cast<nodeid_t>(*it);
 				if (fromNode != toNode) {
-					edges.push_back( pair<long long, long long>(toNode, fromNode) );
+					edges.push_back( pair<nodeid_t, nodeid_t>(toNode, fromNode) );
 					if ( undirectedGraph == true ) {
 						// if the read topology is bidirectional/undirected, insert the reverse edge
 						// this is safe in case of multi-edges (which we do not want) as we use setS for the edgeList
-						edges.push_back( pair<long long, long long>(fromNode, toNode) );
+						edges.push_back( pair<nodeid_t, nodeid_t>(fromNode, toNode) );
 					}
 					nodeset.insert(toNode);
 				} else {
@@ -409,10 +413,10 @@ void NetworkTopology::readSelfDefinedTopology(std::ifstream &topologyFile, std::
 				}
 			}
 
-			if (tokenNumber >= 2 && nodep) {
+			if (tokenNumber >= 2 and nodep) {
 				string s = *it;
 				if (tokenNumber==2) {
-					toNode = boost::lexical_cast<long long>(*it);
+					toNode = boost::lexical_cast<nodeid_t>(*it);
 					continue;
 				}
 				string::size_type i = s.find(':');
@@ -444,7 +448,7 @@ void NetworkTopology::readSelfDefinedTopology(std::ifstream &topologyFile, std::
 
 }
 
-void NetworkTopology::readDimesTopology(std::ifstream &topologyFile, std::set<nodeid_t> &nodeset, vector< pair<long long, long long> > &edges, boost::unordered_map < nodeid_t, properties_t > &nodeproperties, bool makeBidirectional) {
+void NetworkTopology::readDimesTopology(std::ifstream &topologyFile, std::set<nodeid_t> &nodeset, vector< pair<nodeid_t, nodeid_t> > &edges, boost::unordered_map < nodeid_t, properties_t > &nodeproperties, bool makeBidirectional) {
 	string line;
 	// standart csv file...
 	escaped_list_separator<char> sep("\\", "," ,"\"'");
@@ -452,17 +456,17 @@ void NetworkTopology::readDimesTopology(std::ifstream &topologyFile, std::set<no
 
 	while (std::getline(topologyFile, line)) {
 		unsigned int tokenNumber = 0;
-		long long from = 0;
-		long long to = 0;
+		nodeid_t from = 0;
+		nodeid_t to = 0;
 
 		tokenizer_t tok(line,sep);
 		for (tokenizer_t::iterator it = tok.begin(); it != tok.end(); it++) {
 			if (tokenNumber == 0) {
-				from = boost::lexical_cast<long long>(*it);
+				from = boost::lexical_cast<nodeid_t>(*it);
 				nodeset.insert(from);
 			}
 			if (tokenNumber == 1) {
-				to = boost::lexical_cast<long long>(*it);
+				to = boost::lexical_cast<nodeid_t>(*it);
 				edges.push_back( std::make_pair(from, to) );
 				if (makeBidirectional)
 					edges.push_back( std::make_pair(to, from) );
@@ -528,7 +532,7 @@ vector<pair<nodeid_t, nodeid_t> > NetworkTopology::getRandomNodePairs( cRNG *rng
 
 		// check uniqueness
 		for ( resIt = res.begin(); resIt != res.end(); resIt++ ) {
-			if (resIt->first == src && resIt->second == dst) {
+			if (resIt->first == src and resIt->second == dst) {
 				insertPair = false;
 				break;
 			}
@@ -555,12 +559,13 @@ pair<nodeid_t, nodeid_t> NetworkTopology::getRandomEdge(size_t activeLinkNumber)
 	return pair<nodeid_t, nodeid_t>(source(*ei, fg), target(*ei, fg));
 }
 
+
 size_t NetworkTopology::getNodeDegree(nodeid_t node) const {
 	ActiveBGLVertexIt vi, vi_end;
 	FilteredGraph fg(*BGLtopology, activeEdges<topologyGraph>(*BGLtopology), activeNodes<topologyGraph>(*BGLtopology));
 
 	for ( tie(vi, vi_end) = vertices(fg); vi!=vi_end; vi++ ) {
-		if (*vi == node && fg[*vi].active==true)
+		if (*vi == node and fg[*vi].active==true)
 			return out_degree(*vi, fg);
 	}
 	// if the node does not exist, return degree 0
@@ -583,6 +588,7 @@ size_t NetworkTopology::getNodeDegrees( std::map<nodeid_t, unsigned long> &retDe
 	}
 	return retDegreeMap.size();
 }
+
 
 void NetworkTopology::getNodeIDs(vector<nodeid_t> &v) const {
 	ActiveBGLVertexIt vi, ve;
@@ -668,18 +674,20 @@ bool NetworkTopology::isConnected(nodeid_t node1, nodeid_t node2) const {
 	BGLEdgeDesc e;
 	bool edgeExists;
 	tie(e, edgeExists) = edge(node1, node2, *BGLtopology);
-	if (edgeExists && (*BGLtopology)[e].active) {
+	if (edgeExists and (*BGLtopology)[e].active) {
 		return true;
 	} else {
 		return false;
 	}
 }
 
+
 bool NetworkTopology::isConnected() const {
 	return ( getNumPartitions() ==  1 );
 }
 
-unsigned int NetworkTopology::getNumPartitions() const {
+
+unsigned long NetworkTopology::getNumPartitions() const {
 	FilteredGraph fg(*BGLtopology, activeEdges<topologyGraph>(*BGLtopology), activeNodes<topologyGraph>(*BGLtopology));
 	std::vector<int> component(num_vertices(fg));
 
@@ -695,7 +703,7 @@ unsigned int NetworkTopology::getNumPartitions() const {
 
 
 void NetworkTopology::extractFromNetwork(cModule *networkManager) {
-	vector< pair<long long, long long> > edges;
+	vector< pair<nodeid_t, nodeid_t> > edges;
 	cModule* mod = getSimulation()->getContextModule();
 	while(mod->getParentModule()!=NULL) mod = mod->getParentModule();
 
@@ -714,7 +722,7 @@ void NetworkTopology::extractFromNetwork(cModule *networkManager) {
 					cGate *outGate = submodp->gate("toNeighbors$o",i);
 					Node *to = Node::getOtherNode(outGate);
 					EV << "\tconnected to node " << to->getNodeId() << endl;
-					edges.push_back( pair<long long, long long>(fromID, to->getNodeId()));
+					edges.push_back( pair<nodeid_t, nodeid_t>(fromID, to->getNodeId()));
 				}
 			}
 			BGLtopology = new topologyGraph();
@@ -752,9 +760,9 @@ void NetworkTopology::createNetwork(cModule *parent) {
 			//EV << "IGNORING NODE " << *vi << endl;
 			continue;
 		}
-		char name[256];
-		snprintf(name, 255, "Node%llu", (long long)*vi);
-		cModule *mod = moduleType->create(name, parent);
+		std::stringstream node_name;
+		node_name << "Node" << (nodeid_t)*vi;
+		cModule *mod = moduleType->create(node_name.str().c_str(), parent);
 		mod->par("nodeId") = *vi;
 		moduleMap[*vi] = mod;
 	}
@@ -972,11 +980,8 @@ void NetworkTopology::enableNode(nodeid_t n) {
 	}
 }
 
-unsigned int NetworkTopology::getNetworkSize() const {
-	return getActiveNumberNodes();
-}
 
-unsigned int NetworkTopology::getActiveNumberNodes() const {
+unsigned long NetworkTopology::getActiveNumberNodes() const {
 	int cnt = 0;
 	BGLVertexIt vi, ve;
 
@@ -988,7 +993,7 @@ unsigned int NetworkTopology::getActiveNumberNodes() const {
 	return cnt;
 }
 
-unsigned int NetworkTopology::getActiveNumberLinks() const {
+unsigned long NetworkTopology::getActiveNumberLinks() const {
 	int cnt = 0;
 	BGLEdgeIt ei, ee;
 
@@ -1003,7 +1008,7 @@ unsigned int NetworkTopology::getActiveNumberLinks() const {
 float NetworkTopology::getDistance(nodeid_t from, nodeid_t to) {
 	time_t start, end;
 
-	if ( spathAvailable && !topologyAltered ) {
+	if ( spathAvailable and not topologyAltered ) {
 		// return result from calculated spaths
 		return spath[from][to];
 	} else if (shortestPathCalculationMode == "onDemand") {
@@ -1013,12 +1018,12 @@ float NetworkTopology::getDistance(nodeid_t from, nodeid_t to) {
 		// (re-)calculate shortest paths on ACTIVE graph and store
 		// note that num_vertices() and num_edges() on a filtered graph do return the unfiltered sizes!
 
-		int totalNodes = num_vertices(*BGLtopology);
+		unsigned long totalNodes = num_vertices(*BGLtopology);
 
 		// make sure we have enough storage
 		if ( spathMatrixSize < totalNodes ) {
 			if (spath != NULL) {
-				for  (int i=0; i<spathMatrixSize; i++) {
+				for  (unsigned long i=0; i<spathMatrixSize; i++) {
 					delete[] spath[i];
 				}
 				delete[] spath;
@@ -1028,18 +1033,18 @@ float NetworkTopology::getDistance(nodeid_t from, nodeid_t to) {
 			spath = new float*[totalNodes];
 
 			// set to NULL for cleanup in case of exception
-			for (int i=0; i<totalNodes; i++) {
+			for (unsigned long i=0; i<totalNodes; i++) {
 				spath[i] = NULL;
 			}
 
 			// try/catch to cleanup in case of exception
 			try {
-				for (int i=0; i<totalNodes; i++) {
+				for (unsigned long i=0; i<totalNodes; i++) {
 					spath[i] = new float[totalNodes];
 				}
 				spathMatrixSize = totalNodes;
 			} catch(...) {
-				for  (int i=0; i<totalNodes; i++) {
+				for  (unsigned long i=0; i<totalNodes; i++) {
 					delete[] spath[i];
 				}
 				delete[] spath;
@@ -1119,9 +1124,10 @@ vector<nodeid_t> NetworkTopology::getActiveTopologyPath(nodeid_t from, nodeid_t 
 	return path;
 }
 
+
 vector<nodeid_t> NetworkTopology::getFullTopologyPath(nodeid_t from, nodeid_t to) const {
 	// we could use bfs for unweighted graphs
-	unsigned int n = num_vertices(*BGLtopology);
+	unsigned long n = num_vertices(*BGLtopology);
 	vector<nodeid_t> p(n);
 	vector<nodeid_t> path;
 
@@ -1152,6 +1158,7 @@ vector<nodeid_t> NetworkTopology::getFullTopologyPath(nodeid_t from, nodeid_t to
 
 	return path;
 }
+
 
 bool NetworkTopology::fullTopologyPathFailed(nodeid_t from, nodeid_t to) const {
 	vector<nodeid_t> path = getFullTopologyPath(from, to);
@@ -1198,14 +1205,16 @@ bool NetworkTopology::fullTopologyPathFailed(nodeid_t from, nodeid_t to) const {
 	return false;
 }
 
+
 void NetworkTopology::setShortestPathCalculationMode(string mode) {
 	shortestPathCalculationMode = mode;
 }
 
+
 void NetworkTopology::resetNode(nodeid_t n) {
 	cModule *node = Node::getNode(moduleMap[n]);
-	int size = node->gate("toProtocols$o", 0)->size();
-	for (int i = 0; i < size; i++) {
+	unsigned long size = node->gate("toProtocols$o", 0)->size();
+	for (unsigned long i = 0; i < size; i++) {
 		cGate *tnm = node->gate("toProtocols$o", i);
 		check_and_cast<Protocol *> (tnm->getPathEndGate()->getOwner())->reset();
 	}

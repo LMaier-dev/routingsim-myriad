@@ -119,7 +119,7 @@ private:
 	typedef graph_traits<FilteredGraph>::edge_iterator ActiveBGLEdgeIt;
 	typedef graph_traits<FilteredGraph>::adjacency_iterator ActiveBGLAdjacencyIt;
 	/// our topology as bgl graph
-	topologyGraph *BGLtopology;
+	topologyGraph* BGLtopology;
 
 	/// link between the graph and the omnet network
 	boost::unordered_map<nodeid_t, cModule *> moduleMap;
@@ -130,9 +130,9 @@ private:
 	/// modifying functions
 	bool topologyAltered;
 
-	float **spath;
-	int spathMatrixSize;
+	unsigned long spathMatrixSize;
 	bool spathAvailable;
+	float **spath;
 	string shortestPathCalculationMode;
 
 public:
@@ -156,14 +156,14 @@ public:
 	/**
 	 * Read our own
 	 */
-	void readSelfDefinedTopology(std::ifstream &topologyFile, std::set<nodeid_t> &nodeset, vector< std::pair<long long, long long> > &edges, boost::unordered_map < nodeid_t, properties_t > &nodeproperties);
+	void readSelfDefinedTopology(std::ifstream &topologyFile, std::set<nodeid_t> &nodeset, vector< std::pair<nodeid_t, nodeid_t> > &edges, boost::unordered_map < nodeid_t, properties_t > &nodeproperties);
 
 	/**
 	 * Read a dimes as edges topology; by default, bidirectional edges are
 	 * assumed. If this is not the intended behaviour, set makeBidirectional
 	 * to false.
 	 */
-	void readDimesTopology(std::ifstream &topologyFile, std::set<nodeid_t> &nodeset, vector< std::pair<long long, long long> > &edges, boost::unordered_map < nodeid_t, properties_t > &nodeproperties, bool makeBidirectional=true);
+	void readDimesTopology(std::ifstream &topologyFile, std::set<nodeid_t> &nodeset, vector< std::pair<nodeid_t, nodeid_t> > &edges, boost::unordered_map < nodeid_t, properties_t > &nodeproperties, bool makeBidirectional=true);
 
 	/**
 	 * Read shortest paths from file with shortest-path pre-calculations.
@@ -252,22 +252,22 @@ public:
 	bool isConnected() const;
 
 	/// Returns the current number of partitions in the network
-	unsigned int getNumPartitions() const;
+	unsigned long getNumPartitions() const;
 
 	/// Returns the number of ACTIVE nodes in the network
-	unsigned int getNetworkSize() const;
+	unsigned long getNetworkSize() const { 	return getActiveNumberNodes(); }
 
 	/// Returns the TOTAL number of nodes irregarding their state (active/inactive)
-	inline unsigned int getNumberNodes() const { return num_vertices(*BGLtopology); }
+	inline unsigned long getNumberNodes() const { return num_vertices(*BGLtopology); }
 
 	/// Returns the TOTAL number of links irregarding their state (active/inactive)
-	inline unsigned int getNumberLinks() const { return num_edges(*BGLtopology); }
+	inline unsigned long getNumberLinks() const { return num_edges(*BGLtopology); }
 
 	/// Returns the number of ACTIVE nodes in the network
-	unsigned int getActiveNumberNodes() const;
+	unsigned long getActiveNumberNodes() const;
 
 	/// Returns the number of ACTIVE links in the network
-	unsigned int getActiveNumberLinks() const;
+	unsigned long getActiveNumberLinks() const;
 
 	/// return the shortest path distance between two nodes
 	/// if not calculated already (or the graph has changed),

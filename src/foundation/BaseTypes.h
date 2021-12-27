@@ -15,7 +15,7 @@ namespace routingsim {
 
 
 /// identifier type
-typedef unsigned long long id_t;
+typedef unsigned long id_t;
 
 /// node identifier definitions
 typedef id_t nodeid_t;
