@@ -37,13 +37,13 @@ using std::vector;
 // ============================================================================
 
 NetworkTopology::NetworkTopology() :
-	BGLtopology(nullptr), topologyAltered(false), spath(nullptr), spathMatrixSize(0), spathAvailable(false) { }
+	BGLtopology(nullptr), topologyAltered(false), spathMatrixSize(0), spathAvailable(false), spath(nullptr) { }
 
 /// destructor
 NetworkTopology::~NetworkTopology() {
 	if (spathAvailable) {
 		if (spath != nullptr) {
-			for  (int i=0; i<spathMatrixSize; i++) {
+			for  (nodeid_t i=0; i<spathMatrixSize; i++) {
 				delete[] spath[i];
 			}
 			delete[] spath;
@@ -803,8 +803,7 @@ void NetworkTopology::createNetwork(cModule *parent) {
 	EV << "Created links (" << num_edges(*BGLtopology) << " unidirectional)." << endl;
 
 	// start simulation
-	boost::unordered_map<nodeid_t, cModule *>::iterator modMapIt;
-	for (modMapIt = moduleMap.begin(); modMapIt != moduleMap.end(); modMapIt++) {
+	for (auto modMapIt = moduleMap.begin(); modMapIt != moduleMap.end(); modMapIt++) {
 		cModule *module = modMapIt->second;
 
 		// finalize parameters
@@ -838,7 +837,7 @@ void NetworkTopology::createNetwork(cModule *parent) {
 	}
 	EV_INFO << "Modules ready to start." << endl;
 
-	for (modMapIt = moduleMap.begin(); modMapIt != moduleMap.end(); modMapIt++) {
+	for (auto modMapIt = moduleMap.begin(); modMapIt != moduleMap.end(); modMapIt++) {
 		modMapIt->second->scheduleStart(simTime());
 	}
 	EV_INFO << "Modules started." << endl;
@@ -1053,7 +1052,14 @@ float NetworkTopology::getDistance(nodeid_t from, nodeid_t to) {
 		}
 
 		FilteredGraph fg(*BGLtopology, activeEdges<topologyGraph>(*BGLtopology), activeNodes<topologyGraph>(*BGLtopology));
-		EV_DETAIL << "Recalculating Shortest Paths at Simtime " << simTime() << endl;
+		EV_DETAIL << "Recalculating Shortest Paths at Simtime " << simTime()
+			  << " Required Memory: ";
+		if (auto memsize(totalNodes*totalNodes*sizeof(float)); memsize < 1000000ULL) {
+			EV_DETAIL << memsize/1000ULL << " kbytes" << endl;
+		}
+		else {
+			EV_DETAIL << memsize/1000000ULL << "Mbytes" << endl;
+	        }
 		time(&start);
 		// use floyd warshall for dense graphs only
 		if ( (totalNodes*num_edges(*BGLtopology)*log(totalNodes)) < pow(totalNodes, 3) ) {

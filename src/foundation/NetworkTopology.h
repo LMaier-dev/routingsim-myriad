@@ -122,17 +122,16 @@ private:
 	topologyGraph* BGLtopology;
 
 	/// link between the graph and the omnet network
-	boost::unordered_map<nodeid_t, cModule *> moduleMap;
-	//TODO why dont we use std::map
+	std::unordered_map<nodeid_t, cModule *> moduleMap;
 
 	/// Bool to keep track of whether the topology was changed since last
 	/// shortest path calculation; needs to be set to true by topology-
 	/// modifying functions
 	bool topologyAltered;
 
-	unsigned long spathMatrixSize;
+	unsigned long spathMatrixSize; // only the number of rows (= number of columns)
 	bool spathAvailable;
-	float **spath;
+	float **spath; // two dimensional array of floats as distance (float is usually 4 bytes)
 	string shortestPathCalculationMode;
 
 public:
