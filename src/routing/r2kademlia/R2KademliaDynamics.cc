@@ -474,7 +474,7 @@ void R2Kademlia::scheduleRediscovery(const OverlayKey& contactkey, rediscoverQue
 	// remember where it was queued in for next retry round
 	const_cast<KadContact*>(rt_contact)->getRDS().rediscoverQtype=
 		((&rediscoverQ == &slowRediscoverQueue) ? RediscoveryState::rediscoverQ_type::slow :
-		 ((&rediscoverQ == &regularRediscoverQueue) ? RediscoveryState::rediscoverQ_type::regular : RediscoveryState::rediscoverQ_type::slow));
+		 ((&rediscoverQ == &regularRediscoverQueue) ? RediscoveryState::rediscoverQ_type::regular : RediscoveryState::rediscoverQ_type::urgent));
 
 	// start timer for calling rediscoverContacts unless it has been started already
 	if (not rediscoverQ.isScheduled() and not rediscoverQ.empty()) {
