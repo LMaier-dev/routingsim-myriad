@@ -209,7 +209,7 @@ public:
 	inline size_type getSplitSize() const { return bucketSize; }
 	/// returns true if the key is known, i.e. there is a contact present
 	inline bool isKnown(const OverlayKey& key) const { return getContact(key) != nullptr; }
-	/// returns true if key is in last bucket
+	/// returns true if key is in address range of last bucket (it does not have to be present there)
 	inline bool isInLastBucket(const OverlayKey& key) const { return getBucketIndex(key) == buckets.size()-1; }
 	/// returns true if key is in last bucket and not present
 	inline bool isInLastBucketAndNew(const OverlayKey& key) const { size_t index(getBucketIndex(key));

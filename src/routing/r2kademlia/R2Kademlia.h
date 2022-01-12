@@ -335,7 +335,7 @@ private:
 	void incLSSeqNo() { lsseqno++; }
 	/// adds contact and not via link for rediscovery queue (or send it immediately)
 	void scheduleRediscovery(const OverlayKey& contactkey, rediscoverQueueClass& rediscoveryQueue, simtime_t rediscoveryWaitTime);
-	void rediscoverContacts(rediscoverQueueClass& rediscoveryQ, simtime_t rediscoveryWaitTime);
+	void rediscoverContacts(RediscoveryState::rediscoverQ_type qtype, simtime_t rediscoveryWaitTime);
   protected:
 	/** @name Protocol interface */
 	//@{
@@ -407,7 +407,7 @@ private:
 	/// sends a find node call via viacontactkey to find a path to this node
 	void sendFindNodeVia(const OverlayKey& destkey, KadContact_p viacontactkey, bool exact, bool track);
 	/// sends a find node call for rediscovery, possibly using "not via" failed link, last two parameters required for scheduling retries
-	void sendRediscovery(OverlayKey failedcontact, uint8_t maxFanOut, rediscoverQueueClass& rediscoveryQueue, simtime_t rediscoveryWaitTime);
+	void sendRediscovery(OverlayKey failedcontact, uint8_t maxFanOut, simtime_t rediscoveryWaitTime);
 
 	/// sends a data packet
 	void sendData(const OverlayKey& key);

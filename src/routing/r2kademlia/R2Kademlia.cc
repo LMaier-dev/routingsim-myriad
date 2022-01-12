@@ -1270,10 +1270,12 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 					// since we need an exact match and cannot make any progress, we are lost here
 					EV_ERROR << "cannot reach final destination " << query.shortStr() << " (dead end)" << endl;
 					countDropped(*packet, query, routeFailureDeadEnd);
-					// since this node should exist, it may be a hint for inconsistency
-					// trigger discovery of own neighborhood or lookup this contact?
 
+					// since this node should exist, it may be a hint for inconsistency
+					// trigger discovery of own neighborhood in case the contact is in our lowest bucket
+					//if (routingTable.isInLastBucket(contact) and timerDuration[probeTimerId] > SimTime(2000,SIMTIME_MS)) {
 					if (timerDuration[probeTimerId] > SimTime(2000,SIMTIME_MS)) {
+
 					  sendFindNode(myOverlayKey, false);
 					  resetTimer(probeTimerId, SimTime(100,SIMTIME_MS));
 					}
@@ -1352,7 +1354,7 @@ bool R2Kademlia::handleFindNodeResponse(KadPacket_p answer_, RPCState& rpcState)
 							      (contactp->getRDS().rediscoverQtype == RediscoveryState::rediscoverQ_type::regular) ? regularRediscoveryWaitTime : slowRediscoveryWaitTime);
 				rediscoverQueueClass& rediscoverQ((contactp->getRDS().rediscoverQtype == RediscoveryState::rediscoverQ_type::urgent) ? urgentRediscoverQueue :
 								  ((contactp->getRDS().rediscoverQtype == RediscoveryState::rediscoverQ_type::regular) ? regularRediscoverQueue : slowRediscoverQueue));
-				addTimer(SimTime(100,SIMTIME_MS), 0, std::bind(&R2Kademlia::sendRediscovery, this, contactp->getKey(), 1, rediscoverQ, rediscoveryWaitTime));
+				addTimer(SimTime(100,SIMTIME_MS), 0, std::bind(&R2Kademlia::sendRediscovery, this, contactp->getKey(), 1, rediscoveryWaitTime));
 				//sendRediscovery(contactp->getKey(), 1, rediscoverQ, rediscoveryWaitTime);
 			}
 		}

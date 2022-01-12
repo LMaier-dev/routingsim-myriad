@@ -907,10 +907,11 @@ void KadRoutingTable::invalidateContactsPN(const OverlayKey& failedNodeKey)
 	// iterate over all buckets and contacts
 	for (KadBucket& b : buckets) {
 		for (auto& contact : b.contacts) {
-			// we found a failed link in the path, mark contact invalid
 			const auto& path= contact->getPath();
 			if (path.size() >= 1)
 			{
+				// if we find a failed link in the path, mark contact invalid
+				// here it must be the first hop that failed
 				if (path[0] == failedNodeKey) // failed node is first hop
 				{
 					if (contact->isValid()) {
