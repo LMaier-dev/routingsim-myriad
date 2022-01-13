@@ -1272,14 +1272,14 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 					countDropped(*packet, query, routeFailureDeadEnd);
 
 					// since this node should exist, it may be a hint for inconsistency
-					// trigger discovery of own neighborhood in case the contact is in our lowest bucket
-					//if (routingTable.isInLastBucket(contact) and timerDuration[probeTimerId] > SimTime(2000,SIMTIME_MS)) {
-					if (timerDuration[probeTimerId] > SimTime(2000,SIMTIME_MS)) {
-
-					  sendFindNode(myOverlayKey, false);
-					  resetTimer(probeTimerId, SimTime(100,SIMTIME_MS));
+					// trigger discovery of own neighborhood (join) in case the contact is in our lowest bucket
+					// and backoff has already advanced beyond 1s
+					if (routingTable.isInLastBucket(contact.getKey()) and timerDuration[probeTimerId] > SimTime(1000,SIMTIME_MS)) {
+						// send a join now
+						sendFindNode(myOverlayKey, false);
+						// reset timer for periodic joins to ask more frequently now
+						resetTimer(probeTimerId, SimTime(100,SIMTIME_MS));
 					}
-					//sendFindNode(query, false);
 
 					returnToSender(KAD_RouteFailureDeadEnd, std::move(packet));
 				}
