@@ -605,49 +605,58 @@ KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_t
 	}
 
 	size_type index = getBucketIndex(key);
-	auto bucket = buckets.begin() + index;
+	auto bucket = buckets.cbegin() + index;
+
+	// if bucket is large enough, try to copy all contacts
+	// however, size() does not consider contact validity
+	// so we need to check after this for result.size()
 	if (bucket->size() >= n)
 	{
 		copyContactsFn(bucket->contacts, result);
 		copyContactsFn(bucket->PNContacts, result);
 	}
-	else {
-		// not enough contacts in first bucket
-		// now we scan the level of the accelerated lookup
-		// and then we go down the tree
-		size_type firstOnLevelIndex = getFirstOnBucketLevel(index);
-		uint width = getLevelWidth();
 
-		for (auto level = buckets.begin() + firstOnLevelIndex;
-		     level < buckets.end() and result.size() < n;
-		     level+=width) {
-			if (level == buckets.end()-1)
-			{
-				copyContactsFn(level->contacts, result);
-				copyContactsFn(level->PNContacts, result);
-			}
-			else // always insert the whole level
-				for (uint i = 0; i < width and level+i < buckets.end(); i++)
-				{
-					copyContactsFn(level[i].contacts, result);
-					copyContactsFn(level[i].PNContacts, result);
-				}
+	if (result.size() < n) {
+	  // not enough (valid) contacts in first bucket
+	  // now we scan the level of the accelerated lookup
+	  // and then we go down the tree
+	  size_type firstOnLevelIndex = getFirstOnBucketLevel(index);
+	  uint width = getLevelWidth();
+
+	  for (auto level = buckets.cbegin() + firstOnLevelIndex;
+	       level < buckets.cend() and result.size() < n;
+	       level+=width)
+	  {
+	    if (level == buckets.cend()-1) {
+	      copyContactsFn(level->contacts, result);
+	      copyContactsFn(level->PNContacts, result);
+	    }
+	    else { // always insert the whole level
+	      for (uint i = 0; i < width and level+i < buckets.end(); i++)
+		{
+		  copyContactsFn(level[i].contacts, result);
+		  copyContactsFn(level[i].PNContacts, result);
 		}
-		// if we still do not have enough contacts, we go up the tree
-		auto otherBucket = buckets.begin() + firstOnLevelIndex;
-		while(result.size() < n and otherBucket != buckets.begin()) {
-			otherBucket--;
-			copyContactsFn(otherBucket->contacts, result);
-			copyContactsFn(otherBucket->PNContacts, result);
-		}
+	    }
+	  }
+
+	  // if we still do not have enough contacts, we go up the tree
+	  auto otherBucket = buckets.cbegin() + firstOnLevelIndex;
+	  while (result.size() < n and otherBucket != buckets.cbegin()) {
+	    otherBucket--;
+	    copyContactsFn(otherBucket->contacts, result);
+	    copyContactsFn(otherBucket->PNContacts, result);
+	  }
 	}
+
 	// now we sort the contacts by their XOR metric
 	std::sort(result.begin(), result.end(), KadContactCompare(key));
 	// if we have found more than n contacts, we need to remove some
 	if (result.size() > n) {
-		result.resize(n);
+	  result.resize(n);
 	}
 	result.shrink_to_fit();
+
 	return result;
 }
 
