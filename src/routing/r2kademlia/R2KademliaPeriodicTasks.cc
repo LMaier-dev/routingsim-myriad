@@ -102,7 +102,9 @@ void R2Kademlia::doSendHello(short timerId) {
 }
 
 
-// probe for closest (overlay/ID-wise) neighbors, i.e., those in the deepest buckets
+// Contact Probing: probe for closest (overlay/ID-wise) neighbors, i.e., those in the deepest buckets
+// contact probing uses FindNodeReq (i.e., the overlay routing strategy) to check reachability of
+// the contact, this may also detect changes in routes or even better routes
 void R2Kademlia::doProbeNeighbors(short timerId) {
 	if (neighborTable.size() == 0)
 		return; // node is isolated
@@ -130,7 +132,10 @@ void R2Kademlia::doProbeNeighbors(short timerId) {
 }
 
 
-// check for path validity
+
+// check for contact validity
+// contact probing uses FindNodeReq (i.e., the overlay routing strategy) to check reachability of
+// the contact, this may also detect changes in routes or even better routes
 void R2Kademlia::doProbeContacts(short timerId) {
 	if (neighborTable.size() == 0)
 		return; // node is isolated

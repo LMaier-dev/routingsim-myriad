@@ -89,7 +89,7 @@ public:
 	/** called when a contact is invalidated */
 	virtual void onContactInvalidation(KadContact_p contact) = 0;
 	/** called when physical neighbors may be out of synch with their sequence numbers **/
-	virtual void reSyncPN(const KadContact& contact) = 0;
+	virtual void reSyncPN(const KadContact& contact, stateseqno_t expected_seqno) = 0;
 	/** called when physical neighbors in discoveryradius may be out of synch with their sequence numbers **/
 	virtual void recheckPhysicalNeighbors(const KadContact& contact) = 0;
 	/** called when a rediscovery needs to be performed for a contact */
@@ -97,7 +97,7 @@ public:
 	virtual void scheduleRegularRediscovery(const OverlayKey& contact) = 0;
 	virtual void scheduleSlowRediscovery(const OverlayKey& contact) = 0;
 	/** called when the path of a contact is probably broken and needs to be checked */
-	virtual void onContactCheck(const KadContact& contact) = 0;
+	virtual void onPathCheck(const KadContact& contact) = 0;
 };
 
 /**
@@ -182,7 +182,7 @@ public:
 	KadContact_p getRandomContact() const;
 
 	/// if failed link is in contact's path send a ProbeReq to check for path validity
-	void checkContact(KadContact& contact, const link_t& failed_link);
+	void checkPathToContact(KadContact& contact, const link_t& failed_link);
 	/// do not invalidate valid contacts, but test path validity
 	void checkContacts(const link_t& failedlink);
 

@@ -263,7 +263,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 					 << packet->reversePath(packet->getSrcPath()) << endl;
 				break;
 
-			case KAD_ProbeReq:
+			case KAD_ProbeReq: // this is for path probing
 			        {
 					const KadProbeReq* probereq= dynamic_cast<const KadProbeReq*>(packet.get());
 					if (usePathIDs and probereq->getPathCheck()) {
@@ -422,8 +422,8 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 		else
 			EV_TRACE << "adding neighbor failed (maybe was already there)" << endl;
 
-		// schedule PN Discovery Request
-		schedulePNDiscReq(neighborcontact.getKey());
+		// schedule PN Discovery Request (unconditionally)
+		schedulePNDiscReq(neighborcontact.getKey(), stateseqno_t::invalidSeqNo);
 	}
 	else {
 		// already known neighbor, just check for seqno synchronization
@@ -821,8 +821,8 @@ const KadContact& R2Kademlia::chooseNextHop(const KadContactList& contacts, cons
 // -------------------- RPC methods ---------------------------
 
 
-// PING
-void R2Kademlia::sendProbe(KadContact_p contact) {
+// Path Probing: sends a ProbeReq to check for validity of an existing path
+void R2Kademlia::sendPathProbe(KadContact_p contact) {
 	EV_TRACE << "sending ProbeReq from " << myOverlayKey.shortStr() << " to " << contact->getKey().shortStr() << endl;
 	auto probereq= makePacket<KadProbeReq>(contact, "KadProbeReq");
 	probereq->setPathCheck(true);
@@ -833,6 +833,7 @@ void R2Kademlia::sendProbe(KadContact_p contact) {
 }
 
 
+// sends back an answer for a path probe
 void R2Kademlia::handlePacket(std::unique_ptr<KadProbeReq> packet) {
 	// update StateSeqNo and lastseen of origin contact
 	if (KadContact* contact_p= const_cast<KadContact*>(routingTable.getContact(packet->getSource())); contact_p != nullptr) {
@@ -1352,8 +1353,7 @@ bool R2Kademlia::handleFindNodeResponse(KadPacket_p answer_, RPCState& rpcState)
 				ASSERT(contactp->getRDS().rediscoverQtype != RediscoveryState::rediscoverQ_type::undefined);
 				simtime_t rediscoveryWaitTime((contactp->getRDS().rediscoverQtype == RediscoveryState::rediscoverQ_type::urgent) ? urgentRediscoveryWaitTime :
 							      (contactp->getRDS().rediscoverQtype == RediscoveryState::rediscoverQ_type::regular) ? regularRediscoveryWaitTime : slowRediscoveryWaitTime);
-				rediscoverQueueClass& rediscoverQ((contactp->getRDS().rediscoverQtype == RediscoveryState::rediscoverQ_type::urgent) ? urgentRediscoverQueue :
-								  ((contactp->getRDS().rediscoverQtype == RediscoveryState::rediscoverQ_type::regular) ? regularRediscoverQueue : slowRediscoverQueue));
+
 				addTimer(SimTime(100,SIMTIME_MS), 0, std::bind(&R2Kademlia::sendRediscovery, this, contactp->getKey(), 1, rediscoveryWaitTime));
 				//sendRediscovery(contactp->getKey(), 1, rediscoverQ, rediscoveryWaitTime);
 			}
@@ -1654,7 +1654,7 @@ bool R2Kademlia::checkForResync(const OverlayKey& contact, stateseqno_t newseqno
 			EV_TRACE << "resync required for " << contact_p->getKey().shortStr() << " new: "
 				 << newseqno << " old: " << contact_p->getStateSeqNo() << endl;
 
-			reSyncPN(*contact_p);
+			reSyncPN(*contact_p, newseqno);
 
 			return true;
 		}
@@ -1664,21 +1664,38 @@ bool R2Kademlia::checkForResync(const OverlayKey& contact, stateseqno_t newseqno
 }
 
 
-/// schedule sending PNDiscReq, because meanwhile more neighbors will be discovered
+/// schedule sending PNDiscReq for contacts, because meanwhile more neighbors will be discovered
+/// also record expected new seqno, so if state had been updated meanwhile we can avoid resync
 /// this will avoid triggering frequent resynchronizations
-void R2Kademlia::schedulePNDiscReq(const OverlayKey& neighbor)
+void R2Kademlia::schedulePNDiscReq(const OverlayKey& neighbor, stateseqno_t expected_seqno)
 {
 	if (not PNDiscoverQueue.empty()) {
-		if (find(PNDiscoverQueue.cbegin(), PNDiscoverQueue.cend(), neighbor) != PNDiscoverQueue.cend())
-			return; // same neighbor already present
+		if (auto it= std::find_if(PNDiscoverQueue.begin(), PNDiscoverQueue.end(),
+					  [&](const auto& p) { return p.first == neighbor; });
+		    it != PNDiscoverQueue.end()) {
+			// same neighbor already present, but
+			// probably need to update the state seq no
+			if (expected_seqno.isInvalid()) {
+				// update to invalid
+				it->second= expected_seqno;
+			}
+			else {
+				// only update when actually larger
+				if (expected_seqno > it->second)
+					it->second= expected_seqno;
+			}
+			return;
+		}
 	}
 
-	PNDiscoverQueue.push_back(neighbor);
+	PNDiscoverQueue.push_back(std::make_pair(neighbor, expected_seqno));
 
 	if (not pndiscScheduled)
 	{
-		EV_TRACE << "scheduling PNDiscReq for " << neighbor.shortStr() << endl;
-		addTimer(SimTime(20,SIMTIME_MS), 0, std::bind(&R2Kademlia::sendScheduledPNDiscReq, this));
+		const simtime_t PN_discreq_wait_time(SimTime(40,SIMTIME_MS));
+		simtime_t wait_time(uniform(PN_discreq_wait_time/2,3*PN_discreq_wait_time/2));
+		EV_TRACE << "scheduling PNDiscReq in " << neighbor.shortStr() << endl;
+		addTimer(wait_time, 0, std::bind(&R2Kademlia::sendScheduledPNDiscReq, this));
 		pndiscScheduled= true;
 	}
 }
@@ -1692,13 +1709,18 @@ void R2Kademlia::sendScheduledPNDiscReq() {
 
 	while (!PNDiscoverQueue.empty())
 	{
-		auto& neighborcontactkey= PNDiscoverQueue.front();
+		auto& [neighborcontactkey, expected_seqno]= PNDiscoverQueue.front();
 		// check for current status of scheduled contact
 		if (neighborTable.isNeighbor(neighborcontactkey)) { // so contact is still an active neighbor
 			// note: contact may have been invalidated or changed meanwhile
 			if (auto rt_contact= routingTable.getContact(neighborcontactkey); rt_contact != nullptr) { // so contact still exists
-
-				sendDiscoveryReq(rt_contact);
+				// check whether update is needed (invalidSeqNo means unconditionally update)
+				if (expected_seqno.isInvalid() or expected_seqno > rt_contact->getStateSeqNo())
+					sendDiscoveryReq(rt_contact);
+				else
+					EV_TRACE << "Obsolete PNDiscReq avoided due to current seqno "
+						 << rt_contact->getStateSeqNo() << " expected: "
+						 <<  expected_seqno << endl;
 			}
 			else
 				EV_ERROR << "PNDiscReq cannot be sent, because contact " << neighborcontactkey.shortStr() << " not found!?" << endl;

@@ -164,7 +164,7 @@ private:
 	std::list<OverlayKey> probeContactQueue;
 
 	// a list that is used to send PN discover request messages
-	std::list<OverlayKey> PNDiscoverQueue;
+	std::list<std::pair<OverlayKey,stateseqno_t>> PNDiscoverQueue;
 
 	// selfMessage
 	bool pathSetupScheduled= false;
@@ -300,7 +300,7 @@ private:
 	void scheduleSlowRediscovery(const OverlayKey& contactkey) { scheduleRediscovery(contactkey, slowRediscoverQueue, slowRediscoveryWaitTime); };
 
 	/// schedule sending PNDiscReq
-	void schedulePNDiscReq(const OverlayKey& neighbor);
+	void schedulePNDiscReq(const OverlayKey& neighbor, stateseqno_t expectedseqno);
 	/// create and send PNDiscReqs for queued neighbors
 	void sendScheduledPNDiscReq();
 
@@ -392,8 +392,8 @@ private:
 	void sendPacket(KadDataPacket_p packet);
 	/// chooses the contact to forward a request to according to the overlay metric.
 	const KadContact& chooseNextHop(const KadContactList&, const OverlayKey& target);
-	/// sends a probe request to the given contact
-	void sendProbe(KadContact_p contact);
+	/// sends a probe request to the given contact to check for path validity
+	void sendPathProbe(KadContact_p contact);
 	/// sends a path setup request to the given contact
 	void sendPathSetup(KadContact_p contact);
 	/// sends a "get physical neighbors" call to the contact
@@ -437,11 +437,11 @@ public:
 	/** called when a route got improved */
 	virtual void onImprovement(const KadContact& contact) override;
 	/** called when physical neighbors may be out of synch with their sequence numbers **/
-	virtual void reSyncPN(const KadContact& contact) override;
+	virtual void reSyncPN(const KadContact& contact, stateseqno_t expected_seqno) override;
 	/** sendGetPhysicalNeighbors to contact **/
 	virtual void recheckPhysicalNeighbors(const KadContact& contact) override;
-	/** called when supposed failed link detected **/
-	virtual void onContactCheck(const KadContact& contact) override;
+	/** called when supposed failed link detected to initiate path probing **/
+	virtual void onPathCheck(const KadContact& contact) override;
 
 	//@}
 

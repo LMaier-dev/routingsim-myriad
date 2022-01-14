@@ -257,7 +257,7 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 			// try to resynchronize with physical neighbor
 			EV_TRACE << "resync required for " << contact->getKey().shortStr() << " new: "
 				 << stateseqno << " old: " << contact->getStateSeqNo() << endl;
-			policy->reSyncPN(*contact);
+			policy->reSyncPN(*contact, stateseqno);
 			return false;
 		}
 
@@ -855,7 +855,7 @@ void KadRoutingTable::invalidateContact(KadContact& contact, const link_t& faile
 }
 
 
-void KadRoutingTable::checkContact(KadContact& contact, const link_t& failedLink)
+void KadRoutingTable::checkPathToContact(KadContact& contact, const link_t& failedLink)
 {
 	// if we find a failed link in the path, send a ProbeReq to check for path validity
 	// if the path has actually failed, we'll get back a segment failure and rediscovery will start
@@ -866,8 +866,8 @@ void KadRoutingTable::checkContact(KadContact& contact, const link_t& failedLink
 		{ // link somewhere in the path
 
 			if (contact.isValid()) {
-				EV_TRACE << "Will probe contact " << contact << " due to potentially failed link " << failedLink << ":" << endl;
-				policy->onContactCheck(contact);
+				EV_TRACE << "Will probe path to " << contact << " due to potentially failed link " << failedLink << ":" << endl;
+				policy->onPathCheck(contact);
 			}
 		}
 	}
@@ -881,12 +881,12 @@ void KadRoutingTable::checkContacts(const link_t& failedlink)
 	for (KadBucket& b : buckets) {
 		for (auto& contact : b.contacts) {
 			if (contact->isValid())
-				checkContact(*contact, failedlink);
+				checkPathToContact(*contact, failedlink);
 		} // end for inner loop over all contacts
 
 		for (auto& contact : b.PNContacts) {
 			if (contact->isValid())
-				checkContact(*contact, failedlink);
+				checkPathToContact(*contact, failedlink);
 		} // end for inner loop over all PN contacts
 	} // end for over all buckets
 }

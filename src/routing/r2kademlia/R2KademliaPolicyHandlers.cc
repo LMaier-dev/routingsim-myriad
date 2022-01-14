@@ -268,17 +268,17 @@ void R2Kademlia::recheckPhysicalNeighbors(const KadContact& contact) {
 }
 
 
-void R2Kademlia::reSyncPN(const KadContact& contact) {
+void R2Kademlia::reSyncPN(const KadContact& contact, stateseqno_t expected_seqno) {
 	// simply trigger a PNDiscReq to update any sequence number
-	EV_TRACE << "reSyncPN triggered for " << contact.getKey().shortStr() << endl;
-	schedulePNDiscReq(contact.getKey());
+	EV_TRACE << "reSyncPN triggered for " << contact.getKey().shortStr() << "expected seqno: " << expected_seqno << endl;
+	schedulePNDiscReq(contact.getKey(), expected_seqno);
 }
 
 
-
-void R2Kademlia::onContactCheck(const KadContact& contact) {
-	EV_TRACE << "contact check triggered for " << contact.getKey().shortStr() << endl;
-	sendProbe(&contact);
+void R2Kademlia::onPathCheck(const KadContact& contact) {
+	EV_TRACE << "path check triggered for " << contact.getKey().shortStr() << endl;
+	// check whether the current path is still working properly
+	sendPathProbe(&contact);
 }
 
 } // end namespace
