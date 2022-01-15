@@ -475,8 +475,9 @@ public:
 	stateseqno_t getLSSeqNo() const { return lsseqno; }
 
 	// do not probe if information is newer that PathInfoAgeThreshold
-	static constexpr unsigned long PathInfoAgeThreshold = 2000UL;
-
+	static constexpr unsigned long PathInfoAgeThreshold = 2000UL; // ms
+	static constexpr unsigned long RediscoveryNextTryWaitTime = 100UL; // ms
+	static constexpr unsigned long PNDiscrecoveryWaitTime = 100UL;
 };
 
 

@@ -883,7 +883,9 @@ void R2Kademlia::sendGetPhysicalNeighbors(KadContact_p contact)
 		std::move(req),
 		std::bind(&R2Kademlia::handleQueryRouteResponse, this, ph::_1, ph::_2),
 		std::bind(&R2Kademlia::handleQueryRouteResponse, this, ph::_1, ph::_2),
-		std::bind(&R2Kademlia::handleRPCTimeOut, this, ph::_1, ph::_2)
+		std::bind(&R2Kademlia::handleRPCTimeOut, this, ph::_1, ph::_2),
+		SimTime(uniform(2*PNDiscrecoveryWaitTime, 6*PNDiscrecoveryWaitTime),SIMTIME_MS)
+
 	);
 
 	// update vicinity to avoid future redundant requests
@@ -1354,7 +1356,7 @@ bool R2Kademlia::handleFindNodeResponse(KadPacket_p answer_, RPCState& rpcState)
 				simtime_t rediscoveryWaitTime((contactp->getRDS().rediscoverQtype == RediscoveryState::rediscoverQ_type::urgent) ? urgentRediscoveryWaitTime :
 							      (contactp->getRDS().rediscoverQtype == RediscoveryState::rediscoverQ_type::regular) ? regularRediscoveryWaitTime : slowRediscoveryWaitTime);
 
-				addTimer(SimTime(100,SIMTIME_MS), 0, std::bind(&R2Kademlia::sendRediscovery, this, contactp->getKey(), 1, rediscoveryWaitTime));
+				addTimer(SimTime(RediscoveryNextTryWaitTime,SIMTIME_MS), 0, std::bind(&R2Kademlia::sendRediscovery, this, contactp->getKey(), 1, rediscoveryWaitTime));
 				//sendRediscovery(contactp->getKey(), 1, rediscoverQ, rediscoveryWaitTime);
 			}
 		}
@@ -1605,12 +1607,15 @@ void R2Kademlia::readRTableRsp(const KadRTableRsp& packet) {
 			// is not contained in (viaPath + packet.getPath(i))
 			if ( packet.getContact(i)!= myOverlayKey and ((viaPath.size() + packet.getPath(i).size()) < discoveryRadius) )
 			{
+				// for further processing we need a temporary contact object
+				// since it was not put into the routingTable
 				KadContact neighborhoodContact(packet.getContact(i),
 							       routingTable.concatViaPath(viaPath, packet.getPath(i)),
 							       packet.getSeqNo(i));
 
 				bool querynode(false);
 				if (auto vn= vicinity.getNode(neighborhoodContact.getKey()); vn == nullptr) {
+					// newly put intro vicinity, so get its PNs
 					querynode= true;
 				}
 				else {
@@ -1692,8 +1697,8 @@ void R2Kademlia::schedulePNDiscReq(const OverlayKey& neighbor, stateseqno_t expe
 
 	if (not pndiscScheduled)
 	{
-		const simtime_t PN_discreq_wait_time(SimTime(40,SIMTIME_MS));
-		simtime_t wait_time(uniform(PN_discreq_wait_time/2,3*PN_discreq_wait_time/2));
+		simtime_t wait_time(SimTime(uniform(PNDiscrecoveryWaitTime/2,
+						    3*PNDiscrecoveryWaitTime/2),SIMTIME_MS));
 		EV_TRACE << "scheduling PNDiscReq in " << neighbor.shortStr() << endl;
 		addTimer(wait_time, 0, std::bind(&R2Kademlia::sendScheduledPNDiscReq, this));
 		pndiscScheduled= true;
