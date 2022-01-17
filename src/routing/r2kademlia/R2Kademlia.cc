@@ -338,51 +338,6 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 }
 
 
-
-void R2Kademlia::onSelfMessage(cMessage_p msg) {
-	std::unique_ptr<RPCtimeoutMsg> rpctimeout(dynamic_cast<RPCtimeoutMsg *>(msg.get()));
-	if (rpctimeout)
-	{
-		msg.release(); 		// no double deletion
-
-		//EV_TRACE << "RPC Timeout Message for nonce " << rpctimeout->nonce << endl;
-
-		handleTimeOut(rpctimeout->nonce);
-
-		// timeout message will be dismissed
-		return;
-	}
-
-	// handle timer
-	// timerId == -1 is a one shot timer
-	short timerId = msg->getKind();
-
-	if (cbfunc_t* timerCallback(static_cast<cbfunc_t *>(msg->getContextPointer()));
-	    timerCallback != nullptr) {
-		// now call the callback function
-		(*timerCallback)(timerId);
-
-		// delete the callback function for one shot messages
-		if (timerId == -1) {
-			delete timerCallback;
-			msg->setContextPointer(nullptr);
-		}
-	}
-
-	// reschedule timer message if duration > 0, otherwise it was a one shot timer
-	if (timerId  >= 0)
-	{
-		ASSERT((size_t)timerId < timerDuration.size());
-		ASSERT(timerMsg[timerId] == msg.get());
-		if (timerDuration[timerId] > 0)
-		{
-			simtime_t time = uniform(timerDuration[timerId]/2, timerDuration[timerId]/2*3);
-			scheduleAt(simTime() + time, msg.release());
-		}
-	}
-}
-
-
 void R2Kademlia::reset() {
 	Enter_Method_Silent();
 	EV << "resetting state of R2Kademlia" << endl;
@@ -879,14 +834,16 @@ void R2Kademlia::sendGetPhysicalNeighbors(KadContact_p contact)
 	req->setNeighborhood(1); // get only physical neighbors (1 hop away)
 	req->setContactsOnly(false);
 	req->setOverlayNeighbors(false);
+	// we implement a small stretch out of requests depending on the # of open requests
 	sendRpcCall(
 		std::move(req),
 		std::bind(&R2Kademlia::handleQueryRouteResponse, this, ph::_1, ph::_2),
 		std::bind(&R2Kademlia::handleQueryRouteResponse, this, ph::_1, ph::_2),
 		std::bind(&R2Kademlia::handleRPCTimeOut, this, ph::_1, ph::_2),
-		SimTime(uniform(2*PNDiscrecoveryWaitTime, 6*PNDiscrecoveryWaitTime),SIMTIME_MS)
-
+		SimTime(openPNQueryRouteReqs < 3 ?
+			10*openPNQueryRouteReqs : 17*openPNQueryRouteReqs,SIMTIME_MS)
 	);
+	openPNQueryRouteReqs++;
 
 	// update vicinity to avoid future redundant requests
 	bool nodeOrLinkAdded= vicinity.addNode(contact->getPath().empty() ? myOverlayKey : contact->getPath().back(), // parent
@@ -1101,7 +1058,17 @@ bool R2Kademlia::handlePNDiscResponse(KadPacket_p answer, RPCState& rpcState)
 	
 bool R2Kademlia::handleQueryRouteResponse(KadPacket_p answer, RPCState& rpcState)
 {
-	if (rpcState.status != RPC_SUCCESS) return true;
+	// reduce number of open Query Route Requests if PNs were requested only
+	ASSERT(rpcState.original_packet.get() != nullptr);
+	const auto queryroutereq(check_and_cast<KadQueryRouteReq *>(rpcState.original_packet.get()));
+	if (queryroutereq->getNeighborhood() == 1) {
+		ASSERT(openPNQueryRouteReqs > 0);
+		if (openPNQueryRouteReqs > 0)
+			openPNQueryRouteReqs--;
+	}
+	if (rpcState.status != RPC_SUCCESS) {
+		return true;
+	}
 	auto response = safe_packet_cast<KadQueryRouteRsp>(answer);
 	EV_TRACE << "received " << response->getContactArraySize() << " neighbors from " << response->getSource().shortStr() << endl;
 	readRTableRsp(*response);
@@ -1356,7 +1323,7 @@ bool R2Kademlia::handleFindNodeResponse(KadPacket_p answer_, RPCState& rpcState)
 				simtime_t rediscoveryWaitTime((contactp->getRDS().rediscoverQtype == RediscoveryState::rediscoverQ_type::urgent) ? urgentRediscoveryWaitTime :
 							      (contactp->getRDS().rediscoverQtype == RediscoveryState::rediscoverQ_type::regular) ? regularRediscoveryWaitTime : slowRediscoveryWaitTime);
 
-				addTimer(SimTime(RediscoveryNextTryWaitTime,SIMTIME_MS), 0, std::bind(&R2Kademlia::sendRediscovery, this, contactp->getKey(), 1, rediscoveryWaitTime));
+				addOneShotTimer(SimTime(RediscoveryNextTryWaitTime,SIMTIME_MS), std::bind(&R2Kademlia::sendRediscovery, this, contactp->getKey(), 1, rediscoveryWaitTime));
 				//sendRediscovery(contactp->getKey(), 1, rediscoverQ, rediscoveryWaitTime);
 			}
 		}
@@ -1700,7 +1667,7 @@ void R2Kademlia::schedulePNDiscReq(const OverlayKey& neighbor, stateseqno_t expe
 		simtime_t wait_time(SimTime(uniform(PNDiscrecoveryWaitTime/2,
 						    3*PNDiscrecoveryWaitTime/2),SIMTIME_MS));
 		EV_TRACE << "scheduling PNDiscReq in " << neighbor.shortStr() << endl;
-		addTimer(wait_time, 0, std::bind(&R2Kademlia::sendScheduledPNDiscReq, this));
+		addOneShotTimer(wait_time, std::bind(&R2Kademlia::sendScheduledPNDiscReq, this));
 		pndiscScheduled= true;
 	}
 }

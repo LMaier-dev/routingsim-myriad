@@ -22,8 +22,8 @@ namespace ph = std::placeholders;
 // callback function type
 using cbfunc_t = std::function<void(short timerId)>;
 
-
-/* if duration is 0, this is a one shot timer */
+// add a timer that calls callback every duration period (randomized)
+// if duration is 0, this is a one shot timer, consider using addOneShotTimer() instead
 short R2Kademlia::addTimer(simtime_t initialOffset, simtime_t duration, std::function<void(short timerId)> callback) {
 	ASSERT(timerDuration.size() == timerMsg.size());
 	ASSERT(timerDuration.size() < (size_type) std::numeric_limits<short int>::max());
@@ -79,6 +79,52 @@ void R2Kademlia::resetTimer(short timerId, simtime_t duration)
 		}
 	}
 }
+
+
+// this handles timer self messages, if the timer triggers
+void R2Kademlia::onSelfMessage(cMessage_p msg) {
+	std::unique_ptr<RPCtimeoutMsg> rpctimeout(dynamic_cast<RPCtimeoutMsg *>(msg.get()));
+	if (rpctimeout)
+	{
+		msg.release(); 		// no double deletion
+
+		//EV_TRACE << "RPC Timeout Message for nonce " << rpctimeout->nonce << endl;
+
+		handleTimeOut(rpctimeout->nonce);
+
+		// timeout message will be dismissed
+		return;
+	}
+
+	// handle timer
+	// timerId == -1 is a one shot timer
+	short timerId = msg->getKind();
+
+	if (cbfunc_t* timerCallback(static_cast<cbfunc_t *>(msg->getContextPointer()));
+	    timerCallback != nullptr) {
+		// now call the callback function
+		(*timerCallback)(timerId);
+
+		// delete the callback function for one shot messages
+		if (timerId == -1) {
+			delete timerCallback;
+			msg->setContextPointer(nullptr);
+		}
+	}
+
+	// reschedule timer message if duration > 0, otherwise it was a one shot timer
+	if (timerId  >= 0)
+	{
+		ASSERT((size_t)timerId < timerDuration.size());
+		ASSERT(timerMsg[timerId] == msg.get());
+		if (timerDuration[timerId] > 0)
+		{
+			simtime_t time = uniform(timerDuration[timerId]/2, timerDuration[timerId]/2*3);
+			scheduleAt(simTime() + time, msg.release());
+		}
+	}
+}
+
 
 
 // periodically send a Hello packet to keep state seq no in synch

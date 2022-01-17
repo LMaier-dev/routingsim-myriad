@@ -94,7 +94,9 @@ protected:
 	//@{
 	/// used for sending packets
 	virtual void sendPacket(packet_p packet, simtime_t delay) = 0;
+	virtual void addOneShotTimer(simtime_t delay, std::function<void()> callback) = 0;
 	//@}
+
 public:	
         void finish();
 

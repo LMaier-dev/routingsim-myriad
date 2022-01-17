@@ -171,6 +171,10 @@ private:
 
 	// selfMessage
 	bool pndiscScheduled= false;
+
+	// counter for outstanding PNQueryRouteReqs
+	unsigned openPNQueryRouteReqs = 0;
+
 	/** @name statistics */
 	//@{
 	uint forwardedPackets = 0;
@@ -237,6 +241,7 @@ private:
 	//@{
 	/// adds a timer to the timer vectors, sends a timer packet
 	short addTimer(simtime_t initialOffset, simtime_t duration, std::function<void(short timerId)> callback);
+	inline void addOneShotTimer(simtime_t delay, std::function<void()> callback);
 	/// stops timer and cancels timer message
 	void stopTimer(short timerId);
 	/// stops timer and cancel timer message, starts new timer with new duration
@@ -479,6 +484,16 @@ public:
 	static constexpr unsigned long RediscoveryNextTryWaitTime = 100UL; // ms
 	static constexpr unsigned long PNDiscrecoveryWaitTime = 100UL;
 };
+
+
+// for functions that only get called once and not periodically
+inline
+void R2Kademlia::addOneShotTimer(simtime_t delay, std::function<void()> callback) {
+	auto msg = new cMessage("TimerMsg", -1);
+	msg->setContextPointer( reinterpret_cast<void *>( new auto(callback) ) );
+	// callback will be carried out after delay
+	scheduleAt(simTime() + delay, msg);
+}
 
 
 inline

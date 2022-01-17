@@ -21,7 +21,7 @@ namespace routingsim {
 
 void RPCProtocol::sendRpcCall(packet_p rpcCall, rpc_callback_t callback, simtime_t delay)
 {
-	sendRpcCall(std::move(rpcCall), callback, callback, callback);
+	sendRpcCall(std::move(rpcCall), callback, callback, callback, delay);
 }
 
 
@@ -44,12 +44,29 @@ void RPCProtocol::sendRpcCall(packet_p rpcCall, rpc_callback_t success_callback,
 		RPCtimeoutMsg* rpc_timeout_msg= new RPCtimeoutMsg(nonce);
 		rpcState.timeoutMsg= rpc_timeout_msg; // just a reference for cancelling
 		// start timer for RPC timeout
-		scheduleAt(simTime() + SimTime(rpcState.timeout_ms,SIMTIME_MS), rpc_timeout_msg);
+		scheduleAt(simTime() + delay + SimTime(rpcState.timeout_ms,SIMTIME_MS), rpc_timeout_msg);
 	}
 	// register
 	states[nonce] = std::move(rpcState);
-	// send out
-	sendPacket(std::move(rpcCall), delay);
+
+	// send RPC out immediately or after delay
+	if (delay == 0)
+		sendPacket(std::move(rpcCall), delay);
+	else {
+		// sendPacket will be called after delay
+		// moving the unique pointer usgin std::bind() is a problem,
+		// because it creates a function using std::function and this requires to be copy-constructable
+		// this is a tricky workaround using a shared pointer conversion and a lambda expression
+
+		// move unique pointer into shared pointer
+		auto sharedp = std::make_shared<packet_p>(std::move(rpcCall));
+		// lambda function will be the callback invoked after delay
+		addOneShotTimer(delay, [this,sharedp]() {
+			// move unique pointer out of shared pointer again
+		        auto uniqp(std::move(*sharedp.get()));
+			assert(uniqp!=nullptr);
+			this->sendPacket(std::move(uniqp), 0); } );
+	}
 }
 
 

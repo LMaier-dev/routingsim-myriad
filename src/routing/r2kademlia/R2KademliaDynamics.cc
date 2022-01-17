@@ -571,6 +571,7 @@ void R2Kademlia::rediscoverContacts(RediscoveryState::rediscoverQ_type qtype, si
 // maxFanOut determines how many messages are sent in parallel via different contacts
 // last two parameters required for scheduling retries
 void R2Kademlia::sendRediscovery(OverlayKey failedcontactkey, uint8_t maxFanOut, simtime_t rediscoveryWaitTime) {
+	//EV_TRACE << "sendRediscovery called for " << failedcontactkey.shortStr() << endl;
 
 	KadContact* failedcontact= const_cast<KadContact*>(routingTable.getContact(failedcontactkey));
 	// do nothing if contact has been deleted or has been rediscovered successfully meanwhile
