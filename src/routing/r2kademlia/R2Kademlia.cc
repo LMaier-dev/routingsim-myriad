@@ -870,8 +870,9 @@ void R2Kademlia::sendGetOverlayNeighbors(KadContact_p contact)
 		std::bind(&R2Kademlia::handleQueryRouteResponse, this, ph::_1, ph::_2),
 		std::bind(&R2Kademlia::handleQueryRouteResponse, this, ph::_1, ph::_2),
 		std::bind(&R2Kademlia::handleRPCTimeOut, this, ph::_1, ph::_2),
-		SimTime(10,SIMTIME_MS)
+		SimTime(openONQueryRouteReqs,SIMTIME_MS)
 	);
+	openONQueryRouteReqs++;
 }
 
 
@@ -1065,6 +1066,12 @@ bool R2Kademlia::handleQueryRouteResponse(KadPacket_p answer, RPCState& rpcState
 		ASSERT(openPNQueryRouteReqs > 0);
 		if (openPNQueryRouteReqs > 0)
 			openPNQueryRouteReqs--;
+	}
+	else
+	{
+		ASSERT(openONQueryRouteReqs > 0);
+		if (openONQueryRouteReqs > 0)
+			openONQueryRouteReqs--;
 	}
 	if (rpcState.status != RPC_SUCCESS) {
 		return true;
@@ -1666,7 +1673,8 @@ void R2Kademlia::schedulePNDiscReq(const OverlayKey& neighbor, stateseqno_t expe
 	{
 		simtime_t wait_time(SimTime(uniform(PNDiscrecoveryWaitTime/2,
 						    3*PNDiscrecoveryWaitTime/2),SIMTIME_MS));
-		EV_TRACE << "scheduling PNDiscReq in " << neighbor.shortStr() << endl;
+		EV_TRACE << "scheduling PNDiscReq for " << neighbor.shortStr()
+			 << " in " << wait_time << 's' << endl;
 		addOneShotTimer(wait_time, std::bind(&R2Kademlia::sendScheduledPNDiscReq, this));
 		pndiscScheduled= true;
 	}

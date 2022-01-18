@@ -56,16 +56,19 @@ void RPCProtocol::sendRpcCall(packet_p rpcCall, rpc_callback_t success_callback,
 		// sendPacket will be called after delay
 		// moving the unique pointer usgin std::bind() is a problem,
 		// because it creates a function using std::function and this requires to be copy-constructable
-		// this is a tricky workaround using a shared pointer conversion and a lambda expression
+		// a tricky workaround using a shared pointer conversion and a lambda expression caused unfreed messages
 
-		// move unique pointer into shared pointer
-		auto sharedp = std::make_shared<packet_p>(std::move(rpcCall));
-		// lambda function will be the callback invoked after delay
-		addOneShotTimer(delay, [this,sharedp]() {
-			// move unique pointer out of shared pointer again
-		        auto uniqp(std::move(*sharedp.get()));
-			assert(uniqp!=nullptr);
-			this->sendPacket(std::move(uniqp), 0); } );
+		// EV_TRACE << "rpcCall delayed for " << delay << "s" << endl;
+		// save the rpcCall message to be sent in a queue
+		delayedRpcCalls.push_back(std::move(rpcCall));
+		// note: the lambda function will be the callback function invoked after delay
+		addOneShotTimer(delay, [this]() {
+			// simply send the first packet in queue waiting as they are queued FIFO
+			if (not delayedRpcCalls.empty()) {
+				sendPacket(std::move(delayedRpcCalls.front()), 0);
+				delayedRpcCalls.pop_front();
+			}
+		} );
 	}
 }
 
@@ -131,7 +134,6 @@ void RPCProtocol::handleTimeOut(nonce_t nonce)
 
 
 void RPCProtocol::finish() {
-
 	//EV_TRACE << "RPC: # of states left: " << states.size() << endl;
 	// for (const auto& state : states)
 	// {
@@ -139,6 +141,10 @@ void RPCProtocol::finish() {
 	// 		 << " Packet: " << (state.second.original_packet ? state.second.original_packet->getName() : "NULL")
 	// 		 << " id=" << (state.second.original_packet ? state.second.original_packet->getId() : 0) << endl;
 	// }
+
+	// clear any waiting RPCcalls
+	//EV_TRACE << "RPCProtocol::finish() - clear waiting delayed calls " << delayedRpcCalls.size() << endl;
+	delayedRpcCalls.clear();
 }
-	
+
 } // namespace

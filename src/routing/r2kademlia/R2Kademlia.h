@@ -174,6 +174,8 @@ private:
 
 	// counter for outstanding PNQueryRouteReqs
 	unsigned openPNQueryRouteReqs = 0;
+	// counter for outstanding NQueryRouteReqs
+	unsigned openONQueryRouteReqs = 0;
 
 	/** @name statistics */
 	//@{

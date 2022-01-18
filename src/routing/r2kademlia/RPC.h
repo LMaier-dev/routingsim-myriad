@@ -103,6 +103,8 @@ public:
 private:
 	/// maps nonces to rpc states, used to dispatch answers
 	std::unordered_map<nonce_t, RPCState> states;
+	// list of delayed RPC calls, avoids passing unique_ptr via std::bind
+	std::list<packet_p> delayedRpcCalls;
 };
 
 } // namespace
