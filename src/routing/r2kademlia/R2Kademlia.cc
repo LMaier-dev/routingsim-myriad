@@ -377,6 +377,13 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 		else
 			EV_TRACE << "adding neighbor failed (maybe was already there)" << endl;
 
+		// this node can be added safely to the vicinity now,
+		// because PNDiscReq may be sent quite some time later
+		vicinity.addNode(myOverlayKey, // parent
+				 neighborcontact.getKey(), // new child
+				 neighborcontact.getStateSeqNo(),
+				 1);
+
 		// schedule PN Discovery Request (unconditionally)
 		schedulePNDiscReq(neighborcontact.getKey(), stateseqno_t::invalidSeqNo);
 	}
@@ -1575,6 +1582,7 @@ void R2Kademlia::readRTableRsp(const KadRTableRsp& packet) {
 			continue;
 		}
 
+		// try to add contact or update path and/or contact meta data
 		if ( not(routingTable.addPath(packet.getContact(i), packet.getPath(i), packet.getSeqNo(i), packet.getPathInfoAge(i), viaPath)) ) {
 			// even if contact was not interesting for RT, add it as PID entry if within discovery radius
 			// the following condition is correct because the target contact 

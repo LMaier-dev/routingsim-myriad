@@ -183,10 +183,20 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 	// getPathLength()+1 corresponds to the number of hops from me to the contact.
 	// Thus, contact->getPathLength()+1 < discoveryRadius is correct, because we ask
 	// those contacts about their PNs which is even one hop further away
-	if (contact->getPathLength() > 0 and contact->getPathLength()+1 < discoveryRadius)
+	if (contact->getPathLength() > 0)
 	{
-		// sends a QueryRouteReq requesting their 1 hop neighborhood
-		sendGetPhysicalNeighbors(contact);
+		if (contact->getPathLength()+1 < discoveryRadius) {
+			// sends a QueryRouteReq requesting their 1 hop neighborhood
+			// adds contact to vicinity
+			sendGetPhysicalNeighbors(contact);
+		}
+		else
+		if (contact->getPathLength()+1 == discoveryRadius) {
+			vicinity.addNode(contact->getPath().back(), // parent, path not empty, see precondition of outer if
+					 contact->getKey(), // new child
+					 contact->getStateSeqNo(),
+					 contact->getPath().size()+1);
+		}
 	}
 
 	if (contact->isValid())
