@@ -352,7 +352,9 @@ public:
 	/**
 	 * Returns a sub integer at position p with n-bits. p is counted starting
 	 * from the least significant bit of the key as bit 0. Bit p of the key
-	 * becomes bit 0 of the returned integer.
+	 * becomes bit 0 of the returned integer. n is counting "upwards", e.g.,
+	 * p=0, n=8 returns the lowest byte
+	 * p=8, n=8 returns the second lowest byte (higher byte of 16-bit word)
 	 *
 	 * @param p the position of the sub-integer
 	 * @param n the number of bits to be returned (max.32)
