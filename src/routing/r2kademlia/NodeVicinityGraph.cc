@@ -7,6 +7,11 @@ namespace routingsim {
 bool
 nodeVicinityGraph::addNode(const OverlayKey& parentNodeKey, const OverlayKey& childNodeKey, stateseqno_t stateseqno, unsigned short distance) {
 	ASSERT(distance > 0U);
+
+	// nodes further away than the vicinityDiscoveryRadius are ignored
+	if (distance > vicinityDiscoveryRadius)
+		return false;
+
 	// EV_TRACE << "vicinity.addNode(): " << childNodeKey.shortStr()
 	// 	 << " parent: " << parentNodeKey.shortStr() << " distance:" << distance << endl;
 

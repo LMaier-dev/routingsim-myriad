@@ -172,10 +172,12 @@ private:
 	// selfMessage
 	bool pndiscScheduled= false;
 
-	// counter for outstanding PNQueryRouteReqs
-	unsigned openPNQueryRouteReqs = 0;
-	// counter for outstanding NQueryRouteReqs
-	unsigned openONQueryRouteReqs = 0;
+	// timestamp for outstanding PNDiscReqs
+	simtime_t LastPNDiscReq;
+	// timestamp for outstanding PNQueryRouteReqs
+	simtime_t LastPNQueryRouteReq;
+	// timestamp for outstanding ONQueryRouteReqs
+	simtime_t LastONQueryRouteReq;
 
 	/** @name statistics */
 	//@{
@@ -484,7 +486,7 @@ public:
 	// do not probe if information is newer that PathInfoAgeThreshold
 	static constexpr unsigned long PathInfoAgeThreshold = 2000UL; // ms
 	static constexpr unsigned long RediscoveryNextTryWaitTime = 100UL; // ms
-	static constexpr unsigned long PNDiscrecoveryWaitTime = 100UL;
+	static constexpr unsigned long PNDiscrecoveryWaitTime = 100UL; // µs
 };
 
 

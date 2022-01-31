@@ -250,19 +250,22 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 		// sometimes updates may be received that carry a newer sequence number
 		// from physical neighbors; this indicates that we do not have the latest state about its neighbors
 		// if PN link is still up, we ignore this for now and initiate a resynch
+		// we may have received a PNDiscReq from that PN, in this case no resync necessary (pathinfo_age == 0 then)
 		if ( contact->isPhysicalNeighbor() and
 		     neighbortable.isNeighbor(contact->getKey()) and
 		     contact->getPathLength() == 0 and
-		     path.size() > 0) {
+		     pathinfo_age > 0) {
 			// try to resynchronize with physical neighbor
-			EV_TRACE << "resync required for " << contact->getKey().shortStr() << " new: "
-				 << stateseqno << " old: " << contact->getStateSeqNo() << endl;
-			policy->reSyncPN(*contact, stateseqno);
-			return false;
+			if (stateseqno > contact->getSyncPNSeqNo()) {
+				EV_TRACE << "resync required for " << contact->getKey().shortStr() << " new: "
+					 << stateseqno << " old: " << contact->getStateSeqNo() << endl;
+				policy->reSyncPN(*contact, stateseqno);
+				return false;
+			}
 		}
 
 		// if contact is within discovery radius, ask again for its neighbors since something has changed
-		if ( contact->getPathLength()+1 < discoveryRadius or path.size()+1 < discoveryRadius ) {
+		if ( not contact->isPhysicalNeighbor() and (contact->getPathLength()+1 < discoveryRadius or path.size()+1 < discoveryRadius) ) {
 			// we "defer" that until new path has been set (see below)
 			// otherwise addNode() in sendGetPhysicalNeighbors will not update correctly
 			recheckPhysicalNeighbors= true;
@@ -343,7 +346,7 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 		contact->setValid();
 	}
 
-	// update sequence numer
+	// update sequence number
 	contact->setStateSeqNo(stateseqno);
 	// update lastseen to that of the originator
 	contact->updateLastSeenTo(simTime()-SimTime(pathinfo_age,SIMTIME_MS));

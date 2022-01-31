@@ -28,6 +28,7 @@ public:
 	const nodeVicinityNode* getNode(const OverlayKey& NodeKey) const;
 	auto cbegin() const { return graph.cbegin(); }
 	auto cend() const { return graph.cend(); }
+	static constexpr unsigned short vicinityDiscoveryRadius = 2; // this is fixed, otherwise it gets too large
 private:
 	std::unordered_map<OverlayKey,nodeVicinityNode> graph;
 	const OverlayKey* rootNodeKey = nullptr;

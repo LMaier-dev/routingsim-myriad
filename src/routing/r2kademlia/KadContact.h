@@ -132,6 +132,13 @@ public:
 			EV_ERROR << "Contact: " << key.shortStr() << " setPathSeqNo: old=" << seqno << " new=" << newseqno << endl;
 		ASSERT(not newseqno.isInvalid()); ASSERT(seqno.isInvalid() or (not seqno.isInvalid() and newseqno >= seqno));
 		seqno= newseqno; }
+	stateseqno_t getSyncPNSeqNo() const { return syncPNSeqno; }
+	void setSyncPNSeqNo(stateseqno_t newseqno) {
+		if (not (syncPNSeqno.isInvalid() or (not syncPNSeqno.isInvalid() and newseqno >= syncPNSeqno)))
+			EV_ERROR << "Contact: " << key.shortStr() << " setPathSeqNo: old=" << syncPNSeqno << " new=" << newseqno << endl;
+		ASSERT(not newseqno.isInvalid()); ASSERT(syncPNSeqno.isInvalid() or (not syncPNSeqno.isInvalid() and newseqno >= syncPNSeqno));
+		syncPNSeqno= newseqno; }
+
 	bool isContainedinPath(const OverlayKey& myOverlayKey, const link_t& link) const;
 	/// Common stdc++ console output method
 	friend std::ostream& operator<<(std::ostream& os, const KadContact& c);
@@ -144,6 +151,7 @@ private:
 	kad_path path;	   /// the best known source routing path to reach this contact
 	OverlayKey pathHashSum; /// the hash sum of the path
 	stateseqno_t seqno= stateseqno_t::invalidSeqNo; /// sequence number for the path state (announced by origin)
+	stateseqno_t syncPNSeqno= stateseqno_t::invalidSeqNo; /// sequence number for syncing with PN
 	State state= State::undefined; /// the state of the contact
 	bool physicalNeighbor= false; /// true if we have a direct physical link to this neighbor
 	std::unique_ptr<RediscoveryState> rds_p= nullptr;
