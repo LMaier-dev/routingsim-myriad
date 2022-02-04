@@ -131,10 +131,15 @@ void R2Kademlia::onInitialize() {
 
 // link comes up (treat like a link layer indication "link established"), immediately send a PNHello message
 void R2Kademlia::onConnect( nodeid_t nid ) {
-	auto packet(makeHelloPacket());
-	sentVolume+= packet->getByteLength();
-	sendToNode(nid, std::move(packet), SimTime(10,SIMTIME_US));
-	sentPackets++;
+
+	// send a hello packet after some random delay
+	addOneShotTimer(SimTime(uniform(1000,3000),SIMTIME_US), [this,nid]() {
+		auto packet(makeHelloPacket());
+		sentVolume+= packet->getByteLength();
+		sendToNode(nid, std::move(packet));
+		sentPackets++;
+	} );
+
 }
 
 
@@ -368,7 +373,7 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 		// physical neighborhood changed -> increase local state variable
 		incLSSeqNo();
 
-		//EV_TRACE << "neighbor table: "<< neighborTable << endl;
+		//EV_TRACE << "added to neighbor table: "<< neighborTable << endl;
 
 		// PNDiscovery should be sent before any further messages to avoid missing neighbors
 		// send back PNDiscReq to get contacts from physical neighbor
@@ -410,6 +415,7 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 		}
 	}
 	else {
+		EV_TRACE << "check for resync" << endl;
 		// already known neighbor, just check for seqno synchronization
 		checkForResync(packet->getSource(), packet->getStateSeqNo());
 
@@ -855,7 +861,7 @@ bool R2Kademlia::handleProbeResponse(KadPacket_p answer, RPCState& rpcState) {
 
 
 // Request Physical Neighbors from contact
-// it seems crucial for slightly better stretch that this happens with further delay
+// it seems crucial for slightly better stretch that this happens without any further delay
 void R2Kademlia::sendGetPhysicalNeighbors(KadContact_p contact)
 {
 	EV_TRACE << "sending query route request (PN) to " << *contact << endl;
@@ -863,18 +869,29 @@ void R2Kademlia::sendGetPhysicalNeighbors(KadContact_p contact)
 	req->setNeighborhood(1); // get only physical neighbors (1 hop away)
 	req->setContactsOnly(false);
 	req->setOverlayNeighbors(false);
+
 	// we rate limit the requests
-	simtime_t delay(0);
-	//if  ( SimTime()-LastPNQueryRouteReq < SimTime(1000,SIMTIME_US) )
-	//	delay= LastPNQueryRouteReq + SimTime(uniform(1000,1500),SIMTIME_US);
+	//simtime_t delay(0);
+	
+	// static const simtime_t mindelay(SimTime(100,SIMTIME_US));
+	// if  ( SimTime() < LastPNQueryRouteReq ) {
+	// 	// last was scheduled in future, schedule it mindelay behind that
+	// 	delay= LastPNQueryRouteReq-SimTime()+mindelay;
+	// }
+	// else { // last send in past
+	// 	if (SimTime()-LastPNQueryRouteReq < mindelay) {
+	// 		// we are too early, so delay until mindelay is fulfilled
+	// 		delay= LastPNQueryRouteReq+mindelay-SimTime();
+	// 	}
+	// }
+
 	sendRpcCall(
 		std::move(req),
 		std::bind(&R2Kademlia::handleQueryRouteResponse, this, ph::_1, ph::_2),
 		std::bind(&R2Kademlia::handleQueryRouteResponse, this, ph::_1, ph::_2),
-		std::bind(&R2Kademlia::handleRPCTimeOut, this, ph::_1, ph::_2),
-		delay
+		std::bind(&R2Kademlia::handleRPCTimeOut, this, ph::_1, ph::_2)
 	);
-	LastPNQueryRouteReq= SimTime()+delay;
+	//LastPNQueryRouteReq= SimTime()+delay;
 
 	// update vicinity to avoid future redundant requests
 	bool nodeOrLinkAdded= vicinity.addNode(contact->getPath().empty() ? myOverlayKey : contact->getPath().back(), // parent
@@ -899,8 +916,18 @@ void R2Kademlia::sendGetOverlayNeighbors(KadContact_p contact)
 
 	// we rate limit the requests
 	simtime_t delay(0);
-	if  ( SimTime()-LastONQueryRouteReq < SimTime(3000,SIMTIME_US) )
-		delay= LastONQueryRouteReq + SimTime(uniform(3000,3500),SIMTIME_US);
+	static const simtime_t mindelay(SimTime(1000,SIMTIME_US));
+	if  ( SimTime() < LastONQueryRouteReq ) {
+		// last was scheduled in future, schedule it mindelay behind that
+		delay= LastONQueryRouteReq-SimTime()+mindelay;
+	}
+	else { // last send in past
+		if (SimTime()-LastONQueryRouteReq < mindelay) {
+			// we are too early, so delay until mindelay is fulfilled
+			delay= LastONQueryRouteReq+mindelay-SimTime();
+		}
+		// otherwise no extra delay necessary
+	}
 
 	sendRpcCall(
 		std::move(req),
@@ -939,9 +966,19 @@ void R2Kademlia::sendDiscoveryReq(KadContact_p contact)
 	}
 	//req->setHopLimit(1);
 	// we rate limit the requests
-	simtime_t delay(0);
-	//if  ( SimTime()-LastPNDiscReq < SimTime(1000,SIMTIME_US) )
-	//	delay= LastPNDiscReq + SimTime(uniform(1000,1250),SIMTIME_US);
+	//simtime_t delay(0);
+	// static const simtime_t mindelay(SimTime(200,SIMTIME_US));
+	// if  ( SimTime() < LastPNDiscReq ) {
+	// 	// last was scheduled in future, schedule it mindelay behind that
+	// 	delay= LastPNDiscReq-SimTime()+mindelay;
+	// }
+	// else { // last send in past
+	// 	if (SimTime()-LastPNDiscReq < mindelay) {
+	// 		// we are too early, so delay until mindelay is fulfilled
+	// 		delay= LastPNDiscReq+mindelay-SimTime();
+	// 	}
+	// 	// otherwise no extra delay necessary
+	// }
 
 	sendRpcCall(
 		std::move(req),
@@ -949,7 +986,7 @@ void R2Kademlia::sendDiscoveryReq(KadContact_p contact)
 		std::bind(&R2Kademlia::handlePNDiscResponse, this, ph::_1, ph::_2),
 		std::bind(&R2Kademlia::handleRPCTimeOut, this, ph::_1, ph::_2)
 	);
-	LastPNDiscReq= SimTime()+delay;
+	//LastPNDiscReq= SimTime()+delay;
 	// add physical neighbor to my vicinity
 	//commented out, because Hello should have already done so
 	//vicinity.addNode(myOverlayKey, contact->getKey(), contact->getStateSeqNo(), 1);
@@ -1221,9 +1258,17 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 
 	// remove source from the list of potential next hops to avoid loop or exclude it from answer
 	if (!contacts.empty()) {
+		// EV_TRACE << "Found contacts: ";
+		// for (const auto& thiscontact : contacts)
+		// {
+		//  	EV_TRACE << thiscontact->getKey().shortStr() << " ";
+		// }
+		// EV_TRACE << endl;
+
 		for (auto it= contacts.begin(); it != contacts.end(); it++) {
 			if (*it != nullptr and (*it)->getKey() == packet->getSource()) {
 				contacts.erase(it);
+				EV_TRACE << "removed " << packet->getSource() << " from found contacts" << endl;
 				break;
 			}
 		}
@@ -1247,14 +1292,14 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 		// EV_TRACE << "Found contacts: ";
 		// for (const auto& thiscontact : contacts)
 		// {
-		// 	EV_TRACE << thiscontact->getKey().shortStr() << " ";
+		//  	EV_TRACE << thiscontact->getKey().shortStr() << " ";
 		// }
 		// EV_TRACE << endl;
 
 		// precondition here: !contacts.empty(), i.e., we have a contact as potential next hop
-		// if next contact is closer to destination than us, it's ok
+		// if next contact is closer to destination than us, it's ok unless we route back to the source
 		if ((contacts.front()->getKey() ^ query) < (myOverlayKey ^ query)
-				and contacts.front()->getPathLength() < packet->getHopLimit()) {
+		    and contacts.front()->getPathLength() < packet->getHopLimit()) {
 			// we have found a contact that is closer than us to target (query)
 			// => forward request
 			// note: chooseNextHop may choose the next hop with the shortest path (proximity routing)

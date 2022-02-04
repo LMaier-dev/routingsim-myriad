@@ -250,12 +250,13 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 		// sometimes updates may be received that carry a newer sequence number
 		// from physical neighbors; this indicates that we do not have the latest state about its neighbors
 		// if PN link is still up, we ignore this for now and initiate a resynch
-		// we may have received a PNDiscReq from that PN, in this case no resync necessary (pathinfo_age == 0 then)
+		// we may have received a PNDiscReq from that PN, in this case no resync necessary (path is <-> then)
 		if ( contact->isPhysicalNeighbor() and
 		     neighbortable.isNeighbor(contact->getKey()) and
-		     contact->getPathLength() == 0 and
-		     pathinfo_age > 0) {
-			// try to resynchronize with physical neighbor
+		     (contact->getPathLength() == 0) and
+		     path.size() > 0
+		   ) {
+			// try to resynchronize with physical neighbor instead of blindly accepting a longer route now
 			if (stateseqno > contact->getSyncPNSeqNo()) {
 				EV_TRACE << "resync required for " << contact->getKey().shortStr() << " new: "
 					 << stateseqno << " old: " << contact->getStateSeqNo() << endl;
@@ -607,18 +608,26 @@ KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_t
 			copyContactsFn = copyValidNotViaSafeContacts;
 	}
 
+	// that's the bucket where we start
 	size_type index = getBucketIndex(key);
-	auto bucket = buckets.cbegin() + index;
+	auto startbucket = buckets.cbegin() + index;
+
+	//EV_TRACE << "getClosestContacts() bucket index: " << index << endl;
 
 	// if bucket is large enough, try to copy all contacts
 	// however, size() does not consider contact validity
 	// so we need to check after this for result.size()
-	if (bucket->size() >= n)
+	if (startbucket->size() >= n)
 	{
-		copyContactsFn(bucket->contacts, result);
-		copyContactsFn(bucket->PNContacts, result);
+		copyContactsFn(startbucket->contacts, result);
+		copyContactsFn(startbucket->PNContacts, result);
+	}
+	else
+	{ // this bucket has not been considered, so do not skip in next routine
+		startbucket= buckets.cend();
 	}
 
+	// not enough contacts yet, try to gather more, but do not add those from startbucket again
 	if (result.size() < n) {
 		// not enough (valid) contacts in first bucket
 		// now we scan the level of the accelerated lookup
@@ -626,19 +635,25 @@ KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_t
 		size_type firstOnLevelIndex = getFirstOnBucketLevel(index);
 		uint width = getLevelWidth();
 
+		//EV_TRACE << "getClosestContacts() first on bucket level: " << firstOnLevelIndex << " width: " << width << endl;
+
 		for (auto level = buckets.cbegin() + firstOnLevelIndex;
 		     level < buckets.cend() and result.size() < n;
 		     level+=width)
 		{
-			if (level == buckets.cend()-1) {
+			//EV_TRACE << "getClosestContacts() level index: " << buckets.cend() - level << endl;
+			// if it is the very last bucket try to copy content
+			if (level == buckets.cend()-1 and level != startbucket) {
 				copyContactsFn(level->contacts, result);
 				copyContactsFn(level->PNContacts, result);
 			}
 			else { // always insert the whole level
 				for (uint i = 0; i < width and level+i < buckets.cend(); i++)
 				{
-					copyContactsFn(level[i].contacts, result);
-					copyContactsFn(level[i].PNContacts, result);
+					if (level+i != startbucket) {
+						copyContactsFn(level[i].contacts, result);
+						copyContactsFn(level[i].PNContacts, result);
+					}
 				}
 			}
 		}
@@ -647,8 +662,10 @@ KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_t
 		auto otherBucket = buckets.cbegin() + firstOnLevelIndex;
 		while (result.size() < n and otherBucket != buckets.cbegin()) {
 			otherBucket--;
-			copyContactsFn(otherBucket->contacts, result);
-			copyContactsFn(otherBucket->PNContacts, result);
+			if (otherBucket != startbucket) {
+				copyContactsFn(otherBucket->contacts, result);
+				copyContactsFn(otherBucket->PNContacts, result);
+			}
 		}
 	}
 
