@@ -872,7 +872,7 @@ void R2Kademlia::sendGetPhysicalNeighbors(KadContact_p contact)
 
 	// we rate limit the requests
 	//simtime_t delay(0);
-	
+
 	// static const simtime_t mindelay(SimTime(100,SIMTIME_US));
 	// if  ( SimTime() < LastPNQueryRouteReq ) {
 	// 	// last was scheduled in future, schedule it mindelay behind that

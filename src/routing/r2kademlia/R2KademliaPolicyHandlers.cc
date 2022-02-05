@@ -111,7 +111,7 @@ void R2Kademlia::onErrorPacket(KadError& error) {
 		case KAD_PathIDUnknown:
 		{ // KAD_PathIDUnknown: we should try to resetup the path
 			auto affectedContact= routingTable.getContact(original->getTarget());
-			if (affectedContact and affectedContact->isValid() and affectedContact->getPathLength() > discoveryRadius)
+			if (affectedContact and affectedContact->isValid() and affectedContact->getPathLength() > nodeVicinityGraph::vicinityDiscoveryRadius)
 			{
 				schedulePathSetup(affectedContact->getKey());
 			}
@@ -145,7 +145,7 @@ void R2Kademlia::onContactRemoval(KadContact_p contact)
 	// TODO: the following is probably not useful
 	// (node may still be present in vicinity, but was evicted from bucket)
 	// remove from vicinity node set (in case of later rendezvous again)
-	if (contact->getPathLength() < discoveryRadius and contact->getState() == KadContact::State::dead)
+	if (contact->getPathLength() < nodeVicinityGraph::vicinityDiscoveryRadius and contact->getState() == KadContact::State::dead)
 		vicinity.removeNode(contact->getKey());
 }
 
@@ -185,13 +185,13 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 	// those contacts about their PNs which is even one hop further away
 	if (contact->getPathLength() > 0)
 	{
-		if (contact->getPathLength()+1 < discoveryRadius) {
+		if (contact->getPathLength()+1 < nodeVicinityGraph::vicinityDiscoveryRadius) {
 			// sends a QueryRouteReq requesting their 1 hop neighborhood
 			// adds contact to vicinity
 			sendGetPhysicalNeighbors(contact);
 		}
 		else
-		if (contact->getPathLength()+1 == discoveryRadius) {
+		if (contact->getPathLength()+1 == nodeVicinityGraph::vicinityDiscoveryRadius) {
 			vicinity.addNode(contact->getPath().back(), // parent, path not empty, see precondition of outer if
 					 contact->getKey(), // new child
 					 contact->getStateSeqNo(),
@@ -209,7 +209,7 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 		}
 
 		if (usePathIDs) {
-			if (contact->getPathLength() <= discoveryRadius) {
+			if (contact->getPathLength() <= nodeVicinityGraph::vicinityDiscoveryRadius) {
 				// it is required to add all PIDs to nodes within the discovery radius
 				// (and without signaling one can extend this by one hop)
 				// since the contact path excludes the contact itself the above condition includes nodes <= discoveryRadius+1
@@ -220,7 +220,7 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 				}
 			}
 			else
-			if (contact->getPathLength() > discoveryRadius)
+			if (contact->getPathLength() > nodeVicinityGraph::vicinityDiscoveryRadius)
 			{  // send a path setup request packet for installing PIDs in intermediate nodes for this route
 				// only do this for paths longer than (discovery radius+1) (e.g., for dr=3 -> contacts 5 hops away) hops:
 				// the next node precalculated already all path IDs within its own discovery radius and
@@ -246,7 +246,7 @@ void R2Kademlia::onImprovement(const KadContact& contact) {
 
 		// no need to setup routes within discovery radius + 1 distance
 		// (note/remember: getPathLength() does not include the last hop)
-		if ( contact.getPathLength() > discoveryRadius ) {
+		if ( contact.getPathLength() > nodeVicinityGraph::vicinityDiscoveryRadius ) {
 			// send a path setup request packet for installing PIDs in intermediate nodes for this route
 			//EV_TRACE << "Triggering path setup to " << contact.getKey().shortStr() << endl;
 			// modentry() will be called by handlePathSetupResponse

@@ -193,6 +193,9 @@ void FwdTablePathID::invalidateEntry(KadContact_p contact)
 		return;
 
 	kad_path currentpath(contact->getPath());
+	// do not invalidate any paths in vicinity
+	if (currentpath.size() < nodeVicinityGraph::vicinityDiscoveryRadius)
+		return;
 	// add destination node ID to end of the path (will never be empty then)
 	currentpath.push_back(contact->getKey());
 

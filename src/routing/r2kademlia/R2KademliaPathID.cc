@@ -18,7 +18,7 @@ bool R2Kademlia::checkForPathInstallation(KadPacket& packet)
 	KadContact tmpcontact(packet.getTarget(),
 			      packet.getSrcPath(packet.getProgress()+1, packet.getRouteArraySize()-1));
 
-	if (auto incomingPID= fwdTablePathID.addEntry(&tmpcontact, true, tmpcontact.getPathLength() <= discoveryRadius);
+	if (auto incomingPID= fwdTablePathID.addEntry(&tmpcontact, true, tmpcontact.getPathLength() <= nodeVicinityGraph::vicinityDiscoveryRadius);
 	    incomingPID != PathID::UndefinedPathID) {
 		// no need to install NId to PID mapping as this is no local contact
 		return true;
@@ -36,14 +36,14 @@ void R2Kademlia::vicinityPathIDCompletion(const KadContact& neighborhoodContact)
 	EV_TRACE << "vicinityPathIDCompletion(" << neighborhoodContact.getKey().shortStr() << ")" << endl;
 
 	// check for further PID entries that need to be created leading to or starting from this neighborhood contact
-	if (newnode != nullptr and newnode->distance>0 and newnode->distance <= discoveryRadius) {
+	if (newnode != nullptr and newnode->distance>0 and newnode->distance <= nodeVicinityGraph::vicinityDiscoveryRadius) {
 
 		//EV_TRACE << "vicinityPathIDCompletion - collecting parent nodes" << endl;
 
 		// now traverse back toward the root node to cover all paths that lead to this node
 		// we need a temporary graph structure for this, therefore we use unique_ptr
 		// since we also need the root node at level 0, we need discoveryRadius+1 levels in total
-		std::list<std::unique_ptr<nodeVicinityNode>> nodeSet[discoveryRadius+1];
+		std::list<std::unique_ptr<nodeVicinityNode>> nodeSet[nodeVicinityGraph::vicinityDiscoveryRadius+1];
 		// add the root node
 		std::unique_ptr<nodeVicinityNode> rootnode= std::make_unique<nodeVicinityNode>();
 		rootnode->nodeKey= vicinity.getNode(myOverlayKey)->nodeKey;
@@ -112,7 +112,7 @@ void R2Kademlia::vicinityPathIDCompletion(const KadContact& neighborhoodContact)
 		//EV_TRACE << "vicinityPathIDCompletion - collecting child nodes" << endl;
 
 		// now collect all children starting from here
-		for (unsigned int level= newnode->distance; level < discoveryRadius; level++) {
+		for (unsigned int level= newnode->distance; level < nodeVicinityGraph::vicinityDiscoveryRadius; level++) {
 			
 			for (auto node_it= nodeSet[level].cbegin(); node_it != nodeSet[level].cend(); node_it++) {
 				// create a new node temporary for each child of the current node unless it exists already
@@ -161,7 +161,7 @@ void R2Kademlia::vicinityPathIDCompletion(const KadContact& neighborhoodContact)
 		std::list<const OverlayKey*> currentpath;
 		unsigned int currentLevel= 0;
 		// iterator over children: note that childiter_state[i] iterates over nodes at level i+1!
-		decltype(nodeVicinityNode::children)::const_iterator childiter_state[discoveryRadius];
+		decltype(nodeVicinityNode::children)::const_iterator childiter_state[nodeVicinityGraph::vicinityDiscoveryRadius];
 		childiter_state[currentLevel]= nodeSet[0].front()->children.cbegin();
 		while (childiter_state[0] != nodeSet[0].front()->children.cend())
 		{
@@ -191,7 +191,7 @@ void R2Kademlia::vicinityPathIDCompletion(const KadContact& neighborhoodContact)
 				fwdTablePathID.addEntry(&tmpContact, false, true);
 			}
 			// enter next level of current node by using its children
-			if (currentLevel < discoveryRadius and not currentNodep->children.empty()) {
+			if (currentLevel < nodeVicinityGraph::vicinityDiscoveryRadius and not currentNodep->children.empty()) {
 				// start this new level from the beginning
 				// enter next level (== discoverRadius at most)
 				currentLevel++;

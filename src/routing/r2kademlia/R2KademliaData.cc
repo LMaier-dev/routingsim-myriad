@@ -262,14 +262,14 @@ void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 
 				// next hop is not closer than this node
 				if ((contact.getKey() ^ finaldest) > (myOverlayKey ^ finaldest)) {
-					EV_WARN << "next hop is " << contact.getKey().shortStr()
+					EV_WARN << "next overlay hop is " << contact.getKey().shortStr()
 						 << " - cannot get closer, dropping packet" << endl;
 					packet->setControlInfo(nodePkt.release());
 					countDropped(*packet, finaldest, routeFailureDeadEnd);
 					return;
 				}
 
-				EV_TRACE << "next hop is " << contact.getKey().shortStr()
+				EV_TRACE << "next overlay hop is " << contact.getKey().shortStr()
 					 << " (" << contact.getPathLength()+1 << " hops)" << endl;
 
 				// now try to find a PathID to the next overlay hop
