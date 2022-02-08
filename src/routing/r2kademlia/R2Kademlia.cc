@@ -394,10 +394,13 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 				 neighborcontact.getStateSeqNo(),
 				 1);
 
+		// fwdTablePathID.addEntry() and vicinityPathIDCompletion() are called by onNewContact
+
 		// send PN Discovery Request immediately if I have the lower (NodeID % 32)
 		// otherwise wait some time, probably sending a PNDiscReq is obsolete
 		if (KadContact* contact_p= const_cast<KadContact*>(routingTable.getContact(packet->getSource()));
 		    contact_p != nullptr) {
+
 			// use this deterministic strategy to save redundant PNDiscReq/Rsp exchanges
 			// do not use full ID, otherwise large IDs will always "loose", use mod 2^32 comparison
 			// small collision chance: but just in case, full nodeID will be a tie breaker
@@ -1009,7 +1012,12 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadPNDiscReq> packet) {
 	}
 
 	// add physical neighbor to my vicinity
-	vicinity.addNode(myOverlayKey, packet->getSource(), packet->getStateSeqNo(), 1);
+	bool node_added= vicinity.addNode(myOverlayKey, packet->getSource(), packet->getStateSeqNo(), 1);
+	KadContact neighborcontact(packet->getSource(), kad_path());
+	if (usePathIDs and node_added) {
+		fwdTablePathID.addEntry(&neighborcontact, false, true);
+		vicinityPathIDCompletion(neighborcontact);
+	}
 
 	// check for physical neighbors sent with
 	kad_path path{packet->getSource()};
@@ -1070,6 +1078,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadQueryRouteReq> packet) {
 			contact_p->setStateSeqNo(packet->getStateSeqNo());
 			contact_p->updateLastSeen();
 		}
+		EV_TRACE << "contact found" << endl;
 	}
 
 	//  packet->getContactsOnly() not implemented yet

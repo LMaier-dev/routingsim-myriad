@@ -9,16 +9,25 @@ namespace routingsim {
 
 
 // returns false if path already exists, returns true if path was installed
+// this is called during PathSetupReq
 bool R2Kademlia::checkForPathInstallation(KadPacket& packet)
 {
 	if ( usePathIDs == false )
+		return false;
+	// if rest of path is within vicinity discovery radius, we have a precalculated entry
+	// calc: packet.getRouteArraySize()-1-(packet.getProgress()+1)+1 <= vicinityDiscoveryRadius
+	//EV_TRACE << "checkForPathInstallation: " << packet.getSrcPath()
+	//	 << " Progress: " << packet.getProgress() << " PathLen:" << packet.getRouteArraySize() << endl;
+
+	if (packet.getRouteArraySize()-packet.getProgress() <= nodeVicinityGraph::vicinityDiscoveryRadius+1)
 		return false;
 	// will install path in data forward direction
 	// ASSERT(packet.hasRemainingHops()); // this will be true because checkForPathInstallation() is called only then
 	KadContact tmpcontact(packet.getTarget(),
 			      packet.getSrcPath(packet.getProgress()+1, packet.getRouteArraySize()-1));
 
-	if (auto incomingPID= fwdTablePathID.addEntry(&tmpcontact, true, tmpcontact.getPathLength() <= nodeVicinityGraph::vicinityDiscoveryRadius);
+	//EV_TRACE << "checkForPathInstallation: new path to " << tmpcontact << endl;
+	if (auto incomingPID= fwdTablePathID.addEntry(&tmpcontact, true, false);
 	    incomingPID != PathID::UndefinedPathID) {
 		// no need to install NId to PID mapping as this is no local contact
 		return true;
@@ -28,7 +37,7 @@ bool R2Kademlia::checkForPathInstallation(KadPacket& packet)
 }
 
 
-// this creates potential additional entries for PathIDs
+// this creates potential additional entries for PathIDs for PNs in distance <= vicinityDiscoveryRadius
 // note that the provided contact is of temporary nature and need not be a part of the routing table
 void R2Kademlia::vicinityPathIDCompletion(const KadContact& neighborhoodContact)
 {

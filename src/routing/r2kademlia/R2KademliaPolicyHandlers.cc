@@ -168,7 +168,7 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 	//ASSERT( getKadObserver().checkSeqNo(contact->getKey(),contact->getStateSeqNo()) == true );
 
 	// physical neighbor, may have been heard of its existence by some third node!
-	// avoid further actions until we hear a HELLO
+	// avoid further actions until we hear a HELLO or get a PNDiscReq
 	if (contact->getPathLength() == 0) 
 	{ 	if (not neighborTable.isNeighbor(contact->getKey()))
 		{
@@ -213,7 +213,7 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 				// it is required to add all PIDs to nodes within the discovery radius
 				// (and without signaling one can extend this by one hop)
 				// since the contact path excludes the contact itself the above condition includes nodes <= discoveryRadius+1
-				if (auto incomingPID= fwdTablePathID.addEntry(contact, false, true); incomingPID != PathID::UndefinedPathID) {
+				if (auto incomingPID= fwdTablePathID.addEntry(contact, false, contact->getPathLength()<nodeVicinityGraph::vicinityDiscoveryRadius); incomingPID != PathID::UndefinedPathID) {
 					// PID was added, it can directly be used, because no path setup necessary within discovery
 					fwdTablePathID.setNIDtoPIDmapping(contact->getKey(), incomingPID);
 					vicinityPathIDCompletion(*contact);

@@ -27,7 +27,7 @@ size_type FwdTablePathID::getNumForeignEntries() const
 	{
 		const FwdTableEntry&  fwdentry= pidfwdtableentry.second;
 
-		if (fwdentry.isValid() and not(fwdentry.isObsolete()) and fwdentry.isForeign())
+		if (not (fwdentry.isPrecalc()) and fwdentry.isValid() and not(fwdentry.isObsolete()) and fwdentry.isForeign())
 			sum++;
 	}
 	return sum;
@@ -142,7 +142,8 @@ FwdTablePathID::addEntry(KadContact_p contact, bool isForeignPID, bool precalc)
 	currentpath.push_back(contact->getKey());
 
 	//EV_TRACE << currentpath << endl;
-
+	//ASSERT((not precalc and (currentpath.size()>nodeVicinityGraph::vicinityDiscoveryRadius))
+	//       or (precalc and currentpath.size()<=nodeVicinityGraph::vicinityDiscoveryRadius));
 	// prepend own nodeID for incoming PathID
 	PathID incomingPathID(getPathID(*ownNodeID, currentpath));
 

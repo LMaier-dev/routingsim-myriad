@@ -175,6 +175,11 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 
 	KadContact *contact = getContactInternal(key);
 	if (contact == nullptr) { // contact is new
+		// if contact is not known yet but should be a PN, we wait until PNHello
+		// might be the case if QueryRouteReq arrives before PNDiscReq or PNHello
+		if (path.size() == 0 and not neighbortable.isNeighbor(key))
+			return false;
+
 		return handleNewContact(key, std::move(path), stateseqno, pathinfo_age);
 	}
 
@@ -373,6 +378,7 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 
 
 /// @returns true in case path was added
+
 bool KadRoutingTable::addPath(const OverlayKey& key, const kad_path& path, stateseqno_t stateseqno, age_t pathinfo_age, const kad_path& viaPath)
 {
 	if (key == myKey)
