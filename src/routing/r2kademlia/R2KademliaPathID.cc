@@ -14,11 +14,15 @@ bool R2Kademlia::checkForPathInstallation(KadPacket& packet)
 {
 	if ( usePathIDs == false )
 		return false;
-	// if rest of path is within vicinity discovery radius, we have a precalculated entry
-	// calc: packet.getRouteArraySize()-1-(packet.getProgress()+1)+1 <= vicinityDiscoveryRadius
-	//EV_TRACE << "checkForPathInstallation: " << packet.getSrcPath()
-	//	 << " Progress: " << packet.getProgress() << " PathLen:" << packet.getRouteArraySize() << endl;
+	EV_TRACE << "checkForPathInstallation: " << packet.getSrcPath()
+		 << " Progress: " << packet.getProgress() << " PathLen:" << packet.getRouteArraySize() << endl;
 
+	// if rest of path is within vicinity discovery radius, we have a precalculated entry
+	// note: this is a source route, so it includes the destination node
+	// calc: packet.getRouteArraySize()-1-(packet.getProgress()+1)+1 <= vicinityDiscoveryRadius
+	// example progress 1: pathlen: 5 => 4-2+1= 3 hops to go
+	// PIDs for destinations in vicinityDiscoveryRadius (2) hops are pre-computed,
+	// but must be locally installed for >vicinityDiscoveryRadius (3) hops
 	if (packet.getRouteArraySize()-packet.getProgress() <= nodeVicinityGraph::vicinityDiscoveryRadius+1)
 		return false;
 	// will install path in data forward direction
@@ -26,7 +30,8 @@ bool R2Kademlia::checkForPathInstallation(KadPacket& packet)
 	KadContact tmpcontact(packet.getTarget(),
 			      packet.getSrcPath(packet.getProgress()+1, packet.getRouteArraySize()-1));
 
-	//EV_TRACE << "checkForPathInstallation: new path to " << tmpcontact << endl;
+	// PID must be installed if hops > vicinityDiscoveryRadius
+	EV_TRACE << "checkForPathInstallation: new path to " << tmpcontact << endl;
 	if (auto incomingPID= fwdTablePathID.addEntry(&tmpcontact, true, false);
 	    incomingPID != PathID::UndefinedPathID) {
 		// no need to install NId to PID mapping as this is no local contact
