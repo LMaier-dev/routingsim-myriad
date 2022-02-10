@@ -888,16 +888,16 @@ void R2Kademlia::sendGetPhysicalNeighbors(KadContact_p contact)
 	// we rate limit the requests but only after 2s of simulated time to get better initial stretch values
 	simtime_t delay(0);
 
-	if (SimTime() > SimTime(2,SIMTIME_S)) {
-		static const simtime_t mindelay(SimTime(500,SIMTIME_US));
-		if  ( SimTime() < LastPNQueryRouteReq ) {
+	if (simTime() > SimTime(2,SIMTIME_S)) {
+		static const simtime_t mindelay(SimTime(10000,SIMTIME_US));
+		if  ( simTime() < LastPNQueryRouteReq ) {
 			// last was scheduled in future, schedule it mindelay behind that
-			delay= LastPNQueryRouteReq-SimTime()+mindelay;
+			delay= LastPNQueryRouteReq-simTime()+mindelay;
 		}
 		else { // last send in past
-			if (SimTime()-LastPNQueryRouteReq < mindelay) {
+			if (simTime()-LastPNQueryRouteReq < mindelay) {
 				// we are too early, so delay until mindelay is fulfilled
-				delay= LastPNQueryRouteReq+mindelay-SimTime();
+				delay= LastPNQueryRouteReq+mindelay-simTime();
 			}
 		}
 	}
@@ -908,7 +908,7 @@ void R2Kademlia::sendGetPhysicalNeighbors(KadContact_p contact)
 		std::bind(&R2Kademlia::handleRPCTimeOut, this, ph::_1, ph::_2),
 		delay
 	);
-	LastPNQueryRouteReq= SimTime()+delay;
+	LastPNQueryRouteReq= simTime()+delay;
 
 	// update vicinity to avoid future redundant requests
 	bool nodeOrLinkAdded= vicinity.addNode(contact->getPath().empty() ? myOverlayKey : contact->getPath().back(), // parent
@@ -933,15 +933,15 @@ void R2Kademlia::sendGetOverlayNeighbors(KadContact_p contact)
 
 	// we rate limit the requests
 	simtime_t delay(0);
-	static const simtime_t mindelay(SimTime(1000,SIMTIME_US));
-	if  ( SimTime() < LastONQueryRouteReq ) {
+	static const simtime_t mindelay(SimTime(20000,SIMTIME_US));
+	if  ( simTime() < LastONQueryRouteReq ) {
 		// last was scheduled in future, schedule it mindelay behind that
-		delay= LastONQueryRouteReq-SimTime()+mindelay;
+		delay= LastONQueryRouteReq-simTime()+mindelay;
 	}
 	else { // last send in past
-		if (SimTime()-LastONQueryRouteReq < mindelay) {
+		if (simTime()-LastONQueryRouteReq < mindelay) {
 			// we are too early, so delay until mindelay is fulfilled
-			delay= LastONQueryRouteReq+mindelay-SimTime();
+			delay= LastONQueryRouteReq+mindelay-simTime();
 		}
 		// otherwise no extra delay necessary
 	}
@@ -953,7 +953,7 @@ void R2Kademlia::sendGetOverlayNeighbors(KadContact_p contact)
 		std::bind(&R2Kademlia::handleRPCTimeOut, this, ph::_1, ph::_2),
 		delay
 	);
-	LastONQueryRouteReq= SimTime()+delay;
+	LastONQueryRouteReq= simTime()+delay;
 }
 
 
@@ -985,16 +985,16 @@ void R2Kademlia::sendDiscoveryReq(KadContact_p contact)
 	// we rate limit the requests
 	simtime_t delay(0);
 
-	if (SimTime() > SimTime(2,SIMTIME_S)) {
-		static const simtime_t mindelay(SimTime(250,SIMTIME_US));
-		if  ( SimTime() < LastPNDiscReq ) {
+	if (simTime() > SimTime(2,SIMTIME_S)) {
+		static const simtime_t mindelay(SimTime(10000,SIMTIME_US));
+		if  ( simTime() < LastPNDiscReq ) {
 			// last was scheduled in future, schedule it mindelay behind that
-			delay= LastPNDiscReq-SimTime()+mindelay;
+			delay= LastPNDiscReq-simTime()+mindelay;
 		}
 		else { // last send in past
-			if (SimTime()-LastPNDiscReq < mindelay) {
+			if (simTime()-LastPNDiscReq < mindelay) {
 				// we are too early, so delay until mindelay is fulfilled
-				delay= LastPNDiscReq+mindelay-SimTime();
+				delay= LastPNDiscReq+mindelay-simTime();
 			}
 			// otherwise no extra delay necessary
 		}
@@ -1006,7 +1006,7 @@ void R2Kademlia::sendDiscoveryReq(KadContact_p contact)
 		std::bind(&R2Kademlia::handleRPCTimeOut, this, ph::_1, ph::_2),
 		delay
 	);
-	LastPNDiscReq= SimTime()+delay;
+	LastPNDiscReq= simTime()+delay;
 	// add physical neighbor to my vicinity
 	//commented out, because Hello should have already done so
 	//vicinity.addNode(myOverlayKey, contact->getKey(), contact->getStateSeqNo(), 1);
