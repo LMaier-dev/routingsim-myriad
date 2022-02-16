@@ -26,8 +26,8 @@ size_type FwdTablePathID::getNumForeignEntries() const
 	for (auto& pidfwdtableentry : PIDFwdTable)
 	{
 		const FwdTableEntry&  fwdentry= pidfwdtableentry.second;
-
-		if (fwdentry.isForeign() and not (fwdentry.isPrecalc()) and fwdentry.isValid() and not(fwdentry.isObsolete()))
+		// it may be the case that foreign entries are also precalculated or locally required, we do not count them as foreign then
+		if (fwdentry.isForeign() and fwdentry.isValid() and  not(fwdentry.isPrecalc() or fwdentry.isLocal() or fwdentry.isObsolete()))
 			sum++;
 	}
 	return sum;
@@ -70,6 +70,7 @@ std::string FwdTablePathID::str() const
 		if (fwdentry.isInvalid()) out << 'I';
 		if (fwdentry.isForeign()) out << 'F';
 		if (fwdentry.isLocal()) out << 'L';
+		if (fwdentry.isPrecalc()) out << 'P';
 	        out << ':';
 
 		switch (fwdentry.fwdAction) {
