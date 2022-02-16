@@ -34,7 +34,7 @@ bool R2Kademlia::checkForPathInstallation(KadPacket& packet)
 	EV_TRACE << "checkForPathInstallation: new path to " << tmpcontact << endl;
 	if (auto incomingPID= fwdTablePathID.addEntry(&tmpcontact, true, false);
 	    incomingPID != PathID::UndefinedPathID) {
-		// no need to install NId to PID mapping as this is no local contact
+		// no need to install NodeId to PID mapping as this is probably no local contact
 		return true;
 	}
 	else

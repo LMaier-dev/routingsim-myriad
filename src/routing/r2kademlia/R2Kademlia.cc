@@ -266,6 +266,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 				else { // send back response if path ID already present/installed
 					EV_TRACE << "KadPathSetupReq: PID for spath " << packet->getSrcPath(packet->getProgress())
 						 << " already present" << endl;
+					return_answer= true;
 				}
 
 				if (return_answer) {
