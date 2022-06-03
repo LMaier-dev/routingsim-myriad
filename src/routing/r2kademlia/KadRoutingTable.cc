@@ -276,6 +276,14 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 			// otherwise addNode() in sendGetPhysicalNeighbors will not update correctly
 			recheckPhysicalNeighbors= true;
 		}
+
+		// if contact is valid and path is longer, we should recheck the current path
+		// because it might be bad timing and we temporarily accept a worse choice due to
+		// the higher sequence number. Therefore, we simply trigger a path recheck for
+		// the current shorter path. The answer will overwrite the worse choice again
+		if ( not contact->isInvalid() and not shorter_path and not equivalent_path ) {
+			policy->onPathCheck(*contact);
+		}
 	} // end else newer_seqno
 
 	// for valid paths:

@@ -730,7 +730,6 @@ void R2Kademlia::resendPacket(KadPacket_p packet) {
 }
 
 
-
 void R2Kademlia::sendPacket(KadPacket_p packet, simtime_t delay) {
 	ASSERT(packet->getSource() == myOverlayKey);
 	ASSERT(packet->getControlInfo() == nullptr);
@@ -863,6 +862,7 @@ bool R2Kademlia::handleProbeResponse(KadPacket_p answer, RPCState& rpcState) {
 
 	// update StateSeqNo and lastseen of origin contact
 	if (KadContact* contact_p= const_cast<KadContact*>(routingTable.getContact(probeRsp->getSource())); contact_p != nullptr) {
+		// usually this should not be necessary as a path update is done before
 		if (contact_p->getStateSeqNo() <= probeRsp->getStateSeqNo()) {
 			contact_p->setStateSeqNo(probeRsp->getStateSeqNo());
 			contact_p->updateLastSeen();
@@ -889,19 +889,18 @@ void R2Kademlia::sendGetPhysicalNeighbors(KadContact_p contact)
 	// we rate limit the requests but only after 2s of simulated time to get better initial stretch values
 	simtime_t delay(0);
 
-	if (simTime() > SimTime(2,SIMTIME_S)) {
-		static const simtime_t mindelay(SimTime(10000,SIMTIME_US));
-		if  ( simTime() < LastPNQueryRouteReq ) {
-			// last was scheduled in future, schedule it mindelay behind that
-			delay= LastPNQueryRouteReq-simTime()+mindelay;
-		}
-		else { // last send in past
-			if (simTime()-LastPNQueryRouteReq < mindelay) {
-				// we are too early, so delay until mindelay is fulfilled
-				delay= LastPNQueryRouteReq+mindelay-simTime();
-			}
+	static const simtime_t mindelay(SimTime(10000,SIMTIME_US));
+	if  ( simTime() < LastPNQueryRouteReq ) {
+		// last was scheduled in future, schedule it mindelay behind that
+		delay= LastPNQueryRouteReq-simTime()+mindelay;
+	}
+	else { // last send in past
+		if (simTime()-LastPNQueryRouteReq < mindelay) {
+			// we are too early, so delay until mindelay is fulfilled
+			delay= LastPNQueryRouteReq+mindelay-simTime();
 		}
 	}
+
 	sendRpcCall(
 		std::move(req),
 		std::bind(&R2Kademlia::handleQueryRouteResponse, this, ph::_1, ph::_2),
@@ -986,20 +985,19 @@ void R2Kademlia::sendDiscoveryReq(KadContact_p contact)
 	// we rate limit the requests
 	simtime_t delay(0);
 
-	if (simTime() > SimTime(2,SIMTIME_S)) {
-		static const simtime_t mindelay(SimTime(10000,SIMTIME_US));
-		if  ( simTime() < LastPNDiscReq ) {
-			// last was scheduled in future, schedule it mindelay behind that
-			delay= LastPNDiscReq-simTime()+mindelay;
-		}
-		else { // last send in past
-			if (simTime()-LastPNDiscReq < mindelay) {
-				// we are too early, so delay until mindelay is fulfilled
-				delay= LastPNDiscReq+mindelay-simTime();
-			}
-			// otherwise no extra delay necessary
-		}
+	static const simtime_t mindelay(SimTime(10000,SIMTIME_US));
+	if  ( simTime() < LastPNDiscReq ) {
+		// last was scheduled in future, schedule it mindelay behind that
+		delay= LastPNDiscReq-simTime()+mindelay;
 	}
+	else { // last send in past
+		if (simTime()-LastPNDiscReq < mindelay) {
+			// we are too early, so delay until mindelay is fulfilled
+			delay= LastPNDiscReq+mindelay-simTime();
+		}
+		// otherwise no extra delay necessary
+	}
+
 	sendRpcCall(
 		std::move(req),
 		std::bind(&R2Kademlia::handlePNDiscResponse, this, ph::_1, ph::_2),
