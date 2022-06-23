@@ -206,7 +206,7 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 	}
 
 	// update path if:
-	// 1) (always) when sequence number is actually higher
+	// 1) when sequence number is higher (except when contact is valid and new path is longer, then we recheck current path)
 	// 2) contact is invalid: only if we have newer information (higher sequence number)
 	//                        or the same seq# (the path may have changed though and reenabling the contact is important)
 	//                        however, path information must be more recent if same seq#
@@ -283,6 +283,7 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 		// the current shorter path. The answer will overwrite the worse choice again
 		if ( not contact->isInvalid() and not shorter_path and not equivalent_path ) {
 			policy->onPathCheck(*contact);
+			return false;
 		}
 	} // end else newer_seqno
 
