@@ -283,7 +283,7 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 		// the current shorter path. The answer will overwrite the worse choice again
 		if ( not contact->isInvalid() and not shorter_path and not equivalent_path ) {
 			policy->onPathCheck(*contact);
-			return false;
+			return false; // returning from here would reject the longer route
 		}
 	} // end else newer_seqno
 
