@@ -137,9 +137,9 @@ void R2Kademlia::onContactRemoval(KadContact_p contact)
 	if (contact == nullptr)
 		return;
 
-	// delete from Forwarding table PID
+	// delete from Forwarding table PID (not for vicinity nodes)
 	// TODO: this can be scheduled for happening later
-	if (usePathIDs)
+	if (usePathIDs and contact->getPathLength() >= nodeVicinityGraph::vicinityDiscoveryRadius)
 		fwdTablePathID.delEntry(contact);
 
 	// TODO: the following is probably not useful
@@ -185,12 +185,12 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 	// those contacts about their PNs which is even one hop further away
 	if (contact->getPathLength() > 0)
 	{
-		if (contact->getPathLength()+1 < nodeVicinityGraph::vicinityDiscoveryRadius) {
+		if (contact->getPathLength()+1 < discoveryRadius) {
 			// sends a QueryRouteReq requesting their 1 hop neighborhood
-			// adds contact to vicinity
+			// sendGetPhysicalNeighbors() adds contact to vicinity to keep track of already queried nodes in vicinity
 			sendGetPhysicalNeighbors(contact);
 		}
-		else
+		else // maybe just on the radius, check to add contact for vicinity
 		if (contact->getPathLength()+1 == nodeVicinityGraph::vicinityDiscoveryRadius) {
 			vicinity.addNode(contact->getPath().back(), // parent, path not empty, see precondition of outer if
 					 contact->getKey(), // new child

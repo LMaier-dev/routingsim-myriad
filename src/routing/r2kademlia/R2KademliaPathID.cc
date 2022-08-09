@@ -116,7 +116,7 @@ void R2Kademlia::vicinityPathIDCompletion(const KadContact& neighborhoodContact)
 			} // end for iterating over all nodes at the current level
 		} // end for iterating over all levels
 
-		// for (unsigned i= 0; i <= discoveryRadius; i++) {
+		// for (unsigned i= 0; i <= nodeVicinityGraph::vicinityDiscoveryRadius; i++) {
 		// 	EV_TRACE << "vicinityPathIDCompletion - collected nodes @level " << i;
 		// 	for (auto cit= nodeSet[i].cbegin(); cit!= nodeSet[i].cend(); cit++)
 		// 		EV_TRACE << ' ' << (*cit)->nodeKey->shortStr();
@@ -164,7 +164,7 @@ void R2Kademlia::vicinityPathIDCompletion(const KadContact& neighborhoodContact)
 			} // end for
 		} // end for every following level
 
-		// for (unsigned i= 0; i <= discoveryRadius; i++) {
+		// for (unsigned i= 0; i <= nodeVicinityGraph::vicinityDiscoveryRadius; i++) {
 		// 	EV_TRACE << "vicinityPathIDCompletion - collected nodes @level " << i;
 		// 	for (auto cit= nodeSet[i].cbegin(); cit!= nodeSet[i].cend(); cit++)
 		// 		EV_TRACE << ' ' << (*cit)->nodeKey->shortStr();

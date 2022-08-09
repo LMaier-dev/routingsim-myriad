@@ -225,7 +225,10 @@ void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 	auto& finaldest(packet->getDstNodeID());
 
 	if (packet->hasRemainingHops() == false)
-	{ // Loop detected
+	{ // Loop detected: this should not occur
+		if (packet->getControlInfo() == nullptr)
+			packet->setControlInfo(nodePkt.release());
+
 		countDropped(*packet, finaldest, hopLimitExceeded);
 		returnToSender(KAD_HopLimitExceeded, std::move(packet));
 		return;
@@ -283,6 +286,9 @@ void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 					if (not forwardDataPacketToNextHop(packet, nodePkt))
 					{
 						EV_WARN << "PID based forwarding failed while trying to forward to next hop. Dropping packet" << endl;
+						if (packet->getControlInfo() == nullptr)
+							packet->setControlInfo(nodePkt.release());
+
 						countDropped(*packet, finaldest, missingPID);
 						returnToSender(KAD_PathIDUnknown, std::move(packet));
 
@@ -340,6 +346,9 @@ void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 			if (not forwardDataPacketToNextHop(packet, nodePkt))
 			{
 				EV_WARN << "2nd chance forwarding failed while trying to forward. Dropping packet" << endl;
+				if (packet->getControlInfo() == nullptr)
+					packet->setControlInfo(nodePkt.release());
+
 				countDropped(*packet, finaldest, secondChanceFailed);
 				//returnToSender(KAD_PathIDUnknown, std::move(packet));
 

@@ -271,7 +271,7 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 		}
 
 		// if contact is within discovery radius, ask again for its neighbors since something has changed
-		if ( not contact->isPhysicalNeighbor() and (contact->getPathLength()+1 < discoveryRadius or path.size()+1 < discoveryRadius) ) {
+		if ( not contact->isPhysicalNeighbor() and (contact->getPathLength()+1 < nodeVicinityGraph::vicinityDiscoveryRadius or path.size()+1 < nodeVicinityGraph::vicinityDiscoveryRadius) ) {
 			// we "defer" that until new path has been set (see below)
 			// otherwise addNode() in sendGetPhysicalNeighbors will not update correctly
 			recheckPhysicalNeighbors= true;

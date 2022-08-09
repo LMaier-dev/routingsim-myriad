@@ -29,7 +29,8 @@ simple R2Kademlia extends routingsim.foundation.Protocol
 		int bucketSize = default(20);
 		/// number of contacts returned by find node response, called "k" in research papers
 		int findNodeNumber = default(bucketSize);
-		/// radius of physical neighborhood discovery
+		/// radius of physical neighborhood discovery (for populating the routing table)
+		/// (note that the vicinity discovery radius for PathID precalculation is fixed at 2)
 		int discoveryRadius = default(3);
 		bool proximityRouting = default(true);
 		bool proximityNeighborSelection = default(true);

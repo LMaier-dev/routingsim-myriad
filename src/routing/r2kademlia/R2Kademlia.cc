@@ -1693,10 +1693,11 @@ void R2Kademlia::readRTableRsp(const KadRTableRsp& packet) {
 
 		// try to add contact or update path and/or contact meta data
 		if ( not(routingTable.addPath(packet.getContact(i), packet.getPath(i), packet.getSeqNo(i), packet.getPathInfoAge(i), viaPath)) ) {
-			// even if contact was not interesting for RT, add it as PID entry if within discovery radius
+			// even if contact was not interesting for RT, add it as PID entry if within vicinitydiscovery radius
 			// the following condition is correct because the target contact 
 			// is not contained in (viaPath + packet.getPath(i))
-			if ( packet.getContact(i)!= myOverlayKey and ((viaPath.size() + packet.getPath(i).size()) < discoveryRadius) )
+			bool querynode(false);
+			if ( packet.getContact(i)!= myOverlayKey and ((viaPath.size() + packet.getPath(i).size()) < nodeVicinityGraph::vicinityDiscoveryRadius) )
 			{
 				// for further processing we need a temporary contact object
 				// since it was not put into the routingTable
@@ -1704,7 +1705,6 @@ void R2Kademlia::readRTableRsp(const KadRTableRsp& packet) {
 							       routingTable.concatViaPath(viaPath, packet.getPath(i)),
 							       packet.getSeqNo(i));
 
-				bool querynode(false);
 				if (auto vn= vicinity.getNode(neighborhoodContact.getKey()); vn == nullptr) {
 					// newly put intro vicinity, so get its PNs
 					querynode= true;
@@ -1723,16 +1723,22 @@ void R2Kademlia::readRTableRsp(const KadRTableRsp& packet) {
 
 				// still room for one more hop in neighborhood exploration?
 				// the same is done for new contacts in RT (see onNewContact)
-				//bool expandDiscovery(viaPath.size() + packet.getPath(i).size() + 1  < discoveryRadius);
-				// add PID entry as this neighbor is in our discoveryRadius vicinity
+				//bool expandDiscovery(viaPath.size() + packet.getPath(i).size() + 1  < nodeVicinityGraph::vicinityDiscoveryRadius);
+				// add PID entry as this neighbor is in our vicinityDiscoveryRadius
 				if (usePathIDs and nodeOrLinkAdded) {
 					fwdTablePathID.addEntry(&neighborhoodContact, false, true);
 					vicinityPathIDCompletion(neighborhoodContact);
 				}
-				// only get PNs from node if strictly smaller than discovery radius
-				if (((viaPath.size() + packet.getPath(i).size() + 1) < discoveryRadius) and querynode) {
-					sendGetPhysicalNeighbors(&neighborhoodContact);
-				}
+			} // endif entry within vicinitydiscovery
+
+			// only get further PNs from node if strictly smaller than discovery radius
+			// this should improve the routing table contacts
+			if ( querynode and ((viaPath.size() + packet.getPath(i).size() + 1) < discoveryRadius) ) {
+				KadContact neighborhoodContact(packet.getContact(i),
+							       routingTable.concatViaPath(viaPath, packet.getPath(i)),
+							       packet.getSeqNo(i));
+
+				sendGetPhysicalNeighbors(&neighborhoodContact);
 			}
 		} // endif: new path not added
 	} // end for each reported contact
