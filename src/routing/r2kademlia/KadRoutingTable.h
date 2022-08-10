@@ -82,6 +82,8 @@ public:
 	virtual void onBucketEmpty(KadBucket& bucket) = 0;
 	/** called when a new contact is created in the routing table */
 	virtual void onNewContact(KadContact_p contact) = 0;
+	/** called when path has changed, but is not improved **/
+	virtual void onPathChange(const KadContact& contact) = 0;
 	/** called when a better path has been learned for a contact */
 	virtual void onImprovement(const KadContact& contact) = 0;
 	/** called when a contact is about to being removed */

@@ -74,11 +74,15 @@ bool R2Kademlia::handlePathSetupResponse(KadPacket_p answer, RPCState& rpcState)
 				}
 			}
 		}
-		else
+		else {
 			EV_WARN << "PathSetupRsp: ignoring, because Last Seen of current contact is more recent:" << tmpcontact.getLastSeen() << endl;
+			// TODO: initiate Teardown of the obsolete path
+		}
 	}
-	else
+	else {
 		EV_TRACE << "PathSetupRsp: ignoring, because contact " << tmpcontact.getKey().shortStr() << " does not exist anymore" << endl;
+		// TODO: initiate Teardown of the obsolete path? or has this been triggered already by contact replacement/removal?
+	}
 
 	return true;
 }

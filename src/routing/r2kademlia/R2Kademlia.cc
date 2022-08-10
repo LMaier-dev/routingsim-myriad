@@ -759,63 +759,105 @@ void R2Kademlia::sendPacket(KadPacket_p packet, simtime_t delay) {
 
 
 /**
- * Assumption is that the contact list is sorted by XOR and distance to target  */
-const KadContact& R2Kademlia::chooseNextHop(const KadContactList& contacts, const OverlayKey& target) {
+ * chooseNextHop performs proximity routing:
+ * for contacts with the same XOR distance to target it selects the one with the shortest path
+ * Assumption is that the contact list is sorted by XOR distance to target
+**/
+KadContactList::const_iterator
+R2Kademlia::chooseNextHop(const KadContactList& contacts, const OverlayKey& target, KadContactList::const_iterator startit) {
+
 	if (proximityRouting and contacts.size() > 1) {
 		// dprefix is the number of non-matching bits with target: smaller dprefix is closer to target
 		int dprefix = target.getLength()+1; // keylength + 1
 		size_t dproxMin = hopLimit;
 
 		// look for first usable contact
-		const KadContact* contact(nullptr);
-		auto it = contacts.begin();
-		for (; it != contacts.end(); it++)
+		// since the contact list is sorted by XOR, the ID-wise closest contact should be the first one
+		const KadContact* bestcontact(nullptr);
+		auto it(startit);
+		auto bestchoice_it(it);
+		for (; it != contacts.cend(); it++)
 		{
-			contact= *it;
-			if (contact != nullptr)
+			bestcontact= *it;
+			bestchoice_it= it;
+			if (bestcontact != nullptr)
 			{
-				dprefix = (contact->getKey() ^ target).log_2();
-				dproxMin = contact->getPathLength();
+				// initialize the prefix distance and proximity distance
+				dprefix = (bestcontact->getKey() ^ target).log_2();
+				dproxMin = bestcontact->getPathLength();
+				//EV_TRACE << "chooseNextHop(): contact " << contact->getKey().shortStr()
+				//	 << " dprefix=" << dprefix << " dproxMin=" << dproxMin << endl;
+
 				if ((myOverlayKey ^ target).log_2() == dprefix) {
 					// if we have no prefix progress,
 					// we take the closest contact by XOR, which is this one (assumption of XOR-sorted contacts)
-					return *contact;
+					return bestchoice_it;
 				}
+				// stop here as we have found a usable contact to start with
 				break;
 			}
 		}
+
 		// dprefix, dproxMin now initialized to first non-null contact (if any)
 		// continue with next contact
-		if (it != contacts.end())
+		if (it != contacts.cend())
 			it++;
+
 		// look for closest contact with shortest path
-	        for (; it != contacts.end(); it++) {
+	        for (; it != contacts.cend(); it++) {
+
 			if ( (*it) != nullptr ) {
+				//EV_TRACE << "chooseNextHop(): check contact " << (*it)->getKey().shortStr()
+				//	 << " dprefix=" << ((*it)->getKey() ^ target).log_2() << " pathlen=" << (*it)->getPathLength() << endl;
+
 				// stop at contact that is further away
 				if (((*it)->getKey() ^ target).log_2() > dprefix)
 					break;
-				// use contact with shortest path
+
+				// contact is XOR-wise at the same distance (dprefix)
+				// if contact has shorter path it is our best choice now
 				if ((*it)->getPathLength() < dproxMin) {
 					dproxMin = (*it)->getPathLength();
-					contact = *it;
+					bestcontact = *it;
+					bestchoice_it = it;
 				}
 			}
 		} // end for
 
-		if (contact != nullptr)
-			return *contact;
+		if (bestcontact != nullptr)
+			return bestchoice_it;
 	}
 	else {
 		// no proximity routing or only single contact
-		//ASSERT(contacts.front()->getKey() != target); // this assertion seems to be wrong
 
-		if (not contacts.empty() and contacts.front() != nullptr) {
-			if (contacts.front()->getKey() == target)
+		if (not contacts.empty() and startit != contacts.end() and *startit != nullptr) {
+			if ((*startit)->getKey() == target)
 			{
 				EV_WARN << "Next hop is the target, number of contacts: " << contacts.size()
-					<< "contact: " << *(contacts.front()) << endl;
+					<< "contact: " << *(startit) << endl;
 			}
-			return *(contacts.front());
+			return startit;
+		}
+	}
+
+	// if everything else fails we return the end of the contact list
+	// which signals that no eligible contact was found
+	return contacts.cend();
+}
+
+
+/**
+ * chooseNextHop performs proximity routing
+ * Assumption is that the contact list is sorted by XOR distance to target
+**/
+const KadContact&
+R2Kademlia::chooseNextHop(const KadContactList& contacts, const OverlayKey& target) {
+
+	if (auto cit(chooseNextHop(contacts, target, contacts.cbegin())); cit != contacts.cend())
+	{
+		if (*cit != nullptr) {
+			// dereference const_iterator, then dereference pointer
+			return **cit;
 		}
 	}
 
@@ -1325,6 +1367,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 		// if next contact is closer to destination than us, it's ok unless we route back to the source
 		if ((contacts.front()->getKey() ^ query) < (myOverlayKey ^ query)
 		    and contacts.front()->getPathLength() < packet->getHopLimit()) {
+
 			// we have found a contact that is closer than us to target (query)
 			// => forward request
 			// note: chooseNextHop may choose the next hop with the shortest path (proximity routing)

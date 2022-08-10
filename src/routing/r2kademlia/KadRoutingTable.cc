@@ -380,6 +380,9 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 		// try to improve other paths with newly improved contact path
 		updatePaths(*contact);
 	}
+	else {
+		policy->onPathChange(*contact);
+	}
 
 	return true;
 

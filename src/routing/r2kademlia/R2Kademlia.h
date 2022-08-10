@@ -399,6 +399,7 @@ private:
 	void sendPacket(KadPacket_p packet, simtime_t delay= 0) override;
 	/// routes a packet to a neighbor based on the  in the packet
 	void sendPacket(KadDataPacket_p packet);
+	KadContactList::const_iterator chooseNextHop(const KadContactList& contacts, const OverlayKey& target, KadContactList::const_iterator startit);
 	/// chooses the contact to forward a request to according to the overlay metric.
 	const KadContact& chooseNextHop(const KadContactList&, const OverlayKey& target);
 	/// sends a probe request to the given contact to check for path validity
@@ -442,8 +443,9 @@ public:
 	virtual void onContactRemoval(KadContact_p contact) override;
 	/** called when a contact is invalidated */
 	virtual void onContactInvalidation(KadContact_p contact) override;
-
-	/** called when a route got improved */
+	/** called when path has changed, but is not improved **/
+	virtual void onPathChange(const KadContact& contact) override;
+	/** called when a route got improved (shorter or repaired) */
 	virtual void onImprovement(const KadContact& contact) override;
 	/** called when physical neighbors may be out of synch with their sequence numbers **/
 	virtual void reSyncPN(const KadContact& contact, stateseqno_t expected_seqno) override;

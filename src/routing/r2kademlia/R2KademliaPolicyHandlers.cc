@@ -222,7 +222,7 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 			else
 			if (contact->getPathLength() > nodeVicinityGraph::vicinityDiscoveryRadius)
 			{  // send a path setup request packet for installing PIDs in intermediate nodes for this route
-				// only do this for paths longer than (discovery radius+1) (e.g., for dr=3 -> contacts 5 hops away) hops:
+				// only do this for paths longer than (vicinityDiscoveryRadius+1) (e.g., for vdr=2 -> contacts 4 hops away) hops:
 				// the next node precalculated already all path IDs within its own discovery radius and
 				// we are just one hop away, so only required setup for paths longer than (discovery radius+1)
 				// note that the contact->getPath() excludes the contact itself
@@ -270,6 +270,31 @@ void R2Kademlia::onImprovement(const KadContact& contact) {
 		scheduleUpdate(contact, KAD_Change);
 }
 
+
+// this is different from onImprovement(): path has maybe the same length but is different (e.g., due to higher seq no)
+// no UpdateRouteReq is sent, but possibly PathSetup needs to be initiated or PID needs to change
+void R2Kademlia::onPathChange(const KadContact& contact) {
+	EV_TRACE << "onPathChange(" << contact.getKey().shortStr() << ") called, SeqNo #" << contact.getStateSeqNo() << ' ' << contact.getPath() << endl;
+
+	//ASSERT( getKadObserver().checkSeqNo(contact.getKey(),contact.getStateSeqNo()) == true );
+
+	if (usePathIDs and contact.isValid()) {
+
+		// no need to setup routes within discovery radius + 1 distance
+		// (note/remember: getPathLength() does not include the last hop)
+		if ( contact.getPathLength() > nodeVicinityGraph::vicinityDiscoveryRadius ) {
+			// send a path setup request packet for installing PIDs in intermediate nodes for this route
+			//EV_TRACE << "Triggering path setup to " << contact.getKey().shortStr() << endl;
+			// modentry() will be called by handlePathSetupResponse
+			schedulePathSetup(contact.getKey());
+		}
+		else {
+			// for paths within discovery radius: update the PID entry
+			fwdTablePathID.modEntry(&contact, false);
+		}
+	}
+
+}
 
 void R2Kademlia::recheckPhysicalNeighbors(const KadContact& contact) {
 	// simply recheck the physical Neighbors
