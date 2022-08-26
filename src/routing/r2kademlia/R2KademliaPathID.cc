@@ -19,8 +19,9 @@ bool R2Kademlia::checkForPathInstallation(KadPacket& packet)
 
 	// if rest of path is within vicinity discovery radius, we have a precalculated entry
 	// note: this is a source route, so it includes the destination node
-	// calc: packet.getRouteArraySize()-1-(packet.getProgress()+1)+1 <= vicinityDiscoveryRadius
-	// example progress 1: pathlen: 5 => 4-2+1= 3 hops to go
+	// calc number of hops to go: packet.getRouteArraySize()-1-(packet.getProgress()+1)+1 = hops left
+	// example progress 2: pathlen: 6 => 5-3+1= 3 hops to go
+	//
 	// PIDs for destinations in vicinityDiscoveryRadius (2) hops are pre-computed,
 	// but must be locally installed for >vicinityDiscoveryRadius (3) hops
 	if (packet.getRouteArraySize()-packet.getProgress() <= nodeVicinityGraph::vicinityDiscoveryRadius+1)
@@ -224,5 +225,30 @@ void R2Kademlia::vicinityPathIDCompletion(const KadContact& neighborhoodContact)
 		} // end while
 	}
 }
+
+
+void R2Kademlia::checkForPathTeardown(KadPacket& packet)
+{
+	if ( usePathIDs == false )
+		return;
+
+	EV_TRACE << "checkForPathTeardown: " << packet.getSrcPath()
+		 << " Progress: " << packet.getProgress() << " PathLen:" << packet.getRouteArraySize() << endl;
+
+	// if the rest is precalculated, nothing to do
+	if (packet.getRouteArraySize()-packet.getProgress() <= nodeVicinityGraph::vicinityDiscoveryRadius+1)
+		return;
+
+	// will install path in data forward direction
+	// ASSERT(packet.hasRemainingHops()); // this will be true because checkForPathInstallation() is called only then
+	KadContact tmpcontact(packet.getTarget(),
+			      packet.getSrcPath(packet.getProgress()+1, packet.getRouteArraySize()-1));
+
+	EV_TRACE << "checkForPathTeardown: delete path to " << tmpcontact << endl;
+	fwdTablePathID.delEntry(&tmpcontact);
+
+	return;
+}
+
 
 } // end namespace

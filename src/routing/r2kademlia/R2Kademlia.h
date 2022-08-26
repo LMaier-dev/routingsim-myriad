@@ -202,6 +202,7 @@ private:
 	uint sentPathSetup = 0;
 	uint receivedPathSetup = 0;
 	uint forwardedPathSetup = 0;
+	uint forwardedPathTeardown = 0;
 	uint receivedPathTeardown = 0;
 	//@}
 
@@ -275,8 +276,11 @@ private:
 	void countDropped(KadDataPacket& packet, const OverlayKey& target, uint8_t reason);
 	/// try a shortcut route and modify source route of the packet
 	void applyShortcut(KadPacket& packet);
-	/// try to install path from response packet
+	/// try to install path from path setup response packet
 	bool checkForPathInstallation(KadPacket& packet);
+	/// remove path ID if possible
+	void checkForPathTeardown(KadPacket& packet);
+
 	/// for a new neighborhoodcontact, installed any known paths within discoveryRadius
 	void vicinityPathIDCompletion(const KadContact& neighborhoodContact);
 

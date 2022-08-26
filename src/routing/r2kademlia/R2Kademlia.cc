@@ -270,27 +270,51 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 				}
 
 				if (return_answer) {
+					// check for path improvements since this returns early here
+					if (pathSnooping) {
+						kad_path path_of_interest(packet->reversePath(packet->getSrcPath(1, packet->getProgress())));
+						if (path_of_interest.size() > 0)
+						{
+							routingTable.addPath(packet->getSource(), path_of_interest, packet->getStateSeqNo(), 0);
+						}
+					}
 					const KadPathSetupReq* setupreq = static_cast<const KadPathSetupReq *>(packet.get());
 					sendPacket(makeAnswerKadPathSetupRsp(*setupreq));
 					return; // this will delete the original packet
 				}
 				forwardedPathSetup++;
 			}
-				break;
+			break;
+
+			case KAD_PathTeardownReq:
+			{
+				// as intermediate node I need to check to path ID teardown
+				checkForPathTeardown(*packet);
+
+				if (packet->getRouteArraySize()-packet->getProgress() <= nodeVicinityGraph::vicinityDiscoveryRadius+2) {
+					EV_TRACE << "KadPathTeardown: terminated here, the rest is precomputed" << endl;
+					return;  // this will delete the original packet
+				}
+
+				forwardedPathTeardown++;
+			}
+			break;
 
 			case KAD_PathSetupRsp:
+			{
 				EV_TRACE << "forwarding PathSetupRsp, origin spath: "
 					 << packet->reversePath(packet->getSrcPath()) << endl;
-				break;
+			}
+			break;
 
 			case KAD_ProbeReq: // this is for path probing
-			        {
-					const KadProbeReq* probereq= dynamic_cast<const KadProbeReq*>(packet.get());
-					if (usePathIDs and probereq->getPathCheck()) {
-						if (checkForPathInstallation(*packet))
-							EV_TRACE << "POST Installed PathID by ProbeReq PathCheck" << endl;
-					}
+			{
+				const KadProbeReq* probereq= dynamic_cast<const KadProbeReq*>(packet.get());
+				if (usePathIDs and probereq->getPathCheck()) {
+					if (checkForPathInstallation(*packet))
+						EV_TRACE << "POST Installed PathID by ProbeReq PathCheck" << endl;
 				}
+			}
 			break;
 
 			case KAD_UpdateRouteReq: // check for unreachable info
