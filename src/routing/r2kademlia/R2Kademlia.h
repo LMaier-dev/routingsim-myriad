@@ -200,6 +200,7 @@ private:
 	uint sentRouteUpdates = 0;
 	uint receivedRouteUpdates = 0;
 	uint sentPathSetup = 0;
+	uint sentPathTeardown = 0;
 	uint receivedPathSetup = 0;
 	uint forwardedPathSetup = 0;
 	uint forwardedPathTeardown = 0;
@@ -410,6 +411,8 @@ private:
 	void sendPathProbe(KadContact_p contact);
 	/// sends a path setup request to the given contact
 	void sendPathSetup(KadContact_p contact);
+	/// sends a path teardown request to the given contact
+	void sendPathTeardown(KadContact_p contact);
 	/// sends a "get physical neighbors" call to the contact
 	void sendGetPhysicalNeighbors(KadContact_p contact);
 	/// sends a "get overlay neighbors" call to the contact

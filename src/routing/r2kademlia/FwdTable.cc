@@ -9,7 +9,7 @@ size_type FwdTablePathID::getNumValidEntries() const
 	unsigned long sum= 0;
 	for (auto& pidfwdtableentry : PIDFwdTable)
 	{
-		const FwdTableEntry&  fwdentry= pidfwdtableentry.second;
+		const FwdTableEntry& fwdentry= pidfwdtableentry.second;
 
 		if (fwdentry.isValid() and not(fwdentry.isObsolete()))
 			sum++;
@@ -25,7 +25,7 @@ size_type FwdTablePathID::getNumForeignEntries() const
 	unsigned long sum= 0;
 	for (auto& pidfwdtableentry : PIDFwdTable)
 	{
-		const FwdTableEntry&  fwdentry= pidfwdtableentry.second;
+		const FwdTableEntry& fwdentry= pidfwdtableentry.second;
 		// it may be the case that foreign entries are also precalculated or locally required, we do not count them as foreign then
 		if (fwdentry.isForeign() and fwdentry.isValid() and  not(fwdentry.isPrecalc() or fwdentry.isLocal() or fwdentry.isObsolete()))
 			sum++;
@@ -42,7 +42,7 @@ std::tuple<size_type, size_type> FwdTablePathID::getNumUsedPrecalcEntries() cons
 
 	for (auto& pidfwdtableentry : PIDFwdTable)
 	{
-		const FwdTableEntry&  fwdentry= pidfwdtableentry.second;
+		const FwdTableEntry& fwdentry= pidfwdtableentry.second;
 
 		if (fwdentry.isPrecalc()) {
 			total_sum++;
@@ -61,7 +61,7 @@ std::string FwdTablePathID::str() const
 
 	for (auto& pidfwdtableentry : PIDFwdTable)
 	{
-		const FwdTableEntry&  fwdentry= pidfwdtableentry.second;
+		const FwdTableEntry& fwdentry= pidfwdtableentry.second;
 
 		out << "[" << pidfwdtableentry.first << "=>" << fwdentry.outgoingPathID << "] (";
 		if (fwdentry.isUndefined()) out << 'U';
@@ -248,8 +248,7 @@ bool FwdTablePathID::modEntry(KadContact_p contact, bool isForeignPID)
 			EV_TRACE << "modEntry(): same PID entry " << incomingPathID << " for contact already existed" << endl;
 			if (auto it= PIDFwdTable.find(incomingPathID); it != PIDFwdTable.end())
 			{
-				auto& fwdentry= it->second;
-				fwdentry.setValid();
+				it->second.setValid();
 			}
 
 			return false;
@@ -284,8 +283,8 @@ bool FwdTablePathID::modEntry(KadContact_p contact, bool isForeignPID)
 	if (auto it= PIDFwdTable.find(incomingPathID); it != PIDFwdTable.end())
 	{
 		EV_TRACE << "modEntry(): inPID " << incomingPathID << " already existed" << endl;
+		it->second.setValid();
 		fwdentry= it->second;
-		fwdentry.setValid();
 	}
 	else
 	{ // create new entry in FwdTable
@@ -337,6 +336,8 @@ void FwdTablePathID::delPIDEntry(PathID pid)
 			it->second.prevPathID= PathID::UndefinedPathID;
 		}
 
+		// local and precalculated PID entries will not be deleted here,
+		// foreign entries should be deleted by PathTeardown messages by unsetting their foreign bit first
 		if ( not it->second.isLocal() and not it->second.isForeign() and not it->second.isPrecalc()) {
 			EV_TRACE << "FwdTablePathID::delEntry PathID " << pid << " deleted." << endl;
 			// delete this PID Entry
@@ -355,7 +356,7 @@ void FwdTablePathID::delEntry(KadContact_p contact)
        	if (contact == nullptr)
 		return;
 
-	// Lookup entry
+	// Lookup NID -> PID entry
 	if ( auto pidentry= NIDPIDTable.find(contact->getKey()); pidentry != NIDPIDTable.end() )
 	{
 		// delete all PID entries related to this contact except when they were precalculated
@@ -365,7 +366,7 @@ void FwdTablePathID::delEntry(KadContact_p contact)
 			for (auto fwdentry_it= PIDFwdTable.find(currentPathID);
 			     fwdentry_it != PIDFwdTable.end() and fwdentry_it->first != PathID::UndefinedPathID;
 			     fwdentry_it= PIDFwdTable.find(fwdentry_it->second.prevPathID)) {
-				// if the next condition hold, we got a cycle
+				// if the next condition holds, we got a cycle
 				if (alreadySeenPIDSet.find(fwdentry_it->first) != alreadySeenPIDSet.end()) {
 					EV_TRACE << "CYCLE detected, fwdentry: " << fwdentry_it->first
 						 << endl;
@@ -375,6 +376,7 @@ void FwdTablePathID::delEntry(KadContact_p contact)
 				alreadySeenPIDSet.insert(fwdentry_it->first);
 
 				fwdentry_it->second.unsetLocal();
+
 				if (fwdentry_it->second.prevPathID == PathID::UndefinedPathID)
 					break;
 			}
@@ -385,12 +387,26 @@ void FwdTablePathID::delEntry(KadContact_p contact)
 
 		// delete anchor entry in NIDPIDTable
 		NIDPIDTable.erase(pidentry);
-		EV_WARN << "delEntry(): NIDPID entry for " << contact->getKey().shortStr() << " deleted" << endl;
+		EV_TRACE << "delEntry(): NIDPID entry for " << contact->getKey().shortStr() << " deleted" << endl;
 
 	}
-	else
+	else // maybe only the PID exists (e.g., in case of PathSetupReq)
 	{
-		EV_WARN << "delEntry(): no entry for " << contact->getKey().shortStr() << " found" << endl;
+		kad_path newpath(contact->getPath());
+		// add destination node ID to path (will never be empty then)
+		newpath.push_back(contact->getKey());
+		PathID incomingPathID(getPathID(*ownNodeID, newpath));
+		// try to find PID entry and unset the foreign flag
+		if (auto it= PIDFwdTable.find(incomingPathID); it != PIDFwdTable.end())
+		{
+			EV_TRACE << "delEntry(): inPID " << incomingPathID << " delete foreign flag" << endl;
+			it->second.unsetForeign();
+			delPIDEntry(incomingPathID);
+		}
+		else
+		{
+			EV_WARN << "delEntry(): no entry for PID " << incomingPathID  << " found" << endl;
+		}
 	}
 }
 

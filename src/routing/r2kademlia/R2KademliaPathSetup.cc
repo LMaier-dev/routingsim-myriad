@@ -25,6 +25,16 @@ void R2Kademlia::sendPathSetup(KadContact_p contact) {
 }
 
 
+// Path Teardown Request
+void R2Kademlia::sendPathTeardown(KadContact_p contact) {
+	EV_TRACE << "sending PathTeardownReq from " << myOverlayKey.shortStr() << " to " << contact->getKey().shortStr() << endl;
+	sentPathTeardown++;
+	std::unique_ptr<KadPathTeardownReq> packet(makePacket<KadPathTeardownReq>(contact, "KadPathTeardownReq"));
+
+	sendPacket(std::move(packet));
+}
+
+
 // this will never be called, because a node hops before should have answered the PathSetupReq due to precomputed PathIDs
 void R2Kademlia::handlePacket(std::unique_ptr<KadPathSetupReq> packet) {
 	EV_TRACE << "received PathSetupReq from " << packet->getSource().shortStr() << " to " << packet->getTarget().shortStr()

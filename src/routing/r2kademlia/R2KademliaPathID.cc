@@ -239,8 +239,7 @@ void R2Kademlia::checkForPathTeardown(KadPacket& packet)
 	if (packet.getRouteArraySize()-packet.getProgress() <= nodeVicinityGraph::vicinityDiscoveryRadius+1)
 		return;
 
-	// will install path in data forward direction
-	// ASSERT(packet.hasRemainingHops()); // this will be true because checkForPathInstallation() is called only then
+	// will tear down path in data forward direction
 	KadContact tmpcontact(packet.getTarget(),
 			      packet.getSrcPath(packet.getProgress()+1, packet.getRouteArraySize()-1));
 

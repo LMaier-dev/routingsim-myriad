@@ -140,7 +140,10 @@ void R2Kademlia::onContactRemoval(KadContact_p contact)
 	// delete from Forwarding table PID (not for vicinity nodes)
 	// TODO: this can be scheduled for happening later
 	if (usePathIDs and contact->getPathLength() >= nodeVicinityGraph::vicinityDiscoveryRadius)
+	{
+		sendPathTeardown(contact);
 		fwdTablePathID.delEntry(contact);
+	}
 
 	// TODO: the following is probably not useful
 	// (node may still be present in vicinity, but was evicted from bucket)

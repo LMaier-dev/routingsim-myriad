@@ -160,10 +160,6 @@ packet KadPathTeardownReq extends KadPacket {
 	type = KAD_PathTeardownReq;
 }
 
-packet KadPathTeardownRsp extends KadAnswer {
-	type = KAD_PathTeardownRsp;
-}
-
 
 // QUERY ROUTE
 packet KadQueryRouteReq extends KadRTableReq {
