@@ -3,6 +3,43 @@
 
 namespace routingsim {
 
+std::string FwdTableEntry::str() const {
+
+	std::ostringstream out;
+	out << outgoingPathID << " (";
+		if (isUndefined()) out << 'U';
+		if (isValid()) out << 'V';
+		if (isObsolete()) out << 'O';
+		if (isInvalid()) out << 'I';
+		if (isForeign()) out << 'F';
+		if (isLocal()) out << 'L';
+		if (isPrecalc()) out << 'P';
+	        out << ':';
+
+		switch (fwdAction) {
+			case FwdTableEntry::Action::undefined:
+				out << 'U';
+				break;
+			case FwdTableEntry::Action::fwdNextPathID:
+				out << 'P';
+				break;
+			case FwdTableEntry::Action::fwdNextKadId:
+				out << 'N';
+				break;
+			case FwdTableEntry::Action::fwdlocal:
+				out << 'L';
+				break;
+			default:
+				out << '?';
+		} // end switch;
+
+		out << ") nh <" << nextHopNode.shortStr() << ">(" << getPathLength() << ")";
+
+		return out.str();
+
+}
+
+
 // this counts only valid and active entries (=non obsolete)
 size_type FwdTablePathID::getNumValidEntries() const
 {
@@ -59,42 +96,26 @@ std::string FwdTablePathID::str() const
 {
 	std::ostringstream out;
 
-	for (auto& pidfwdtableentry : PIDFwdTable)
+	out << "NIDPIDTable: ";
+	for (const auto& nidpidentry : NIDPIDTable)
+	{
+		out << "{ " << nidpidentry.first.shortStr() << "=> " << nidpidentry.second << ' ';
+		if (const auto it= PIDFwdTable.find(nidpidentry.second); it != PIDFwdTable.end()) {
+			out << it->second.str() << " } ";
+		}
+		else
+			out << "<missing PID> } ";
+	}
+
+	out << "PIDFwdTable: ";
+	for (const auto& pidfwdtableentry : PIDFwdTable)
 	{
 		const FwdTableEntry& fwdentry= pidfwdtableentry.second;
 
-		out << "[" << pidfwdtableentry.first << "=>" << fwdentry.outgoingPathID << "] (";
-		if (fwdentry.isUndefined()) out << 'U';
-		if (fwdentry.isValid()) out << 'V';
-		if (fwdentry.isObsolete()) out << 'O';
-		if (fwdentry.isInvalid()) out << 'I';
-		if (fwdentry.isForeign()) out << 'F';
-		if (fwdentry.isLocal()) out << 'L';
-		if (fwdentry.isPrecalc()) out << 'P';
-	        out << ':';
-
-		switch (fwdentry.fwdAction) {
-			case FwdTableEntry::Action::undefined:
-				out << 'U';
-				break;
-			case FwdTableEntry::Action::fwdNextPathID:
-				out << 'P';
-				break;
-			case FwdTableEntry::Action::fwdNextKadId:
-				out << 'N';
-				break;
-			case FwdTableEntry::Action::fwdlocal:
-				out << 'L';
-				break;
-			default:
-				out << '?';
-		} // end switch;
-
-		out << ") nh <" << fwdentry.nextHopNode.shortStr() << ">(" << fwdentry.getPathLength() << "); ";
+		out << "[" << pidfwdtableentry.first << "=>" << fwdentry.str() << "] ";
 	}
 
 	return out.str();
-
 }
 
 
@@ -152,9 +173,12 @@ FwdTablePathID::addEntry(KadContact_p contact, bool isForeignPID, bool precalc)
 	if ( auto pidentry= PIDFwdTable.find(incomingPathID); pidentry != PIDFwdTable.end() )
 	{
 		//EV_TRACE << "addEntry(): inPID entry " << incomingPathID << " exists already" << endl;
-		// set foreign flag
+		// set foreign or local flag
 		if (isForeignPID)
 			pidentry->second.setForeign();
+		else
+			pidentry->second.setLocal();
+
 		if (precalc)
 			pidentry->second.setPrecalc();
 
@@ -182,7 +206,7 @@ FwdTablePathID::addEntry(KadContact_p contact, bool isForeignPID, bool precalc)
 	PIDFwdTable[incomingPathID]= fwdentry;
 
 	EV_TRACE << "addEntry(): inPID: " << incomingPathID << " outPID: "
-		 << fwdentry.outgoingPathID << " spath: " << currentpath << endl;
+		 << fwdentry.outgoingPathID << " spath: " << currentpath << " " << fwdentry.str() << endl;
 
 	return incomingPathID;
 }
@@ -215,6 +239,8 @@ void FwdTablePathID::invalidateEntry(KadContact_p contact)
 
 
 // returns false if entry is not accepted (e.g., path is longer)
+// note that modEntry() may also be called while a path setup is still pending, i.e.,
+// there is no NIDPID and PID entry yet and a shorter path may have been found meanwhile
 bool FwdTablePathID::modEntry(KadContact_p contact, bool isForeignPID)
 {
        	if (contact == nullptr)
@@ -249,6 +275,10 @@ bool FwdTablePathID::modEntry(KadContact_p contact, bool isForeignPID)
 			if (auto it= PIDFwdTable.find(incomingPathID); it != PIDFwdTable.end())
 			{
 				it->second.setValid();
+				if (isForeignPID)
+					it->second.setForeign();
+				else
+					it->second.setLocal();
 			}
 
 			return false;
@@ -279,21 +309,28 @@ bool FwdTablePathID::modEntry(KadContact_p contact, bool isForeignPID)
 	}
 
 	FwdTableEntry fwdentry;
-	// if PID already exists, just re-enable mapping and set to valid
+	// if PID already exists, just re-enable mapping and set to valid or modify flags
 	if (auto it= PIDFwdTable.find(incomingPathID); it != PIDFwdTable.end())
 	{
 		EV_TRACE << "modEntry(): inPID " << incomingPathID << " already existed" << endl;
 		it->second.setValid();
 		fwdentry= it->second;
+		if (isForeignPID)
+			fwdentry.setForeign();
+		else
+			fwdentry.setLocal();
 	}
 	else
 	{ // create new entry in FwdTable
-
+		// this may happen in case a PathSetup is still pending
 		fwdentry.outgoingPathID= getPathID(newpath);
 		fwdentry.nextHopNode= newpath[0];
 		fwdentry.setValid();
 		if (isForeignPID)
 			fwdentry.setForeign();
+		else
+			fwdentry.setLocal();
+
 		fwdentry.setPathLength(newpath.size());
 		fwdentry.fwdAction=
 			(newpath.size()==1) // next hop is our physical neighbor
@@ -339,15 +376,15 @@ void FwdTablePathID::delPIDEntry(PathID pid)
 		// local and precalculated PID entries will not be deleted here,
 		// foreign entries should be deleted by PathTeardown messages by unsetting their foreign bit first
 		if ( not it->second.isLocal() and not it->second.isForeign() and not it->second.isPrecalc()) {
-			EV_TRACE << "FwdTablePathID::delEntry PathID " << pid << " deleted." << endl;
+			EV_TRACE << "FwdTablePathID::delPIDEntry PathID " << pid << " deleted." << endl;
 			// delete this PID Entry
 			PIDFwdTable.erase(it);
 		}
 		else
-			EV_TRACE << "FwdTablePathID::delEntry PathID " << pid << " not yet deleted." << endl;
+			EV_TRACE << "FwdTablePathID::delPIDEntry PathID " << pid << " not yet deleted." << endl;
 	}
 	else
-		EV_ERROR << "FwdTablePathID::delEntry PathID " << pid << " not found" << endl;
+		EV_ERROR << "FwdTablePathID::delPIDEntry PathID " << pid << " not found" << endl;
 }
 
 

@@ -33,7 +33,7 @@ bool R2Kademlia::checkForPathInstallation(KadPacket& packet)
 
 	// PID must be installed if hops > vicinityDiscoveryRadius
 	EV_TRACE << "checkForPathInstallation: new path to " << tmpcontact << endl;
-	if (auto incomingPID= fwdTablePathID.addEntry(&tmpcontact, true, false);
+	if (auto incomingPID= fwdTablePathID.addForeignEntry(&tmpcontact);
 	    incomingPID != PathID::UndefinedPathID) {
 		// no need to install NodeId to PID mapping as this is probably no local contact
 		return true;
@@ -203,7 +203,7 @@ void R2Kademlia::vicinityPathIDCompletion(const KadContact& neighborhoodContact)
 					basicpath.push_back(*v);
 				KadContact tmpContact(*(currentNodep->nodeKey), basicpath);
 				//EV_TRACE << "vicinityPathIDCompletion - trying to add " << tmpContact.getPath() << " " << tmpContact.getKey().shortStr() << endl;
-				fwdTablePathID.addEntry(&tmpContact, false, true);
+				fwdTablePathID.addPrecalcEntry(&tmpContact);
 			}
 			// enter next level of current node by using its children
 			if (currentLevel < nodeVicinityGraph::vicinityDiscoveryRadius and not currentNodep->children.empty()) {
@@ -243,8 +243,13 @@ void R2Kademlia::checkForPathTeardown(KadPacket& packet)
 	KadContact tmpcontact(packet.getTarget(),
 			      packet.getSrcPath(packet.getProgress()+1, packet.getRouteArraySize()-1));
 
-	EV_TRACE << "checkForPathTeardown: delete path to " << tmpcontact << endl;
-	fwdTablePathID.delEntry(&tmpcontact);
+	kad_path newpath(tmpcontact.getPath());
+	// add destination node ID to path (will never be empty then)
+	newpath.push_back(tmpcontact.getKey());
+	PathID incomingPathID(getPathID(myOverlayKey, newpath));
+
+	EV_TRACE << "checkForPathTeardown: delete pathID " << incomingPathID << endl;
+	fwdTablePathID.delPIDEntry(incomingPathID);
 
 	return;
 }

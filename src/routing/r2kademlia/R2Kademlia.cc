@@ -982,7 +982,7 @@ void R2Kademlia::sendGetPhysicalNeighbors(KadContact_p contact)
 					       contact->getStateSeqNo(),
 					       contact->getPath().size()+1);
 	if (usePathIDs and nodeOrLinkAdded) {
-		fwdTablePathID.addEntry(contact, false, true);
+		fwdTablePathID.addPrecalcEntry(contact);
 		vicinityPathIDCompletion(*contact);
 	}
 }
@@ -1097,7 +1097,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadPNDiscReq> packet) {
 	bool node_added= vicinity.addNode(myOverlayKey, packet->getSource(), packet->getStateSeqNo(), 1);
 	KadContact neighborcontact(packet->getSource(), kad_path());
 	if (usePathIDs and node_added) {
-		fwdTablePathID.addEntry(&neighborcontact, false, true);
+		fwdTablePathID.addPrecalcEntry(&neighborcontact);
 		vicinityPathIDCompletion(neighborcontact);
 	}
 
@@ -1160,7 +1160,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadQueryRouteReq> packet) {
 			contact_p->setStateSeqNo(packet->getStateSeqNo());
 			contact_p->updateLastSeen();
 		}
-		EV_TRACE << "contact found" << endl;
+		// EV_TRACE << "contact found" << endl;
 	}
 
 	//  packet->getContactsOnly() not implemented yet
@@ -1793,7 +1793,7 @@ void R2Kademlia::readRTableRsp(const KadRTableRsp& packet) {
 				//bool expandDiscovery(viaPath.size() + packet.getPath(i).size() + 1  < nodeVicinityGraph::vicinityDiscoveryRadius);
 				// add PID entry as this neighbor is in our vicinityDiscoveryRadius
 				if (usePathIDs and nodeOrLinkAdded) {
-					fwdTablePathID.addEntry(&neighborhoodContact, false, true);
+					fwdTablePathID.addPrecalcEntry(&neighborhoodContact);
 					vicinityPathIDCompletion(neighborhoodContact);
 				}
 			} // endif entry within vicinitydiscovery

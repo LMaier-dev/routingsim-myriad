@@ -15,109 +15,110 @@
 
 namespace routingsim {
 
-	class FwdTableEntry {
-	private:
-		uint8_t fwdState = State::undefined;
-                uint16_t pathlen = 0; // default: number of hops to destination
-		unsigned long usageCount = 0;
-	public:
-		PathID outgoingPathID = PathID::UndefinedPathID;
-		OverlayKey nextHopNode = OverlayKey::UNSPECIFIED_KEY;
-		PathID prevPathID = PathID::UndefinedPathID;
+class FwdTableEntry {
+private:
+	uint8_t fwdState = State::undefined;
+	uint16_t pathlen = 0; // default: number of hops to destination
+	unsigned long usageCount = 0;
+public:
+	PathID outgoingPathID = PathID::UndefinedPathID;
+	OverlayKey nextHopNode = OverlayKey::UNSPECIFIED_KEY;
+	PathID prevPathID = PathID::UndefinedPathID;
 
-		enum State : uint8_t {
-			undefined     = 0,
-			valid         = 1, // path intact so far
-			local         = 2, // locally wanted (contact or neighbor)
-			foreign       = 4, // PID wanted by KadPathSetup
-			obsolete      = 8,
-			precalc       = 16, // typically all paths in the discovery radius
-			deleted       = 32
-		};
-
-		enum class Action {
-		     undefined     = 0,
-		     fwdNextPathID = 1,
-		     fwdNextKadId  = 2,
-		     fwdlocal      = 3
-		} fwdAction = Action::undefined;
-
-		void setObsolete() { setInvalid(); fwdState |= State::obsolete; }
-		bool isObsolete() const { return fwdState & State::obsolete; }
-
-		void setInvalid() { fwdState &= ~State::valid; }
-		bool isInvalid() const { return (fwdState & State::valid) == 0; }
-
-		void setValid() { fwdState |= State::valid; }
-		bool isValid() const { return fwdState & State::valid; }
-
-		void unsetForeign() { fwdState &= ~State::foreign; };
-
-		void setForeign() { if (not isPrecalc()) fwdState = fwdState | State::foreign; };
-		bool isForeign() const { return fwdState & State::foreign; };
-
-		void unsetLocal() { fwdState &= ~State::local; };
-		void setLocal() { fwdState |= State::local; };
-		bool isLocal() const { return fwdState & State::local; };
-
-		void unsetPrecalc() { fwdState &= ~State::precalc; };
-		void setPrecalc() { fwdState |= State::precalc; unsetForeign(); };
-		bool isPrecalc() const { return fwdState & State::precalc; };
-
-		void setDeleted() { fwdState |= State::deleted; setInvalid(); };
-		bool isDeleted() const { return fwdState & State::deleted; };
-
-		bool isUndefined() const { return fwdState == State::undefined; }
-
-		void setPathLength(uint16_t plen) { pathlen= plen; }
-		uint16_t getPathLength() const { return pathlen; }
-
-		void incrementUsageCount() { usageCount++; }
-		unsigned long getUsageCount() const { return usageCount; }
+	enum State : uint8_t {
+		undefined     = 0,
+		valid         = 1, // path intact so far
+		local         = 2, // locally wanted (contact or neighbor)
+		foreign       = 4, // PID wanted by KadPathSetup
+		obsolete      = 8,
+		precalc       = 16, // typically all paths in the discovery radius
+		deleted       = 32
 	};
 
-	/* not yet used
-	class FwdTableNodeID {
-	public:
-		std::unordered_map<OverlayKey,FwdTableEntry> NIDFwdTable;
-	};
-	*/
+	enum class Action {
+		undefined     = 0,
+		fwdNextPathID = 1,
+		fwdNextKadId  = 2,
+		fwdlocal      = 3
+	} fwdAction = Action::undefined;
+
+	void setObsolete() { setInvalid(); fwdState |= State::obsolete; }
+	bool isObsolete() const { return fwdState & State::obsolete; }
+
+	void setInvalid() { fwdState &= ~State::valid; }
+	bool isInvalid() const { return (fwdState & State::valid) == 0; }
+
+	void setValid() { fwdState |= State::valid; }
+	bool isValid() const { return fwdState & State::valid; }
+
+	void unsetForeign() { fwdState &= ~State::foreign; };
+
+	void setForeign() { if (not isPrecalc()) fwdState = fwdState | State::foreign; };
+	bool isForeign() const { return fwdState & State::foreign; };
+
+	void unsetLocal() { fwdState &= ~State::local; };
+	void setLocal() { fwdState |= State::local; };
+	bool isLocal() const { return fwdState & State::local; };
+
+	void unsetPrecalc() { fwdState &= ~State::precalc; };
+	void setPrecalc() { fwdState |= State::precalc; unsetForeign(); };
+	bool isPrecalc() const { return fwdState & State::precalc; };
+
+	void setDeleted() { fwdState |= State::deleted; setInvalid(); };
+	bool isDeleted() const { return fwdState & State::deleted; };
+
+	bool isUndefined() const { return fwdState == State::undefined; }
+
+	void setPathLength(uint16_t plen) { pathlen= plen; }
+	uint16_t getPathLength() const { return pathlen; }
+
+	void incrementUsageCount() { usageCount++; }
+	unsigned long getUsageCount() const { return usageCount; }
+
+	std::string str() const;
+};
+
 	
-	class FwdTablePathID : public cObject {
-	public:
-		// This stores incoming PathID -> PathID/NextHop mappings plus state and action
-		std::unordered_map<PathID,FwdTableEntry> PIDFwdTable;
-		// This stores NodeID to incoming PathID mapping
-		// (outgoing PID can be determined by lookup in PIDFwdTable)
-		std::unordered_map<OverlayKey,PathID> NIDPIDTable;
-		// cannot use constructor to set ID, because OnInitialize generates the Node ID
-	        void setOwnNodeID(const OverlayKey* myownNodeID) { ownNodeID= myownNodeID; };
-		// returns true if exactly this PID exists for path to contact
-		bool existsEntry(KadContact_p contact);
+class FwdTablePathID : public cObject {
+public:
+	// This stores incoming PathID -> PathID/NextHop mappings plus state and action
+	std::unordered_map<PathID,FwdTableEntry> PIDFwdTable;
+	// This stores NodeID to incoming PathID mapping
+	// (outgoing PID can be determined by lookup in PIDFwdTable)
+	std::unordered_map<OverlayKey,PathID> NIDPIDTable;
+	// cannot use constructor to set ID, because OnInitialize generates the Node ID
+	void setOwnNodeID(const OverlayKey* myownNodeID) { ownNodeID= myownNodeID; };
+	// returns true if exactly this PID exists for path to contact
+	bool existsEntry(KadContact_p contact);
 
-		inline void setNIDtoPIDmapping(const OverlayKey& nid, const PathID incomingPathID);
+	inline void setNIDtoPIDmapping(const OverlayKey& nid, const PathID incomingPathID);
 
-		// try to add PID for path to contact, returns incomingPID or undefined on failure
-		PathID addEntry(KadContact_p contact, bool foreignPID, bool precalc);
-		// modify PID for path to contact
-		bool modEntry(KadContact_p contact, bool foreignPID);
-		void delEntry(KadContact_p contact);
-		void invalidateEntry(KadContact_p contact);
+	PathID addPrecalcEntry(KadContact_p contact) { return addEntry(contact, false, true); }
+	PathID addForeignEntry(KadContact_p contact) { return addEntry(contact, true, false); }
+	PathID addLocalEntry(KadContact_p contact, bool precalc) { return addEntry(contact, false, precalc); }
 
-		void delPIDEntry(PathID pid);
+	// modify PID for path to contact
+	bool modEntry(KadContact_p contact, bool foreignPID);
+	void delEntry(KadContact_p contact);
+	void invalidateEntry(KadContact_p contact);
 
-		// for gathering statistics
-		size_type getNumEntries() const { return PIDFwdTable.size(); };
-		size_type getNumValidEntries() const;
-		size_type getNumForeignEntries() const;
-		std::tuple<size_type, size_type> getNumUsedPrecalcEntries() const;
+	void delPIDEntry(PathID pid);
 
-		// from cObject()
-		virtual std::string str() const;
+	// for gathering statistics
+	size_type getNumEntries() const { return PIDFwdTable.size(); };
+	size_type getNumValidEntries() const;
+	size_type getNumForeignEntries() const;
+	std::tuple<size_type, size_type> getNumUsedPrecalcEntries() const;
 
-	private:
-		const OverlayKey* ownNodeID = nullptr;
-	};
+	// from cObject()
+	virtual std::string str() const;
+protected:
+	// try to add PID for path to contact, returns incomingPID or undefined on failure
+	PathID addEntry(KadContact_p contact, bool foreignPID, bool precalc);
+
+private:
+	const OverlayKey* ownNodeID = nullptr;
+};
 
 
 inline

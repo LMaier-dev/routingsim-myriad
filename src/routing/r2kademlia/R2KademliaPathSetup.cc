@@ -101,7 +101,8 @@ bool R2Kademlia::handlePathSetupResponse(KadPacket_p answer, RPCState& rpcState)
 			fwdTablePathID.modEntry(&tmpcontact, false);
 		}
 		else {
-			if (auto incomingPID= fwdTablePathID.addEntry(&tmpcontact, false, false); incomingPID != PathID::UndefinedPathID) {
+			// add new PID and mapping
+			if (auto incomingPID= fwdTablePathID.addLocalEntry(&tmpcontact, false); incomingPID != PathID::UndefinedPathID) {
 				fwdTablePathID.setNIDtoPIDmapping(tmpcontact.getKey(),incomingPID);
 			}
 		}
@@ -123,11 +124,15 @@ void R2Kademlia::schedulePathSetup(const OverlayKey& contactkey)
 		return;
 	}
 
-	EV_TRACE << "PathSetup scheduled for contact " << contactkey.shortStr() << endl;
-
 	// do not insert the same contact key twice
-	if (std::find(pathSetupQueue.begin(), pathSetupQueue.end(), contactkey) == pathSetupQueue.end())
+	if (std::find(pathSetupQueue.begin(), pathSetupQueue.end(), contactkey) == pathSetupQueue.end()) {
+		EV_TRACE << "PathSetup scheduled for contact " << contactkey.shortStr() << endl;
+
 		pathSetupQueue.push_back(contactkey);
+	}
+	else
+		EV_TRACE << "PathSetup already scheduled for contact " << contactkey.shortStr() << endl;
+
 
 	if (not pathSetupScheduled)
 	{

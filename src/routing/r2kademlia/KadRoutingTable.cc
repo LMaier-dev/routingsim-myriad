@@ -843,11 +843,19 @@ void KadRoutingTable::updatePaths(const KadContact& improvedContact)
 						for (auto fwdpathit= path.begin() + (path.rend() - revpathit); fwdpathit != path.end(); fwdpathit++) {
 							newpath.push_back(*fwdpathit);
 						}
+
+						bool pathimproved(newpath != contact->getPath() and newpath.size() < contact->getPath().size());
 						// set new path (must be more current than old one)
 						// note: this will set the contact to be valid
 						contact->updatePath( myKey, newpath );
-						// call onImprovement(contact) also for updating PID
-						policy->onImprovement(*contact);
+						if (pathimproved) {
+							// call onImprovement(contact) also for updating PID
+							policy->onImprovement(*contact);
+						}
+						else {
+							// update the PID
+							policy->onPathChange(*contact);
+						}
 						found=true; // break the loop
 					}
 				} // end for: iterating backwards over path
