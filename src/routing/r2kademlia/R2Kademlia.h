@@ -247,7 +247,7 @@ private:
 	//@{
 	/// adds a timer to the timer vectors, sends a timer packet
 	short addTimer(simtime_t initialOffset, simtime_t duration, std::function<void(short timerId)> callback);
-	inline void addOneShotTimer(simtime_t delay, std::function<void()> callback);
+	inline void addOneShotTimer(simtime_t delay, std::function<void()> callback) override;
 	/// stops timer and cancels timer message
 	void stopTimer(short timerId);
 	/// stops timer and cancel timer message, starts new timer with new duration
@@ -309,9 +309,9 @@ private:
 	kad_path concatViaPath(const kad_path& viaPath, const OverlayKey& viaKey, const kad_path& path);
 
 	/// schedule rediscovery
-	void scheduleUrgentRediscovery(const OverlayKey& contactkey) { scheduleRediscovery(contactkey, urgentRediscoverQueue, urgentRediscoveryWaitTime); };
-	void scheduleRegularRediscovery(const OverlayKey& contactkey) { scheduleRediscovery(contactkey, regularRediscoverQueue, regularRediscoveryWaitTime); };
-	void scheduleSlowRediscovery(const OverlayKey& contactkey) { scheduleRediscovery(contactkey, slowRediscoverQueue, slowRediscoveryWaitTime); };
+	void scheduleUrgentRediscovery(const OverlayKey& contactkey) override { scheduleRediscovery(contactkey, urgentRediscoverQueue, urgentRediscoveryWaitTime); };
+	void scheduleRegularRediscovery(const OverlayKey& contactkey) override { scheduleRediscovery(contactkey, regularRediscoverQueue, regularRediscoveryWaitTime); };
+	void scheduleSlowRediscovery(const OverlayKey& contactkey) override { scheduleRediscovery(contactkey, slowRediscoverQueue, slowRediscoveryWaitTime); };
 
 	/// schedule sending PNDiscReq
 	void schedulePNDiscReq(const OverlayKey& neighbor, stateseqno_t expectedseqno);

@@ -1648,7 +1648,7 @@ void R2Kademlia::recordRoutingTable() {
 	cModuleType* modType = cModuleType::get("routingsim.routing.r2kademlia.Dummy");
 	auto allContacts = routingTable.getAllContacts();
 	std::string contactStr{"contact"};
-	for (size_type i; i < allContacts.size(); i++) {
+	for (size_type i= 0; i < allContacts.size(); i++) {
 		KadContact_p contact = allContacts[i];
 		cModule* mod = modType->create((contactStr + std::to_string(i)).c_str(), this);
 		mod->recordScalar("pathLength", contact->getPathLength()+1);
