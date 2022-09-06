@@ -158,7 +158,7 @@ bool R2Kademlia::forwardDataPacketToNextHop(KadDataPacket_p& packet, NodePkt_p& 
 				EV_TRACE << "New outgoing PathID: " << nh.outgoingPathID << endl;
 			}
 			else
-			if (nh.fwdAction == FwdTableEntry::Action::fwdNextKadId)
+			if (nh.fwdAction == FwdTableEntry::Action::fwdNextNodeId)
 			{ // next hop will be destination NID
 				packet->setDestPathID(PathID::UndefinedPathID);
 				EV_TRACE << "Forward to Next KadID: " << nh.nextHopNode.shortStr() << endl;
@@ -339,44 +339,12 @@ void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 	{ // incoming PathID not found
 		// may be the case if entry already deleted/overwritten, or
 		// has never existed due to shortcut route heard from other nodes
-		EV_WARN << "forwardDataPacket: incoming PathID " << incomingPathID << " not found in FwdPIDTable" << endl;
+		EV_WARN << "forwardDataPacket: incoming PathID " << incomingPathID << " not found in FwdPIDTable. Dropping packet" << endl;
 		inconsistentPathHit++;
 
-		// 2nd chance in case for inconsistent paths (e.g., due to overhearing/shortening):
-		// lookup path ID to destination ID
-		// this would avoid routing via the overlay (which should be the last resort)
-		auto pidentry= fwdTablePathID.NIDPIDTable.find(finaldest);
-		if ( pidentry != fwdTablePathID.NIDPIDTable.end() )
-		{ // pidentry.second is incomingPathID
-			// this will be used to lookup the outgoing PID in forwardDataPacket()
-			packet->setDestPathID(pidentry->second);
-			EV_TRACE << "new PID for dest " << finaldest << ": " << pidentry->second << endl;
-
-			if (not forwardDataPacketToNextHop(packet, nodePkt))
-			{
-				EV_WARN << "2nd chance forwarding failed while trying to forward. Dropping packet" << endl;
-				if (packet->getControlInfo() == nullptr)
-					packet->setControlInfo(nodePkt.release());
-
-				countDropped(*packet, finaldest, secondChanceFailed);
-				//returnToSender(KAD_PathIDUnknown, std::move(packet));
-
-				return;
-			}
-			else
-			{ // 2nd chance had success or dropped
-				return;
-			}
-		}
-		else
-		{
-			EV_WARN << "No PID found for contact: 2nd chance forwarding failed. Dropping packet" << endl;
-		
-			// if we are here 2nd chance failed
-			packet->setControlInfo(nodePkt.release());
-			countDropped(*packet, finaldest, secondChanceFailed);
-			returnToSender(KAD_PathIDUnknown, std::move(packet));
-		}
+		packet->setControlInfo(nodePkt.release());
+		countDropped(*packet, finaldest, missingPID);
+		returnToSender(KAD_PathIDUnknown, std::move(packet));
 	}
 	// else: Packet was sent off or dropped by function
 }
