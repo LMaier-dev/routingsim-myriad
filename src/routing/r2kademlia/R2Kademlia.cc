@@ -91,30 +91,37 @@ void R2Kademlia::onInitialize() {
 	// doProbeSelf is required for joining (will do exponential backoff)
 	// calculation for first timer is: initialOffset - duration/2 + random([0..duration])
 	// start after 100ms, use 250ms, 500ms, 1s, 2s, 4s, 8s, 16s, 32s, 64s, 128s, 256s, 300s as intervals
-	probeTimerId= addTimer(SimTime(225,SIMTIME_MS), SimTime(250,SIMTIME_MS), std::bind(&R2Kademlia::doProbeSelf, this, ph::_1));
+	probeTimerId= addRandomizedTimer(SimTime(225,SIMTIME_MS), SimTime(250,SIMTIME_MS), std::bind(&R2Kademlia::doProbeSelf, this, ph::_1));
 
 	// regularly probe for closest (overlay/ID-wise)  neighbors
-	addTimer(std::max(probeInterval, SimTime(1000,SIMTIME_MS)), probeInterval*2, std::bind(&R2Kademlia::doProbeNeighbors, this, ph::_1));
+	addRandomizedTimer(std::max(probeInterval, SimTime(1000,SIMTIME_MS)), probeInterval*2, std::bind(&R2Kademlia::doProbeNeighbors, this, ph::_1));
 	// regularly probe for non PN contacts to test path liveliness
-	addTimer(std::max(probeInterval/2, SimTime(1000,SIMTIME_MS)), probeInterval, std::bind(&R2Kademlia::doProbeContacts, this, ph::_1));
+	addRandomizedTimer(std::max(probeInterval/2, SimTime(1000,SIMTIME_MS)), probeInterval, std::bind(&R2Kademlia::doProbeContacts, this, ph::_1));
 	// regularly send FindNodeReq to _randomly_ chosen IDs, i.e., key-IDs but not node-IDs
 	// the advantage is to discover new and better contacts and/or paths
-	addTimer(probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doProbe, this, ph::_1));
+	addRandomizedTimer(probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doProbe, this, ph::_1));
 
 	// Reachability Test: check whether other _existing_ nodes can be reached (uses KadObserver)
-	addTimer(probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doReachabilityTest, this, ph::_1));
+	addRandomizedTimer(probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doReachabilityTest, this, ph::_1));
 
 	// For path exploration
 	if (exploreInterval > 0)
-		addTimer(exploreInterval*1.5, exploreInterval, std::bind(&R2Kademlia::doSendExplorePathPacket, this, ph::_1));
+		addRandomizedTimer(exploreInterval*1.5, exploreInterval, std::bind(&R2Kademlia::doSendExplorePathPacket, this, ph::_1));
 
 	// resend Hello packets to keep state sequence numbers in synch
-	addTimer(SimTime(225,SIMTIME_MS), SimTime(250,SIMTIME_MS), std::bind(&R2Kademlia::doSendHello, this, ph::_1));
+	addRandomizedTimer(SimTime(225,SIMTIME_MS), SimTime(250,SIMTIME_MS), std::bind(&R2Kademlia::doSendHello, this, ph::_1));
+
+	if (usePathIDs) {
+		// if PathRefreshThreshold is 20s, refresh is scheduled between [10s,30s]
+		addRandomizedTimer(SimTime(PathRefreshThreshold/2,SIMTIME_MS), SimTime(PathRefreshThreshold,SIMTIME_MS), std::bind(&R2Kademlia::doRefreshSetupPaths, this, ph::_1));
+		// garbageCollection would happen after 60s
+		addFixedTimer(SimTime(3*PathRefreshThreshold,SIMTIME_MS), SimTime(3*PathRefreshThreshold,SIMTIME_MS), std::bind(&R2Kademlia::doGarbageCollectPathIDs, this, ph::_1));
+	}
 
 	if (sendDataPackets)
 	{
 	  EV << "will send data packets after " << getSimulation()->getWarmupPeriod() << endl;
-	  addTimer(getSimulation()->getWarmupPeriod()+probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doDataProbe, this, ph::_1));
+	  addRandomizedTimer(getSimulation()->getWarmupPeriod()+probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doDataProbe, this, ph::_1));
 	}
 
 	// expose the following variables in GUI for inspection
@@ -182,6 +189,7 @@ void R2Kademlia::onDisconnect( nodeid_t nid ) {
 }
 
 
+// called on reception of a NodePkt for this protocol
 void R2Kademlia::onMessage( NodePkt_p pkt ) {
 
 	ASSERT(pkt->getType() == KAD_CTRL_PACKET_TYPE || pkt->getType() == KAD_DATA_PACKET_TYPE);
@@ -225,12 +233,12 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	if (handleIfFitting<KadHello>(packet))
 		return;
 
-	// other packets should do so
+	// other packets should include the key in the source route
 	packet->advanceProgress(); // increase hop count
 	if (packet->getCurrentHop() != myOverlayKey) {
-		EV_ERROR << "dropping packet, current hop does not fit!" << endl;
+		EV_ERROR << "dropping packet, current hop in source route does not match!" << endl;
 		//TODO how does this happen?
-		countDropped(*packet, packet->getTarget(), wrongNextHop);
+		countDropped(*packet, packet->getTarget(), erroneousSourceRoute);
 		return;
 	}
 
@@ -893,8 +901,15 @@ R2Kademlia::chooseNextHop(const KadContactList& contacts, const OverlayKey& targ
 
 
 // Path Probing: sends a ProbeReq to check for validity of an existing path
-void R2Kademlia::sendPathProbe(KadContact_p contact) {
-	EV_TRACE << "sending ProbeReq from " << myOverlayKey.shortStr() << " to " << contact->getKey().shortStr() << endl;
+void R2Kademlia::sendPathProbe(const OverlayKey& destinationNodeID) {
+	KadContact_p contact(routingTable.getContact(destinationNodeID));
+	// must be a valid contact
+	if ( contact == nullptr or contact->isInvalid() ) {
+		EV_TRACE << "not sending ProbeReq from " << myOverlayKey.shortStr() << " to " << destinationNodeID.shortStr() << " because of invalid contact" << endl;
+		return;
+	}
+
+	EV_TRACE << "sending ProbeReq from " << myOverlayKey.shortStr() << " to " << destinationNodeID.shortStr() << endl;
 	auto probereq= makePacket<KadProbeReq>(contact, "KadProbeReq");
 	probereq->setPathCheck(true);
 	sendRpcCall(std::move(probereq),
@@ -1434,7 +1449,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 					// since this node should exist, it may be a hint for inconsistency
 					// trigger discovery of own neighborhood (join) in case the contact is in our lowest bucket
 					// and backoff has already advanced beyond 1s
-					if (routingTable.isInLastBucket(contact.getKey()) and timerDuration[probeTimerId] > SimTime(1000,SIMTIME_MS)) {
+					if (routingTable.isInLastBucket(contact.getKey()) and randomTimerDuration[probeTimerId] > SimTime(1000,SIMTIME_MS)) {
 						// send a join now
 						sendFindNode(myOverlayKey, false);
 						// reset timer for periodic joins to ask more frequently now

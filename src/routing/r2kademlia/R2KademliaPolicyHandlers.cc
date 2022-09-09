@@ -109,7 +109,7 @@ void R2Kademlia::onErrorPacket(KadError& error) {
 		break;
 
 		case KAD_PathIDUnknown:
-		{ // KAD_PathIDUnknown: we should try to resetup the path
+		{ // KAD_PathIDUnknown: we should try to setup the path
 			auto affectedContact= routingTable.getContact(original->getTarget());
 			if (affectedContact and affectedContact->isValid() and affectedContact->getPathLength() > nodeVicinityGraph::vicinityDiscoveryRadius)
 			{
@@ -141,7 +141,10 @@ void R2Kademlia::onContactRemoval(KadContact_p contact)
 	// TODO: this can be scheduled for happening later
 	if (usePathIDs and contact->getPathLength() >= nodeVicinityGraph::vicinityDiscoveryRadius)
 	{
-		sendPathTeardown(contact);
+		// check for pending/scheduled PathSetup first
+		if (std::find(pathSetupQueue.cbegin(),pathSetupQueue.cend(),contact->getKey()) == pathSetupQueue.cend())
+			sendPathTeardown(contact);
+
 		fwdTablePathID.delEntry(contact);
 	}
 
@@ -153,7 +156,7 @@ void R2Kademlia::onContactRemoval(KadContact_p contact)
 }
 
 
-// this is called after invalidation of the contact
+// this is called after invalidation of the contact, i.e., path is known to be broken
 void R2Kademlia::onContactInvalidation(KadContact_p contact)
 {
 	if (contact == nullptr)
@@ -317,7 +320,7 @@ void R2Kademlia::reSyncPN(const KadContact& contact, stateseqno_t expected_seqno
 void R2Kademlia::onPathCheck(const KadContact& contact) {
 	EV_TRACE << "path check triggered for " << contact.getKey().shortStr() << endl;
 	// check whether the current path is still working properly
-	sendPathProbe(&contact);
+	sendPathProbe(contact.getKey());
 }
 
 } // end namespace

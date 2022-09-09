@@ -18,10 +18,6 @@
 #include "KadObserver.h"
 
 namespace routingsim {
-// for std::bind with callback functions
-namespace ph = std::placeholders;
-
-
 
 template<typename T>
 std::unique_ptr<T> R2Kademlia::makeDataPacket(const OverlayKey& dstNodeID, const KadContact* viacontact, const char *name) {
@@ -145,7 +141,7 @@ bool R2Kademlia::forwardDataPacketToNextHop(KadDataPacket_p& packet, NodePkt_p& 
 		if (nh.isValid() or nh.isObsolete() or nh.isInvalid())
 		{
 			if (nh.isInvalid()) {
-				EV_ERROR << "invalid PathID entry hit " << packet->getDestPathID() << endl;
+				EV_ERROR << "invalid PathID entry hit: " << packet->getDestPathID() << endl;
 			}
 
 			if (nh.isObsolete()) { // obsolete, but maybe still good enough to forward
@@ -155,7 +151,7 @@ bool R2Kademlia::forwardDataPacketToNextHop(KadDataPacket_p& packet, NodePkt_p& 
 			if (nh.fwdAction == FwdTableEntry::Action::fwdNextPathID)
 			{ // set new outgoing PathID
 				packet->setDestPathID(nh.outgoingPathID);
-				EV_TRACE << "New outgoing PathID: " << nh.outgoingPathID << endl;
+				EV_TRACE << "Outgoing PathID: " << nh.outgoingPathID << endl;
 			}
 			else
 			if (nh.fwdAction == FwdTableEntry::Action::fwdNextNodeId)
@@ -198,20 +194,20 @@ bool R2Kademlia::forwardDataPacketToNextHop(KadDataPacket_p& packet, NodePkt_p& 
 				// send back segment failure
 				onMissingNeighbor(std::move(packet), std::move(nodePkt));
 			}
-			else { // else: wrong source route
+			else { // else: wrong source route (TODO: this cannot happen during data packet forwarding)
 				EV_ERROR << "forwardDataPacketToNextHop: wrong next hop"
 					 << nh.nextHopNode.shortStr() << endl;
 
 				packet->setControlInfo(nodePkt.release());
-				countDropped(*packet, packet->getDstNodeID(), wrongNextHop);
+				countDropped(*packet, packet->getDstNodeID(), erroneousSourceRoute);
 			}
 
 			return true;
 		}
 
-	}
+	} // endif forwarding entry found
 
-	// false means failure
+	// false means forwarding failure
 	return false;
 }
 

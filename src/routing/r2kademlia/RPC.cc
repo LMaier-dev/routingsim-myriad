@@ -133,7 +133,8 @@ void RPCProtocol::handleTimeOut(nonce_t nonce)
 }
 
 
-void RPCProtocol::finish() {
+void RPCProtocol::finish()
+{
 	//EV_TRACE << "RPC: # of states left: " << states.size() << endl;
 	// for (const auto& state : states)
 	// {

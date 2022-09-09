@@ -43,14 +43,13 @@ using UpdateList_t = std::list< std::pair<KadContact, KadRouteUpdateAction> >;
 
 enum reasoncode : uint8_t {
 	unspecified = 0,
-        hopLimitExceeded = 1,	
-	nextHopUnknown = 2,
-	travelledDisabledLink = 3,
-	wrongNextHop= 4,
-	routeFailureDeadEnd= 5,
-	secondChanceFailed = 6,
-	missingNeighbor = 7,
-	missingPID = 8,
+        hopLimitExceeded = 1, // should never happen as KIRA is loop free
+	nextHopUnknown = 2,   // not used
+	travelledDisabledLink = 3, // in case a packet is wrongly sent along a link that is disabled/broken
+	erroneousSourceRoute= 4,        // current hop in source route is not correct
+	routeFailureDeadEnd= 5, // no ID-wise progress possible
+	missingNeighbor = 7,    // forwarding entry contains non existing next hop
+	missingPID = 8,         // cannot find a corresponding (incoming) pathID
 	unhandledType= 128
 };
 
@@ -213,8 +212,10 @@ private:
 
 	/** @name periodic timer things */
 	//@{
-	std::vector<simtime_t> timerDuration;
-	std::vector<cMessage *> timerMsg;
+	std::vector<simtime_t> randomTimerDuration;
+	std::vector<simtime_t> fixedTimerDuration;
+	std::vector<cMessage *> randomTimerMsg;
+	std::vector<cMessage *> fixedTimerMsg;
 	//@}
 
 	/** @name message generation */
@@ -246,13 +247,14 @@ private:
 	/** @name timer functions */
 	//@{
 	/// adds a timer to the timer vectors, sends a timer packet
-	short addTimer(simtime_t initialOffset, simtime_t duration, std::function<void(short timerId)> callback);
+	short addRandomizedTimer(simtime_t initialOffset, simtime_t duration, std::function<void(short timerId)> callback);
+	short addFixedTimer(simtime_t initialOffset, simtime_t duration, std::function<void(short timerId)> callback);
 	inline void addOneShotTimer(simtime_t delay, std::function<void()> callback) override;
 	/// stops timer and cancels timer message
 	void stopTimer(short timerId);
 	/// stops timer and cancel timer message, starts new timer with new duration
 	void resetTimer(short timerId, simtime_t duration);
-	void stopAllTimers() { for (short timerId= 0; (size_type) timerId < timerMsg.size(); timerId++) { stopTimer(timerId); } };
+	void stopAllTimers() { for (short timerId= 0; (size_type) timerId < randomTimerMsg.size(); timerId++) { stopTimer(timerId); }; for (short timerIdx= 0; (size_type) timerIdx < fixedTimerMsg.size(); timerIdx++) { stopTimer(-2-timerIdx); } };
 
 	/// timer callbacks
 	void doSendHello(short timerId);
@@ -263,6 +265,7 @@ private:
 	void doDataProbe(short timerId);
 	void doReachabilityTest(short timerId);
 	void doSendExplorePathPacket(short timerId);
+	void doRefreshSetupPaths(short timerId);
 	//@}
 
 	/** @name private helpers */
@@ -330,6 +333,8 @@ private:
 	void schedulePathSetup(const OverlayKey& contactkey);
 	/// send all queue (valid) path setups
 	void sendScheduledPathSetups();
+	/// perform garbage collection of unused PathIDs
+	void doGarbageCollectPathIDs(short timerId);
 
 	/// evaluate Updates while forwarding
 	void evalUpdateReq(const KadUpdateRouteReq* packet);
@@ -408,7 +413,7 @@ private:
 	/// chooses the contact to forward a request to according to the overlay metric.
 	const KadContact& chooseNextHop(const KadContactList&, const OverlayKey& target);
 	/// sends a probe request to the given contact to check for path validity
-	void sendPathProbe(KadContact_p contact);
+	void sendPathProbe(const OverlayKey& destinationNodeID);
 	/// sends a path setup request to the given contact
 	void sendPathSetup(KadContact_p contact);
 	/// sends a path teardown request to the given contact
@@ -440,6 +445,7 @@ private:
 	virtual void sampleStatistics (Statistics &stats) override;
 public:
         R2Kademlia() : routingTable(neighborTable), cmp(myOverlayKey), urgentRediscoverQueue(cmp), regularRediscoverQueue(cmp), slowRediscoverQueue(cmp) {};
+	virtual void finish() override { fwdTablePathID.garbageCollect(); RPCProtocol::finish(); }
 	/** @name policy functions called by routing table */
 	//@{
 	/** called when last contact is removed from a bucket*/
@@ -492,8 +498,9 @@ public:
 	//@}
 	stateseqno_t getLSSeqNo() const { return lsseqno; }
 
-	// do not probe if information is newer that PathInfoAgeThreshold
+	// do not probe if information is newer than PathInfoAgeThreshold
 	static constexpr unsigned long PathInfoAgeThreshold = 2000UL; // ms
+	static constexpr unsigned long PathRefreshThreshold = 20000UL; // ms
 	static constexpr unsigned long RediscoveryNextTryWaitTime = 100UL; // ms
 	static constexpr unsigned long PNDiscrecoveryWaitTime = 1000UL; // µs
 };

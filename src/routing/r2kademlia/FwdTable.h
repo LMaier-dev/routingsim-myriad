@@ -15,11 +15,14 @@
 
 namespace routingsim {
 
+constexpr unsigned long fwdentry_refresh_timeout_ms= 30000;
+
 class FwdTableEntry {
 private:
 	uint8_t fwdState = State::undefined;
 	uint16_t pathlen = 0; // default: number of hops to destination
 	unsigned long usageCount = 0;
+	simtime_t last_touched = SIMTIME_ZERO; // age for soft state refresh in ms
 public:
 	PathID outgoingPathID = PathID::UndefinedPathID;
 	OverlayKey nextHopNode = OverlayKey::UNSPECIFIED_KEY;
@@ -30,41 +33,46 @@ public:
 		valid         = 1, // path intact so far
 		local         = 2, // locally wanted (contact or neighbor)
 		foreign       = 4, // PID wanted by KadPathSetup
-		obsolete      = 8,
-		precalc       = 16, // typically all paths in the discovery radius
-		deleted       = 32
+		obsolete      = 8, // if overwritten by a newer entry
+		precalc       = 16, // typically all paths in the vicinity discovery radius
+		deleted       = 32  // if explicitly marked for deletion
 	};
 
+	// forwarding actions
 	enum class Action {
 		undefined     = 0,
-		fwdNextPathID = 1,
-		fwdNextKadId  = 2,
+		fwdNextPathID = 1, // forward with new outgoing PathID
+		fwdNextNodeId = 2, // forward to next NodeID
 		fwdlocal      = 3
 	} fwdAction = Action::undefined;
 
-	void setObsolete() { setInvalid(); fwdState |= State::obsolete; }
+	void refresh() { last_touched= simTime(); }
+	unsigned long getAge() const { return (simTime() - last_touched).inUnit(SIMTIME_MS); }
+	simtime_t getLastTouched() const { return last_touched; }
+
+	void setObsolete() { fwdState |= State::obsolete; refresh(); }
 	bool isObsolete() const { return fwdState & State::obsolete; }
 
-	void setInvalid() { fwdState &= ~State::valid; }
+	void setInvalid() { fwdState &= ~State::valid; refresh(); }
 	bool isInvalid() const { return (fwdState & State::valid) == 0; }
 
-	void setValid() { fwdState |= State::valid; }
+	void setValid() { fwdState |= State::valid; refresh(); }
 	bool isValid() const { return fwdState & State::valid; }
 
-	void unsetForeign() { fwdState &= ~State::foreign; };
-
-	void setForeign() { if (not isPrecalc()) fwdState = fwdState | State::foreign; };
+	void unsetForeign() { fwdState &= ~State::foreign; refresh(); };
+	void setForeign() { if (not isPrecalc()) fwdState = fwdState | State::foreign; refresh(); };
 	bool isForeign() const { return fwdState & State::foreign; };
 
-	void unsetLocal() { fwdState &= ~State::local; };
-	void setLocal() { fwdState |= State::local; };
+	void unsetLocal() { fwdState &= ~State::local; refresh(); };
+	void setLocal() { fwdState |= State::local; refresh(); };
 	bool isLocal() const { return fwdState & State::local; };
 
-	void unsetPrecalc() { fwdState &= ~State::precalc; };
-	void setPrecalc() { fwdState |= State::precalc; unsetForeign(); };
+	void unsetPrecalc() { fwdState &= ~State::precalc; refresh(); };
+	void setPrecalc() { fwdState |= State::precalc; unsetForeign(); refresh(); };
 	bool isPrecalc() const { return fwdState & State::precalc; };
 
-	void setDeleted() { fwdState |= State::deleted; setInvalid(); };
+	void unsetDeleted() { fwdState &= ~State::deleted; refresh(); };
+	void setDeleted() { fwdState |= State::deleted; refresh(); };
 	bool isDeleted() const { return fwdState & State::deleted; };
 
 	bool isUndefined() const { return fwdState == State::undefined; }
@@ -103,6 +111,9 @@ public:
 	void invalidateEntry(KadContact_p contact);
 
 	void delPIDEntry(PathID pid);
+
+	// garbage collect, actually delete unnecessary entries
+	void garbageCollect();
 
 	// for gathering statistics
 	size_type getNumEntries() const { return PIDFwdTable.size(); };

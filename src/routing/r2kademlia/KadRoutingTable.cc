@@ -755,6 +755,28 @@ KadContact_p KadRoutingTable::getRandomContact() const
 }
 
 
+
+void KadRoutingTable::getContactsforPathRefresh(std::list<OverlayKey>& result) const
+{
+	// do not consider contacts younger than R2Kademlia::PathInfoAgeThreshold
+
+	for (auto& bucket : buckets)
+	{
+		for (auto it = bucket.contacts.cbegin(); it != bucket.contacts.cend(); it++) {
+			if (*it != nullptr) {
+				auto kadcontactp(it->get());
+				if ( kadcontactp!= nullptr
+				     and kadcontactp->isValid()
+				     and kadcontactp->getPathLength() > nodeVicinityGraph::vicinityDiscoveryRadius
+				     and kadcontactp->getAge() > R2Kademlia::PathRefreshThreshold ) {
+					result.push_back(kadcontactp->getKey());
+				}
+			}
+		}
+	} // end for iterate over all buckets
+}
+
+
 // returns the two oldest entries from each bucket, deepest contacts first and oldest before newer (per bucket)
 // only non PN contacts will be returned
 // However, contacts that have recent information <1s will not be selected
@@ -766,20 +788,23 @@ void KadRoutingTable::getOldestValidContacts(std::list<OverlayKey>& result) cons
 	{
 		KadContact_p oldest(nullptr);
 		KadContact_p secondoldest(nullptr);
-		for (auto it = bucket.contacts.begin(); it != bucket.contacts.end(); it++) {
-			if ( *it != nullptr and it->get()!= nullptr and it->get()->getAge() > R2Kademlia::PathInfoAgeThreshold ) {
-				if (oldest != nullptr) {
-					// older entry? then replace oldest
-					if (oldest->getAge() < it->get()->getAge()) {
-						secondoldest= oldest; oldest= it->get();
+		for (auto it = bucket.contacts.cbegin(); it != bucket.contacts.cend(); it++) {
+			if (*it != nullptr) {
+				auto kadcontactp(it->get());
+				if ( kadcontactp != nullptr and kadcontactp->getAge() > R2Kademlia::PathInfoAgeThreshold ) {
+					if (oldest != nullptr) {
+						// older entry? then replace oldest
+						if (oldest->getAge() < kadcontactp->getAge()) {
+							secondoldest= oldest; oldest= kadcontactp;
+						}
+						else if (secondoldest != nullptr and secondoldest->getAge() < kadcontactp->getAge()) {
+							// replace second oldest
+							secondoldest= kadcontactp;
+						}
 					}
-					else if (secondoldest != nullptr and secondoldest->getAge() < it->get()->getAge()) {
-						// replace second oldest
-						secondoldest= it->get();
+					else { // initialize
+						oldest= kadcontactp;
 					}
-				}
-				else { // initialize
-					oldest= it->get();
 				}
 			}
 		}

@@ -23,7 +23,7 @@ std::string FwdTableEntry::str() const {
 			case FwdTableEntry::Action::fwdNextPathID:
 				out << 'P';
 				break;
-			case FwdTableEntry::Action::fwdNextKadId:
+			case FwdTableEntry::Action::fwdNextNodeId:
 				out << 'N';
 				break;
 			case FwdTableEntry::Action::fwdlocal:
@@ -172,6 +172,10 @@ FwdTablePathID::addEntry(KadContact_p contact, bool isForeignPID, bool precalc)
 	// check for already existing PID
 	if ( auto pidentry= PIDFwdTable.find(incomingPathID); pidentry != PIDFwdTable.end() )
 	{
+		// if it was marked for deletion before, reset the flag as it is used now
+		pidentry->second.unsetDeleted();
+		pidentry->second.setValid();
+
 		//EV_TRACE << "addEntry(): inPID entry " << incomingPathID << " exists already" << endl;
 		// set foreign or local flag
 		if (isForeignPID)
@@ -185,6 +189,7 @@ FwdTablePathID::addEntry(KadContact_p contact, bool isForeignPID, bool precalc)
 		return incomingPathID; // already there, fine
 	}
 
+	// create new PID entry
 	FwdTableEntry fwdentry;
 
 	fwdentry.outgoingPathID= (currentpath.size() > 1) ? getPathID(currentpath) : PathID::UndefinedPathID;
@@ -201,7 +206,7 @@ FwdTablePathID::addEntry(KadContact_p contact, bool isForeignPID, bool precalc)
 
 	fwdentry.fwdAction=
 		(currentpath.size()==1) // next hop is our physical neighbor
-		? FwdTableEntry::Action::fwdNextKadId : FwdTableEntry::Action::fwdNextPathID;
+		? FwdTableEntry::Action::fwdNextNodeId : FwdTableEntry::Action::fwdNextPathID;
 
 	PIDFwdTable[incomingPathID]= fwdentry;
 
@@ -212,7 +217,7 @@ FwdTablePathID::addEntry(KadContact_p contact, bool isForeignPID, bool precalc)
 }
 
 
-// this invalidates the PID entry that corresponds to the current path
+// this invalidates the PID entry that corresponds to the current path (i.e., path is known to be broken)
 void FwdTablePathID::invalidateEntry(KadContact_p contact)
 {
 	if (contact == nullptr)
@@ -334,7 +339,7 @@ bool FwdTablePathID::modEntry(KadContact_p contact, bool isForeignPID)
 		fwdentry.setPathLength(newpath.size());
 		fwdentry.fwdAction=
 			(newpath.size()==1) // next hop is our physical neighbor
-			? FwdTableEntry::Action::fwdNextKadId : FwdTableEntry::Action::fwdNextPathID;
+			? FwdTableEntry::Action::fwdNextNodeId : FwdTableEntry::Action::fwdNextPathID;
 		fwdentry.prevPathID= priorPathID;
 		PIDFwdTable[incomingPathID]= fwdentry;
 	}
@@ -352,7 +357,6 @@ bool FwdTablePathID::modEntry(KadContact_p contact, bool isForeignPID)
 }
 
 
-
 void FwdTablePathID::delPIDEntry(PathID pid)
 {
 	if (pid == PathID::UndefinedPathID)
@@ -367,7 +371,7 @@ void FwdTablePathID::delPIDEntry(PathID pid)
 		// delete all related PID entries (prior entries)
 		if (it->second.prevPathID != PathID::UndefinedPathID)
 		{ // recurse here
-			// mark for deletion
+			// mark this entry for deletion
 			it->second.setDeleted();
 			delPIDEntry(it->second.prevPathID);
 			it->second.prevPathID= PathID::UndefinedPathID;
@@ -376,9 +380,11 @@ void FwdTablePathID::delPIDEntry(PathID pid)
 		// local and precalculated PID entries will not be deleted here,
 		// foreign entries should be deleted by PathTeardown messages by unsetting their foreign bit first
 		if ( not it->second.isLocal() and not it->second.isForeign() and not it->second.isPrecalc()) {
+			it->second.setDeleted();
 			EV_TRACE << "FwdTablePathID::delPIDEntry PathID " << pid << " deleted." << endl;
-			// delete this PID Entry
-			PIDFwdTable.erase(it);
+			// actually delete this PID Entry
+			// suspended until garbageCollect()
+			// PIDFwdTable.erase(it);
 		}
 		else
 			EV_TRACE << "FwdTablePathID::delPIDEntry PathID " << pid << " not yet deleted." << endl;
@@ -445,6 +451,22 @@ void FwdTablePathID::delEntry(KadContact_p contact)
 			EV_WARN << "delEntry(): no entry for PID " << incomingPathID  << " found" << endl;
 		}
 	}
+}
+
+
+void FwdTablePathID::garbageCollect()
+{
+	auto it= PIDFwdTable.begin();
+	while ( it != PIDFwdTable.end() )
+	{
+		if (it->second.isDeleted() and not it->second.isLocal() and not it->second.isForeign() and not it->second.isPrecalc()
+		    and it->second.getAge() > fwdentry_refresh_timeout_ms) {
+			EV << "garbageCollect(): actually deleting PID " << it->first << ": " << it->second.str() << endl;
+			it= PIDFwdTable.erase(it);
+		}
+		else
+			it++;
+	} // end while
 }
 
 } // end namespace

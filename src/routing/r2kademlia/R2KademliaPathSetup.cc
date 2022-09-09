@@ -136,7 +136,7 @@ void R2Kademlia::schedulePathSetup(const OverlayKey& contactkey)
 
 	if (not pathSetupScheduled)
 	{
-		addTimer(pathSetupWaitTime, 0, std::bind(&R2Kademlia::sendScheduledPathSetups, this));
+		addRandomizedTimer(pathSetupWaitTime, 0, std::bind(&R2Kademlia::sendScheduledPathSetups, this));
 		pathSetupScheduled= true;
 	}
 }
