@@ -12,8 +12,8 @@ nodeVicinityGraph::addNode(const OverlayKey& parentNodeKey, const OverlayKey& ch
 	if (distance > vicinityDiscoveryRadius)
 		return false;
 
-	EV_TRACE << "vicinity.addNode(): " << childNodeKey.shortStr()
-		 << " parent: " << parentNodeKey.shortStr() << " distance:" << distance << endl;
+	//EV_TRACE << "vicinity.addNode(): " << childNodeKey.shortStr()
+	//	 << " parent: " << parentNodeKey.shortStr() << " distance:" << distance << endl;
 
 	bool modified(false);
 

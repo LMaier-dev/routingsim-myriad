@@ -102,7 +102,7 @@ bool R2Kademlia::handlePathSetupResponse(KadPacket_p answer, RPCState& rpcState)
 		}
 		else {
 			// add new PID and mapping
-			if (auto incomingPID= fwdTablePathID.addLocalEntry(&tmpcontact, false); incomingPID != PathID::UndefinedPathID) {
+			if (auto [added, incomingPID]= fwdTablePathID.addLocalEntry(&tmpcontact, false); incomingPID != PathID::UndefinedPathID) {
 				fwdTablePathID.setNIDtoPIDmapping(tmpcontact.getKey(),incomingPID);
 			}
 		}

@@ -15,7 +15,7 @@ bool R2Kademlia::checkForPathInstallation(KadPacket& packet)
 	if ( usePathIDs == false )
 		return false;
 	EV_TRACE << "checkForPathInstallation: " << packet.getSrcPath()
-		 << " Progress: " << packet.getProgress() << " PathLen:" << packet.getRouteArraySize() << endl;
+		 << " Progress: " << packet.getProgress() << " SrcPathLen:" << packet.getRouteArraySize() << endl;
 
 	// if rest of path is within vicinity discovery radius, we have a precalculated entry
 	// note: this is a source route, so it includes the destination node
@@ -32,14 +32,19 @@ bool R2Kademlia::checkForPathInstallation(KadPacket& packet)
 			      packet.getSrcPath(packet.getProgress()+1, packet.getRouteArraySize()-1));
 
 	// PID must be installed if hops > vicinityDiscoveryRadius
-	EV_TRACE << "checkForPathInstallation: new path to " << tmpcontact << endl;
-	if (auto incomingPID= fwdTablePathID.addForeignEntry(&tmpcontact);
-	    incomingPID != PathID::UndefinedPathID) {
+	EV_TRACE << "checkForPathInstallation: path to " << tmpcontact;
+	if (auto [added,incomingPID]= fwdTablePathID.addForeignEntry(&tmpcontact); added == true) {
 		// no need to install NodeId to PID mapping as this is probably no local contact
+		EV_TRACE << " added " << incomingPID << endl;
 		return true;
 	}
-	else
+	else {
+		// touch entry and reset obsolete flag
+		auto& fwdtableentry= fwdTablePathID.PIDFwdTable.at(incomingPID);
+		fwdtableentry.unsetObsolete();
+		EV_TRACE << " already present/ignored" << endl;
 		return false;
+	}
 }
 
 

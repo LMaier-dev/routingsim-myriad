@@ -50,6 +50,7 @@ public:
 	unsigned long getAge() const { return (simTime() - last_touched).inUnit(SIMTIME_MS); }
 	simtime_t getLastTouched() const { return last_touched; }
 
+	void unsetObsolete() { fwdState &= ~State::obsolete; refresh(); }
 	void setObsolete() { fwdState |= State::obsolete; refresh(); }
 	bool isObsolete() const { return fwdState & State::obsolete; }
 
@@ -101,9 +102,9 @@ public:
 
 	inline void setNIDtoPIDmapping(const OverlayKey& nid, const PathID incomingPathID);
 
-	PathID addPrecalcEntry(KadContact_p contact) { return addEntry(contact, false, true); }
-	PathID addForeignEntry(KadContact_p contact) { return addEntry(contact, true, false); }
-	PathID addLocalEntry(KadContact_p contact, bool precalc) { return addEntry(contact, false, precalc); }
+	std::pair<bool, PathID> addPrecalcEntry(KadContact_p contact) { return addEntry(contact, false, true); }
+	std::pair<bool, PathID> addForeignEntry(KadContact_p contact) { return addEntry(contact, true, false); }
+	std::pair<bool, PathID> addLocalEntry(KadContact_p contact, bool precalc) { return addEntry(contact, false, precalc); }
 
 	// modify PID for path to contact
 	bool modEntry(KadContact_p contact, bool foreignPID);
@@ -125,7 +126,7 @@ public:
 	virtual std::string str() const;
 protected:
 	// try to add PID for path to contact, returns incomingPID or undefined on failure
-	PathID addEntry(KadContact_p contact, bool foreignPID, bool precalc);
+	std::pair<bool, PathID> addEntry(KadContact_p contact, bool foreignPID, bool precalc);
 
 private:
 	const OverlayKey* ownNodeID = nullptr;

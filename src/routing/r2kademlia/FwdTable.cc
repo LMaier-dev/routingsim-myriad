@@ -147,12 +147,13 @@ bool FwdTablePathID::existsEntry(KadContact_p contact)
 
 // contact is sometimes a temporary variable, i.e., the contact may not be part of the routing table yet
 // precalc is set for contacts within the discovery range
-// @returns incoming PathID if entry was added or already present, otherwise (already existed etc.) PathID::undefined
-PathID
+// @returns true if entry was newly added/created, otherwise false (for existing entry)
+// the incomingPathID is returned
+std::pair<bool, PathID>
 FwdTablePathID::addEntry(KadContact_p contact, bool isForeignPID, bool precalc)
 {
        	if (contact == nullptr)
-		return PathID::UndefinedPathID;
+		return std::make_pair(false, PathID::UndefinedPathID);
 
 	// Routingtable entry on node 4: Dest 5: < 3 2 >
 	//EV_TRACE << "addEntry(): called for contact " << *contact << " with path ";
@@ -186,7 +187,7 @@ FwdTablePathID::addEntry(KadContact_p contact, bool isForeignPID, bool precalc)
 		if (precalc)
 			pidentry->second.setPrecalc();
 
-		return incomingPathID; // already there, fine
+		return std::make_pair(false, incomingPathID); // already there, fine
 	}
 
 	// create new PID entry
@@ -213,7 +214,7 @@ FwdTablePathID::addEntry(KadContact_p contact, bool isForeignPID, bool precalc)
 	EV_TRACE << "addEntry(): inPID: " << incomingPathID << " outPID: "
 		 << fwdentry.outgoingPathID << " spath: " << currentpath << " " << fwdentry.str() << endl;
 
-	return incomingPathID;
+	return std::make_pair(true, incomingPathID);
 }
 
 
@@ -280,6 +281,7 @@ bool FwdTablePathID::modEntry(KadContact_p contact, bool isForeignPID)
 			if (auto it= PIDFwdTable.find(incomingPathID); it != PIDFwdTable.end())
 			{
 				it->second.setValid();
+				it->second.unsetObsolete();
 				if (isForeignPID)
 					it->second.setForeign();
 				else
@@ -292,7 +294,9 @@ bool FwdTablePathID::modEntry(KadContact_p contact, bool isForeignPID)
 		{ // set old entry to obsolete state if local update
 			FwdTableEntry& priorfwdentry(PIDFwdTable[pidentry->second]);
 
-			priorfwdentry.setObsolete();
+			// mark it obsolete unless it was precalculated
+			if (not priorfwdentry.isPrecalc())
+				priorfwdentry.setObsolete();
 			// delete the entry before priorPathID (i.e., the one before the penultimate entry)
 			//TODO make this configurable in depth
 			if (priorfwdentry.prevPathID != PathID::UndefinedPathID)
@@ -300,14 +304,13 @@ bool FwdTablePathID::modEntry(KadContact_p contact, bool isForeignPID)
 				auto it= PIDFwdTable.find(priorfwdentry.prevPathID);
 				if (it != PIDFwdTable.end())
 				{
-					if (it->second.isObsolete())
-					{ // remove entry before priorPathID
-						//EV_TRACE << "deleting PID entry " << priorfwdentry.prevPathID << endl;
-						//if (not it->second.isPrecalc() and not it->second.isForeign())
-						//	PIDFwdTable.erase(it);
+					// remove entry before priorPathID if still obsolete and not in use otherwise
+					// it may still have the local flag
+					if (it->second.isObsolete() and not it->second.isPrecalc() and not it->second.isForeign())
+					{
+						EV_TRACE << "deleting PID entry " << priorfwdentry.prevPathID << endl;
+						PIDFwdTable.erase(it);
 					}
-					else
-						EV_WARN << "PID entry before prior penultimate entry not obsolete";
 				}
 			}
 		}
@@ -319,11 +322,13 @@ bool FwdTablePathID::modEntry(KadContact_p contact, bool isForeignPID)
 	{
 		EV_TRACE << "modEntry(): inPID " << incomingPathID << " already existed" << endl;
 		it->second.setValid();
-		fwdentry= it->second;
 		if (isForeignPID)
-			fwdentry.setForeign();
+			it->second.setForeign();
 		else
-			fwdentry.setLocal();
+			it->second.setLocal();
+
+		// only used for debugging output afterwards
+		fwdentry= it->second;
 	}
 	else
 	{ // create new entry in FwdTable

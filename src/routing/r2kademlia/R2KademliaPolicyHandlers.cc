@@ -15,9 +15,6 @@
 #include "R2Kademlia.h"
 
 namespace routingsim {
-// for std::bind with callback functions
-namespace ph = std::placeholders;
-
 
 // -------------- kad policy -------------
 
@@ -219,8 +216,9 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 				// it is required to add all PIDs to nodes within the discovery radius
 				// (and without signaling one can extend this by one hop)
 				// since the contact path excludes the contact itself the above condition includes nodes <= vicinityDiscoveryRadius+1
-				if (auto incomingPID= fwdTablePathID.addLocalEntry(contact, contact->getPathLength()<nodeVicinityGraph::vicinityDiscoveryRadius); incomingPID != PathID::UndefinedPathID) {
-					// PID was added, it can directly be used, because no path setup necessary within discovery
+				if (auto [added,incomingPID]= fwdTablePathID.addLocalEntry(contact, contact->getPathLength()<nodeVicinityGraph::vicinityDiscoveryRadius); incomingPID != PathID::UndefinedPathID) {
+					// PID was added, it can directly be used, because no path setup necessary within vicinity
+					EV_TRACE << "added local NID " << contact->getKey() << " and PID entry " << incomingPID << endl;
 					fwdTablePathID.setNIDtoPIDmapping(contact->getKey(), incomingPID);
 					vicinityPathIDCompletion(*contact);
 				}

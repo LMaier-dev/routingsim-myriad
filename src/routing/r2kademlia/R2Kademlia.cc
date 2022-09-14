@@ -318,6 +318,9 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 			case KAD_ProbeReq: // this is for path probing
 			{
 				const KadProbeReq* probereq= dynamic_cast<const KadProbeReq*>(packet.get());
+				// usually the following is not necessary, but sometimes
+				// PathSetup was scheduled but not performed and a newer seq of a longer
+				// path start a path check, resulting in the ProbeReq
 				if (usePathIDs and probereq->getPathCheck()) {
 					if (checkForPathInstallation(*packet))
 						EV_TRACE << "POST Installed PathID by ProbeReq PathCheck" << endl;
@@ -556,7 +559,7 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt, simtime_t 
 		return;
 	}
 	else { // next hop not available
-		// for Routing Updates and Rediscovery messages try to use overlay-based forwarding
+               // for Routing Updates and Rediscovery messages try to use overlay-based forwarding
 		EV_TRACE << "forwardPacket(): next hop " << nextHop.shortStr() << " unavailable" << endl;
 
 		const OverlayKey* finaldestination(nullptr);
@@ -1165,7 +1168,8 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadPNDiscReq> packet) {
 
 
 
-void R2Kademlia::handlePacket(std::unique_ptr<KadQueryRouteReq> packet) {
+void R2Kademlia::handlePacket(std::unique_ptr<KadQueryRouteReq> packet)
+{
 	EV_TRACE << "received KadQueryRouteReq from " << packet->getSource().shortStr()
 		 << " SSeq#" <<  packet->getStateSeqNo() << endl;
 
@@ -1764,12 +1768,12 @@ void R2Kademlia::readRTableRsp(const KadRTableRsp& packet) {
 		// TODO optimization: isPathInteresting
 		// Examples: contact 0779b9 via path < ee2741 0de89c > + <->
                 //           contact 06cc5e via path < ee2741 0de89c > + < d9c74f >
-		EV_TRACE << "readRTableRsp: contact " <<  packet.getContact(i).shortStr() << " via " << viaPath << " + " << packet.getPath(i) << endl;
+		//EV_TRACE << "readRTableRsp: contact " <<  packet.getContact(i).shortStr() << " via " << viaPath << " + " << packet.getPath(i) << endl;
 		// check whether contact is not contained in path (avoid cycles)
 		if ( find(viaPath.cbegin(), viaPath.cend(), packet.getContact(i)) != viaPath.cend()
 		     or
 		     find(packet.getPath(i).cbegin(), packet.getPath(i).cend(), packet.getContact(i)) != packet.getPath(i).cend() ) {
-			EV_TRACE << "skipping contact as it occurs already in path" <<  endl;
+			//EV_TRACE << "skipping contact as it occurs already in path" <<  endl;
 			continue;
 		}
 
@@ -1985,7 +1989,7 @@ template<typename T> bool R2Kademlia::handleIfFitting(KadPacket_p& packet) {
 	// if cast failed we get nullptr -> skip the rest, return false
 	if (not tPacket) return false;
 	// invalidate the original unique_ptr
-	packet.release();
+	(void) packet.release();
 	//EV_TRACE << "handleIfFitting tPacket " << static_cast<void*>(tPacket.get()) << endl;
 	// delegate responsibility to handlePacket method
 	handlePacket(std::move(tPacket));
