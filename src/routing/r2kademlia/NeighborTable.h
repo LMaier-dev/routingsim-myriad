@@ -27,7 +27,7 @@ namespace routingsim {
 using inner_table = std::vector<std::pair<OverlayKey, nodeid_t>>;
 /**
  * A table for mapping overlay keys of neigbors to nodeIDs and back.
- * Compare to arp table.
+ * Similar to ARP table that maps IP addresses to MAC addresses.
  * @author Jakob Thomas
  */
 class NeighborTable

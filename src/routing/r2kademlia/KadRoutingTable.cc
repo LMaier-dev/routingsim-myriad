@@ -73,14 +73,14 @@ std::string KadRoutingTable::str() const
 		for (const auto& econtact : b.PNContacts) {
 			out << ' ' << *econtact;
 		}
-		out << '}';		
+		out << '}';
 		i++;
 	}
 
 	return out.str();
 }
 
-	
+
 size_type KadRoutingTable::getBucketIndex(const OverlayKey& key) const
 {
 	OverlayKey delta = key ^ myKey;
@@ -139,6 +139,56 @@ size_type KadRoutingTable::getBucketIndex(const OverlayKey& key) const
 }
 
 
+/// this should be called by PNDiscReq and PNDiscRsp only!
+void KadRoutingTable::addPNContact(const OverlayKey& key, stateseqno_t stateseqno)
+{
+	if (not neighbortable.isNeighbor(key)) {
+		// this should not happen, either we got a PNHello before or it was added just before this call
+		EV_ERROR << "addPNContact: PN is not a neighbor yet" << endl;
+		ASSERT(neighbortable.isNeighbor(key));
+	}
+
+	KadContact *contact = getContactInternal(key);
+	if (contact == nullptr) { // contact is new
+		handleNewContact(key, kad_path(), stateseqno, 0);
+		return;
+	}
+	else { // contact already known, maybe have added it via other contact/neighbor
+		if (not contact->isPhysicalNeighbor()) {
+			// flag contact as physical neighbor and move it over to the PNContacts bucket
+			contact->setPhysicalNeighbor();
+			contact->updateLastSeen();
+
+			// move over to PNcontacts
+			KadBucket& bucket = getBucket(key);
+			auto it = bucket.findContact(key);
+			if (it != bucket.contacts.end()) {
+				bucket.PNContacts.push_back(std::move(*it));
+				bucket.contacts.erase(it);
+			}
+			else
+				EV_ERROR << "Contact existed already, but not found" << endl;
+		}
+		else { // contact is physical neighbor already, but old path maybe longer
+		}
+
+		if (contact->getStateSeqNo() < stateseqno) { // contact has newer state for its physical neighbors
+			policy->reSyncPN(*contact, stateseqno);
+		}
+		else { // current received sequence number older
+		       // this may happen, however, when we learned about the PN from other nodes that had newer information from the node
+		       // next PNHello from this PN should fix that
+		}
+
+		// set the current path irrespective of the sequence number to empty
+		// as we heard a direct message from the neighbor NOW
+		// contact will be automatically set to valid
+		contact->setPath(kad_path(),{});
+
+	} // end else (=contact already known)
+}
+
+
 /// @returns true in case path was added
 bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t stateseqno, age_t pathinfo_age)
 {
@@ -186,7 +236,7 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 	// contact is known
 
 	// there may be the rare case when we learned the new contact from someone else
-	// before we heard the Hello
+	// before we heard the Hello or PNDiscReq
 	if (!contact->isPhysicalNeighbor() and path.empty()==true)
 	{
 		contact->setPhysicalNeighbor();
@@ -331,13 +381,16 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 				// now check for XOR distance to own ID of Path Hash
 				pathHashSum= HashSum(path, key);
 				// pathSet.insert(pathHashSum);
-				if ((pathHashSum ^ myKey) >= (contact->getPathHashSum() ^  myKey)) {
-					EV_TRACE << "for contact " << key.shortStr() << " discarding path of same length: " << path << endl;
+				if ((pathHashSum ^ myKey) > (contact->getPathHashSum() ^  myKey)) {
+					EV_TRACE << "for contact " << key.shortStr() << " discarding path of same length: " << path <<  endl;
 					return false;
 				}
 				else {
-					EV_TRACE << "for contact " << key.shortStr()
-						 << " replacing path of same length with: " << path << endl;
+					// path may be identical and have a newer_seqno or different but smaller XOR distance
+					if (not identical_path) {
+						EV_TRACE << "for contact " << key.shortStr()
+							 << " replacing path of same length with: " << path << endl;
+					}
 				}
 			} // end if equivalent_path (otherwise path is shorter)
 		} // end else if path.size() > 0
@@ -541,7 +594,7 @@ bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, sta
 			return false;
 		}
 	}
-	
+
 	// just as safety measure in case we fall through here
 	return false;
 }
@@ -564,7 +617,7 @@ void KadRoutingTable::splitLastBucket()
 	// sort contacts into new buckets
 	for (auto& contact : oldBucket.contacts)
 		getBucket(contact.get()).contacts.push_back(std::move(contact));
-	
+
 	// sort PNcontacts into new buckets
 	for (auto& contact : oldBucket.PNContacts)
 		getBucket(contact.get()).PNContacts.push_back(std::move(contact));
@@ -587,7 +640,7 @@ auto copyAllContacts = std::bind( &copySelectedContacts,ph::_1,ph::_2, [](const 
 auto copyValidContacts = std::bind( &copySelectedContacts,ph::_1,ph::_2, [](const KadContact& contact) -> bool { return contact.isValid(); } );
 
 
-/** 
+/**
  * returns at most n contacts closest to key
  * ContactList is sorted according to XOR metric with respect to key, i.e.,
  * the first returned contact is the closest to key.
@@ -1106,16 +1159,16 @@ bool KadRoutingTable::removeContact(const OverlayKey& key)
 {
 	// function will be called *before* contact is actually removed
 	policy->onContactRemoval(getContact(key));
-	
+
 	KadBucket& bucket = getBucket(key);
 	bool result = bucket.removeContact(key);
 	if (!result) {
 		EV_ERROR << "failed to remove contact " << key << endl;
 	}
-	
+
 	if (bucket.empty())
 		policy->onBucketEmpty(bucket);
-	
+
 	return result;
 }
 
@@ -1149,7 +1202,7 @@ KadContact *KadBucket::getContact(const OverlayKey& key)
 	auto it = findContact(key);
 	if (it != contacts.end() )
 		return it->get();
-	
+
 	it = findPNContact(key);
 	if (it != PNContacts.end() )
 		return it->get();

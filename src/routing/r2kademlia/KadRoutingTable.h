@@ -133,6 +133,12 @@ public:
 	 * @returns true if path was added
 	 */
 	bool addPath(const OverlayKey& key, const kad_path& path, stateseqno_t pathseqno, age_t pathinfo_age, const kad_path& via);
+
+	/**
+	 * add a physical neighbor as contact or updates an existing one
+	 */
+	void addPNContact(const OverlayKey& key, stateseqno_t stateseqno);
+
 	/**
 	 * Removes the contact with the given key from the routing table.
 	 * @returns true if the contact was removed, false if it was not present

@@ -3,15 +3,15 @@
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
-// 
+//
 // This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU Lesser General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU Lesser General Public License
 // along with this program.  If not, see http://www.gnu.org/licenses/.
-// 
+//
 
 #include <BaseTypes.h>
 
@@ -228,7 +228,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		 << static_cast<void*>(packet.get()) << " c:" << packet->getCreationTime()
 		 << " isTracked:" << packet->isTracked() << endl;
 	*/
-	
+
 	// hello packets do not include my key
 	if (handleIfFitting<KadHello>(packet))
 		return;
@@ -364,7 +364,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	}
 	else { // no hops left, packet is addressed to me
 		packet->setControlInfo(pkt.release());
-		
+
 		// learn route from packet
 		//TODO optimization use isPathInteresting
 
@@ -416,61 +416,51 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 	receivedPackets++;
 	receivedVolume+= packet->getByteLength();
 
-	// either completely new PN or reseen after link repair
-	if (neighborTable.addNeighbor(packet->getSourceId(), packet->getSource())) {
-		// physical neighborhood changed -> increase local state variable
-		incLSSeqNo();
+	if (auto nodep= vicinity.getNode(packet->getSource()); nodep != nullptr)
+	{ // known physical neighbor: check for newer sequence number
+		if (nodep->stateseqno < packet->getStateSeqNo()) {
+			// update seqno in vicinity
+			vicinity.addNode(myOverlayKey, // parent
+					 packet->getSource(), // new child
+					 packet->getStateSeqNo(),
+					 1);
 
-		//EV_TRACE << "added to neighbor table: "<< neighborTable << endl;
-
-		// PNDiscovery should be sent before any further messages to avoid missing neighbors
-		// send back PNDiscReq to get contacts from physical neighbor
-		KadContact neighborcontact(packet->getSource(), kad_path());
-
-		// try to add neighbor to routing table
-		if (routingTable.addPath(packet->getSource(), kad_path(), packet->getStateSeqNo(), 0))
-		{
-			EV_TRACE << "adding neighbor successful, its SSeq#" << packet->getStateSeqNo() << endl;
+			EV_TRACE << "check for resync" << endl;
+			// already known neighbor, just check for seqno synchronization
+			checkForResync(packet->getSource(), packet->getStateSeqNo());
 		}
-		else
-			EV_TRACE << "adding neighbor failed (maybe was already there)" << endl;
-
-		// this node can be added safely to the vicinity now,
-		// because PNDiscReq may be sent quite some time later
-		vicinity.addNode(myOverlayKey, // parent
-				 neighborcontact.getKey(), // new child
-				 neighborcontact.getStateSeqNo(),
-				 1);
-
-		// fwdTablePathID.addEntry() and vicinityPathIDCompletion() are called by onNewContact
-
-		// send PN Discovery Request immediately if I have the lower (NodeID % 32)
-		// otherwise wait some time, probably sending a PNDiscReq is obsolete
-		if (KadContact* contact_p= const_cast<KadContact*>(routingTable.getContact(packet->getSource()));
-		    contact_p != nullptr) {
-
-			// use this deterministic strategy to save redundant PNDiscReq/Rsp exchanges
-			// do not use full ID, otherwise large IDs will always "loose", use mod 2^32 comparison
-			// small collision chance: but just in case, full nodeID will be a tie breaker
-			uint32_t ownModID(myOverlayKey.getBitRange(0,32));
-			uint32_t otherModID(contact_p->getKey().getBitRange(0,32));
-			uint32_t delta((uint32_t) (otherModID-ownModID));
-
-			if ( delta < 0x80000000UL or
-			     ((delta==0 or delta==0x80000000UL) and myOverlayKey < contact_p->getKey())
-			   ) {
-				sendDiscoveryReq(contact_p);
-			}
-			else // schedule PNDiscReq for later
-				reSyncPN(*contact_p, packet->getStateSeqNo());
-		}
-	}
-	else {
-		EV_TRACE << "check for resync" << endl;
-		// already known neighbor, just check for seqno synchronization
-		checkForResync(packet->getSource(), packet->getStateSeqNo());
 
 		return;
+	}
+	else
+	{ // new physical neighbor, first contact: either wait for PNDiscReq or send one
+
+		// we need to add the node to our neighbortable, because we need to send a Req
+		neighborTable.addNeighbor(packet->getSourceId(), packet->getSource());
+
+		// add node to vicinity
+		vicinity.addNode(myOverlayKey, // parent
+				 packet->getSource(), // new child
+				 packet->getStateSeqNo(),
+				 1);
+
+		// use this deterministic strategy to save redundant PNDiscReq/Rsp exchanges
+		// do not use full ID, otherwise large IDs will always "loose", use mod 2^32 comparison
+		// small collision chance: but just in case, full nodeID will be a tie breaker
+		uint32_t ownModID(myOverlayKey.getBitRange(0,32));
+		uint32_t otherModID(packet->getSource().getBitRange(0,32));
+		uint32_t delta((uint32_t) (otherModID-ownModID));
+
+		KadContact neighborcontact(packet->getSource(), kad_path());
+		auto contact_p(&neighborcontact);
+		if ( delta < 0x80000000UL or
+		     ((delta==0 or delta==0x80000000UL) and myOverlayKey < packet->getSourceId())
+			) {
+			//sendDiscoveryReq(contact_p); // old
+			schedulePNDiscReq(contact_p->getKey(), stateseqno_t::invalidSeqNo);
+		}
+		//else // schedule PNDiscReq for later
+		//reSyncPN(*contact_p, packet->getStateSeqNo());
 	}
 
 	//EV_TRACE << "handlePacket: "<< static_cast<void*>(packet.get()) << endl;
@@ -501,7 +491,7 @@ void R2Kademlia::handlePacket(KadAnswer_p packet) {
 			getKadObserver().sampleAnswer(*packet);
 		// try to shorten the return path (we exclude ourselves first)
 		kad_path returnpath(packet->reversePath(packet->getSrcPath(0,packet->getProgress())));
-		EV_TRACE << "answer packet: path to replier " << returnpath; 
+		EV_TRACE << "answer packet: path to replier " << returnpath;
 		laterpaths++;
 		if (routingTable.shortenPath(returnpath))
 		{
@@ -529,7 +519,7 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt, simtime_t 
 	bool packetorigin(packet->getProgress() == 0);
 	// TODO Check for already present NotVia() => loop
 	// TODO Check for presence of own ID in so far processed path (maybe as overlay hop)
-	
+
 	//TODO optimization: potential shortcut - we check if the target is a already neighbor
 	// only allowed for exact and not strict routing
 
@@ -1006,7 +996,7 @@ void R2Kademlia::sendGetPhysicalNeighbors(KadContact_p contact)
 }
 
 
-// Request k nearest Overlay Neighbors from contact 
+// Request k nearest Overlay Neighbors from contact
 void R2Kademlia::sendGetOverlayNeighbors(KadContact_p contact)
 {
 	EV_TRACE << "sending query route request (ON) to " << *contact << endl;
@@ -1041,34 +1031,43 @@ void R2Kademlia::sendGetOverlayNeighbors(KadContact_p contact)
 }
 
 
-// Send PNDiscReq
+// Send PNDiscReq (rate limited)
 void R2Kademlia::sendDiscoveryReq(KadContact_p contact)
 {
 	ASSERT(contact != nullptr);
-	EV_TRACE << "sending PNDiscReq to " << *contact << " mySSeq#: " << getLSSeqNo() << endl;
+	EV_TRACE << "sending PNDiscReq to " << *contact << " mySSeq#: " << getLSSeqNo();
 	auto req = makePacket<KadPNDiscReq>(contact, "KadPNDiscReq");
 	req->setSourceId(node().getNodeId());
 	req->setNeighborhood(1); // get only physical neighbors (1 hop away)
 	req->setContactsOnly(false);
 	// send my own physical neighbors
 	if (std::vector<OverlayKey> neighbors = neighborTable.getNeighbors(); neighbors.size() > 0) {
+
+		// reserve enough space in the vectors
 		req->setPhyNeighborArraySize(neighbors.size());
 		req->setPhyNeighborSeqNoArraySize(neighbors.size());
 		req->setPhyNeighborAgeArraySize(neighbors.size());
+		uint effective_size(0);
 		for (uint i = 0; i < neighbors.size(); i++) {
 			req->setPhyNeighbor(i, neighbors[i]);
-			if (routingTable.getContact(neighbors[i]) != nullptr) {
-				req->setPhyNeighborSeqNo(i, routingTable.getContact(neighbors[i])->getStateSeqNo());
-				req->setPhyNeighborAge(i,routingTable.getContact(neighbors[i])->getAge());
+			if (auto contactp= routingTable.getContact(neighbors[i]); contactp != nullptr) {
+				req->setPhyNeighborSeqNo(effective_size, contactp->getStateSeqNo());
+				req->setPhyNeighborAge(effective_size, contactp->getAge());
+				effective_size++;
 			}
-			else
-				EV_ERROR << "Contact in RT for neighbor " << neighbors[i] << " not found" << endl; 
 		}
+		// shrink size to what has been actually written
+		req->setPhyNeighborArraySize(effective_size);
+		req->setPhyNeighborSeqNoArraySize(effective_size);
+		req->setPhyNeighborAgeArraySize(effective_size);
+
 	}
 	//req->setHopLimit(1);
+
 	// we rate limit the requests
 	simtime_t delay(0);
 
+	// 10000µs is 10ms, so the rate limit is 100 PNDiscReqs/s
 	static const simtime_t mindelay(SimTime(10000,SIMTIME_US));
 	if  ( simTime() < LastPNDiscReq ) {
 		// last was scheduled in future, schedule it mindelay behind that
@@ -1082,6 +1081,7 @@ void R2Kademlia::sendDiscoveryReq(KadContact_p contact)
 		// otherwise no extra delay necessary
 	}
 
+	EV_TRACE << " delay: " << delay << endl;
 	sendRpcCall(
 		std::move(req),
 		std::bind(&R2Kademlia::handlePNDiscResponse, this, ph::_1, ph::_2),
@@ -1105,11 +1105,8 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadPNDiscReq> packet) {
 	receivedPackets++;
 	receivedVolume+= packet->getByteLength();
 
-	// since this is physical neighbor add it to our neighbortable
-	if (neighborTable.addNeighbor(packet->getSourceId(), packet->getSource())) {
-		// new neighbor -> increase sequence number
-		incLSSeqNo();
-	}
+	// since this is a physical neighbor try to add it to our neighbortable
+	neighborTable.addNeighbor(packet->getSourceId(), packet->getSource());
 
 	// add physical neighbor to my vicinity
 	bool node_added= vicinity.addNode(myOverlayKey, packet->getSource(), packet->getStateSeqNo(), 1);
@@ -1118,6 +1115,9 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadPNDiscReq> packet) {
 		fwdTablePathID.addPrecalcEntry(&neighborcontact);
 		vicinityPathIDCompletion(neighborcontact);
 	}
+
+	// add physical contact to routing table or update sequence number
+	routingTable.addPNContact(packet->getSource(), packet->getStateSeqNo());
 
 	// check for physical neighbors sent with
 	kad_path path{packet->getSource()};
@@ -1131,9 +1131,6 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadPNDiscReq> packet) {
 	}
 
 	EV_TRACE << "neighbor table: "<< neighborTable << endl;
-
-	// add physical contact to routing table or update sequence number
-	routingTable.addPath(packet->getSource(), kad_path(), packet->getStateSeqNo(), 0);
 
 	// update lastseen of origin contact
 	if (KadContact* contact_p= const_cast<KadContact*>(routingTable.getContact(packet->getSource())); contact_p != nullptr) {
@@ -1154,15 +1151,26 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadPNDiscReq> packet) {
 	ASSERT(not packet->getContactsOnly());
 	auto response = makeAnswer<KadPNDiscRsp>(*packet);
 	std::vector<OverlayKey> neighbors = neighborTable.getNeighbors();
+
 	response->setContactArraySize(neighbors.size());
 	response->setPathArraySize(neighbors.size());
 	response->setSeqNoArraySize(neighbors.size());
 	response->setPathInfoAgeArraySize(neighbors.size());
+	uint effective_size(0);
 	for (uint i = 0; i < neighbors.size(); i++) {
-		response->setContact(i, neighbors[i]);
-		response->setSeqNo(i, routingTable.getContact(neighbors[i])->getStateSeqNo());
-		response->setPathInfoAge(i,routingTable.getContact(neighbors[i])->getAge());
+		// some neighbors may not yet be in the routing table
+		if (auto contactp= routingTable.getContact(neighbors[i]); contactp != nullptr) {
+			response->setContact(effective_size, neighbors[i]);
+			response->setSeqNo(effective_size, contactp->getStateSeqNo());
+			response->setPathInfoAge(effective_size, contactp->getAge());
+			effective_size++;
+		}
 	}
+	response->setContactArraySize(effective_size);
+	response->setPathArraySize(effective_size);
+	response->setSeqNoArraySize(effective_size);
+	response->setPathInfoAgeArraySize(effective_size);
+
 	sendPacket(std::move(response));
 }
 
@@ -1192,16 +1200,21 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadQueryRouteReq> packet)
 		response->setPathArraySize(neighbors.size());
 		response->setSeqNoArraySize(neighbors.size());
 		response->setPathInfoAgeArraySize(neighbors.size());
+		uint effective_size= 0;
 		for (uint i = 0; i < neighbors.size(); i++) {
-			if (routingTable.getContact(neighbors[i]) != nullptr)
+			if (auto contactp= routingTable.getContact(neighbors[i]); contactp != nullptr)
 			{
-				response->setContact(i, neighbors[i]);
-				response->setSeqNo(i, routingTable.getContact(neighbors[i])->getStateSeqNo());
-				response->setPathInfoAge(i,routingTable.getContact(neighbors[i])->getAge());
+				response->setContact(effective_size, neighbors[i]);
+				response->setSeqNo(effective_size, contactp->getStateSeqNo());
+				response->setPathInfoAge(effective_size, contactp->getAge());
+				effective_size++;
 			}
-			else
-				EV_ERROR << "Physical neighbor " << neighbors[i].shortStr() << " not present in routing table!" << endl;
 		}
+		response->setContactArraySize(effective_size);
+		response->setPathArraySize(effective_size);
+		response->setSeqNoArraySize(effective_size);
+		response->setPathInfoAgeArraySize(effective_size);
+
 	}
 	else
 	if (packet->getNeighborhood() == 63) // means to get full routing table
@@ -1250,19 +1263,21 @@ bool R2Kademlia::handlePNDiscResponse(KadPacket_p answer, RPCState& rpcState)
 		 << " neighbors SSeq#" << response->getStateSeqNo() << endl;
 
 	// update sequence number or restore direct link
-	routingTable.addPath(response->getSource(), kad_path(), response->getStateSeqNo(), 0);
+	routingTable.addPNContact(response->getSource(), response->getStateSeqNo());
+
 	// update PNsyncSeqNo
 	if (KadContact* contact_p= const_cast<KadContact*>(routingTable.getContact(response->getSource())); contact_p != nullptr) {
 		contact_p->setSyncPNSeqNo(response->getStateSeqNo());
 	}
 	else
 		EV_ERROR << "PN not found as contact in RT!" << endl;
+
 	// now read PNs from neighbor
 	readRTableRsp(*response);
 	return true;
 }
 
-	
+
 bool R2Kademlia::handleQueryRouteResponse(KadPacket_p answer, RPCState& rpcState)
 {
 	ASSERT(rpcState.original_packet.get() != nullptr);
@@ -1498,7 +1513,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 	countReceived(*packet);
 	if (is_rediscovery)
 		succeededRediscovery++;
-	
+
 	EV_TRACE << "KadFindNodeReq query for " << query.shortStr() << " answering with list size " << contacts.size() << " Tracked: " << (answer->isTracked() ? 'T' : 'F') << endl;
 	sendPacket(std::move(answer));
 }
@@ -1569,10 +1584,10 @@ bool R2Kademlia::handleRPCTimeOut(KadPacket_p answer_, RPCState& rpcState) {
 	}
 	// else: no retransmissions
 	// nothing to do, RPC state will be deleted
-	
+
 	EV_TRACE << "RPC Timeout for msg: " << rpcState.original_packet->getId()
 		 << " nonce:" << rpcState.nonce << endl;
-	
+
 	return true;
 }
 
@@ -1780,7 +1795,7 @@ void R2Kademlia::readRTableRsp(const KadRTableRsp& packet) {
 		// try to add contact or update path and/or contact meta data
 		if ( not(routingTable.addPath(packet.getContact(i), packet.getPath(i), packet.getSeqNo(i), packet.getPathInfoAge(i), viaPath)) ) {
 			// even if contact was not interesting for RT, add it as PID entry if within vicinitydiscovery radius
-			// the following condition is correct because the target contact 
+			// the following condition is correct because the target contact
 			// is not contained in (viaPath + packet.getPath(i))
 			bool querynode(false);
 			if ( packet.getContact(i)!= myOverlayKey and ((viaPath.size() + packet.getPath(i).size()) < nodeVicinityGraph::vicinityDiscoveryRadius) )
@@ -1911,17 +1926,28 @@ void R2Kademlia::sendScheduledPNDiscReq() {
 		// check for current status of scheduled contact
 		if (neighborTable.isNeighbor(neighborcontactkey)) { // so contact is still an active neighbor
 			// note: contact may have been invalidated or changed meanwhile
-			if (auto rt_contact= routingTable.getContact(neighborcontactkey); rt_contact != nullptr) { // so contact still exists
-				// check whether update is needed (invalidSeqNo means unconditionally update)
-				if (expected_seqno.isInvalid() or expected_seqno > rt_contact->getSyncPNSeqNo())
-					sendDiscoveryReq(rt_contact);
-				else
-					EV_TRACE << "Obsolete PNDiscReq for " << rt_contact->getKey().shortStr() << " avoided due to current seqno "
-						 << rt_contact->getSyncPNSeqNo() << " expected: "
-						 <<  expected_seqno << endl;
+		        stateseqno_t lastseenseqno(stateseqno_t::invalidSeqNo);
+			auto rt_contact= routingTable.getContact(neighborcontactkey);
+			if (rt_contact != nullptr) { // so contact still exists
+				lastseenseqno= rt_contact->getSyncPNSeqNo();
 			}
+			else { // if we only received a PNHello, PN is not a contact yet, but it is in the vicinity
+				auto vnodep= vicinity.getNode(neighborcontactkey);
+				ASSERT(vnodep != nullptr and vnodep->distance==1);
+				if (vnodep != nullptr)
+					lastseenseqno= vnodep->stateseqno;
+			}
+			// temporary contact object in case we don't have a real one yet
+			KadContact tmpcontact(neighborcontactkey,kad_path(),lastseenseqno);
+			if (rt_contact == nullptr)
+				rt_contact= &tmpcontact;
+			// check whether update is needed (invalidSeqNo means unconditionally update)
+			if (expected_seqno.isInvalid() or expected_seqno > lastseenseqno)
+				sendDiscoveryReq(rt_contact);
 			else
-				EV_ERROR << "PNDiscReq cannot be sent, because contact " << neighborcontactkey.shortStr() << " not found!?" << endl;
+				EV_TRACE << "Obsolete PNDiscReq for " << rt_contact->getKey().shortStr() << " avoided due to current seqno "
+					 << lastseenseqno << " expected: "
+					 <<  expected_seqno << endl;
 		}
 		else
 			EV_ERROR << "PNDiscReq cannot be sent, because contact " << neighborcontactkey.shortStr() << " not in neighbor table anymore" << endl;
@@ -1968,11 +1994,11 @@ void R2Kademlia::countDropped(KadPacket& packet, const OverlayKey& target, uint8
 void R2Kademlia::returnToSender(uint8_t errorType, KadPacket_p packet) {
 	KadError_p answer = makeAnswer<KadError>(*packet);
 	answer->setErrorType(errorType);
-	
+
 	EV_TRACE << "returnToSender() - error: " << (unsigned int) errorType << " - return path:";
 	for (const auto& c : answer->getSrcPath())
 		EV_TRACE << ' ' << c.shortStr();
-	EV_TRACE << endl;		
+	EV_TRACE << endl;
 	answer->encapsulate(packet.release());
 	if (answer->hasRemainingHops())
 		sendPacket(std::move(answer));

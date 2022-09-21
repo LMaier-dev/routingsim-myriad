@@ -178,6 +178,9 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 			EV_DEBUG << "onNewContact: will ignore supposed physical neighbor not being in Neighbor table yet" << endl;
 			return;
 		}
+		else { // actually a new neighbor -> increase sequence number
+			incLSSeqNo();
+		}
 	}
 
 	// ask for physical neighbors if new contact is within discovery radius

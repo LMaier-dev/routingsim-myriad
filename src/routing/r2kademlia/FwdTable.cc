@@ -96,7 +96,7 @@ std::string FwdTablePathID::str() const
 {
 	std::ostringstream out;
 
-	out << "NIDPIDTable: ";
+	out << "NIDPIDTable (" << NIDPIDTable.size() << "): ";
 	for (const auto& nidpidentry : NIDPIDTable)
 	{
 		out << "{ " << nidpidentry.first.shortStr() << "=> " << nidpidentry.second << ' ';
@@ -107,7 +107,8 @@ std::string FwdTablePathID::str() const
 			out << "<missing PID> } ";
 	}
 
-	out << "PIDFwdTable: ";
+	auto [ptotal,pused]= getNumUsedPrecalcEntries();
+	out << "PIDFwdTable (F=" << getNumForeignEntries() << ",P=" << pused << '/' << ptotal << ",V=" << getNumValidEntries() << "): ";
 	for (const auto& pidfwdtableentry : PIDFwdTable)
 	{
 		const FwdTableEntry& fwdentry= pidfwdtableentry.second;

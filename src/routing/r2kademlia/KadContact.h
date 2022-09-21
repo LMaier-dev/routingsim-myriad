@@ -135,7 +135,7 @@ public:
 	stateseqno_t getSyncPNSeqNo() const { return syncPNSeqno; }
 	void setSyncPNSeqNo(stateseqno_t newseqno) {
 		if (not (syncPNSeqno.isInvalid() or (not syncPNSeqno.isInvalid() and newseqno >= syncPNSeqno)))
-			EV_ERROR << "Contact: " << key.shortStr() << " setPathSeqNo: old=" << syncPNSeqno << " new=" << newseqno << endl;
+			EV_ERROR << "Contact: " << key.shortStr() << " setSyncPNSeqNo: old=" << syncPNSeqno << " new=" << newseqno << endl;
 		ASSERT(not newseqno.isInvalid()); ASSERT(syncPNSeqno.isInvalid() or (not syncPNSeqno.isInvalid() and newseqno >= syncPNSeqno));
 		syncPNSeqno= newseqno; }
 
