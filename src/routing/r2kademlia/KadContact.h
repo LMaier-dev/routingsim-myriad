@@ -70,19 +70,19 @@ public:
 		dead          = 4
 	};
 
-	KadContact(const KadContact& o) : key(o.key), lastseen(o.lastseen), path(o.path), pathHashSum(o.pathHashSum),
+	KadContact(const KadContact& o) : key(o.key), lastseen(o.lastseen), lastPathRefresh(o.lastPathRefresh), path(o.path), pathHashSum(o.pathHashSum),
 					  seqno(o.seqno), state(o.state),
 					  physicalNeighbor(o.physicalNeighbor),
 					  rds_p(o.rds_p == nullptr ? nullptr :
 						std::make_unique<RediscoveryState>(*o.rds_p)) {};
-        KadContact(KadContact&& k) : key(std::move(k.key)), lastseen(std::move(k.lastseen)), path(std::move(k.path)),
+        KadContact(KadContact&& k) : key(std::move(k.key)), lastseen(std::move(k.lastseen)), lastPathRefresh(std::move(k.lastPathRefresh)), path(std::move(k.path)),
 				     pathHashSum(std::move(k.pathHashSum)),
 				     seqno(k.seqno), state(k.state),
 				     physicalNeighbor(k.physicalNeighbor),
 				     rds_p(std::move(k.rds_p)) {};
-        explicit KadContact(const OverlayKey& key): key(key), lastseen(SIMTIME_ZERO), path(), state(State::undefined), rds_p(nullptr) {};
+        explicit KadContact(const OverlayKey& key): key(key), lastseen(SIMTIME_ZERO), lastPathRefresh(SIMTIME_ZERO), path(), state(State::undefined), rds_p(nullptr) {};
         KadContact(const OverlayKey& key, kad_path opath, stateseqno_t seqno= stateseqno_t::invalidSeqNo) :
-		key(key), lastseen(SIMTIME_ZERO), path(std::move(opath)), pathHashSum(HashSum(path,key)), seqno(seqno),
+		key(key), lastseen(SIMTIME_ZERO), lastPathRefresh(SIMTIME_ZERO), path(std::move(opath)), pathHashSum(HashSum(path,key)), seqno(seqno),
 		state(State::valid), physicalNeighbor(path.empty() == true), rds_p(nullptr) // simply path.empty() doesn't work correctly!
 		{};
         KadContact& operator=(const KadContact &other); // copy assignment
@@ -107,6 +107,10 @@ public:
 	simtime_t getLastSeen() const { return lastseen; }
 	void updateLastSeen() { lastseen= simTime(); }
 	void updateLastSeenTo(const simtime_t &new_time_stamp) { lastseen= new_time_stamp; }
+
+	unsigned long getPathAge() const { return (simTime() - lastPathRefresh).inUnit(SIMTIME_MS); }
+	simtime_t getLastPathRefresh() const { return lastPathRefresh; }
+	void updateLastPathRefresh() { lastPathRefresh = simTime(); }
 
 	const RediscoveryState& getRDS() const { ASSERT(rds_p != nullptr); return *rds_p; }
 	RediscoveryState& getRDS() { ASSERT(rds_p != nullptr); return *rds_p; }
@@ -147,6 +151,7 @@ public:
 private:
 	OverlayKey key;	   /// the OverlayKey of this contact
 	simtime_t lastseen; /// time of last direct contact or path update (could stem from other node, too)
+	simtime_t lastPathRefresh; /// time of last path refresh (setupRsp / propeRsp)
 	/// the following path does neither contain the source (myself) nor the target node
 	kad_path path;	   /// the best known source routing path to reach this contact
 	OverlayKey pathHashSum; /// the hash sum of the path
@@ -179,6 +184,7 @@ inline KadContact& KadContact::operator=(const KadContact& other)
 	if (this != &other) {
 		key= other.key;
 		lastseen = other.lastseen;
+		lastPathRefresh = other.lastPathRefresh;
 		path= other.path;
 		pathHashSum= other.pathHashSum;
 		seqno= other.seqno;
@@ -195,6 +201,7 @@ inline KadContact& KadContact::operator=(KadContact&& other)
 	if (this != &other) {
 		key= other.key;
 		lastseen = other.lastseen;
+		lastPathRefresh = other.lastPathRefresh;
 		path= other.path;
 		pathHashSum= other.pathHashSum;
 		state= other.state;

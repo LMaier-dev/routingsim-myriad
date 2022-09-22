@@ -950,6 +950,7 @@ bool R2Kademlia::handleProbeResponse(KadPacket_p answer, RPCState& rpcState) {
 		if (contact_p->getStateSeqNo() <= probeRsp->getStateSeqNo()) {
 			contact_p->setStateSeqNo(probeRsp->getStateSeqNo());
 			contact_p->updateLastSeen();
+			contact_p->updateLastPathRefresh();
 		}
 		else
 			EV_WARN << "State sequence number of message smaller (" << probeRsp->getStateSeqNo() << ") than for contact (" << contact_p->getStateSeqNo() << ")" << endl;

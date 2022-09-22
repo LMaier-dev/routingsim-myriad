@@ -758,7 +758,7 @@ KadContact_p KadRoutingTable::getRandomContact() const
 
 void KadRoutingTable::getContactsforPathRefresh(std::list<OverlayKey>& result) const
 {
-	// do not consider contacts younger than R2Kademlia::PathInfoAgeThreshold
+	// do not consider contacts with a path refreshed more recent than R2Kademlia::PathRefreshThreshold
 
 	for (auto& bucket : buckets)
 	{
@@ -768,7 +768,7 @@ void KadRoutingTable::getContactsforPathRefresh(std::list<OverlayKey>& result) c
 				if ( kadcontactp!= nullptr
 				     and kadcontactp->isValid()
 				     and kadcontactp->getPathLength() > nodeVicinityGraph::vicinityDiscoveryRadius
-				     and kadcontactp->getAge() > R2Kademlia::PathRefreshThreshold ) {
+				     and kadcontactp->getPathAge() > R2Kademlia::PathRefreshThreshold ) {
 					result.push_back(kadcontactp->getKey());
 				}
 			}
