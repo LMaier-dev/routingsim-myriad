@@ -75,8 +75,12 @@ bool R2Kademlia::handlePathSetupResponse(KadPacket_p answer, RPCState& rpcState)
 		if (contactp->getStateSeqNo() < pathSetupRsp->getContactSeqNo() or
 		    (contactp->getStateSeqNo() == pathSetupRsp->getContactSeqNo() and
 		     tmpcontact.getLastSeen() < pathSetupRsp->getContactLastSeen())) {
+                    if (contactp->isValid() and contactp->getPathLength() < tmpcontact.getPathLength()){
+                        // do nothing we have a valid shorter path in our contact
+                    } else {
 			addthispath= true;
                         contactp->updateLastPathRefresh();
+                    }
 		}
 		else {
 			// Last Seen of current contact is more recent
