@@ -108,7 +108,7 @@ void R2Kademlia::onInitialize() {
 	if (exploreInterval > 0)
 		addRandomizedTimer(exploreInterval*1.5, exploreInterval, std::bind(&R2Kademlia::doSendExplorePathPacket, this, ph::_1));
 
-	// resend Hello packets to keep state sequence numbers in synch
+	// resend Hello packets to keep state sequence numbers in synch, note that is includes an exonential backoff (until 30s max)
 	addRandomizedTimer(SimTime(225,SIMTIME_MS), SimTime(250,SIMTIME_MS), std::bind(&R2Kademlia::doSendHello, this, ph::_1));
 
 	if (usePathIDs) {
@@ -439,10 +439,16 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 		neighborTable.addNeighbor(packet->getSourceId(), packet->getSource());
 
 		// add node to vicinity
-		vicinity.addNode(myOverlayKey, // parent
-				 packet->getSource(), // new child
-				 packet->getStateSeqNo(),
-				 1);
+		bool node_added= vicinity.addNode(myOverlayKey, // parent
+						  packet->getSource(), // new child
+						  packet->getStateSeqNo(),
+						  1);
+
+		KadContact neighborcontact(packet->getSource(), kad_path());
+		if (usePathIDs and node_added) {
+			fwdTablePathID.addPrecalcEntry(&neighborcontact);
+			vicinityPathIDCompletion(neighborcontact);
+		}
 
 		// use this deterministic strategy to save redundant PNDiscReq/Rsp exchanges
 		// do not use full ID, otherwise large IDs will always "loose", use mod 2^32 comparison
@@ -451,7 +457,6 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 		uint32_t otherModID(packet->getSource().getBitRange(0,32));
 		uint32_t delta((uint32_t) (otherModID-ownModID));
 
-		KadContact neighborcontact(packet->getSource(), kad_path());
 		auto contact_p(&neighborcontact);
 		if ( delta < 0x80000000UL or
 		     ((delta==0 or delta==0x80000000UL) and myOverlayKey < packet->getSourceId())
@@ -960,10 +965,9 @@ void R2Kademlia::sendGetPhysicalNeighbors(KadContact_p contact)
 	req->setContactsOnly(false);
 	req->setOverlayNeighbors(false);
 
-	// we rate limit the requests but only after 2s of simulated time to get better initial stretch values
 	simtime_t delay(0);
 
-	static const simtime_t mindelay(SimTime(10000,SIMTIME_US));
+	static const simtime_t mindelay(SimTime(20000,SIMTIME_US));
 	if  ( simTime() < LastPNQueryRouteReq ) {
 		// last was scheduled in future, schedule it mindelay behind that
 		delay= LastPNQueryRouteReq-simTime()+mindelay;
@@ -1007,7 +1011,7 @@ void R2Kademlia::sendGetOverlayNeighbors(KadContact_p contact)
 
 	// we rate limit the requests
 	simtime_t delay(0);
-	static const simtime_t mindelay(SimTime(20000,SIMTIME_US));
+	static const simtime_t mindelay(SimTime(40000,SIMTIME_US));
 	if  ( simTime() < LastONQueryRouteReq ) {
 		// last was scheduled in future, schedule it mindelay behind that
 		delay= LastONQueryRouteReq-simTime()+mindelay;
