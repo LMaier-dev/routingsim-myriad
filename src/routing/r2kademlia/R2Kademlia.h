@@ -423,7 +423,7 @@ private:
 	/// sends a "get overlay neighbors" call to the contact
 	void sendGetOverlayNeighbors(KadContact_p contact);
 	/// sends a PNDisc Request to the Physical Neighbor
-	void sendDiscoveryReq(KadContact_p contact);
+	simtime_t sendDiscoveryReq(KadContact_p contact);
 	/// sends a find node call to find a path this node
 	void sendFindNode(const OverlayKey& key, bool exact=false, bool track=false);
 	/// sends a find node call via viacontactkey to find a path to this node

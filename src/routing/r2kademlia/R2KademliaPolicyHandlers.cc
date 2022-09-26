@@ -266,10 +266,11 @@ void R2Kademlia::onImprovement(const KadContact& contact) {
 	}
 
 	// TODO: wait grace period
-	if ( neighborTable.isNeighbor(contact.getKey()) )
+	if ( neighborTable.isNeighbor(contact.getKey()) and contact.getPath().empty())
 	{ // this is true after re-enabling a physical neighbor
-		if (not contact.isPhysicalNeighbor())
+		if (not contact.isPhysicalNeighbor()) {
 			EV_WARN << "reenabling physical contact is not flagged as being neighbor" << endl;
+		}
 
 		scheduleUpdate(contact, KAD_Announce);
 	}
