@@ -65,7 +65,7 @@ class R2Kademlia : public RPCProtocol, public KadPolicy, public StatisticSample
 {
 private:
 
-	~R2Kademlia() { updateQueue.clear(); pathSetupQueue.clear(); stopAllTimers(); }
+	~R2Kademlia() { updateQueue.clear(); pathSetupQueue.clear(); }
 	/// the overlay key of this node
 	OverlayKey myOverlayKey;
 
@@ -445,7 +445,7 @@ private:
 	virtual void sampleStatistics (Statistics &stats) override;
 public:
         R2Kademlia() : routingTable(neighborTable), cmp(myOverlayKey), urgentRediscoverQueue(cmp), regularRediscoverQueue(cmp), slowRediscoverQueue(cmp) {};
-	virtual void finish() override { fwdTablePathID.garbageCollect(); RPCProtocol::finish(); }
+	virtual void finish() override { fwdTablePathID.garbageCollect(); RPCProtocol::finish(); stopAllTimers(); }
 	/** @name policy functions called by routing table */
 	//@{
 	/** called when last contact is removed from a bucket*/

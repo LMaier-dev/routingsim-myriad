@@ -1705,9 +1705,7 @@ void R2Kademlia::recordRoutingTable() {
 NodePkt_p R2Kademlia::makeHelloPacket()
 {
 	KadHello_p hello = std::make_unique<KadHello>();
-	OverlayKey k(0);
 	hello->setName("KadHello");
-	hello->appendHop(k);
 	hello->setSource(myOverlayKey);
 	hello->setHopLimit(hopLimit);
 	hello->setSourceId(node().getNodeId());
