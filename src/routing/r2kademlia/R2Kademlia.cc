@@ -460,12 +460,11 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 		uint32_t otherModID(packet->getSource().getBitRange(0,32));
 		uint32_t delta((uint32_t) (otherModID-ownModID));
 
-		auto contact_p(&neighborcontact);
-		if ( (delta < 0x80000000UL and delta != 0) or
+		if ( (delta < 0x80000000UL and delta != 0 ) or
 		     ((delta == 0 or delta == 0x80000000UL) and myOverlayKey < packet->getSourceId())
 			) {
 			// Initiate PNDiscReq
-			schedulePNDiscReq(contact_p->getKey(), stateseqno_t::invalidSeqNo);
+			schedulePNDiscReq(packet->getSource(), stateseqno_t::invalidSeqNo);
 		}
 	}
 
