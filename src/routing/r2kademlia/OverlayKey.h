@@ -36,6 +36,8 @@
 class BinaryValue;
 class OverlayKeyBit;
 
+using namespace omnetpp;
+
 /**
  * replacement function for mpn_random() using omnet's rng
  */
@@ -492,27 +494,12 @@ public:
 	static OverlayKey getMax();
 
 	/**
-	 * Returns a key with the SHA1 cryptographic hash of a
-	 * BinaryValue.
-	 *
-	 * @param value A BinaryValue object.
-	 * @return SHA1 of value
-	 */
-	static OverlayKey sha1(const BinaryValue& value);
-
-	/**
 	 * Returns a key 2^exponent.
 	 *
 	 * @param exponent The exponent.
 	 * @return Key=2^exponent.
 	 */
 	static OverlayKey pow2(uint32_t exponent);
-
-	/**
-	 * A pseudo regression test method.
-	 * Outputs report to standard output.
-	 */
-	static void test();
 
 	/**
 	 * Returns the bit length of the commen prefix of the two keys.
@@ -623,7 +610,7 @@ OverlayKey::OverlayKey()
 }
 
 
-// create a key out of an normal integer
+// create a key out of a normal integer
 inline
 OverlayKey::OverlayKey(uint32_t num)
 {

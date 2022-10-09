@@ -50,8 +50,6 @@ mp_limb_t OverlayKey::GMP_MSB_MASK = (OverlayKey::keyLength % GMP_LIMB_BITS)
 const OverlayKey OverlayKey::UNSPECIFIED_KEY;
 const OverlayKey OverlayKey::ZERO((uint32_t)0);
 const OverlayKey OverlayKey::ONE((uint32_t)1);
-
-
 // hex crap
 const char* HEX = "0123456789abcdef";
 
@@ -393,7 +391,8 @@ OverlayKey OverlayKey::randomPrefix(uint32_t pos, cRNG* rng) const
 uint32_t OverlayKey::sharedPrefixLength(const OverlayKey& compKey,
 				        uint32_t bitsPerDigit) const
 {
-	if (compareTo(compKey) == 0) return keyLength;
+	if (compareTo(compKey) == 0)
+		return keyLength / bitsPerDigit;
 
 	uint32_t length = 0;
 	int i;
