@@ -18,28 +18,28 @@
 
 /**
  * Taken from OverSim. Adapted by Jakob Thomas
- * @file OverlayKey.cc
+ * @file OverlayKeyGMP.cc
  * @author Sebastian Mies, Ingmar Baumgart
  */
 
 #include <cassert>
 #include <omnetpp.h>
-#include "OverlayKey.h"
+#include "OverlayKeyGMP.h"
 
-uint32_t OverlayKey::keyLength = MAX_KEYLENGTH;
+uint32_t OverlayKeyGMP::keyLength = MAX_KEYLENGTH;
 
 // TODO: replace both commands below with simpler macros without conditionals
 
 //#define ROUND_NEXT(n, div) (((n) + (div) - 1) / (div))
-//uint OverlayKey::aSize = ROUND_NEXT(OverlayKey::keyLength, 8*sizeof(mp_limb_t));
+//uint OverlayKeyGMP::aSize = ROUND_NEXT(OverlayKeyGMP::keyLength, 8*sizeof(mp_limb_t));
 
 // aSize is the number of 8*sizeof(mp_limb_t)-bit words, e.g., 2 64 bit words for a 112 bit identifier
-uint32_t OverlayKey::aSize = OverlayKey::keyLength / (8*sizeof(mp_limb_t)) +
-	(OverlayKey::keyLength % (8*sizeof(mp_limb_t))
+uint32_t OverlayKeyGMP::aSize = OverlayKeyGMP::keyLength / (8*sizeof(mp_limb_t)) +
+	(OverlayKeyGMP::keyLength % (8*sizeof(mp_limb_t))
 	 != 0 ? 1 : 0);
 
-mp_limb_t OverlayKey::GMP_MSB_MASK = (OverlayKey::keyLength % GMP_LIMB_BITS)
-	!= 0 ? (((mp_limb_t)1 << (OverlayKey::keyLength % GMP_LIMB_BITS))-1)
+mp_limb_t OverlayKeyGMP::GMP_MSB_MASK = (OverlayKeyGMP::keyLength % GMP_LIMB_BITS)
+	!= 0 ? (((mp_limb_t)1 << (OverlayKeyGMP::keyLength % GMP_LIMB_BITS))-1)
 	: (mp_limb_t) - 1;
 
 //--------------------------------------------------------------------
@@ -47,9 +47,9 @@ mp_limb_t OverlayKey::GMP_MSB_MASK = (OverlayKey::keyLength % GMP_LIMB_BITS)
 //--------------------------------------------------------------------
 
 // predefined keys
-const OverlayKey OverlayKey::UNSPECIFIED_KEY;
-const OverlayKey OverlayKey::ZERO((uint32_t)0);
-const OverlayKey OverlayKey::ONE((uint32_t)1);
+const OverlayKeyGMP OverlayKeyGMP::UNSPECIFIED_KEY;
+const OverlayKeyGMP OverlayKeyGMP::ZERO((uint32_t)0);
+const OverlayKeyGMP OverlayKeyGMP::ONE((uint32_t)1);
 // hex crap
 const char* HEX = "0123456789abcdef";
 
@@ -59,7 +59,7 @@ const char* HEX = "0123456789abcdef";
 
 
 // create a key out of a buffer
-OverlayKey::OverlayKey(const unsigned char* buf, uint32_t size)
+OverlayKeyGMP::OverlayKeyGMP(const unsigned char* buf, uint32_t size)
 {
 	int trimSize, offset;
 	clear();
@@ -70,17 +70,17 @@ OverlayKey::OverlayKey(const unsigned char* buf, uint32_t size)
 }
 
 // create a key out of an string with the given base
-OverlayKey::OverlayKey(const std::string& str, uint32_t base)
+OverlayKeyGMP::OverlayKeyGMP(const std::string& str, uint32_t base)
 {
 	if ((base < 2) || (base > 16)) {
-		throw cRuntimeError("OverlayKey::OverlayKey(): Invalid base!");
+		throw cRuntimeError("OverlayKeyGMP::OverlayKeyGMP(): Invalid base!");
 	}
 
 	std::string s(str);
 	clear();
 
 	if(s == "<unspec>") { // for deserializing
-		(*this) = OverlayKey::UNSPECIFIED_KEY;
+		(*this) = OverlayKeyGMP::UNSPECIFIED_KEY;
 		return;
 	}
 
@@ -92,7 +92,7 @@ OverlayKey::OverlayKey(const std::string& str, uint32_t base)
 		} else if ((s[i] >= 'A') && (s[i] <= 'F')) {
 			s[i] -= ('A' - 10);
 		} else {
-			throw cRuntimeError("OverlayKey::OverlayKey(): "
+			throw cRuntimeError("OverlayKeyGMP::OverlayKeyGMP(): "
 			                    "Invalid character in string!");
 		}
 	}
@@ -105,20 +105,20 @@ OverlayKey::OverlayKey(const std::string& str, uint32_t base)
 
 
 // default destructor
-// OverlayKey::~OverlayKey() {
+// OverlayKeyGMP::~OverlayKeyGMP() {
 // 	EV_STATICCONTEXT;
-// 	EV_TRACE << "OverlayKey: " << shortStr() << " destructor called, addr:" << static_cast<void*>(this) << endl;
+// 	EV_TRACE << "OverlayKeyGMP: " << shortStr() << " destructor called, addr:" << static_cast<void*>(this) << endl;
 // }
 
 //--------------------------------------------------------------------
 // string representations & node key attributes
 //--------------------------------------------------------------------
 
-void OverlayKey::setKeyLength(uint32_t length)
+void OverlayKeyGMP::setKeyLength(uint32_t length)
 {
-	if ((length < 1) or (length > OverlayKey::keyLength) or (length > MAX_KEYLENGTH)) {
+	if ((length < 1) or (length > OverlayKeyGMP::keyLength) or (length > MAX_KEYLENGTH)) {
 		throw cRuntimeError(
-				"OverlayKey::setKeyLength(): length must be <= %i "
+				"OverlayKeyGMP::setKeyLength(): length must be <= %i "
 				"and setKeyLength() must not be called twice "
 				"with different length!", MAX_KEYLENGTH);
 	}
@@ -135,11 +135,11 @@ void OverlayKey::setKeyLength(uint32_t length)
 	// EV_STATICCONTEXT;
 	// EV_TRACE << "keylength: " << keyLength << " sizeof(mp_limb_t): " << sizeof(mp_limb_t)
 	// 	 << " aSize: " << aSize << " sizeof(key): " << sizeof(key)
-	// 	 << " MSB_MASK: " << std::hex << OverlayKey::GMP_MSB_MASK << std::dec << endl;
+	// 	 << " MSB_MASK: " << std::hex << OverlayKeyGMP::GMP_MSB_MASK << std::dec << endl;
 }
 
 
-bool OverlayKey::isValid(std::string str)
+bool OverlayKeyGMP::isValid(std::string str)
 {
 	std::string s(str);
 
@@ -160,10 +160,10 @@ bool OverlayKey::isValid(std::string str)
 }
 
 
-std::string OverlayKey::toString(uint32_t base) const
+std::string OverlayKeyGMP::toString(uint32_t base) const
 {
 	if ((base != 2) && (base != 16)) {
-		throw cRuntimeError("OverlayKey::OverlayKey(): Invalid base!");
+		throw cRuntimeError("OverlayKeyGMP::OverlayKeyGMP(): Invalid base!");
 	}
 
 	if (isUnspec)
@@ -186,7 +186,7 @@ std::string OverlayKey::toString(uint32_t base) const
 			temp[k] = 0;
 			return std::string((const char*)temp);
 		} else {
-			throw cRuntimeError("OverlayKey::OverlayKey(): Invalid base!");
+			throw cRuntimeError("OverlayKeyGMP::OverlayKeyGMP(): Invalid base!");
 		}
 	}
 }
@@ -196,9 +196,9 @@ std::string OverlayKey::toString(uint32_t base) const
 //--------------------------------------------------------------------
 
 // bitwise shift right
-OverlayKey OverlayKey::operator>>(uint32_t num) const
+OverlayKeyGMP OverlayKeyGMP::operator>>(uint32_t num) const
 {
-	OverlayKey result = ZERO;
+	OverlayKeyGMP result = ZERO;
 	int i = num/GMP_LIMB_BITS;
 	num %= GMP_LIMB_BITS;
 
@@ -215,9 +215,9 @@ OverlayKey OverlayKey::operator>>(uint32_t num) const
 }
 
 // bitwise shift left
-OverlayKey OverlayKey::operator<<(uint32_t num) const
+OverlayKeyGMP OverlayKeyGMP::operator<<(uint32_t num) const
 {
-	OverlayKey result = ZERO;
+	OverlayKeyGMP result = ZERO;
 	int i = num/GMP_LIMB_BITS;
 	num %= GMP_LIMB_BITS;
 
@@ -235,10 +235,10 @@ OverlayKey OverlayKey::operator<<(uint32_t num) const
 }
 
 
-OverlayKey& OverlayKey::setBit(uint32_t pos, bool value)
+OverlayKeyGMP& OverlayKeyGMP::setBit(uint32_t pos, bool value)
 {
 	if (pos >= keyLength) {
-		throw cRuntimeError("OverlayKey::setBitAt(): "
+		throw cRuntimeError("OverlayKeyGMP::setBitAt(): "
 		                    "pos >= keyLength!");
 	}
 
@@ -260,17 +260,17 @@ OverlayKey& OverlayKey::setBit(uint32_t pos, bool value)
 //--------------------------------------------------------------------
 
 // returns the digit at bitposition bitpos
-uint32_t OverlayKey::getBitRange(uint32_t bitpos, uint32_t bits_per_digit) const
+uint32_t OverlayKeyGMP::getBitRange(uint32_t bitpos, uint32_t bits_per_digit) const
 {
 	int i = bitpos / GMP_LIMB_BITS,      // word index of starting bit
 	    f = bitpos % GMP_LIMB_BITS,      // position of starting bit  
 	    f2 = f + bits_per_digit - GMP_LIMB_BITS; // how many bits to take from next index
 
-	if ((bitpos + bits_per_digit > OverlayKey::keyLength) || (bits_per_digit > 32)) {
-		throw cRuntimeError("OverlayKey::get:  Invalid range");
+	if ((bitpos + bits_per_digit > OverlayKeyGMP::keyLength) || (bits_per_digit > 32)) {
+		throw cRuntimeError("OverlayKeyGMP::get:  Invalid range");
 	}
 	if (GMP_LIMB_BITS < 32) {
-		throw cRuntimeError("OverlayKey::get:  GMP_LIMB_BITS too small!");
+		throw cRuntimeError("OverlayKeyGMP::get:  GMP_LIMB_BITS too small!");
 	}
 
 	return ((key[i] >> f) |                                     // get the bits of key[i]
@@ -279,7 +279,7 @@ uint32_t OverlayKey::getBitRange(uint32_t bitpos, uint32_t bits_per_digit) const
 }
 
 
-double OverlayKey::toDouble() const
+double OverlayKeyGMP::toDouble() const
 {
 	double result = 0;
 	uint8_t range = 32, length = getLength();
@@ -293,7 +293,7 @@ double OverlayKey::toDouble() const
 
 
 // returns a simple hash of the key
-std::size_t OverlayKey::hash() const noexcept
+std::size_t OverlayKeyGMP::hash() const noexcept
 {
 /* By Paul Hsieh (C) 2004, 2005.  Covered under the LGPL 2.1 license.
    http://www.azillionmonkeys.com/qed/hash.html */
@@ -301,7 +301,7 @@ std::size_t OverlayKey::hash() const noexcept
     #define get16bits(d) (*((const uint16_t *) (d)))
 
     const char * data = (const char *)key;
-    int len = OverlayKey::keyLength / 8;
+    int len = OverlayKeyGMP::keyLength / 8;
 
     std::size_t hash = len, tmp;
     int rem;
@@ -350,36 +350,36 @@ std::size_t OverlayKey::hash() const noexcept
 
 
 // fill suffix with random bits
-OverlayKey OverlayKey::randomSuffix(uint32_t pos, cRNG* rng) const
+OverlayKeyGMP OverlayKeyGMP::randomSuffix(uint32_t pos, cRNG* rng) const
 {
-	OverlayKey newKey = *this;
+	OverlayKeyGMP newKey = *this;
 	int i = pos/GMP_LIMB_BITS, j = pos%GMP_LIMB_BITS;
 	mp_limb_t m = ((mp_limb_t)1 << j)-1;
 	mp_limb_t rnd;
 
-	omnet_random(&rnd, 1, rng);
+	omnet_random_gmp(&rnd, 1, rng);
 	newKey.key[i] &= ~m;
 	newKey.key[i] |= (rnd&m);
-	omnet_random(newKey.key,i, rng);
+	omnet_random_gmp(newKey.key,i, rng);
 	newKey.trim();
 
 	return newKey;
 }
 
 // fill prefix with random bits
-OverlayKey OverlayKey::randomPrefix(uint32_t pos, cRNG* rng) const
+OverlayKeyGMP OverlayKeyGMP::randomPrefix(uint32_t pos, cRNG* rng) const
 {
-	OverlayKey newKey = *this;
+	OverlayKeyGMP newKey = *this;
 	int i = pos/GMP_LIMB_BITS, j = pos%GMP_LIMB_BITS;
 	mp_limb_t m = ((mp_limb_t)1 << j)-1;
 	mp_limb_t rnd;
 
-	omnet_random(&rnd,1, rng);
+	omnet_random_gmp(&rnd,1, rng);
 
 	newKey.key[i] &= m;
 	newKey.key[i] |= (rnd&~m);
 	for (int k=aSize-1; k!=i; k--) {
-		omnet_random(&newKey.key[k], 1, rng);
+		omnet_random_gmp(&newKey.key[k], 1, rng);
 	}
 	newKey.trim();
 
@@ -388,7 +388,7 @@ OverlayKey OverlayKey::randomPrefix(uint32_t pos, cRNG* rng) const
 
 
 // calculate shared prefix length (in number of equal digits)
-uint32_t OverlayKey::sharedPrefixLength(const OverlayKey& compKey,
+uint32_t OverlayKeyGMP::sharedPrefixLength(const OverlayKeyGMP& compKey,
 				        uint32_t bitsPerDigit) const
 {
 	if (compareTo(compKey) == 0)
@@ -421,7 +421,7 @@ uint32_t OverlayKey::sharedPrefixLength(const OverlayKey& compKey,
 }
 
 // calculate log of base 2
-int OverlayKey::log_2() const
+int OverlayKeyGMP::log_2() const
 {
 	int16_t i = aSize-1;
 
@@ -446,8 +446,8 @@ int OverlayKey::log_2() const
 }
 
 // returns true, if this key is element of the interval (keyA, keyB)
-bool OverlayKey::isBetween(const OverlayKey& keyA,
-				           const OverlayKey& keyB) const
+bool OverlayKeyGMP::isBetween(const OverlayKeyGMP& keyA,
+				           const OverlayKeyGMP& keyB) const
 {
 	if (isUnspec || keyA.isUnspec || keyB.isUnspec)
 		return false;
@@ -461,8 +461,8 @@ bool OverlayKey::isBetween(const OverlayKey& keyA,
 }
 
 // returns true, if this key is element of the interval (keyA, keyB]
-bool OverlayKey::isBetweenR(const OverlayKey& keyA,
-				            const OverlayKey& keyB) const
+bool OverlayKeyGMP::isBetweenR(const OverlayKeyGMP& keyA,
+				            const OverlayKeyGMP& keyB) const
 {
 	if (isUnspec || keyA.isUnspec || keyB.isUnspec)
 		return false;
@@ -476,8 +476,8 @@ bool OverlayKey::isBetweenR(const OverlayKey& keyA,
 }
 
 // returns true, if this key is element of the interval [keyA, keyB)
-bool OverlayKey::isBetweenL(const OverlayKey& keyA,
-				            const OverlayKey& keyB) const
+bool OverlayKeyGMP::isBetweenL(const OverlayKeyGMP& keyA,
+				            const OverlayKeyGMP& keyB) const
 {
 	if (isUnspec || keyA.isUnspec || keyB.isUnspec)
 		return false;
@@ -491,8 +491,8 @@ bool OverlayKey::isBetweenL(const OverlayKey& keyA,
 }
 
 // returns true, if this key is element of the interval [keyA, keyB]
-bool OverlayKey::isBetweenLR(const OverlayKey& keyA,
-				             const OverlayKey& keyB) const
+bool OverlayKeyGMP::isBetweenLR(const OverlayKeyGMP& keyA,
+				             const OverlayKeyGMP& keyB) const
 {
 	if (isUnspec || keyA.isUnspec || keyB.isUnspec)
 		return false;
@@ -511,16 +511,16 @@ bool OverlayKey::isBetweenLR(const OverlayKey& keyA,
 //----------------------------------------------------------------------
 
 // default console output
-std::ostream& operator<<(std::ostream& os, const OverlayKey& c)
+std::ostream& operator<<(std::ostream& os, const OverlayKeyGMP& c)
 {
 	os << c.toString(16);
 	return os;
 };
 
 // returns a key filled with bit 1
-OverlayKey OverlayKey::getMax()
+OverlayKeyGMP OverlayKeyGMP::getMax()
 {
-	OverlayKey newKey;
+	OverlayKeyGMP newKey;
 
 	for (uint32_t i=0; i<aSize; i++) {
 		newKey.key[i] = ~0;
@@ -532,11 +532,11 @@ OverlayKey OverlayKey::getMax()
 }
 
 // generate random number
-OverlayKey OverlayKey::random(cRNG* rng)
+OverlayKeyGMP OverlayKeyGMP::random(cRNG* rng)
 {
-	OverlayKey newKey = ZERO;
+	OverlayKeyGMP newKey = ZERO;
 
-	omnet_random(newKey.key,aSize, rng);
+	omnet_random_gmp(newKey.key,aSize, rng);
 
 	newKey.trim();
 
@@ -544,14 +544,14 @@ OverlayKey OverlayKey::random(cRNG* rng)
 }
 
 // generate a key=2**exponent
-OverlayKey OverlayKey::pow2( uint32_t exponent )
+OverlayKeyGMP OverlayKeyGMP::pow2( uint32_t exponent )
 {
 	if (exponent >= keyLength) {
-		throw cRuntimeError("OverlayKey::pow2(): "
+		throw cRuntimeError("OverlayKeyGMP::pow2(): "
 				                "exponent >= keyLength!");
 	}
 
-	OverlayKey newKey = ZERO;
+	OverlayKeyGMP newKey = ZERO;
 
 	newKey.key[exponent/GMP_LIMB_BITS] =
 		(mp_limb_t)1 << (exponent % GMP_LIMB_BITS);
