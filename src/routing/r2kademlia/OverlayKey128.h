@@ -90,6 +90,12 @@ public:
 	 */
 	OverlayKey( const OverlayKey& rhs );
 
+	/**
+	 * Move constructor.
+	 *
+	 * @param rhs The key to copy.
+	 */
+	OverlayKey( OverlayKey&& rhs );
 
 	/**
 	 * override dup() function from cObject base class
@@ -208,6 +214,14 @@ public:
 	OverlayKey& operator= ( const OverlayKey& rhs );
 
 	/**
+	 * move assignment OverlayKey of rhs to this->key
+	 *
+	 * @param rhs the OverlayKey with the defined key
+	 * @return this OverlayKey object
+	 */
+	OverlayKey& operator= ( OverlayKey&& rhs );
+
+        /**
 	 * substracts 1 from this->key
 	 *
 	 * @return this OverlayKey object
@@ -609,6 +623,14 @@ OverlayKey::OverlayKey(const OverlayKey& rhs) : cObject(rhs), isUnspec(rhs.isUns
 }
 
 
+// move constructor
+inline
+OverlayKey::OverlayKey(OverlayKey&& rhs) : cObject(rhs), isUnspec(rhs.isUnspec), key(rhs.key)
+{
+	rhs.isUnspec= true;
+	rhs.key= 0;
+}
+
 
 // returns the length in bits
 inline
@@ -639,6 +661,22 @@ OverlayKey& OverlayKey::operator=(const OverlayKey& rhs)
 	cObject::operator=(rhs);
 	isUnspec = rhs.isUnspec;
 	key= rhs.key;
+	return *this;
+}
+
+
+// move assignment operator
+inline
+OverlayKey& OverlayKey::operator=(OverlayKey&& rhs)
+{
+	if (this == &rhs) // exclude assignment to itself, mempcy doesn't work then
+		return *this;
+
+	cObject::operator=(std::move(rhs));
+	isUnspec= rhs.isUnspec;
+	key= rhs.key;
+	rhs.isUnspec= true;
+	rhs.key= 0;
 	return *this;
 }
 

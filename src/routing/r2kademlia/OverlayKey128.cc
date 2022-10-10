@@ -17,9 +17,9 @@
 //
 
 /**
- * Taken from OverSim. Adapted by Jakob Thomas
+ * Use OverlayKey from OverSim as starting point
  * @file OverlayKey128.cc
- * @author Sebastian Mies, Ingmar Baumgart
+ * @author Roland Bless, Jakob Thomas, Sebastian Mies, Ingmar Baumgart
  */
 
 #include <cassert>
