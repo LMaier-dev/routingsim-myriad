@@ -1057,8 +1057,8 @@ simtime_t R2Kademlia::sendDiscoveryReq(KadContact_p contact)
 		req->setPhyNeighborAgeArraySize(neighbors.size());
 		uint effective_size(0);
 		for (uint i = 0; i < neighbors.size(); i++) {
-			req->setPhyNeighbor(i, neighbors[i]);
 			if (auto contactp= routingTable.getContact(neighbors[i]); contactp != nullptr and contactp->getPathLength()==0) {
+				req->setPhyNeighbor(i, neighbors[i]);
 				req->setPhyNeighborSeqNo(effective_size, contactp->getStateSeqNo());
 				req->setPhyNeighborAge(effective_size, contactp->getAge());
 				effective_size++;
