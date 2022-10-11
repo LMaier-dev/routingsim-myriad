@@ -38,6 +38,8 @@ class OverlayKeyGMPBit;
 
 using namespace omnetpp;
 
+typedef class OverlayKeyGMP OverlayKey;
+
 /**
  * replacement function for mpn_random() using omnet's rng
  */
@@ -876,6 +878,5 @@ inline void omnet_random_gmp(mp_limb_t *r1p, mp_size_t r1n, cRNG* rng)
 	}
 }
 
-typedef OverlayKeyGMP OverlayKey;
 
 #endif

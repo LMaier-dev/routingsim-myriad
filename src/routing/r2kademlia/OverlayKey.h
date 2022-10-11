@@ -3,7 +3,7 @@
 
 #define USE_128_BITS 1
 
-#ifdef USE_128_BITS
+#if USE_128_BITS
 #include "OverlayKey128.h"
 #else
 #include "OverlayKeyGMP.h"
