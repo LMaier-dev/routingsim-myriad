@@ -98,7 +98,7 @@ protected:
 	//@}
 
 public:	
-        void finish();
+        virtual void finish() override;
 
 private:
 	/// maps nonces to rpc states, used to dispatch answers

@@ -25,6 +25,16 @@ void R2Kademlia::sendPathSetup(KadContact_p contact) {
 }
 
 
+// Path Teardown Request
+void R2Kademlia::sendPathTeardown(KadContact_p contact) {
+	EV_TRACE << "sending PathTeardownReq from " << myOverlayKey.shortStr() << " to " << contact->getKey().shortStr() << endl;
+	sentPathTeardown++;
+	std::unique_ptr<KadPathTeardownReq> packet(makePacket<KadPathTeardownReq>(contact, "KadPathTeardownReq"));
+
+	sendPacket(std::move(packet));
+}
+
+
 // this will never be called, because a node hops before should have answered the PathSetupReq due to precomputed PathIDs
 void R2Kademlia::handlePacket(std::unique_ptr<KadPathSetupReq> packet) {
 	EV_TRACE << "received PathSetupReq from " << packet->getSource().shortStr() << " to " << packet->getTarget().shortStr()
@@ -55,6 +65,7 @@ bool R2Kademlia::handlePathSetupResponse(KadPacket_p answer, RPCState& rpcState)
 
 	EV_TRACE << "Received PathSetupRsp, source path: " << setuppath << " to " << target.shortStr() << endl;
 
+	bool addthispath(false);
 	// meanwhile the contact may have been replaced or deleted etc.
 	// also the pathID may have been updated for the contact in the meantime
 	// otherwise actually install the path
@@ -64,21 +75,38 @@ bool R2Kademlia::handlePathSetupResponse(KadPacket_p answer, RPCState& rpcState)
 		if (contactp->getStateSeqNo() < pathSetupRsp->getContactSeqNo() or
 		    (contactp->getStateSeqNo() == pathSetupRsp->getContactSeqNo() and
 		     tmpcontact.getLastSeen() < pathSetupRsp->getContactLastSeen())) {
-			if (auto pidentry= fwdTablePathID.NIDPIDTable.find(tmpcontact.getKey()); pidentry != fwdTablePathID.NIDPIDTable.end()) {
-				// contact to PID mapping exists already, then call modEntry()
-				fwdTablePathID.modEntry(&tmpcontact, false);
+			addthispath= true;
+		}
+		else {
+			// Last Seen of current contact is more recent
+			// check whether path has changed, then we should better ignore this PathSetup as obsolete and ignore
+			if (contactp->getPathLength() != setuppath.size() or contactp->getPath() != setuppath) {
+				EV_WARN << "PathSetupRsp: ignoring, because Last Seen of current contact is more recent and path has changed meanwhile:" << tmpcontact.getLastSeen() << endl;
+				// TODO: initiate Teardown of the obsolete path
+
 			}
 			else {
-				if (auto incomingPID= fwdTablePathID.addEntry(&tmpcontact, false, false); incomingPID != PathID::UndefinedPathID) {
-					fwdTablePathID.setNIDtoPIDmapping(tmpcontact.getKey(),incomingPID);
-				}
+				addthispath= true;
 			}
 		}
-		else
-			EV_WARN << "PathSetupRsp: ignoring, because Last Seen of current contact is more recent:" << tmpcontact.getLastSeen() << endl;
 	}
-	else
+	else {
 		EV_TRACE << "PathSetupRsp: ignoring, because contact " << tmpcontact.getKey().shortStr() << " does not exist anymore" << endl;
+		// TODO: initiate Teardown of the obsolete path? or has this been triggered already by contact replacement/removal?
+	}
+
+	if (addthispath) {
+		if (auto pidentry= fwdTablePathID.NIDPIDTable.find(tmpcontact.getKey()); pidentry != fwdTablePathID.NIDPIDTable.end()) {
+			// contact to PID mapping exists already, so call modEntry()
+			fwdTablePathID.modEntry(&tmpcontact, false);
+		}
+		else {
+			// add new PID and mapping
+			if (auto [added, incomingPID]= fwdTablePathID.addLocalEntry(&tmpcontact, false); incomingPID != PathID::UndefinedPathID) {
+				fwdTablePathID.setNIDtoPIDmapping(tmpcontact.getKey(),incomingPID);
+			}
+		}
+	}
 
 	return true;
 }
@@ -96,15 +124,19 @@ void R2Kademlia::schedulePathSetup(const OverlayKey& contactkey)
 		return;
 	}
 
-	EV_TRACE << "PathSetup scheduled for contact " << contactkey.shortStr() << endl;
-
 	// do not insert the same contact key twice
-	if (std::find(pathSetupQueue.begin(), pathSetupQueue.end(), contactkey) == pathSetupQueue.end())
+	if (std::find(pathSetupQueue.begin(), pathSetupQueue.end(), contactkey) == pathSetupQueue.end()) {
+		EV_TRACE << "PathSetup scheduled for contact " << contactkey.shortStr() << endl;
+
 		pathSetupQueue.push_back(contactkey);
+	}
+	else
+		EV_TRACE << "PathSetup already scheduled for contact " << contactkey.shortStr() << endl;
+
 
 	if (not pathSetupScheduled)
 	{
-		addTimer(pathSetupWaitTime, 0, std::bind(&R2Kademlia::sendScheduledPathSetups, this));
+		addRandomizedTimer(pathSetupWaitTime, 0, std::bind(&R2Kademlia::sendScheduledPathSetups, this));
 		pathSetupScheduled= true;
 	}
 }
@@ -136,10 +168,11 @@ void R2Kademlia::sendScheduledPathSetups() {
 
 
 void R2Kademlia::handlePacket(std::unique_ptr<KadPathTeardownReq> packet) {
-	EV_TRACE << "received PathTeardownReq from " << packet->getSource().shortStr() << " to " << packet->getTarget().shortStr()
-		 << " sending back answer" << endl;
+	EV_TRACE << "received PathTeardownReq from " << packet->getSource().shortStr() << " to " << packet->getTarget().shortStr() << endl;
+
 	receivedPathTeardown++;
-	sendPacket(makeAnswer<KadPathTeardownRsp>(*packet));
+	// no need to send back an answer
+	//sendPacket(makeAnswer<KadPathTeardownRsp>(*packet));
 }
 
 

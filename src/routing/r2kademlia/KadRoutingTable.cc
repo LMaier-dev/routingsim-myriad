@@ -206,7 +206,7 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 	}
 
 	// update path if:
-	// 1) (always) when sequence number is actually higher
+	// 1) when sequence number is higher (except when contact is valid and new path is longer, then we recheck current path)
 	// 2) contact is invalid: only if we have newer information (higher sequence number)
 	//                        or the same seq# (the path may have changed though and reenabling the contact is important)
 	//                        however, path information must be more recent if same seq#
@@ -271,10 +271,19 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 		}
 
 		// if contact is within discovery radius, ask again for its neighbors since something has changed
-		if ( not contact->isPhysicalNeighbor() and (contact->getPathLength()+1 < discoveryRadius or path.size()+1 < discoveryRadius) ) {
+		if ( not contact->isPhysicalNeighbor() and (contact->getPathLength()+1 < nodeVicinityGraph::vicinityDiscoveryRadius or path.size()+1 < nodeVicinityGraph::vicinityDiscoveryRadius) ) {
 			// we "defer" that until new path has been set (see below)
 			// otherwise addNode() in sendGetPhysicalNeighbors will not update correctly
 			recheckPhysicalNeighbors= true;
+		}
+
+		// if contact is valid and path is longer, we should recheck the current path
+		// because it might be bad timing and we temporarily accept a worse choice due to
+		// the higher sequence number. Therefore, we simply trigger a path recheck for
+		// the current shorter path. The answer will overwrite the worse choice again
+		if ( not contact->isInvalid() and not shorter_path and not equivalent_path ) {
+			policy->onPathCheck(*contact);
+			return false; // returning from here would reject the longer route
 		}
 	} // end else newer_seqno
 
@@ -370,6 +379,9 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 
 		// try to improve other paths with newly improved contact path
 		updatePaths(*contact);
+	}
+	else {
+		policy->onPathChange(*contact);
 	}
 
 	return true;
@@ -743,6 +755,28 @@ KadContact_p KadRoutingTable::getRandomContact() const
 }
 
 
+
+void KadRoutingTable::getContactsforPathRefresh(std::list<OverlayKey>& result) const
+{
+	// do not consider contacts younger than R2Kademlia::PathInfoAgeThreshold
+
+	for (auto& bucket : buckets)
+	{
+		for (auto it = bucket.contacts.cbegin(); it != bucket.contacts.cend(); it++) {
+			if (*it != nullptr) {
+				auto kadcontactp(it->get());
+				if ( kadcontactp!= nullptr
+				     and kadcontactp->isValid()
+				     and kadcontactp->getPathLength() > nodeVicinityGraph::vicinityDiscoveryRadius
+				     and kadcontactp->getAge() > R2Kademlia::PathRefreshThreshold ) {
+					result.push_back(kadcontactp->getKey());
+				}
+			}
+		}
+	} // end for iterate over all buckets
+}
+
+
 // returns the two oldest entries from each bucket, deepest contacts first and oldest before newer (per bucket)
 // only non PN contacts will be returned
 // However, contacts that have recent information <1s will not be selected
@@ -754,20 +788,23 @@ void KadRoutingTable::getOldestValidContacts(std::list<OverlayKey>& result) cons
 	{
 		KadContact_p oldest(nullptr);
 		KadContact_p secondoldest(nullptr);
-		for (auto it = bucket.contacts.begin(); it != bucket.contacts.end(); it++) {
-			if ( *it != nullptr and it->get()!= nullptr and it->get()->getAge() > R2Kademlia::PathInfoAgeThreshold ) {
-				if (oldest != nullptr) {
-					// older entry? then replace oldest
-					if (oldest->getAge() < it->get()->getAge()) {
-						secondoldest= oldest; oldest= it->get();
+		for (auto it = bucket.contacts.cbegin(); it != bucket.contacts.cend(); it++) {
+			if (*it != nullptr) {
+				auto kadcontactp(it->get());
+				if ( kadcontactp != nullptr and kadcontactp->getAge() > R2Kademlia::PathInfoAgeThreshold ) {
+					if (oldest != nullptr) {
+						// older entry? then replace oldest
+						if (oldest->getAge() < kadcontactp->getAge()) {
+							secondoldest= oldest; oldest= kadcontactp;
+						}
+						else if (secondoldest != nullptr and secondoldest->getAge() < kadcontactp->getAge()) {
+							// replace second oldest
+							secondoldest= kadcontactp;
+						}
 					}
-					else if (secondoldest != nullptr and secondoldest->getAge() < it->get()->getAge()) {
-						// replace second oldest
-						secondoldest= it->get();
+					else { // initialize
+						oldest= kadcontactp;
 					}
-				}
-				else { // initialize
-					oldest= it->get();
 				}
 			}
 		}
@@ -831,11 +868,19 @@ void KadRoutingTable::updatePaths(const KadContact& improvedContact)
 						for (auto fwdpathit= path.begin() + (path.rend() - revpathit); fwdpathit != path.end(); fwdpathit++) {
 							newpath.push_back(*fwdpathit);
 						}
+
+						bool pathimproved(newpath != contact->getPath() and newpath.size() < contact->getPath().size());
 						// set new path (must be more current than old one)
 						// note: this will set the contact to be valid
 						contact->updatePath( myKey, newpath );
-						// call onImprovement(contact) also for updating PID
-						policy->onImprovement(*contact);
+						if (pathimproved) {
+							// call onImprovement(contact) also for updating PID
+							policy->onImprovement(*contact);
+						}
+						else {
+							// update the PID
+							policy->onPathChange(*contact);
+						}
 						found=true; // break the loop
 					}
 				} // end for: iterating backwards over path

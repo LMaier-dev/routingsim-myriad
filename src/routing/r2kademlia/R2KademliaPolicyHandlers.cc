@@ -15,9 +15,6 @@
 #include "R2Kademlia.h"
 
 namespace routingsim {
-// for std::bind with callback functions
-namespace ph = std::placeholders;
-
 
 // -------------- kad policy -------------
 
@@ -109,7 +106,7 @@ void R2Kademlia::onErrorPacket(KadError& error) {
 		break;
 
 		case KAD_PathIDUnknown:
-		{ // KAD_PathIDUnknown: we should try to resetup the path
+		{ // KAD_PathIDUnknown: we should try to setup the path
 			auto affectedContact= routingTable.getContact(original->getTarget());
 			if (affectedContact and affectedContact->isValid() and affectedContact->getPathLength() > nodeVicinityGraph::vicinityDiscoveryRadius)
 			{
@@ -137,10 +134,16 @@ void R2Kademlia::onContactRemoval(KadContact_p contact)
 	if (contact == nullptr)
 		return;
 
-	// delete from Forwarding table PID
+	// delete from Forwarding table PID (not for vicinity nodes)
 	// TODO: this can be scheduled for happening later
-	if (usePathIDs)
+	if (usePathIDs and contact->getPathLength() >= nodeVicinityGraph::vicinityDiscoveryRadius)
+	{
+		// check for pending/scheduled PathSetup first
+		if (std::find(pathSetupQueue.cbegin(),pathSetupQueue.cend(),contact->getKey()) == pathSetupQueue.cend())
+			sendPathTeardown(contact);
+
 		fwdTablePathID.delEntry(contact);
+	}
 
 	// TODO: the following is probably not useful
 	// (node may still be present in vicinity, but was evicted from bucket)
@@ -150,7 +153,7 @@ void R2Kademlia::onContactRemoval(KadContact_p contact)
 }
 
 
-// this is called after invalidation of the contact
+// this is called after invalidation of the contact, i.e., path is known to be broken
 void R2Kademlia::onContactInvalidation(KadContact_p contact)
 {
 	if (contact == nullptr)
@@ -185,12 +188,12 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 	// those contacts about their PNs which is even one hop further away
 	if (contact->getPathLength() > 0)
 	{
-		if (contact->getPathLength()+1 < nodeVicinityGraph::vicinityDiscoveryRadius) {
+		if (contact->getPathLength()+1 < discoveryRadius) {
 			// sends a QueryRouteReq requesting their 1 hop neighborhood
-			// adds contact to vicinity
+			// sendGetPhysicalNeighbors() adds contact to vicinity to keep track of already queried nodes in vicinity
 			sendGetPhysicalNeighbors(contact);
 		}
-		else
+		else // maybe just on the radius, check to add contact for vicinity
 		if (contact->getPathLength()+1 == nodeVicinityGraph::vicinityDiscoveryRadius) {
 			vicinity.addNode(contact->getPath().back(), // parent, path not empty, see precondition of outer if
 					 contact->getKey(), // new child
@@ -212,9 +215,10 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 			if (contact->getPathLength() <= nodeVicinityGraph::vicinityDiscoveryRadius) {
 				// it is required to add all PIDs to nodes within the discovery radius
 				// (and without signaling one can extend this by one hop)
-				// since the contact path excludes the contact itself the above condition includes nodes <= discoveryRadius+1
-				if (auto incomingPID= fwdTablePathID.addEntry(contact, false, contact->getPathLength()<nodeVicinityGraph::vicinityDiscoveryRadius); incomingPID != PathID::UndefinedPathID) {
-					// PID was added, it can directly be used, because no path setup necessary within discovery
+				// since the contact path excludes the contact itself the above condition includes nodes <= vicinityDiscoveryRadius+1
+				if (auto [added,incomingPID]= fwdTablePathID.addLocalEntry(contact, contact->getPathLength()<nodeVicinityGraph::vicinityDiscoveryRadius); incomingPID != PathID::UndefinedPathID) {
+					// PID was added, it can directly be used, because no path setup necessary within vicinity
+					EV_TRACE << "added local NID " << contact->getKey() << " and PID entry " << incomingPID << endl;
 					fwdTablePathID.setNIDtoPIDmapping(contact->getKey(), incomingPID);
 					vicinityPathIDCompletion(*contact);
 				}
@@ -222,7 +226,7 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 			else
 			if (contact->getPathLength() > nodeVicinityGraph::vicinityDiscoveryRadius)
 			{  // send a path setup request packet for installing PIDs in intermediate nodes for this route
-				// only do this for paths longer than (discovery radius+1) (e.g., for dr=3 -> contacts 5 hops away) hops:
+				// only do this for paths longer than (vicinityDiscoveryRadius+1) (e.g., for vdr=2 -> contacts 4 hops away) hops:
 				// the next node precalculated already all path IDs within its own discovery radius and
 				// we are just one hop away, so only required setup for paths longer than (discovery radius+1)
 				// note that the contact->getPath() excludes the contact itself
@@ -271,6 +275,31 @@ void R2Kademlia::onImprovement(const KadContact& contact) {
 }
 
 
+// this is different from onImprovement(): path has maybe the same length but is different (e.g., due to higher seq no)
+// no UpdateRouteReq is sent, but possibly PathSetup needs to be initiated or PID needs to change
+void R2Kademlia::onPathChange(const KadContact& contact) {
+	EV_TRACE << "onPathChange(" << contact.getKey().shortStr() << ") called, SeqNo #" << contact.getStateSeqNo() << ' ' << contact.getPath() << endl;
+
+	//ASSERT( getKadObserver().checkSeqNo(contact.getKey(),contact.getStateSeqNo()) == true );
+
+	if (usePathIDs and contact.isValid()) {
+
+		// no need to setup routes within discovery radius + 1 distance
+		// (note/remember: getPathLength() does not include the last hop)
+		if ( contact.getPathLength() > nodeVicinityGraph::vicinityDiscoveryRadius ) {
+			// send a path setup request packet for installing PIDs in intermediate nodes for this route
+			//EV_TRACE << "Triggering path setup to " << contact.getKey().shortStr() << endl;
+			// modentry() will be called by handlePathSetupResponse
+			schedulePathSetup(contact.getKey());
+		}
+		else {
+			// for paths within discovery radius: update the PID entry
+			fwdTablePathID.modEntry(&contact, false);
+		}
+	}
+
+}
+
 void R2Kademlia::recheckPhysicalNeighbors(const KadContact& contact) {
 	// simply recheck the physical Neighbors
 	EV_TRACE << "recheckPhysicalNeighbors triggered for " << contact.getKey().shortStr() << endl;
@@ -289,7 +318,7 @@ void R2Kademlia::reSyncPN(const KadContact& contact, stateseqno_t expected_seqno
 void R2Kademlia::onPathCheck(const KadContact& contact) {
 	EV_TRACE << "path check triggered for " << contact.getKey().shortStr() << endl;
 	// check whether the current path is still working properly
-	sendPathProbe(&contact);
+	sendPathProbe(contact.getKey());
 }
 
 } // end namespace

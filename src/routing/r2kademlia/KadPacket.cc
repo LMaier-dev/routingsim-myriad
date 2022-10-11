@@ -78,6 +78,7 @@ void KadPacket::appendHop(const OverlayKey& key) {
 	addBitLength(OverlayKey::getLength());
 }
 
+
 void KadPacket::appendRoute(const KadContact& contact) {
 	ASSERT(getRouteArraySize() == getActiveArraySize());
 	auto old_size = getRouteArraySize();
@@ -91,6 +92,7 @@ void KadPacket::appendRoute(const KadContact& contact) {
 	setActive(getRouteArraySize() - 1, true);
 	addBitLength(OverlayKey::getLength()*(contact.getPathLength() + 1));
 }
+
 
 kad_path KadPacket::getSrcPath(uint from, uint to) const {
 	// index bounds are checked in getHop 

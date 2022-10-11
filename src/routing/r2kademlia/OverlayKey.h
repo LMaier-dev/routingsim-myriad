@@ -125,7 +125,7 @@ public:
 	 *
 	 * @return String representation of this key
 	 */
-	virtual std::string str() const { return toString(); }
+	virtual std::string str() const override { return toString(); }
 	/**
 	 * Returns a short string representation of this key
 	 *
