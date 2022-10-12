@@ -1042,7 +1042,7 @@ simtime_t R2Kademlia::sendDiscoveryReq(KadContact_p contact)
 	ASSERT(contact != nullptr);
 	EV_TRACE << "sending PNDiscReq to " << *contact << " mySSeq#: " << getLSSeqNo();
 
-	// need to brute for the path as the contact may be know via a detour before
+	// need to brute force the path as the contact may be known via a detour before
 	KadContact pncontact(contact->getKey(),kad_path());
 	auto req = makePacket<KadPNDiscReq>(&pncontact, "KadPNDiscReq");
 	req->setSourceId(node().getNodeId());
@@ -1068,10 +1068,8 @@ simtime_t R2Kademlia::sendDiscoveryReq(KadContact_p contact)
 		req->setPhyNeighborArraySize(effective_size);
 		req->setPhyNeighborSeqNoArraySize(effective_size);
 		req->setPhyNeighborAgeArraySize(effective_size);
-
 	}
 	//req->setHopLimit(1);
-
 	// we rate limit the requests
 	simtime_t delay(0);
 
@@ -1862,13 +1860,7 @@ bool R2Kademlia::checkForResync(const OverlayKey& contact, stateseqno_t newseqno
 	if (KadContact* contact_p= const_cast<KadContact*>(routingTable.getContact(contact)); contact_p != nullptr and contact_p->isPhysicalNeighbor()) {
 		contact_p->updateLastSeen();
 		// if state seqno of PN has changed resync
-		if (contact_p->getSyncPNSeqNo().isInvalid()) {
-			// do it immediately
-			EV_TRACE << "resync required for " << contact_p->getKey().shortStr() << " doing it now" << endl;
-			sendDiscoveryReq(contact_p);
-		}
-		else
-		if (newseqno > contact_p->getSyncPNSeqNo()) {
+		if (contact_p->getSyncPNSeqNo().isInvalid() or newseqno > contact_p->getSyncPNSeqNo()) {
 			EV_TRACE << "resync required for " << contact_p->getKey().shortStr() << " new: "
 				 << newseqno << " old: " << contact_p->getSyncPNSeqNo() << endl;
 

@@ -271,7 +271,8 @@ void R2Kademlia::onImprovement(const KadContact& contact) {
 		if (not contact.isPhysicalNeighbor()) {
 			EV_WARN << "reenabling physical contact is not flagged as being neighbor" << endl;
 		}
-
+		// now increase the sequence number
+		incLSSeqNo();
 		scheduleUpdate(contact, KAD_Announce);
 	}
 	else

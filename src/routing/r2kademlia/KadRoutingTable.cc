@@ -154,11 +154,13 @@ void KadRoutingTable::addPNContact(const OverlayKey& key, stateseqno_t stateseqn
 		return;
 	}
 	else { // contact already known, maybe have added it via other contact/neighbor
+		bool improved(false);
 		if (not contact->isPhysicalNeighbor()) {
 			// flag contact as physical neighbor and move it over to the PNContacts bucket
 			contact->setPhysicalNeighbor();
 			contact->updateLastSeen();
 
+			improved= true; // must increase Local State Sequence number
 			// move over to PNcontacts
 			KadBucket& bucket = getBucket(key);
 			auto it = bucket.findContact(key);
@@ -170,6 +172,8 @@ void KadRoutingTable::addPNContact(const OverlayKey& key, stateseqno_t stateseqn
 				EV_ERROR << "Contact existed already, but not found" << endl;
 		}
 		else { // contact is physical neighbor already, but old path maybe longer
+			if (contact->getPathLength() > 0)
+				improved= true; // must increase Local State Sequence number
 		}
 
 		if (contact->getStateSeqNo() < stateseqno) { // contact has newer state for its physical neighbors
@@ -184,6 +188,9 @@ void KadRoutingTable::addPNContact(const OverlayKey& key, stateseqno_t stateseqn
 		// as we heard a direct message from the neighbor NOW
 		// contact will be automatically set to valid
 		contact->setPath(kad_path(),{});
+		// the following call is important, because it calls incLSSeqNo()
+		if (improved)
+			policy->onImprovement(*contact);
 
 	} // end else (=contact already known)
 }
