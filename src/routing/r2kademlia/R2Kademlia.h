@@ -502,7 +502,7 @@ public:
 	static constexpr unsigned long PathInfoAgeThreshold = 2000UL; // ms
 	static constexpr unsigned long PathRefreshThreshold = 20000UL; // ms
 	static constexpr unsigned long RediscoveryNextTryWaitTime = 100UL; // ms
-	static constexpr unsigned long PNDiscrecoveryWaitTime = 1000UL; // µs
+	static constexpr unsigned long PNDiscoveryWaitTime = 1000UL; // µs
 };
 
 

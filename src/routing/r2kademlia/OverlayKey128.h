@@ -509,8 +509,7 @@ private:
 
 	static constexpr uint32_t MAX_KEYLENGTH = 128; /**< maximum length of the key */
 	static uint32_t keyLength; /**< actual length of the key */
-	static overlaykey_t MSB_MASK; /**< bits to fill up if key does not
-	exactly fit in one or more machine words */
+	static overlaykey_t MSB_MASK; /**< bits to fill up if key is not full length, e.g., 112bit */
 
 	// private fields
 	bool isUnspec; /**< is this->key unspecified? */

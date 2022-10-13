@@ -1903,8 +1903,8 @@ void R2Kademlia::schedulePNDiscReq(const OverlayKey& neighbor, stateseqno_t expe
 	EV_TRACE << "schedulePNDiscReq(): " << neighbor.shortStr() << " queued, expected  seq#" << expected_seqno << endl;
 	if (not pndiscScheduled)
 	{
-		simtime_t wait_time(SimTime(uniform(PNDiscrecoveryWaitTime/2,
-						    3*PNDiscrecoveryWaitTime/2),SIMTIME_US));
+		simtime_t wait_time(SimTime(uniform(PNDiscoveryWaitTime/2,
+						    3*PNDiscoveryWaitTime/2),SIMTIME_US));
 		EV_TRACE << "scheduling PNDiscReq for " << neighbor.shortStr()
 			 << " in " << wait_time << 's' << endl;
 		addOneShotTimer(wait_time, std::bind(&R2Kademlia::sendScheduledPNDiscReq, this));

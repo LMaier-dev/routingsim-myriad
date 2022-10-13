@@ -467,7 +467,7 @@ void FwdTablePathID::garbageCollect()
 	{
 		if (it->second.isDeleted() and not it->second.isLocal() and not it->second.isForeign() and not it->second.isPrecalc()
 		    and it->second.getAge() > fwdentry_refresh_timeout_ms) {
-			EV << "garbageCollect(): actually deleting PID " << it->first << ": " << it->second.str() << endl;
+			EV_TRACE << "garbageCollect(): actually deleting PID " << it->first << ": " << it->second.str() << endl;
 			it= PIDFwdTable.erase(it);
 		}
 		else
