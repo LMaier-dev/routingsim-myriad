@@ -37,7 +37,7 @@ OverlayKey::overlaykey_t OverlayKey::MSB_MASK = ~((OverlayKey::overlaykey_t) 0) 
 //--------------------------------------------------------------------
 
 // predefined keys
-const OverlayKey OverlayKey::UNSPECIFIED_KEY;
+const OverlayKey OverlayKey::UNSPECIFIED_KEY(INVALIDKEYVALUE);
 const OverlayKey OverlayKey::ZERO(0);
 const OverlayKey OverlayKey::ONE(1);
 
@@ -132,7 +132,7 @@ void OverlayKey::setKeyLength(uint32_t length)
 }
 
 
-bool OverlayKey::isValid(std::string str)
+bool OverlayKey::isValid(const std::string& str)
 {
 	std::string s(str);
 
@@ -159,7 +159,7 @@ std::string OverlayKey::toString(uint32_t base) const
 		throw cRuntimeError("OverlayKey::OverlayKey(): Invalid base!");
 	}
 
-	if (isUnspec)
+	if (isUnspecified())
 		return std::string("<unspec>");
 	else {
 		std::ostringstream outstr;
@@ -345,7 +345,7 @@ int OverlayKey::log_2() const
 bool OverlayKey::isBetween(const OverlayKey& keyA,
 				           const OverlayKey& keyB) const
 {
-	if (isUnspec or keyA.isUnspec or keyB.isUnspec)
+	if (isUnspecified() or keyA.isUnspecified() or keyB.isUnspecified())
 		return false;
 
 	if (*this == keyA)
@@ -357,10 +357,9 @@ bool OverlayKey::isBetween(const OverlayKey& keyA,
 }
 
 // returns true, if this key is element of the interval (keyA, keyB]
-bool OverlayKey::isBetweenR(const OverlayKey& keyA,
-				            const OverlayKey& keyB) const
+bool OverlayKey::isBetweenR(const OverlayKey& keyA, const OverlayKey& keyB) const
 {
-	if (isUnspec or keyA.isUnspec or keyB.isUnspec)
+	if (isUnspecified() or keyA.isUnspecified() or keyB.isUnspecified())
 		return false;
 
 	if ((keyA == keyB) && (*this == keyA))
@@ -375,7 +374,7 @@ bool OverlayKey::isBetweenR(const OverlayKey& keyA,
 bool OverlayKey::isBetweenL(const OverlayKey& keyA,
 			    const OverlayKey& keyB) const
 {
-	if (isUnspec or keyA.isUnspec or keyB.isUnspec)
+	if (isUnspecified() or keyA.isUnspecified() or keyB.isUnspecified())
 		return false;
 
 	if ((keyA == keyB) and (*this == keyA))
@@ -391,7 +390,7 @@ bool OverlayKey::isBetweenL(const OverlayKey& keyA,
 bool OverlayKey::isBetweenLR(const OverlayKey& keyA,
 			     const OverlayKey& keyB) const
 {
-	if (isUnspec or keyA.isUnspec or keyB.isUnspec)
+	if (isUnspecified() or keyA.isUnspecified() or keyB.isUnspecified())
 		return false;
 
 	if ((keyA == keyB) and (*this == keyA))
@@ -414,18 +413,6 @@ std::ostream& operator<<(std::ostream& os, const OverlayKey& c)
 	os << c.toString(16);
 	return os;
 };
-
-
-// returns a key filled with bits 1
-OverlayKey OverlayKey::getMax()
-{
-	OverlayKey newKey;
-	newKey.key= ~0;
-	newKey.isUnspec = false;
-	newKey.trim();
-
-	return newKey;
-}
 
 
 // generate random number
