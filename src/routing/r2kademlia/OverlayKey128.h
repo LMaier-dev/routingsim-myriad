@@ -36,7 +36,6 @@ class OverlayKeyBit;
 
 using namespace omnetpp;
 
-
 /**
  * A common overlay key class based on int128
  *
@@ -52,6 +51,7 @@ public:
 	static const OverlayKey UNSPECIFIED_KEY; /**< OverlayKey without defined key */
 	static const OverlayKey ZERO; /**< OverlayKey with key initialized as 0 */
 	static const OverlayKey ONE; /**< OverlayKey with key initialized as 1 */
+	static constexpr overlaykey_t INVALIDKEYVALUE = (overlaykey_t) ~0; /**< all bits set to 1 */
 
 	//-------------------------------------------------------------------------
 	// construction and destruction
@@ -151,7 +151,7 @@ public:
 	 * @return Returns true, if the key is a valid string representation
 	 */
 
-	static bool isValid(std::string str);
+	static bool isValid(const std::string& str);
 
 	//-------------------------------------------------------------------------
 	// operators
@@ -511,9 +511,6 @@ private:
 	static uint32_t keyLength; /**< actual length of the key */
 	static overlaykey_t MSB_MASK; /**< bits to fill up if key is not full length, e.g., 112bit */
 
-	// private fields
-	bool isUnspec; /**< is this->key unspecified? */
-
 	union {
 		overlaykey_t key; /**< the overlay key this object represents */
 		std::uint64_t keyw[2]; // the same key as two 64-bit words
@@ -601,14 +598,14 @@ namespace std {
 
 // default construction: create an unspecified node key
 inline
-OverlayKey::OverlayKey() :  isUnspec(true)
+OverlayKey::OverlayKey() : key(INVALIDKEYVALUE)
 {
 }
 
 
 // create a key out of a normal integer
 inline
-OverlayKey::OverlayKey(overlaykey_t num) : isUnspec(false), key(num)
+OverlayKey::OverlayKey(overlaykey_t num) : key(num)
 {
 	trim();
 }
@@ -617,17 +614,16 @@ OverlayKey::OverlayKey(overlaykey_t num) : isUnspec(false), key(num)
 
 // copy constructor
 inline
-OverlayKey::OverlayKey(const OverlayKey& rhs) : cObject(rhs), isUnspec(rhs.isUnspec), key(rhs.key)
+OverlayKey::OverlayKey(const OverlayKey& rhs) : cObject(rhs), key(rhs.key)
 {
 }
 
 
 // move constructor
 inline
-OverlayKey::OverlayKey(OverlayKey&& rhs) : cObject(rhs), isUnspec(rhs.isUnspec), key(rhs.key)
+OverlayKey::OverlayKey(OverlayKey&& rhs) : cObject(rhs), key(rhs.key)
 {
-	rhs.isUnspec= true;
-	rhs.key= 0;
+	rhs.key= INVALIDKEYVALUE;
 }
 
 
@@ -642,9 +638,15 @@ uint32_t OverlayKey::getLength()
 inline
 bool OverlayKey::isUnspecified() const
 {
-	return isUnspec;
+	return key == INVALIDKEYVALUE;
 }
 
+// returns a key with the maximum valid value
+inline
+OverlayKey OverlayKey::getMax()
+{
+	return OverlayKey(~0-1);
+}
 
 //--------------------------------------------------------------------
 // operators
@@ -658,7 +660,6 @@ OverlayKey& OverlayKey::operator=(const OverlayKey& rhs)
 		return *this;
 
 	cObject::operator=(rhs);
-	isUnspec = rhs.isUnspec;
 	key= rhs.key;
 	return *this;
 }
@@ -672,10 +673,8 @@ OverlayKey& OverlayKey::operator=(OverlayKey&& rhs)
 		return *this;
 
 	cObject::operator=(std::move(rhs));
-	isUnspec= rhs.isUnspec;
 	key= rhs.key;
-	rhs.isUnspec= true;
-	rhs.key= 0;
+	rhs.key= INVALIDKEYVALUE;
 	return *this;
 }
 
@@ -685,6 +684,8 @@ inline
 OverlayKey& OverlayKey::operator--()
 {
 	key--;
+	if (key == INVALIDKEYVALUE) // wrap from 0 to 0xFFFF....FFFE
+		key--;
 	trim();
 	return *this;
 }
@@ -695,6 +696,8 @@ OverlayKey OverlayKey::operator--(int)
 {
 	OverlayKey clone(*this);
 	key--;
+	if (key == INVALIDKEYVALUE) // wrap from 0 to 0xFFFF....FFFE
+		key--;
 	trim();
 	return clone;
 }
@@ -705,6 +708,9 @@ inline
 OverlayKey& OverlayKey::operator++()
 {
 	key++;
+        // wrap around at 0xFFFF....FFFE to 0
+	if (key == INVALIDKEYVALUE)
+		key++;
 	trim();
 	return *this;
 }
@@ -715,6 +721,8 @@ OverlayKey OverlayKey::operator++(int)
 {
 	OverlayKey clone(*this);
 	key++;
+	if (key == INVALIDKEYVALUE)
+		key++;
 	trim();
 	return clone;
 }
@@ -726,7 +734,6 @@ OverlayKey& OverlayKey::operator+=( const OverlayKey& rhs )
 {
 	key+= rhs.key;
 	trim();
-	isUnspec = false;
 	return *this;
 }
 
@@ -737,7 +744,6 @@ OverlayKey& OverlayKey::operator-=( const OverlayKey& rhs )
 {
 	key-= rhs.key;
 	trim();
-	isUnspec = false;
 	return *this;
 }
 
@@ -852,7 +858,6 @@ OverlayKey OverlayKey::operator>>(uint32_t num) const
 	OverlayKey result(*this);
 
 	result.key= key >> num;
-	result.isUnspec = false;
 	result.trim();
 	return result;
 }
@@ -864,7 +869,6 @@ OverlayKey OverlayKey::operator<<(uint32_t num) const
 	OverlayKey result(*this);
 
 	result.key= key << num;
-	result.isUnspec = false;
 	result.trim();
 	return result;
 }
@@ -893,10 +897,12 @@ OverlayKey& OverlayKey::setBit(uint32_t pos, bool value)
 //--------------------------------------------------------------------
 
 // trims uppermost (unused) bits of a key after each operation
+// except if key == INVALIDKEYVALUE 
 inline
 void OverlayKey::trim()
 {
-	key &= MSB_MASK;
+	if (key != INVALIDKEYVALUE)
+		key &= MSB_MASK;
 }
 
 
@@ -904,8 +910,7 @@ void OverlayKey::trim()
 inline
 void OverlayKey::clear()
 {
-	key= 0;
-	isUnspec= false;
+	key= INVALIDKEYVALUE;
 }
 
 
@@ -914,13 +919,18 @@ inline
 void omnet_random(OverlayKey::overlaykey_t& key, cRNG* rng)
 {
 	key= 0;
-	// fill in 32 bit chunks
-	uint32_t tmpword;
-	for (uint32_t i= 0; i < 4; i++) {
-		tmpword= intuniform(rng, 0, 0xFFFFFFFF);
-		key<<= 32;
-		key|= tmpword;
+	// with small probability the random key will hit
+	// the invalid value, in this case we just repeat
+	do {
+		// fill in 32 bit chunks
+		uint32_t tmpword;
+		for (uint32_t i= 0; i < 4; i++) {
+			tmpword= intuniform(rng, 0, 0xFFFFFFFF);
+			key<<= 32;
+			key|= tmpword;
+		}
 	}
+	while (key == OverlayKey::INVALIDKEYVALUE);
 }
 
 
