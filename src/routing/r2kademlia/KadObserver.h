@@ -17,6 +17,7 @@
 #define __ROUTINGSIM_KadObserver_H_
 
 #include <boost/bimap.hpp>
+#include <fstream>
 #include "foundation.h"
 #include "OverlayKey.h"
 #include "R2Kademlia.h"
@@ -119,6 +120,12 @@ private:
 
 	// the set of nodes used for sampling statistics values
 	std::set<nodeid_t> sampleNodes(int n);
+
+#ifdef R2K_RT_EXPORT
+        // export simulation state for later analysis
+        void exportRoutingTables(std::ofstream file) const;
+        void exportOverlayKeyNodeIdMapping(std::ofstream file) const;
+#endif
 
 public:
 

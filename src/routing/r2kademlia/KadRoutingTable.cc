@@ -726,6 +726,18 @@ KadContactList KadRoutingTable::getAllValidContacts(bool noPN) const
 	return result;
 }
 
+KadContactList KadRoutingTable::getValidContactsFromBucket(size_t index) const
+{
+    KadContactList result{};
+    if (buckets.size() > index) {
+        auto& bucket = buckets[index];
+	result.reserve(bucketSize);
+        copyValidContacts(bucket.contacts, result);
+        copyValidContacts(bucket.PNContacts, result);
+    }
+    return result;
+}
+
 
 KadContact_p KadRoutingTable::getRandomContact() const
 {

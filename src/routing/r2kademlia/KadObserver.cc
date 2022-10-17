@@ -20,6 +20,7 @@
 
 #include "KadObserver.h"
 #include "NetworkManager.h"
+#include <fstream>
 
 namespace routingsim {
 Define_Module(KadObserver);
@@ -131,6 +132,17 @@ void KadObserver::finish() {
 	recordLinkUsage();
 	recordStatistics();
 	recordMessageScalars();
+
+        if (par("dumpRTState").boolValue()) {
+#ifdef R2K_RT_EXPORT
+            std::string fileName = par("resultPrefix").stringValue();
+
+            exportOverlayKeyNodeIdMapping(std::ofstream(fileName + ".map.json"));
+            exportRoutingTables(std::ofstream(fileName + ".rt.json"));
+#else 
+            EV_WARN << "RT exporter only works with R2K_RT_EXPORT flag enabled at compile time!" << endl;
+#endif
+        }
 
 	nodes.clear();
 	histograms.clear();

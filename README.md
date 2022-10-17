@@ -42,3 +42,33 @@ and compiled with MODE=release.
 
 Result files are stored in ../simulations/r2kademlia/results
 for the example above.
+
+# State Export
+The state Export functionality allows to dump the contents of all routingtables at the end of a simulation for offline analysis.
+
+## Dependencies
+For the state-export functionality one needs [https://github.com/nlohmann/json](https://github.com/nlohmann/json) version 3.10.5:
+
+- The library is also available in some package managers. In that case you cane install it and skip the rest.
+  - Fedora: [json-devel](https://packages.fedoraproject.org/pkgs/json/json-devel/)
+  - Arch (AUR): [nlohman-json-git](https://aur.archlinux.org/packages/nlohmann-json-git)
+  - Debian (sid):[nlohmann-json3-dev](https://packages.debian.org/sid/nlohmann-json3-dev)
+  - Ubuntu (jammy): [nlohmann-json3-dev](https://packages.ubuntu.com/jammy/nlohmann-json3-dev) 
+- [Download](https://github.com/nlohmann/json/releases/download/v3.10.5/include.zip)
+- Extract somewhere
+- Set env var to single_include directory in extracted folder
+```
+export JSON_INCL_DIR=/path/to/extracted/folder/single_include
+```
+- Then run make makefiles
+
+
+## Feature Flag
+Activate the compiletime flag during compilation: ```make -j8 MODE=release CFLAGS="-DR2K_RT_EXPORT"```
+
+## Activate in ```eval.ini```:
+```ini
+**.dumpRTState = true
+```
+
+Hint: Currently it is required to explicitly set the result folder using the cli option: ```--result-dir=`pwd`/../simulations/r2kademlia/results```
