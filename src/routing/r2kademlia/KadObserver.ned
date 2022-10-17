@@ -33,4 +33,7 @@ simple KadObserver
         int nodeSample = default(-1);
         /// number of nodes for routing table scalar sampling
         int routingTableSample = default(-1);
+        /// wether to dump routingTable state
+        bool dumpRTState = default(false);
+        string resultPrefix = default(expand("${resultdir}/${configname}-${iterationvarsf}#${repetition}"));
 }

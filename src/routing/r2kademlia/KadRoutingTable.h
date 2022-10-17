@@ -232,6 +232,11 @@ public:
 	kad_path concatViaPath(const kad_path& viaPath, const kad_path& path) const;
 	/// removes duplicates and loops from a path
 	bool simplifyPath(kad_path& path, const OverlayKey* destination) const;
+        inline size_t getBucketCount() const { return buckets.size(); }
+        KadContactList getValidContactsFromBucket(size_t index) const;
+
+	/** returns the width of a level in the accelerated lookup tree */
+	inline size_type getAccelerationFactor() const { return accelerationFactor; }
 
 protected:
 	/// adds a new contact, called by addPath, returns true if contact was added
