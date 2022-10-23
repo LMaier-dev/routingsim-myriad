@@ -142,6 +142,7 @@ public:
 	bool isContainedinPath(const OverlayKey& myOverlayKey, const link_t& link) const;
 	uint32_t getNodeDegree() const { return nodeDegree; };
 	void setNodeDegree(uint32_t newnodeDegree) { nodeDegree= newnodeDegree; };
+	uint32_t getConnectivity() const { return nodeDegree; };
 
 	/// Common stdc++ console output method
 	friend std::ostream& operator<<(std::ostream& os, const KadContact& c);

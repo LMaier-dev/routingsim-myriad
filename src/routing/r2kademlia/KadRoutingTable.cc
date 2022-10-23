@@ -578,22 +578,39 @@ bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, sta
 			//EV_DEBUG << "dropping new contact " << *contact << endl;
 			return false;
 		}
-		// contact replacement if contact is better than existing ones
+		// contact replacement if contact is "better" than existing ones
 		auto& contacts = bucket.contacts;
-		auto result = contacts.end();
+		auto result = contacts.end(); // replacement candidate path length
+		auto resultconn = contacts.end(); // replacement candidate connectivity
 		size_type maxLen = contact->getPathLength();
+		uint32_t minconnectivity(contact->getConnectivity());
 		for (auto it = contacts.begin(); it!=contacts.end(); it++) {
-			if( (*it)->getPathLength() > maxLen) {
+			if ( (*it)->getPathLength() > maxLen) {
 				maxLen = (*it)->getPathLength();
 				result = it;
 			}
+			else if ( (*it)->getPathLength() == contact->getPathLength() and (*it)->getConnectivity() < minconnectivity) {
+				minconnectivity= (*it)->getConnectivity();
+				resultconn = it;
+			}
 		}
-		if (result != contacts.end()) {
+		// if result is set, it is the (last) contact in the bucket with the largest path length (larger than the current contact)
+		if (result != contacts.end()) { // contact with longer path found
 			replacementCount++;
-			EV_DEBUG << "replacing contact, new: " << *contact << " old: " << **result << endl;
+			EV_DEBUG << "replacing contact (PNS), new: " << *contact << " old: " << **result << endl;
 			policy->onContactRemoval(result->get());
 			*result = std::move(contact);
 			policy->onNewContact(result->get());
+
+			return true;
+		}
+		else if (resultconn != contacts.end()) { // contact with better connectivity found
+			replacementCount++;
+			EV_DEBUG << "replacing contact (Conn), new: " << *contact << " (" << contact->getConnectivity() << ") old: "
+				 << **resultconn << " (" << (*resultconn)->getConnectivity()  << ")" << endl;
+			policy->onContactRemoval(resultconn->get());
+			*resultconn = std::move(contact);
+			policy->onNewContact(resultconn->get());
 
 			return true;
 		}
