@@ -57,6 +57,7 @@ enum reasoncode : uint8_t {
 	unhandledType= 128
 };
 
+// OverlayKey length 112 bit (16 bit prefix will be prepended to make it an IPv6 address)
 constexpr uint8_t OverlayKeyLength= 112;
 
 /**
@@ -596,6 +597,7 @@ std::unique_ptr<T> R2Kademlia::makePacket(const KadContact* contact, const char 
 	packet->setHopLimit(hopLimit);
 	packet->appendRoute(contact);
 	packet->setStateSeqNo(getLSSeqNo());
+	packet->setSrcNodeDegree(neighborTable.size());
 	return packet;
 }
 
@@ -609,6 +611,7 @@ std::unique_ptr<T> R2Kademlia::makeAnswer(const KadPacket& original) {
 	ASSERT(answer->getSource() == myOverlayKey);
 	answer->setNonce(original.getNonce());
 	answer->setStateSeqNo(getLSSeqNo());
+	answer->setSrcNodeDegree(neighborTable.size());
 	// now copy the notvia information to let the source update its obsolete routes, too
 	if (original.getNotVia()) {
 		answer->setNotVia(true);

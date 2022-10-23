@@ -140,6 +140,10 @@ public:
 		syncPNSeqno= newseqno; }
 
 	bool isContainedinPath(const OverlayKey& myOverlayKey, const link_t& link) const;
+	uint32_t getNodeDegree() const { return nodeDegree; };
+	void setNodeDegree(uint32_t newnodeDegree) { nodeDegree= newnodeDegree; };
+	uint32_t getConnectivity() const { return nodeDegree; };
+
 	/// Common stdc++ console output method
 	friend std::ostream& operator<<(std::ostream& os, const KadContact& c);
 
@@ -154,6 +158,7 @@ private:
 	stateseqno_t syncPNSeqno= stateseqno_t::invalidSeqNo; /// sequence number for syncing with PN
 	State state= State::undefined; /// the state of the contact
 	bool physicalNeighbor= false; /// true if we have a direct physical link to this neighbor
+	uint32_t nodeDegree = 0; /// degree of contact (node attribute connectivity)
 	std::unique_ptr<RediscoveryState> rds_p= nullptr;
 };
 

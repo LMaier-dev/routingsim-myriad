@@ -127,17 +127,17 @@ public:
 	 * add a potentially new path, adds a contacts or updates an existing one
 	 * @returns true if path was added
 	 */
-	bool addPath(const OverlayKey& key, kad_path path, stateseqno_t pathseqno, age_t pathinfo_age);
+	bool addPath(const OverlayKey& key, kad_path path, stateseqno_t pathseqno, age_t pathinfo_age, uint32_t nodeDegree);
 	/**
 	 * add a potentially new path, adds a contact or updates an existing one
 	 * @returns true if path was added
 	 */
-	bool addPath(const OverlayKey& key, const kad_path& path, stateseqno_t pathseqno, age_t pathinfo_age, const kad_path& via);
+	bool addPath(const OverlayKey& key, const kad_path& path, stateseqno_t pathseqno, age_t pathinfo_age, uint32_t nodeDegree, const kad_path& via);
 
 	/**
 	 * add a physical neighbor as contact or updates an existing one
 	 */
-	void addPNContact(const OverlayKey& key, stateseqno_t stateseqno);
+	void addPNContact(const OverlayKey& key, stateseqno_t stateseqno, uint32_t nodeDegree);
 
 	/**
 	 * Removes the contact with the given key from the routing table.
@@ -241,7 +241,7 @@ public:
 
 protected:
 	/// adds a new contact, called by addPath, returns true if contact was added
-	virtual bool handleNewContact(const OverlayKey& key, kad_path path, stateseqno_t pathseqno, age_t pathinfo_age);
+	virtual bool handleNewContact(const OverlayKey& key, kad_path path, stateseqno_t pathseqno, age_t pathinfo_age, uint32_t nodeDegree);
 	/** @name bucket access */
 	//@{
 	/** returns the index of the bucket corresponding to the given overlay key. */

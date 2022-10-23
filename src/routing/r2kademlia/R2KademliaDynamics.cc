@@ -56,6 +56,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadUpdateRouteReq> packet) {
 		const auto& contactkey= packet->getContact(i);
 		const auto& path= packet->getPath(i);
 		auto action= packet->getAction(i);
+		auto nodeDegree= packet->getNodeDegree(i);
 
 		if (contactkey == myOverlayKey) {
 			// someone is telling me news about myself -> ignore
@@ -72,7 +73,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadUpdateRouteReq> packet) {
 		switch (action) {
 			case KAD_Announce:
 				EV_TRACE << "UpdateRouteReq Announce for contact " << contactkey.shortStr() << endl;
-			        routingTable.addPath(contactkey, path, packet->getSeqNo(i), packet->getPathInfoAge(i), source_path);
+			        routingTable.addPath(contactkey, path, packet->getSeqNo(i), packet->getPathInfoAge(i), nodeDegree, source_path);
 				
 				if (updatePropagateStrategy == 2 ||
 						updatePropagateStrategy == 4 ||
@@ -87,7 +88,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadUpdateRouteReq> packet) {
 
 			case KAD_Change:
 				EV_TRACE << "UpdateRouteReq Change for contact " << contactkey.shortStr() << endl;
-			        routingTable.addPath(contactkey, path, packet->getSeqNo(i), packet->getPathInfoAge(i), source_path);
+			        routingTable.addPath(contactkey, path, packet->getSeqNo(i), packet->getPathInfoAge(i), nodeDegree, source_path);
 
 				if (updatePropagateStrategy == 3 ||
 						updatePropagateStrategy == 4 ||
@@ -343,6 +344,7 @@ void R2Kademlia::sendUrgentUpdates()
 				packet->setPathArraySize(urgentupdatelist.size());
 				packet->setActionArraySize(urgentupdatelist.size());
 				packet->setSeqNoArraySize(urgentupdatelist.size());
+				packet->setNodeDegreeArraySize(urgentupdatelist.size());
 
 				//EV_TRACE << "UrgentUpdateRoute packet to " << notifyContact_it->first.shortStr() << " w/ ";
 
@@ -353,6 +355,7 @@ void R2Kademlia::sendUrgentUpdates()
 					packet->setContact(i, affectedContact.getKey());
 					packet->setPath(i, affectedContact.getPath());
 					packet->setSeqNo(i, affectedContact.getStateSeqNo());
+					packet->setNodeDegree(i, affectedContact.getNodeDegree());
 					packet->setAction(i, action);
 					//EV_TRACE << affectedContact << "; ";
 					i++;
@@ -422,7 +425,8 @@ void R2Kademlia::sendUpdates()
 			packet->setActionArraySize(updatelist.size());
 			packet->setSeqNoArraySize(updatelist.size());
 			packet->setPathInfoAgeArraySize(updatelist.size());
-			
+			packet->setNodeDegreeArraySize(updatelist.size());
+
 			// now construct the routing information by the information from updatelist
 			std::size_t i= 0;
 			for (const auto& [affectedContact,action] : updatelist)
@@ -433,6 +437,7 @@ void R2Kademlia::sendUpdates()
 				packet->setPath(i, affectedContact.getPath());
 				packet->setSeqNo(i, affectedContact.getStateSeqNo());
 				packet->setPathInfoAge(i, affectedContact.getAge());
+				packet->setNodeDegree(i, affectedContact.getNodeDegree());
 				packet->setAction(i, action);
 				//EV_TRACE << affectedContact << "; ";
 				i++;
