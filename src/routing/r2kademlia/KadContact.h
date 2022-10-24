@@ -73,17 +73,19 @@ public:
 	KadContact(const KadContact& o) : key(o.key), lastseen(o.lastseen), path(o.path), pathHashSum(o.pathHashSum),
 					  seqno(o.seqno), state(o.state),
 					  physicalNeighbor(o.physicalNeighbor),
+					  nodeDegree(o.nodeDegree),
 					  rds_p(o.rds_p == nullptr ? nullptr :
 						std::make_unique<RediscoveryState>(*o.rds_p)) {};
         KadContact(KadContact&& k) : key(std::move(k.key)), lastseen(std::move(k.lastseen)), path(std::move(k.path)),
 				     pathHashSum(std::move(k.pathHashSum)),
 				     seqno(k.seqno), state(k.state),
 				     physicalNeighbor(k.physicalNeighbor),
+				     nodeDegree(k.nodeDegree),
 				     rds_p(std::move(k.rds_p)) {};
-        explicit KadContact(const OverlayKey& key): key(key), lastseen(SIMTIME_ZERO), path(), state(State::undefined), rds_p(nullptr) {};
+        explicit KadContact(const OverlayKey& key): key(key), lastseen(SIMTIME_ZERO), path(), state(State::undefined), nodeDegree(0), rds_p(nullptr) {};
         KadContact(const OverlayKey& key, kad_path opath, stateseqno_t seqno= stateseqno_t::invalidSeqNo) :
 		key(key), lastseen(SIMTIME_ZERO), path(std::move(opath)), pathHashSum(HashSum(path,key)), seqno(seqno),
-		state(State::valid), physicalNeighbor(path.empty() == true), rds_p(nullptr) // simply path.empty() doesn't work correctly!
+		state(State::valid), physicalNeighbor(path.empty() == true), nodeDegree(0), rds_p(nullptr) // simply path.empty() doesn't work correctly!
 		{};
         KadContact& operator=(const KadContact &other); // copy assignment
 	KadContact& operator=(KadContact &&other); // move assignment
@@ -189,6 +191,7 @@ inline KadContact& KadContact::operator=(const KadContact& other)
 		seqno= other.seqno;
 		state= other.state;
 		physicalNeighbor= other.physicalNeighbor;
+		nodeDegree = other.nodeDegree;
 	}
 	return *this;
 }
@@ -204,10 +207,12 @@ inline KadContact& KadContact::operator=(KadContact&& other)
 		pathHashSum= other.pathHashSum;
 		state= other.state;
 		seqno= other.seqno;
+		nodeDegree = other.nodeDegree;
 		physicalNeighbor= other.physicalNeighbor;
 		other.path.clear();
 		other.seqno= stateseqno_t::invalidSeqNo;
 		other.state= State::undefined;
+		other.nodeDegree= 0;
 	}
 	return *this;
 }
