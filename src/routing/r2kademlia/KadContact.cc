@@ -36,7 +36,7 @@ std::ostream& operator<<(std::ostream& os, const KadContact& c) {
 		os << "/P";
 	}
 	os << ")";
-	os << " #" << c.getStateSeqNo() << " t=" << c.lastseen.trunc(SIMTIME_MS) << ' ';
+	os << " #" << c.getStateSeqNo() << " t=" << c.lastseen.trunc(SIMTIME_MS) << " (" << c.getNodeDegree() << ") ";
 	os << c.getPath();
 	return os;
 }

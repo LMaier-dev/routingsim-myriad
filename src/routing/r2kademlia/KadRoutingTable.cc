@@ -457,7 +457,7 @@ bool KadRoutingTable::addPath(const OverlayKey& key, const kad_path& path, state
 		return false;
 
 	// concatenated paths are direct if learned from neighborhood within discovery radius
-	return addPath(key, concatViaPath(viaPath, path), stateseqno, nodeDegree, pathinfo_age);
+	return addPath(key, concatViaPath(viaPath, path), stateseqno, pathinfo_age, nodeDegree);
 }
 
 
