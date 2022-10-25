@@ -346,6 +346,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadQueryRouteReq> packet)
 		if (contact_p->getStateSeqNo() <= packet->getStateSeqNo()) {
 			contact_p->setStateSeqNo(packet->getStateSeqNo());
 			contact_p->updateLastSeen();
+			contact_p->setNodeDegree(packet->getSrcNodeDegree());
 		}
 		// EV_TRACE << "contact found" << endl;
 	}

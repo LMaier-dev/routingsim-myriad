@@ -27,8 +27,6 @@ namespace routingsim {
 
 namespace ph = std::placeholders;
 
-constexpr unsigned int exploreMinRadius = 10;
-
 void KadRoutingTable::init(const OverlayKey& myKey, KadPolicy* policy,
 			   size_type accelerationFactor, size_type bucketSize,
 			   bool proximityNeighborSelection,
@@ -63,7 +61,7 @@ std::string KadRoutingTable::str() const
 	std::ostringstream out;
 
 	unsigned int i= 0;
-	for (auto& b : buckets)
+	for (const auto& b : buckets)
 	{
 		out << "B[" << i << "]:{";
 		for (const auto& contact : b.contacts) {
@@ -177,6 +175,7 @@ void KadRoutingTable::addPNContact(const OverlayKey& key, stateseqno_t stateseqn
 		}
 
 		if (contact->getStateSeqNo() < stateseqno) { // contact has newer state for its physical neighbors
+			contact->setNodeDegree(nodeDegree);
 			policy->reSyncPN(*contact, stateseqno);
 		}
 		else { // current received sequence number older
@@ -423,6 +422,7 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 
 	// update sequence number
 	contact->setStateSeqNo(stateseqno);
+	contact->setNodeDegree(nodeDegree);
 	// update lastseen to that of the originator
 	contact->updateLastSeenTo(simTime()-SimTime(pathinfo_age,SIMTIME_MS));
 

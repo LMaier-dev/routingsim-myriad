@@ -422,6 +422,7 @@ void R2Kademlia::handlePacket(KadAnswer_p packet) {
 			if (contact_p->getStateSeqNo() <= packet->getStateSeqNo()) {
 				contact_p->setStateSeqNo(packet->getStateSeqNo());
 				contact_p->updateLastSeen();
+				contact_p->setNodeDegree(packet->getSrcNodeDegree());
 			}
 			else
 				EV_WARN << "State sequence number of message smaller (" << packet->getStateSeqNo() << ") than for contact (" << contact_p->getStateSeqNo() << ")" << endl;
@@ -860,6 +861,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadProbeReq> packet) {
 		if (contact_p->getStateSeqNo() <= packet->getStateSeqNo()) {
 			contact_p->setStateSeqNo(packet->getStateSeqNo());
 			contact_p->updateLastSeen();
+			contact_p->setNodeDegree(packet->getSrcNodeDegree());
 		}
 		else
 			EV_WARN << "State sequence number of message smaller (" << packet->getStateSeqNo() << ") than for contact (" << contact_p->getStateSeqNo() << ")" << endl;
@@ -881,6 +883,7 @@ bool R2Kademlia::handleProbeResponse(KadPacket_p answer, RPCState& rpcState) {
 		if (contact_p->getStateSeqNo() <= probeRsp->getStateSeqNo()) {
 			contact_p->setStateSeqNo(probeRsp->getStateSeqNo());
 			contact_p->updateLastSeen();
+			contact_p->setNodeDegree(probeRsp->getSrcNodeDegree());
 		}
 		else
 			EV_WARN << "State sequence number of message smaller (" << probeRsp->getStateSeqNo() << ") than for contact (" << contact_p->getStateSeqNo() << ")" << endl;
@@ -1352,6 +1355,7 @@ void R2Kademlia::fillRTableRsp(KadRTableRsp& packet, const KadContactList& conta
 
 			}
 			packet.setNodeDegree(i, contacts[i]->getNodeDegree());
+			//ASSERT((stateseqno_t) contacts[i]->getNodeDegree() > contacts[i]->getStateSeqNo());
 		}
 		packet.addBitLength(contacts.size()*(OverlayKey::getLength()+32));
 	}

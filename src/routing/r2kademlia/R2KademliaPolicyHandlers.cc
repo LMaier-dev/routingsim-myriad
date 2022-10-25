@@ -167,7 +167,7 @@ void R2Kademlia::onContactInvalidation(KadContact_p contact)
 
 void R2Kademlia::onNewContact(KadContact_p contact) {
 
-	EV_TRACE << "onNewContact(" << contact->getKey().shortStr() << ") called, SeqNo #" << contact->getStateSeqNo() << endl;
+	EV_TRACE << "onNewContact(" << contact->getKey().shortStr() << ") called, SeqNo #" << contact->getStateSeqNo() << " (" << contact->getNodeDegree() << ')' << endl;
 	//ASSERT( getKadObserver().checkSeqNo(contact->getKey(),contact->getStateSeqNo()) == true );
 
 	// physical neighbor, may have been heard of its existence by some third node!
