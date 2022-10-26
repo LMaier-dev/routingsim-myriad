@@ -19,6 +19,7 @@
 #include <omnetpp.h>
 #include <unordered_map>
 #include <queue>
+#include <functional>
 
 #include "foundation.h"
 #include "Protocol.h"
@@ -31,6 +32,9 @@
 #include "RPC.h"
 
 namespace routingsim {
+
+// for std::bind with callback functions
+namespace ph = std::placeholders;
 
 // packet types
 using KadDataPacket_p = std::unique_ptr<KadDataPacket>;
@@ -53,19 +57,21 @@ enum reasoncode : uint8_t {
 	unhandledType= 128
 };
 
+// OverlayKey length 112 bit (16 bit prefix will be prepended to make it an IPv6 address)
 constexpr uint8_t OverlayKeyLength= 112;
 
 /**
- * Implementation of R2Kademlia.
- * Routing with R/Kademlia...
- * TODO: sources
- * @author Jakob Thomas
+ * Implementation of R2Kad.
+ * Routing with R/Kademlia
+ * @author Jakob Thomas, Roland Bless
  */
+
+
 class R2Kademlia : public RPCProtocol, public KadPolicy, public StatisticSample
 {
 private:
 
-	~R2Kademlia() { updateQueue.clear(); pathSetupQueue.clear(); stopAllTimers(); }
+	~R2Kademlia() { updateQueue.clear(); pathSetupQueue.clear(); }
 	/// the overlay key of this node
 	OverlayKey myOverlayKey;
 
@@ -163,13 +169,29 @@ private:
 	std::list<OverlayKey> probeContactQueue;
 
 	// a list that is used to send PN discover request messages
-	std::list<std::pair<OverlayKey,stateseqno_t>> PNDiscoverQueue;
+	typedef std::list<KadContact> RequestQueueType;
+	class RequestQueue : public RequestQueueType {
+	public:
+		RequestQueue(const std::string descriptiontxt, std::function<simtime_t(KadContact_p)> sendrequestcall, std::function<void()> sendscheduledcall, unsigned long initialScheduleDelay) : sendrequestcall(sendrequestcall), sendscheduledcall(sendscheduledcall), initialScheduleDelay(initialScheduleDelay), description(descriptiontxt), scheduled(false) {};
+		const std::string& getDescription() { return description; }
+		bool isScheduled() const { return scheduled; }
+		void setScheduled() { scheduled= true; }
+		void clearScheduled() { scheduled= false; }
+		std::function<simtime_t(KadContact_p)> sendrequestcall;
+		std::function<void()> sendscheduledcall;
+		unsigned long initialScheduleDelay = 0; // in µs
+	private:
+		const std::string description;
+		bool scheduled = false;
+	};
+
+	// queues for rate limiting requests
+	RequestQueue PNDiscoverQueue; // for sending PNDiscReq
+	RequestQueue GetPNQueue;      // for sending QueryRouteReq (Physical Neighbors)
+	RequestQueue GetONQueue;      // for sending QueryRouteReq (Overlay Neighbors)
 
 	// selfMessage
 	bool pathSetupScheduled= false;
-
-	// selfMessage
-	bool pndiscScheduled= false;
 
 	// timestamp for outstanding PNDiscReqs
 	simtime_t LastPNDiscReq;
@@ -311,31 +333,6 @@ private:
 
 	kad_path concatViaPath(const kad_path& viaPath, const OverlayKey& viaKey, const kad_path& path);
 
-	/// schedule rediscovery
-	void scheduleUrgentRediscovery(const OverlayKey& contactkey) override { scheduleRediscovery(contactkey, urgentRediscoverQueue, urgentRediscoveryWaitTime); };
-	void scheduleRegularRediscovery(const OverlayKey& contactkey) override { scheduleRediscovery(contactkey, regularRediscoverQueue, regularRediscoveryWaitTime); };
-	void scheduleSlowRediscovery(const OverlayKey& contactkey) override { scheduleRediscovery(contactkey, slowRediscoverQueue, slowRediscoveryWaitTime); };
-
-	/// schedule sending PNDiscReq
-	void schedulePNDiscReq(const OverlayKey& neighbor, stateseqno_t expectedseqno);
-	/// create and send PNDiscReqs for queued neighbors
-	void sendScheduledPNDiscReq();
-
-	/// adds routing table updates for contacts to an update queue
-	void scheduleUpdate(const KadContact& affectedcontact, KadRouteUpdateAction action);
-	/// send Update closer towards target contacts
-	void propagateUpdateReq(std::unique_ptr<KadUpdateRouteReq> packet);
-	/// sends all queued updates
-	void sendUpdates();
-	/// sends only KAD_Unreachable updates
-	void sendUrgentUpdates();
-	/// schedule a PathSetup
-	void schedulePathSetup(const OverlayKey& contactkey);
-	/// send all queue (valid) path setups
-	void sendScheduledPathSetups();
-	/// perform garbage collection of unused PathIDs
-	void doGarbageCollectPathIDs(short timerId);
-
 	/// evaluate Updates while forwarding
 	void evalUpdateReq(const KadUpdateRouteReq* packet);
 	/// evaluateQueryRouteRsp
@@ -419,11 +416,11 @@ private:
 	/// sends a path teardown request to the given contact
 	void sendPathTeardown(KadContact_p contact);
 	/// sends a "get physical neighbors" call to the contact
-	void sendGetPhysicalNeighbors(KadContact_p contact);
+	simtime_t sendGetPhysicalNeighbors(KadContact_p contact);
 	/// sends a "get overlay neighbors" call to the contact
-	void sendGetOverlayNeighbors(KadContact_p contact);
+	simtime_t sendGetOverlayNeighbors(KadContact_p contact);
 	/// sends a PNDisc Request to the Physical Neighbor
-	void sendDiscoveryReq(KadContact_p contact);
+	simtime_t sendDiscoveryReq(KadContact_p contact);
 	/// sends a find node call to find a path this node
 	void sendFindNode(const OverlayKey& key, bool exact=false, bool track=false);
 	/// sends a find node call via viacontactkey to find a path to this node
@@ -435,6 +432,38 @@ private:
 	void sendData(const OverlayKey& key);
 	//@}
 
+	/// schedule rediscovery
+	void scheduleUrgentRediscovery(const OverlayKey& contactkey) override { scheduleRediscovery(contactkey, urgentRediscoverQueue, urgentRediscoveryWaitTime); };
+	void scheduleRegularRediscovery(const OverlayKey& contactkey) override { scheduleRediscovery(contactkey, regularRediscoverQueue, regularRediscoveryWaitTime); };
+	void scheduleSlowRediscovery(const OverlayKey& contactkey) override { scheduleRediscovery(contactkey, slowRediscoverQueue, slowRediscoveryWaitTime); };
+
+	void scheduleRequest(class RequestQueue& q, const KadContact& tmpcontact);
+	/// schedule sending PNDiscReq
+	void schedulePNDiscReq(const KadContact& tmpcontact) { scheduleRequest(PNDiscoverQueue, tmpcontact); };
+	void scheduleGetPNReq(const KadContact& tmpcontact) { scheduleRequest(GetPNQueue, tmpcontact); };
+	void scheduleGetONReq(const KadContact& tmpcontact) { scheduleRequest(GetONQueue, tmpcontact); };
+	/// schedule sending PNDiscReq
+	void sendScheduledPNDiscReqs() { sendScheduledRequests(PNDiscoverQueue); };
+	void sendScheduledQueryRouteReqsPN() { sendScheduledRequests(GetPNQueue); };
+	void sendScheduledQueryRouteReqsON() { sendScheduledRequests(GetONQueue); };
+
+	void sendScheduledRequests(class RequestQueue& q);
+
+	/// adds routing table updates for contacts to an update queue
+	void scheduleUpdate(const KadContact& affectedcontact, KadRouteUpdateAction action);
+	/// send Update closer towards target contacts
+	void propagateUpdateReq(std::unique_ptr<KadUpdateRouteReq> packet);
+	/// sends all queued updates
+	void sendUpdates();
+	/// sends only KAD_Unreachable updates
+	void sendUrgentUpdates();
+	/// schedule a PathSetup
+	void schedulePathSetup(const OverlayKey& contactkey);
+	/// send all queue (valid) path setups
+	void sendScheduledPathSetups();
+	/// perform garbage collection of unused PathIDs
+	void doGarbageCollectPathIDs(short timerId);
+
 	/** @name policy foo */
 	//@{
 	void onMissingNeighbor(KadPacket_p packet, NodePkt_p pkt);
@@ -444,8 +473,8 @@ private:
 	//@}
 	virtual void sampleStatistics (Statistics &stats) override;
 public:
-        R2Kademlia() : routingTable(neighborTable), cmp(myOverlayKey), urgentRediscoverQueue(cmp), regularRediscoverQueue(cmp), slowRediscoverQueue(cmp) {};
-	virtual void finish() override { fwdTablePathID.garbageCollect(); RPCProtocol::finish(); }
+        R2Kademlia();
+	virtual void finish() override { fwdTablePathID.garbageCollect(); RPCProtocol::finish(); stopAllTimers(); }
 	/** @name policy functions called by routing table */
 	//@{
 	/** called when last contact is removed from a bucket*/
@@ -502,7 +531,23 @@ public:
 	static constexpr unsigned long PathInfoAgeThreshold = 2000UL; // ms
 	static constexpr unsigned long PathRefreshThreshold = 20000UL; // ms
 	static constexpr unsigned long RediscoveryNextTryWaitTime = 100UL; // ms
-	static constexpr unsigned long PNDiscrecoveryWaitTime = 1000UL; // µs
+	static constexpr unsigned long PNDiscoverWaitTime = 1000UL; // µs
+	static constexpr unsigned long GetPNWaitTime = 10000UL; // µs
+	static constexpr unsigned long GetONWaitTime = 20000UL; // µs
+};
+
+
+// default constructor
+inline
+R2Kademlia::R2Kademlia() :
+	routingTable(neighborTable), cmp(myOverlayKey),
+	urgentRediscoverQueue(cmp),
+	regularRediscoverQueue(cmp),
+	slowRediscoverQueue(cmp),
+	PNDiscoverQueue("PNDiscover", std::bind(&R2Kademlia::sendDiscoveryReq, this, ph::_1), std::bind(&R2Kademlia::sendScheduledPNDiscReqs, this), PNDiscoverWaitTime),
+	GetPNQueue("QueryRouteReq(PN)", std::bind(&R2Kademlia::sendGetPhysicalNeighbors, this, ph::_1), std::bind(&R2Kademlia::sendScheduledQueryRouteReqsPN, this), GetPNWaitTime),
+	GetONQueue("QueryRouteReq(ON)", std::bind(&R2Kademlia::sendGetOverlayNeighbors, this, ph::_1), std::bind(&R2Kademlia::sendScheduledQueryRouteReqsON, this), GetONWaitTime)
+{
 };
 
 
@@ -552,6 +597,7 @@ std::unique_ptr<T> R2Kademlia::makePacket(const KadContact* contact, const char 
 	packet->setHopLimit(hopLimit);
 	packet->appendRoute(contact);
 	packet->setStateSeqNo(getLSSeqNo());
+	packet->setSrcNodeDegree(neighborTable.size());
 	return packet;
 }
 
@@ -565,6 +611,7 @@ std::unique_ptr<T> R2Kademlia::makeAnswer(const KadPacket& original) {
 	ASSERT(answer->getSource() == myOverlayKey);
 	answer->setNonce(original.getNonce());
 	answer->setStateSeqNo(getLSSeqNo());
+	answer->setSrcNodeDegree(neighborTable.size());
 	// now copy the notvia information to let the source update its obsolete routes, too
 	if (original.getNotVia()) {
 		answer->setNotVia(true);

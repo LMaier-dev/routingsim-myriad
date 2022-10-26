@@ -1,7 +1,7 @@
 # OMNET executables need to be in the PATH opp_makemake
 include $(shell opp_configfilepath)
 
-BUILD_OPTIONS = -f --deep -o RoutingSim -I. -Ifoundation -I$(OMNETPP_INCL_DIR)/omnetpp -I$(OMNETPP_INCL_DIR) -DAUTOIMPORT_OMNETPP_NAMESPACE -lgmp 
+BUILD_OPTIONS = -f --deep -o RoutingSim -X src/routing/r2kademlia/work -I. -Ifoundation -I$(OMNETPP_INCL_DIR)/omnetpp -I$(OMNETPP_INCL_DIR) -DAUTOIMPORT_OMNETPP_NAMESPACE -lgmp 
 ifneq ($(JSON_INCL_DIR),)
 BUILD_OPTIONS += -I$(JSON_INCL_DIR)
 endif

@@ -35,7 +35,6 @@ short R2Kademlia::addRandomizedTimer(simtime_t initialOffset, simtime_t duration
 	if (duration > 0)
 		randomTimerDuration.push_back(duration);
 
-
 	short int ntimerId(duration == 0 ? -1 : randomTimerDuration.size()-1);
 	cMessage *msg = new cMessage("TimerMsg", ntimerId);
 	msg->setContextPointer( reinterpret_cast<void *>( new auto(callback) ) );
@@ -175,6 +174,7 @@ void R2Kademlia::onSelfMessage(cMessage_p msg)
 		if (timerId == -1) {
 			delete timerCallback;
 			msg->setContextPointer(nullptr);
+			return;
 		}
 	}
 
@@ -193,7 +193,7 @@ void R2Kademlia::onSelfMessage(cMessage_p msg)
 	else if (timerId < -1)
 	{
 		size_type timerIdx= -2-timerId;
-		ASSERT(timerIdx < randomTimerDuration.size());
+		ASSERT(timerIdx < fixedTimerDuration.size());
 		ASSERT(fixedTimerMsg[timerIdx] == msg.get());
 		if (fixedTimerDuration[timerIdx] > 0)
 		{

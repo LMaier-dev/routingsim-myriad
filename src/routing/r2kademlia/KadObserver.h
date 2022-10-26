@@ -141,6 +141,7 @@ public:
 	/// returns true if a node with the given key is known
 	inline bool exists(const OverlayKey& key) const { return nodes.left.count(key) > 0; };
 
+	//inline uint32_t getNodeDegree(const OverlayKey& key) const { return getR2Kademlia(key).neighborTable.size(); } // requires being a friend of R2Kademlia
 	//inline bool checkSeqNo(const OverlayKey& key, stateseqno_t seqno) const { return seqno <= getR2Kademlia(key).getGLSSeqNo();  };
 
 	/// returns the closest key that is assigned to a node

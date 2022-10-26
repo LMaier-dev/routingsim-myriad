@@ -67,6 +67,7 @@ packet KadPacket {
 	uint16_t hopLimit = 255;
 	// state seq number from source node
 	stateseqno_t stateSeqNo= stateseqno_t::invalidSeqNo;
+	uint32_t srcNodeDegree;
 	nonce_t nonce= 0; // simulator internal only
 	uint8_t type enum(KadPDUType);
 	bool notVia = false;

@@ -75,6 +75,7 @@ packet KadRTableRsp extends KadAnswer {
 	key_vector_t path[];
 	stateseqno_t seqNo[];
 	age_t pathInfoAge[];
+	uint32_t nodeDegree[];
 	// bool unknownFlag[];
 	// bool intermediateFlag[];
 }
@@ -89,6 +90,7 @@ packet KadUpdateRouteReq extends KadPacket {
        key_vector_t path[];
        stateseqno_t seqNo[];
        age_t pathInfoAge[];
+       uint32_t nodeDegree[];
        uint8_t action[] enum(KadRouteUpdateAction);
 }
 
@@ -120,6 +122,7 @@ packet KadPNDiscReq extends KadRTableReq {
 	OverlayKey phyNeighbor[];
 	stateseqno_t phyNeighborSeqNo[];
 	age_t phyNeighborAge[];
+	uint32_t phyNeighborDegree[];
 }
 
 // PNDiscRsp

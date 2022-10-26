@@ -260,8 +260,8 @@ void KadObserver::recordMessageScalars() {
 		mod->recordScalar("prefixDistLeft", info.prefixDistLeft);
 		mod->recordScalar("reasonDropped", info.reason);
 	}
-
 }
+
 
 R2Kademlia& KadObserver::getR2Kademlia(Node* nodeMod) {
 	cGate* gate = nodeMod->gate("toProtocols$o", 0);

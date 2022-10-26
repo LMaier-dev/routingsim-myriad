@@ -3,6 +3,7 @@
 namespace routingsim {
 
 // adds a new childnode to the parent or at least the link if the childnode is already known
+// also updates parameters like distance and sequence number if childnode already known
 // @returns whether something has been changed (link or node added)
 bool
 nodeVicinityGraph::addNode(const OverlayKey& parentNodeKey, const OverlayKey& childNodeKey, stateseqno_t stateseqno, unsigned short distance) {

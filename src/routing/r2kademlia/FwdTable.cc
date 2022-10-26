@@ -96,7 +96,7 @@ std::string FwdTablePathID::str() const
 {
 	std::ostringstream out;
 
-	out << "NIDPIDTable: ";
+	out << "NIDPIDTable (" << NIDPIDTable.size() << "): ";
 	for (const auto& nidpidentry : NIDPIDTable)
 	{
 		out << "{ " << nidpidentry.first.shortStr() << "=> " << nidpidentry.second << ' ';
@@ -107,7 +107,8 @@ std::string FwdTablePathID::str() const
 			out << "<missing PID> } ";
 	}
 
-	out << "PIDFwdTable: ";
+	auto [ptotal,pused]= getNumUsedPrecalcEntries();
+	out << "PIDFwdTable (F=" << getNumForeignEntries() << ",P=" << pused << '/' << ptotal << ",V=" << getNumValidEntries() << "): ";
 	for (const auto& pidfwdtableentry : PIDFwdTable)
 	{
 		const FwdTableEntry& fwdentry= pidfwdtableentry.second;
@@ -466,7 +467,7 @@ void FwdTablePathID::garbageCollect()
 	{
 		if (it->second.isDeleted() and not it->second.isLocal() and not it->second.isForeign() and not it->second.isPrecalc()
 		    and it->second.getAge() > fwdentry_refresh_timeout_ms) {
-			EV << "garbageCollect(): actually deleting PID " << it->first << ": " << it->second.str() << endl;
+			EV_TRACE << "garbageCollect(): actually deleting PID " << it->first << ": " << it->second.str() << endl;
 			it= PIDFwdTable.erase(it);
 		}
 		else

@@ -23,7 +23,6 @@ void KadPacket::setSource(const OverlayKey & source) {
 		appendHop(source);
 	else
 		setRoute(0, source);
-	addBitLength(OverlayKey::getLength());
 };
 
 

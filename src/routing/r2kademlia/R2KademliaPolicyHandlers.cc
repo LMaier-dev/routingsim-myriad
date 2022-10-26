@@ -167,7 +167,7 @@ void R2Kademlia::onContactInvalidation(KadContact_p contact)
 
 void R2Kademlia::onNewContact(KadContact_p contact) {
 
-	EV_TRACE << "onNewContact(" << contact->getKey().shortStr() << ") called, SeqNo #" << contact->getStateSeqNo() << endl;
+	EV_TRACE << "onNewContact(" << contact->getKey().shortStr() << ") called, SeqNo #" << contact->getStateSeqNo() << " (" << contact->getNodeDegree() << ')' << endl;
 	//ASSERT( getKadObserver().checkSeqNo(contact->getKey(),contact->getStateSeqNo()) == true );
 
 	// physical neighbor, may have been heard of its existence by some third node!
@@ -177,6 +177,9 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 		{
 			EV_DEBUG << "onNewContact: will ignore supposed physical neighbor not being in Neighbor table yet" << endl;
 			return;
+		}
+		else { // actually a new neighbor -> increase sequence number
+			incLSSeqNo();
 		}
 	}
 
@@ -191,7 +194,7 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 		if (contact->getPathLength()+1 < discoveryRadius) {
 			// sends a QueryRouteReq requesting their 1 hop neighborhood
 			// sendGetPhysicalNeighbors() adds contact to vicinity to keep track of already queried nodes in vicinity
-			sendGetPhysicalNeighbors(contact);
+			scheduleGetPNReq(*contact); // was sendGetPhysicalNeighbors(contact);
 		}
 		else // maybe just on the radius, check to add contact for vicinity
 		if (contact->getPathLength()+1 == nodeVicinityGraph::vicinityDiscoveryRadius) {
@@ -208,7 +211,7 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 		if (routingTable.isInLastBucket(contact->getKey()))
 		{
 			//EV_TRACE << "New contact is in deepest bucket, will ask for contacts close to me" << endl;
-			sendGetOverlayNeighbors(contact);
+			scheduleGetONReq(*contact);// was sendGetOverlayNeighbors(contact);
 		}
 
 		if (usePathIDs) {
@@ -263,11 +266,13 @@ void R2Kademlia::onImprovement(const KadContact& contact) {
 	}
 
 	// TODO: wait grace period
-	if ( neighborTable.isNeighbor(contact.getKey()) )
+	if ( neighborTable.isNeighbor(contact.getKey()) and contact.getPath().empty())
 	{ // this is true after re-enabling a physical neighbor
-		if (not contact.isPhysicalNeighbor())
+		if (not contact.isPhysicalNeighbor()) {
 			EV_WARN << "reenabling physical contact is not flagged as being neighbor" << endl;
-
+		}
+		// now increase the sequence number
+		incLSSeqNo();
 		scheduleUpdate(contact, KAD_Announce);
 	}
 	else
@@ -303,7 +308,7 @@ void R2Kademlia::onPathChange(const KadContact& contact) {
 void R2Kademlia::recheckPhysicalNeighbors(const KadContact& contact) {
 	// simply recheck the physical Neighbors
 	EV_TRACE << "recheckPhysicalNeighbors triggered for " << contact.getKey().shortStr() << endl;
-	sendGetPhysicalNeighbors(&contact);
+	scheduleGetPNReq(contact);
 }
 
 
@@ -311,7 +316,7 @@ void R2Kademlia::reSyncPN(const KadContact& contact, stateseqno_t expected_seqno
 	// simply trigger a PNDiscReq to update any sequence number
 	EV_TRACE << "reSyncPN scheduled for " << contact.getKey().shortStr() << " expected seqno: " << expected_seqno << endl;
 
-	schedulePNDiscReq(contact.getKey(), expected_seqno);
+	schedulePNDiscReq({contact.getKey(), {}, expected_seqno});
 }
 
 
