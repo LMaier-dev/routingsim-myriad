@@ -883,6 +883,7 @@ bool R2Kademlia::handleProbeResponse(KadPacket_p answer, RPCState& rpcState) {
 		if (contact_p->getStateSeqNo() <= probeRsp->getStateSeqNo()) {
 			contact_p->setStateSeqNo(probeRsp->getStateSeqNo());
 			contact_p->updateLastSeen();
+			contact_p->updateLastPathRefresh();
 			contact_p->setNodeDegree(probeRsp->getSrcNodeDegree());
 		}
 		else

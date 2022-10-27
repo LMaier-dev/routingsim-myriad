@@ -69,13 +69,18 @@ bool R2Kademlia::handlePathSetupResponse(KadPacket_p answer, RPCState& rpcState)
 	// meanwhile the contact may have been replaced or deleted etc.
 	// also the pathID may have been updated for the contact in the meantime
 	// otherwise actually install the path
-	if (auto contactp= routingTable.getContact(tmpcontact.getKey()); contactp != nullptr) {
+	if (auto contactp= const_cast<KadContact*>(routingTable.getContact(tmpcontact.getKey())); contactp != nullptr) {
 		// check if contact has been changed meanwhile
 		// e.g., maybe without path setup as precalc, so this action would override the correct better path...
 		if (contactp->getStateSeqNo() < pathSetupRsp->getContactSeqNo() or
 		    (contactp->getStateSeqNo() == pathSetupRsp->getContactSeqNo() and
 		     tmpcontact.getLastSeen() < pathSetupRsp->getContactLastSeen())) {
+                    if (contactp->isValid() and contactp->getPathLength() < tmpcontact.getPathLength()){
+                        // do nothing we have a valid shorter path in our contact
+                    } else {
 			addthispath= true;
+                        contactp->updateLastPathRefresh();
+                    }
 		}
 		else {
 			// Last Seen of current contact is more recent
@@ -87,6 +92,7 @@ bool R2Kademlia::handlePathSetupResponse(KadPacket_p answer, RPCState& rpcState)
 			}
 			else {
 				addthispath= true;
+                                contactp->updateLastPathRefresh();
 			}
 		}
 	}

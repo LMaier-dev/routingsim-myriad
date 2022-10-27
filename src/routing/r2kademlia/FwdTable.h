@@ -15,7 +15,7 @@
 
 namespace routingsim {
 
-constexpr unsigned long fwdentry_refresh_timeout_ms= 30000;
+constexpr unsigned long fwdentry_refresh_timeout_ms= 180000;
 
 class FwdTableEntry {
 private:

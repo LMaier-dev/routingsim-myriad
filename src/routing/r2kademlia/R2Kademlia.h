@@ -529,7 +529,7 @@ public:
 
 	// do not probe if information is newer than PathInfoAgeThreshold
 	static constexpr unsigned long PathInfoAgeThreshold = 2000UL; // ms
-	static constexpr unsigned long PathRefreshThreshold = 20000UL; // ms
+	static constexpr unsigned long PathRefreshThreshold = 120000UL; // ms
 	static constexpr unsigned long RediscoveryNextTryWaitTime = 100UL; // ms
 	static constexpr unsigned long PNDiscoverWaitTime = 1000UL; // µs
 	static constexpr unsigned long GetPNWaitTime = 10000UL; // µs
