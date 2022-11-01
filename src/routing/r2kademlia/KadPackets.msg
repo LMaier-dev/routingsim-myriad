@@ -25,6 +25,7 @@ cplusplus {{
 class KadPacket;
 typedef std::vector<OverlayKey> key_vector_t;
 typedef uint32_t age_t;
+typedef uint16_t nodedegree_t;
 }}
 
 namespace routingsim;
@@ -35,6 +36,7 @@ class noncobject OverlayKey;
 class noncobject key_vector_t;
 class noncobject stateseqno_t;
 class noncobject age_t;
+class noncobject nodedegree_t;
 
 enum KadErrorType {
 	KAD_NoError = 0;
@@ -75,7 +77,7 @@ packet KadRTableRsp extends KadAnswer {
 	key_vector_t path[];
 	stateseqno_t seqNo[];
 	age_t pathInfoAge[];
-	uint32_t nodeDegree[];
+	nodedegree_t nodeDegree[];
 	// bool unknownFlag[];
 	// bool intermediateFlag[];
 }
@@ -90,7 +92,7 @@ packet KadUpdateRouteReq extends KadPacket {
        key_vector_t path[];
        stateseqno_t seqNo[];
        age_t pathInfoAge[];
-       uint32_t nodeDegree[];
+       nodedegree_t nodeDegree[];
        uint8_t action[] enum(KadRouteUpdateAction);
 }
 
@@ -122,7 +124,7 @@ packet KadPNDiscReq extends KadRTableReq {
 	OverlayKey phyNeighbor[];
 	stateseqno_t phyNeighborSeqNo[];
 	age_t phyNeighborAge[];
-	uint32_t phyNeighborDegree[];
+	nodedegree_t phyNeighborDegree[];
 }
 
 // PNDiscRsp

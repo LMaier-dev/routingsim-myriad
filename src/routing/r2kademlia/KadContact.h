@@ -35,7 +35,7 @@ namespace routingsim {
 using size_type = std::size_t;
 	//using stateseqno_t = uint16_t;
 using age_t = uint32_t;
-
+using nodedegree_t = uint16_t;
 constexpr unsigned short int maxRediscoveryRetries= 6;
 
 // see R2Kademlia.h
@@ -146,8 +146,10 @@ public:
 		syncPNSeqno= newseqno; }
 
 	bool isContainedinPath(const OverlayKey& myOverlayKey, const link_t& link) const;
-	uint32_t getNodeDegree() const { return nodeDegree; };
-	void setNodeDegree(uint32_t newnodeDegree) { nodeDegree= newnodeDegree; };
+	nodedegree_t getNodeDegree() const { return nodeDegree; };
+	// larger node degrees are set to 65535 (probably no distinction beyond necessary)
+	void setNodeDegree(size_t newnodeDegree) { nodeDegree= (newnodeDegree > 0xffffUL) ? 0xffff : newnodeDegree; };
+	// the following measure could also take the connectivity of the whole path into account (currently only nodeDegree)
 	uint32_t getConnectivity() const { return nodeDegree; };
 
 	/// Common stdc++ console output method
@@ -165,7 +167,7 @@ private:
 	stateseqno_t syncPNSeqno= stateseqno_t::invalidSeqNo; /// sequence number for syncing with PN
 	State state= State::undefined; /// the state of the contact
 	bool physicalNeighbor= false; /// true if we have a direct physical link to this neighbor
-	uint32_t nodeDegree = 0; /// degree of contact (node attribute connectivity)
+	nodedegree_t nodeDegree = 0; /// degree of contact (node attribute), larger degrees are set to 65535
 	std::unique_ptr<RediscoveryState> rds_p= nullptr;
 };
 

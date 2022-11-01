@@ -23,6 +23,7 @@ cplusplus {{
 typedef std::pair<OverlayKey,OverlayKey> link_t;
 
 typedef uint32_t age_t;
+typedef uint16_t nodedegree_t;
 }}
 
 namespace routingsim;
@@ -57,6 +58,7 @@ class noncobject nonce_t;
 class noncobject link_t;
 class noncobject stateseqno_t;
 class noncobject age_t;
+class noncobject nodedegree_t;
 
 // a KAD control packet
 packet KadPacket {
@@ -67,7 +69,7 @@ packet KadPacket {
 	uint16_t hopLimit = 255;
 	// state seq number from source node
 	stateseqno_t stateSeqNo= stateseqno_t::invalidSeqNo;
-	uint32_t srcNodeDegree;
+	nodedegree_t srcNodeDegree;
 	nonce_t nonce= 0; // simulator internal only
 	uint8_t type enum(KadPDUType);
 	bool notVia = false;
