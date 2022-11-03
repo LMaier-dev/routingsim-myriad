@@ -107,7 +107,7 @@ void R2Kademlia::onInitialize() {
 		addRandomizedTimer(exploreInterval*1.5, exploreInterval, std::bind(&R2Kademlia::doSendExplorePathPacket, this, ph::_1));
 
 	// resend Hello packets to keep state sequence numbers in synch, note that is includes an exonential backoff (until 30s max)
-	addRandomizedTimer(SimTime(225,SIMTIME_MS), SimTime(250,SIMTIME_MS), std::bind(&R2Kademlia::doSendHello, this, ph::_1));
+	PNHelloTimerId= addRandomizedTimer(SimTime(225,SIMTIME_MS), SimTime(250,SIMTIME_MS), std::bind(&R2Kademlia::doSendHello, this, ph::_1));
 
 	if (usePathIDs) {
 		// if PathRefreshThreshold is 20s, refresh is scheduled between [10s,30s]
@@ -137,14 +137,16 @@ void R2Kademlia::onInitialize() {
 // link comes up (treat like a link layer indication "link established"), immediately send a PNHello message
 void R2Kademlia::onConnect( nodeid_t nid ) {
 
-	// send a hello packet after some random delay
+	// send a hello packet to new neighbor after some very small random delay
 	addOneShotTimer(SimTime(uniform(1000,3000),SIMTIME_US), [this,nid]() {
 		auto packet(makeHelloPacket());
 		sentVolume+= packet->getByteLength();
 		sendToNode(nid, std::move(packet));
 		sentPackets++;
 	} );
-
+	// additionally, reset PNHello timer if this fires too far away in the future
+	if (randomTimerDuration[PNHelloTimerId] > 3*SimTime(PNHelloMinInterval,SIMTIME_MS))
+		resetTimer(PNHelloTimerId, SimTime(PNHelloMinInterval,SIMTIME_MS));
 }
 
 

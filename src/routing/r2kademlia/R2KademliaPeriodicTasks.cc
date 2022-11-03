@@ -75,7 +75,7 @@ short R2Kademlia::addFixedTimer(simtime_t initialOffset, simtime_t duration, std
 
 void R2Kademlia::stopTimer(short timerId)
 {
-	EV_TRACE << "stopTimer " << timerId;
+	//EV_TRACE << "stopTimer " << timerId;
 	if (timerId > 0 and (size_type) timerId < randomTimerMsg.size()) {
 		cMessage* timermsg= randomTimerMsg[timerId];
 		randomTimerMsg[timerId]= nullptr;
@@ -101,7 +101,7 @@ void R2Kademlia::stopTimer(short timerId)
 		delete timermsg;
 		}
 	}
-	EV_TRACE << " done." << endl;
+	//EV_TRACE << " done." << endl;
 }
 
 
@@ -109,6 +109,7 @@ void R2Kademlia::resetTimer(short timerId, simtime_t duration)
 {
 	if (timerId > 0 and (size_type) timerId < randomTimerMsg.size()) {
 		cMessage* timermsg= randomTimerMsg[timerId];
+		ASSERT(timermsg != nullptr);
 		// save callback function pointer
 		cbfunc_t* cbfunc_p(static_cast<cbfunc_t*>(timermsg->getContextPointer()));
 		// cancel potentially scheduled message (nothing happens if it was not)
@@ -118,6 +119,7 @@ void R2Kademlia::resetTimer(short timerId, simtime_t duration)
 			randomTimerDuration[timerId]= duration;
 			cMessage *msg = new cMessage("TimerMsg", timerId);
 			msg->setContextPointer( reinterpret_cast<void *>( cbfunc_p ) );
+			randomTimerMsg[timerId]= msg;
 			scheduleAt(simTime() + uniform(duration, duration/2*3), msg);
 		}
 	}
@@ -125,6 +127,7 @@ void R2Kademlia::resetTimer(short timerId, simtime_t duration)
 	if (timerId < 0) {
 		if (size_type timerIdx= -2-timerId; timerIdx < fixedTimerMsg.size()) {
 			cMessage* timermsg= fixedTimerMsg[timerIdx];
+			ASSERT(timermsg != nullptr);
 			// save callback function pointer
 			cbfunc_t* cbfunc_p(static_cast<cbfunc_t*>(timermsg->getContextPointer()));
 			// cancel potentially scheduled message (nothing happens if it was not)
@@ -134,6 +137,7 @@ void R2Kademlia::resetTimer(short timerId, simtime_t duration)
 				randomTimerDuration[timerIdx]= duration;
 				cMessage *msg = new cMessage("TimerMsg", timerId);
 				msg->setContextPointer( reinterpret_cast<void *>( cbfunc_p ) );
+				randomTimerMsg[timerId]= msg;
 				scheduleAt(simTime() + duration, msg);
 			}
 		}
@@ -211,18 +215,25 @@ void R2Kademlia::doSendHello(short timerId)
 	if (neighborTable.size() == 0)
 		return; // node is isolated
 
-	static const simtime_t maxDuration(30); // check every 30 seconds
+	static const simtime_t maxHelloInterval(SimTime(PNHelloMaxInterval,SIMTIME_MS)); // check every 30 seconds
 
-	// exponential backoff double duration until we reached maxDuration
-	if (randomTimerDuration[timerId] < maxDuration)
-	{ // double waiting time for next call until maxDuration is reached
-		randomTimerDuration[timerId] = std::min(2 * randomTimerDuration[timerId], maxDuration);
+	if (lastPNHelloStateSeqNo.isInvalid() or lastPNHelloStateSeqNo != getLSSeqNo()) {
+		// if local state has changed within the last interval, reset to minInterval
+		randomTimerDuration[timerId]= SimTime(PNHelloMinInterval,SIMTIME_MS);
+	}
+	else {
+		// exponential backoff double duration until we reached maxDuration
+		if (randomTimerDuration[timerId] < maxHelloInterval)
+		{ // double waiting time for next call until maxDuration is reached
+			randomTimerDuration[timerId] = std::min(2 * randomTimerDuration[timerId], maxHelloInterval);
+		}
 	}
 
 	auto hellopkt(makeHelloPacket());
 	sentVolume+= neighborTable.size() * hellopkt->getByteLength();
 	sendToNeighbors(std::move(hellopkt));
 	sentPackets+= neighborTable.size();
+	lastPNHelloStateSeqNo= getLSSeqNo();
 }
 
 

@@ -28,6 +28,7 @@ public:
 	stateseqno_t& operator+=(const stateseqno_t& other) { seqnumber+= (uint16_t) other; return *this; }
 	stateseqno_t operator+(const stateseqno_t& other) { return seqnumber + (uint16_t) other; }
 	bool operator== (const stateseqno_t& other) const { return other.seqnumber == seqnumber; }
+	bool operator!= (const stateseqno_t& other) const { return other.seqnumber != seqnumber; }
 	// s < s' (modulo 2^16) when 0 < ((s' - s) MOD 2^16) < 32768
 	bool operator< (const stateseqno_t& other) const { return  (seqnumber != other.seqnumber) and (uint16_t)(other.seqnumber - seqnumber) < 0x8000u;}
 	bool operator> (const stateseqno_t& other) const { return  (seqnumber != other.seqnumber) and not((uint16_t)(other.seqnumber - seqnumber) < 0x8000u); }

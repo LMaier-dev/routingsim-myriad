@@ -200,6 +200,9 @@ private:
 	// timestamp for outstanding ONQueryRouteReqs
 	simtime_t LastONQueryRouteReq;
 
+	// state seq number sent with last PNHello
+	stateseqno_t lastPNHelloStateSeqNo= stateseqno_t::invalidSeqNo;
+
 	/** @name statistics */
 	//@{
 	uint forwardedPackets = 0;
@@ -238,6 +241,7 @@ private:
 	std::vector<simtime_t> fixedTimerDuration;
 	std::vector<cMessage *> randomTimerMsg;
 	std::vector<cMessage *> fixedTimerMsg;
+	short PNHelloTimerId= 0;
 	//@}
 
 	/** @name message generation */
@@ -532,6 +536,8 @@ public:
 	static constexpr unsigned long PathRefreshThreshold = 120000UL; // ms
 	static constexpr unsigned long RediscoveryNextTryWaitTime = 100UL; // ms
 	static constexpr unsigned long PNDiscoverWaitTime = 1000UL; // µs
+	static constexpr unsigned long PNHelloMinInterval = 100UL; // ms
+	static constexpr unsigned long PNHelloMaxInterval = 30000UL; // ms
 	static constexpr unsigned long GetPNWaitTime = 10000UL; // µs
 	static constexpr unsigned long GetONWaitTime = 20000UL; // µs
 };
