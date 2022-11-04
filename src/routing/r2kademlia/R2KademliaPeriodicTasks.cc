@@ -115,6 +115,7 @@ void R2Kademlia::resetTimer(short timerId, simtime_t duration)
 		// cancel potentially scheduled message (nothing happens if it was not)
 		randomTimerMsg[timerId]= nullptr;
 		cancelEvent(timermsg);
+		delete timermsg;
 		if (duration > 0) {
 			randomTimerDuration[timerId]= duration;
 			cMessage *msg = new cMessage("TimerMsg", timerId);
@@ -133,6 +134,7 @@ void R2Kademlia::resetTimer(short timerId, simtime_t duration)
 			// cancel potentially scheduled message (nothing happens if it was not)
 			fixedTimerMsg[timerIdx]= nullptr;
 			cancelEvent(timermsg);
+			delete timermsg;
 			if (duration > 0) {
 				randomTimerDuration[timerIdx]= duration;
 				cMessage *msg = new cMessage("TimerMsg", timerId);
