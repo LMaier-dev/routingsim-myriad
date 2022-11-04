@@ -536,7 +536,7 @@ public:
 	static constexpr unsigned long PathRefreshThreshold = 120000UL; // ms
 	static constexpr unsigned long RediscoveryNextTryWaitTime = 100UL; // ms
 	static constexpr unsigned long PNDiscoverWaitTime = 1000UL; // µs
-	static constexpr unsigned long PNHelloMinInterval = 100UL; // ms
+	static constexpr unsigned long PNHelloMinInterval = 200UL; // ms
 	static constexpr unsigned long PNHelloMaxInterval = 30000UL; // ms
 	static constexpr unsigned long GetPNWaitTime = 10000UL; // µs
 	static constexpr unsigned long GetONWaitTime = 20000UL; // µs
