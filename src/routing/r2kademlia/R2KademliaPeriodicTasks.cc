@@ -36,7 +36,7 @@ short R2Kademlia::addRandomizedTimer(simtime_t initialOffset, simtime_t duration
 		randomTimerDuration.push_back(duration);
 
 	short int ntimerId(duration == 0 ? -1 : randomTimerDuration.size()-1);
-	cMessage *msg = new cMessage("TimerMsg", ntimerId);
+	cMessage *msg(new cMessage("TimerMsg", ntimerId));
 	msg->setContextPointer( reinterpret_cast<void *>( new auto(callback) ) );
 
 	if (duration > 0)
@@ -60,7 +60,7 @@ short R2Kademlia::addFixedTimer(simtime_t initialOffset, simtime_t duration, std
 		fixedTimerDuration.push_back(duration);
 	// for fixed timers the timerId is negative and starts at -2
 	short int ntimerId(duration == 0 ? -1 : -1-fixedTimerDuration.size());
-	cMessage *msg = new cMessage("TimerMsg", ntimerId);
+	cMessage *msg(new cMessage("TimerMsg", ntimerId));
 	msg->setContextPointer( reinterpret_cast<void *>( new auto(callback) ) );
 
 	if (duration > 0)
@@ -77,7 +77,7 @@ void R2Kademlia::stopTimer(short timerId)
 {
 	//EV_TRACE << "stopTimer " << timerId;
 	if (timerId > 0 and (size_type) timerId < randomTimerMsg.size()) {
-		cMessage* timermsg= randomTimerMsg[timerId];
+		cMessage* timermsg(randomTimerMsg[timerId]);
 		randomTimerMsg[timerId]= nullptr;
 		// cancel potentially scheduled message (nothing happens if it was not)
 		cancelEvent(timermsg);
@@ -90,15 +90,15 @@ void R2Kademlia::stopTimer(short timerId)
 	else
 	if (timerId < 0) {
 		if (size_type timerIdx= -2-timerId; timerIdx < fixedTimerMsg.size()) {
-		cMessage* timermsg= fixedTimerMsg[timerIdx];
-		fixedTimerMsg[timerIdx]= nullptr;
-		// cancel potentially scheduled message (nothing happens if it was not)
-		cancelEvent(timermsg);
-		// remove callback function
-		cbfunc_t* cbfunc_p(static_cast<cbfunc_t*>(timermsg->getContextPointer()));
-		delete(cbfunc_p);
-		timermsg->setContextPointer(nullptr);
-		delete timermsg;
+			cMessage* timermsg(fixedTimerMsg[timerIdx]);
+			fixedTimerMsg[timerIdx]= nullptr;
+			// cancel potentially scheduled message (nothing happens if it was not)
+			cancelEvent(timermsg);
+			// remove callback function
+			cbfunc_t* cbfunc_p(static_cast<cbfunc_t*>(timermsg->getContextPointer()));
+			delete(cbfunc_p);
+			timermsg->setContextPointer(nullptr);
+			delete timermsg;
 		}
 	}
 	//EV_TRACE << " done." << endl;
@@ -108,43 +108,28 @@ void R2Kademlia::stopTimer(short timerId)
 void R2Kademlia::resetTimer(short timerId, simtime_t duration)
 {
 	if (timerId > 0 and (size_type) timerId < randomTimerMsg.size()) {
-		cMessage* timermsg= randomTimerMsg[timerId];
+		cMessage* timermsg(randomTimerMsg[timerId]);
 		ASSERT(timermsg != nullptr);
-		// save callback function pointer
-		cbfunc_t* cbfunc_p(static_cast<cbfunc_t*>(timermsg->getContextPointer()));
 		// cancel potentially scheduled message (nothing happens if it was not)
-		randomTimerMsg[timerId]= nullptr;
 		cancelEvent(timermsg);
-		delete timermsg;
-		if (duration > 0) {
+		if (duration > 0) { // set new duration and reschedule
 			randomTimerDuration[timerId]= duration;
-			cMessage *msg = new cMessage("TimerMsg", timerId);
-			msg->setContextPointer( reinterpret_cast<void *>( cbfunc_p ) );
-			randomTimerMsg[timerId]= msg;
-			scheduleAt(simTime() + uniform(duration, duration/2*3), msg);
+			scheduleAt(simTime() + uniform(duration, duration/2*3), timermsg);
 		}
 	}
 	else
 	if (timerId < 0) {
 		if (size_type timerIdx= -2-timerId; timerIdx < fixedTimerMsg.size()) {
-			cMessage* timermsg= fixedTimerMsg[timerIdx];
+			cMessage* timermsg(fixedTimerMsg[timerIdx]);
 			ASSERT(timermsg != nullptr);
-			// save callback function pointer
-			cbfunc_t* cbfunc_p(static_cast<cbfunc_t*>(timermsg->getContextPointer()));
 			// cancel potentially scheduled message (nothing happens if it was not)
-			fixedTimerMsg[timerIdx]= nullptr;
 			cancelEvent(timermsg);
-			delete timermsg;
-			if (duration > 0) {
+			if (duration > 0) { // set new duration and reschedule
 				fixedTimerDuration[timerIdx]= duration;
-				cMessage *msg = new cMessage("TimerMsg", timerId);
-				msg->setContextPointer( reinterpret_cast<void *>( cbfunc_p ) );
-				fixedTimerMsg[timerIdx]= msg;
-				scheduleAt(simTime() + duration, msg);
+				scheduleAt(simTime() + duration, timermsg);
 			}
 		}
 	}
-
 }
 
 
