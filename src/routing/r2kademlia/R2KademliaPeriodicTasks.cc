@@ -136,10 +136,10 @@ void R2Kademlia::resetTimer(short timerId, simtime_t duration)
 			cancelEvent(timermsg);
 			delete timermsg;
 			if (duration > 0) {
-				randomTimerDuration[timerIdx]= duration;
+				fixedTimerDuration[timerIdx]= duration;
 				cMessage *msg = new cMessage("TimerMsg", timerId);
 				msg->setContextPointer( reinterpret_cast<void *>( cbfunc_p ) );
-				randomTimerMsg[timerId]= msg;
+				fixedTimerMsg[timerIdx]= msg;
 				scheduleAt(simTime() + duration, msg);
 			}
 		}
