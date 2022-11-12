@@ -198,8 +198,8 @@ public:
 
 	/// invalidate all contacts with paths that contain a failed link otherNodeKey <-> failedNodeKey
 	void invalidateContacts(const link_t& failedLink, age_t failedLinkAge);
-	/// invalidate all contacts with paths that contain the physical neighbor failedNodeKey as next hop 
-	void invalidateContactsPN(const OverlayKey& failedNodeKey);
+	/// invalidate all contacts with paths that contain the physical neighbor failedNodeKey as next hop, returns number of affected contacts
+	unsigned short invalidateContactsPN(const OverlayKey& failedNodeKey);
 	/// invalidate individual contact if its path contains the failed_link
 	void invalidateContact(KadContact& contact, const link_t& failed_link, age_t failedLinkAge);
 

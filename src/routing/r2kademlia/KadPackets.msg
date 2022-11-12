@@ -60,6 +60,7 @@ packet KadAnswer extends KadPacket {
 	bool shortened = false; // true if return path was shortened (removed cycles)
 }
 
+
 /// compare RTableRequestType from Spec
 packet KadRTableReq extends KadPacket {
 	// reserved flag is omitted
@@ -80,6 +81,20 @@ packet KadRTableRsp extends KadAnswer {
 	nodedegree_t nodeDegree[];
 	// bool unknownFlag[];
 	// bool intermediateFlag[];
+}
+
+// FIND NODE
+packet KadFindNodeReq extends KadRTableReq {
+	type = KAD_FindNodeReq;
+
+	OverlayKey dstNodeID;
+	bool exact = false;
+	bool rediscovery = false;
+}
+
+
+packet KadFindNodeRsp extends KadRTableRsp {
+	type = KAD_FindNodeRsp;
 }
 
 /// UpdateRouteReq (w/o response)
@@ -176,16 +191,3 @@ packet KadQueryRouteRsp extends KadRTableRsp {
 }
 
 
-// FIND NODE
-packet KadFindNodeReq extends KadRTableReq {
-	type = KAD_FindNodeReq;
-
-	OverlayKey dstNodeID;
-	bool exact = false;
-	bool rediscovery = false;
-}
-
-
-packet KadFindNodeRsp extends KadRTableRsp {
-	type = KAD_FindNodeRsp;
-}

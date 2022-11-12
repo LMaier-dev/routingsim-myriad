@@ -305,7 +305,7 @@ private:
 	/// does statistics on dropped data packet
 	void countDropped(KadDataPacket& packet, const OverlayKey& target, uint8_t reason);
 	/// try a shortcut route and modify source route of the packet
-	void applyShortcut(KadPacket& packet);
+	void applyShortcut(KadPacket& packet, const OverlayKey& destination);
 	/// try to install path from path setup response packet
 	bool checkForPathInstallation(KadPacket& packet);
 	/// remove path ID if possible

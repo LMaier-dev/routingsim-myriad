@@ -21,6 +21,7 @@
 #include "KadRoutingTable.h"
 #include "KadObserver.h"
 #include <algorithm>
+#include <limits>
 #include "BaseTypes.h"
 
 namespace routingsim {
@@ -1070,9 +1071,15 @@ void KadRoutingTable::invalidateContacts(const link_t& failedLink, age_t failedL
 }
 
 
-/** invalidate all contacts with paths that contain the physical neighbor failedNodeKey as next hop */
-void KadRoutingTable::invalidateContactsPN(const OverlayKey& failedNodeKey)
+/** invalidate all contacts with paths that contain the physical neighbor failedNodeKey as next hop
+    @returns number of invalidated contacts (this is the priority for rediscovering it)
+    a failed PN that invalidates many routes should be rediscovered first in order to reduce
+    the number of invalid paths.
+*/
+unsigned short
+KadRoutingTable::invalidateContactsPN(const OverlayKey& failedNodeKey)
 {
+	unsigned short counter(0);
 	//EV_TRACE << "invalidateContactsPN(" << failedNodeKey << ")" << endl;
 	// iterate over all buckets and contacts
 	for (KadBucket& b : buckets) {
@@ -1086,6 +1093,8 @@ void KadRoutingTable::invalidateContactsPN(const OverlayKey& failedNodeKey)
 				{
 					if (contact->isValid()) {
 						contact->setInvalid({failedNodeKey, myKey},0);
+						if (counter < std::numeric_limits<decltype(counter)>::max())
+							counter++;
 						EV_TRACE << "Set Contact to invalid due to PN first hop failure: "  << *contact << endl;
 						// will schedule this for regular rediscovery later
 						if (isInLastBucket(contact->getKey()))
@@ -1097,20 +1106,28 @@ void KadRoutingTable::invalidateContactsPN(const OverlayKey& failedNodeKey)
 					if (contact->isInvalid()) { // contact already invalid or rediscovering
 						// add potentially further failed link
 						contact->setInvalid({failedNodeKey, myKey},0);
+						if (counter < std::numeric_limits<decltype(counter)>::max())
+							counter++;
 					}
 				}
 			}
 		} // end for inner loop over all contacts
 
+		// note: it may seem odd to iterate through the PNs here, but in case of failed links
+		// they may currently have a longer route and thus depend on the failed PN link, too
 		for (auto& contact : b.PNContacts) {
 			// we found a failed link in the path, mark contact invalid
 			const auto& path= contact->getPath();
+			// only check PNs that are currently not directly connected
 			if (path.size() >= 1)
 			{
 				if (path[0] == failedNodeKey) // failed node is first hop
 				{
+
 					if (contact->isValid()) {
 						contact->setInvalid({failedNodeKey, myKey},0);
+						if (counter < std::numeric_limits<decltype(counter)>::max())
+							counter++;
 						EV_TRACE << "Set Contact to invalid due to PN first hop failure: "  << *contact << endl;
 						// will schedule this for rediscovery later
 						if (isInLastBucket(contact->getKey()))
@@ -1122,11 +1139,15 @@ void KadRoutingTable::invalidateContactsPN(const OverlayKey& failedNodeKey)
 					if (contact->isInvalid()) { // contact already invalid or rediscovering
 						// add potentially further failed link
 						contact->setInvalid({failedNodeKey, myKey}, 0);
+						if (counter < std::numeric_limits<decltype(counter)>::max())
+							counter++;
 					}
 				}
 			}
 		} // end for inner loop over all contacts
 	} // end for over all buckets
+
+	return counter;
 }
 
 

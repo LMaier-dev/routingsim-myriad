@@ -1,7 +1,7 @@
 ./RoutingSim_dbg ../simulations/r2kademlia/eval.ini -u Cmdenv -c ClosFatTree -r 2  --sim-time-limit=1000s --cmdenv-express-mode=false --cmdenv-log-level=trace 2>&1 | egrep -v 'DefaultNetwork\.manager\.Node[[[:xdigit:]]+\.node'
 # useful extraction commands:
 # filter out events from a specific node
-#awk -e '/^\*\*\ Event.*DefaultNetwork\.manager\.Node49\.protocol0.*$/ { out = 1; print; next } out == 1 && /^[^\*]/ { print; } out == 1 && /^\*\*\ Event/ { out = 0; next }'
+#awk -e '/^\*\* Event.*DefaultNetwork\.manager\.Node49\.protocol0.*$/ { out = 1; print; next } out == 1 && /^[^\*]/ { print; } out == 1 && /^\*\* Event/ { out = 0; next }'
 # filter out a specific time period
 #sed -n '/^\*\*\ Event .* t=1\..*$/,/^\*\*\ Event .* t=1\.8.* .*$/p
 

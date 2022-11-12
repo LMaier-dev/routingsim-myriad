@@ -172,16 +172,19 @@ void R2Kademlia::onDisconnect( nodeid_t nid ) {
 		return;
 	}
 
+	// contacts from routing table with this neighbor as next hop are not usable until rediscovered
+	auto counter= routingTable.invalidateContactsPN(key);
+	if (counter > 0)
+		EV_TRACE << "invalidated " << counter << " contacts" << endl;
+
 	// Try to rediscover that contact
 	// after grace period (otherwise more links may fail immediately after this)
-	if (routingTable.isInLastBucket(key))
+	unsigned long threshold= 5UL * counter; // 5 corresponds to 20% (100/20) of the entries
+	// it is promoted to urgent in case there are more then a certain percentage
+	if (routingTable.isInLastBucket(key) or threshold > routingTable.getNumContactsWithoutPNs())
 		scheduleUrgentRediscovery(key);
 	else
 		scheduleRegularRediscovery(key);
-
-
-	// contacts from routing table with this neighbor as next hop are not usable until rediscovered
-	routingTable.invalidateContactsPN(key);
 
 	// send UpdateRouteReq w/ failed link to ID-wise closest Nodes
 	// we can rely on routingTable.getContact(key) != nullptr, because of earlier setContactInvalid() call
@@ -189,7 +192,7 @@ void R2Kademlia::onDisconnect( nodeid_t nid ) {
 }
 
 
-// called on reception of a NodePkt for this protocol
+// called on reception of a NodePkt for this protocol, i.e., an R2/Kad packet
 void R2Kademlia::onMessage( NodePkt_p pkt ) {
 
 	ASSERT(pkt->getType() == KAD_CTRL_PACKET_TYPE || pkt->getType() == KAD_DATA_PACKET_TYPE);
@@ -253,7 +256,6 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	if (packet->hasRemainingHops()) {
 		// we are not the recipient
 
-		//TODO ERROR OVERHEARING, more overhearing
 		// special actions while forwarding packets
 		switch (packet->getType())
 		{
@@ -336,9 +338,31 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 				evalQueryRouteRsp(static_cast<const KadQueryRouteRsp*>(packet.get()));
 				break;
 
-			// case KAD_Error: // TODO check for contact invalidation due to SegmentFailure
-			//
-			// break;
+		        case KAD_Error: // check for contact invalidation due to SegmentFailure
+				if (auto errorpkt= static_cast<const KadError*>(packet.get());
+				    errorpkt != nullptr and (errorpkt->getErrorType() == KAD_SegmentFailure))
+				{
+					KadPacket* original = check_and_cast<KadPacket *>(errorpkt->getEncapsulatedPacket());
+					// find out the failed link
+					auto reportingNode(errorpkt->getSource());
+					const auto originalPath(original->getSrcPath());
+					// use progress in original path to find the correct link
+					// just finding the reporting node in the source path isn't safe due to cycles in forwarding path!
+					short unsigned int index(original->getProgress());
+					// the following should be true, otherwise we are getting
+					// an error from some off path node
+					ASSERT(originalPath[index] == reportingNode and index+1U < originalPath.size());
+					// the next hop is the one that failed
+					if (index+1U < originalPath.size()) {
+						auto failedNextHop = originalPath[index+1];
+						link_t failedlink(reportingNode, failedNextHop);
+						EV_INFO << "Check for invalid contacts because of failed link " << failedlink << " in error packet" << endl;
+						// this segment or node error is current and should invalidate all affected contacts
+						// a rediscovery will be triggered automatically if necessary
+						routingTable.invalidateContacts(failedlink, (simTime()-errorpkt->getCreationTime()).inUnit(SIMTIME_MS));
+					}
+				}
+				break;
 
 		} // end switch
 
@@ -453,7 +477,7 @@ void R2Kademlia::handlePacket(KadAnswer_p packet) {
 }
 
 
-/// note: this method is also called when packet originate from this node
+/// note: this method is also called when packets originate from this node
 void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt, simtime_t delay) {
 	// we do not route hello packets!
 	ASSERT(packet->getType() != KAD_PNHello);
@@ -464,8 +488,14 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt, simtime_t 
 	// TODO Check for already present NotVia() => loop
 	// TODO Check for presence of own ID in so far processed path (maybe as overlay hop)
 
-	//TODO optimization: potential shortcut - we check if the target is a already neighbor
+	// optimization: potential shortcut - we check if the target is a known contact
 	// only allowed for exact and not strict routing
+	if (packet->getType() == KAD_FindNodeReq) {
+		KadFindNodeReq* findnodepacket= dynamic_cast<KadFindNodeReq*>(packet.get());
+		if (findnodepacket != nullptr and findnodepacket->getExact() == true) {
+			applyShortcut(*findnodepacket,findnodepacket->getDstNodeID());
+		}
+	}
 
 	// it is not allowed to use a reference for nextHop here,
 	// because modRoute() may delete the referenced object and nextHop is used thereafter
@@ -1301,10 +1331,12 @@ void R2Kademlia::recordRoutingTable() {
 
 // -------------------- private helper methods --------------------
 
-
-void R2Kademlia::applyShortcut(KadPacket& packet)
+// this function modifies the source route in case a _valid_ contact to the destination
+// is known. This should be safe even during rediscovery in case the notVia info was
+// checked before calling this function.
+void R2Kademlia::applyShortcut(KadPacket& packet, const OverlayKey& destination)
 {
-	auto knownContact= routingTable.getContact(packet.getTarget());
+	auto knownContact= routingTable.getContact(destination);
 
 	if (knownContact != nullptr)
 	{ // final destination Contact is known, check for route shortcut
@@ -1328,8 +1360,6 @@ void R2Kademlia::applyShortcut(KadPacket& packet)
 				EV_TRACE << " new=" << packet.getSrcPath() << endl;
 			}
 		}
-		else
-			EV_WARN << "Contact in non valid state: " << *knownContact;
 	}
 }
 

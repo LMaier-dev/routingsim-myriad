@@ -470,7 +470,6 @@ void R2Kademlia::scheduleRediscovery(const OverlayKey& contactkey, rediscoverQue
 		return;
 	}
 
-
 	EV_TRACE << ((&rediscoverQ == &slowRediscoverQueue) ? "Slow" :
 		     ((&rediscoverQ == &regularRediscoverQueue) ? "Regular" :
 		      ((&rediscoverQ == &urgentRediscoverQueue) ? "Urgent" : "Unknown")))
@@ -516,6 +515,12 @@ void R2Kademlia::rediscoverContacts(RediscoveryState::rediscoverQ_type qtype, si
 			// if viaContacts is empty, refill when retrying
 			if (rt_contact->isInvalid() or (rt_contact->isRediscovering() and rt_contact->getRDS().viaContacts.empty()))
 			{
+				if (rt_contact->isPhysicalNeighbor() and rt_contact->getNodeDegree()==1) {
+					// PN has lost its only link to us -> not useful for rediscovering
+					rediscoverQ.pop();
+					continue;
+				}
+
 				// set contact state to rediscovering
 				if (not rt_contact->isRediscovering())
 					rt_contact->setRediscovering();
