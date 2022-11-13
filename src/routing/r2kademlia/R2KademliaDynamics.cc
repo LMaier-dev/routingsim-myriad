@@ -333,7 +333,7 @@ void R2Kademlia::sendUrgentUpdates()
 				else
 					affectedcontact_it++;
 			}
-			EV_TRACE << "sendUrgentUpdates() - found urgent updates:" << urgentupdatelist.size() << endl;
+			//EV_TRACE << "sendUrgentUpdates() - found urgent updates:" << urgentupdatelist.size() << endl;
 
 			if (not urgentupdatelist.empty()) {
 				// UpdateRouteReqs are not expecting an answer, so no RPC call
@@ -470,20 +470,23 @@ void R2Kademlia::scheduleRediscovery(const OverlayKey& contactkey, rediscoverQue
 		return;
 	}
 
-	EV_TRACE << ((&rediscoverQ == &slowRediscoverQueue) ? "Slow" :
+	EV_TRACE << ((&rediscoverQ == &PNRediscoverQueue) ? "PN" :
+		     ((&rediscoverQ == &slowRediscoverQueue) ? "Slow" :
 		     ((&rediscoverQ == &regularRediscoverQueue) ? "Regular" :
-		      ((&rediscoverQ == &urgentRediscoverQueue) ? "Urgent" : "Unknown")))
+		      ((&rediscoverQ == &urgentRediscoverQueue) ? "Urgent" : "Unknown"))))
 	         << " Rediscovery scheduled for contact " << contactkey.shortStr() << endl;
 
 	rediscoverQ.push(contactkey);
 	// remember where it was queued in for next retry round
-	RediscoveryState::rediscoverQ_type rediscoverQ_type((&rediscoverQ == &urgentRediscoverQueue) ? RediscoveryState::rediscoverQ_type::urgent :
-							    ((&rediscoverQ == &regularRediscoverQueue) ? RediscoveryState::rediscoverQ_type::regular : RediscoveryState::rediscoverQ_type::slow));
+	RediscoveryState::rediscoverQ_type rediscoverQ_type((&rediscoverQ == &PNRediscoverQueue) ? RediscoveryState::rediscoverQ_type::physicalneighbors :
+							    ((&rediscoverQ == &urgentRediscoverQueue) ? RediscoveryState::rediscoverQ_type::urgent :
+							    ((&rediscoverQ == &regularRediscoverQueue) ? RediscoveryState::rediscoverQ_type::regular : RediscoveryState::rediscoverQ_type::slow)));
 
 	const_cast<KadContact*>(rt_contact)->getRDS().rediscoverQtype= rediscoverQ_type;
 
 	// start timer for calling rediscoverContacts unless it has been started already
 	if (not rediscoverQ.isScheduled() and not rediscoverQ.empty()) {
+		//EV_TRACE << "addRandomizedTimer(): rediscoveryWaitTime =" << rediscoveryWaitTime << endl;
 		addRandomizedTimer(uniform(rediscoveryWaitTime/2,rediscoveryWaitTime*1.5), 0, std::bind(&R2Kademlia::rediscoverContacts, this, rediscoverQ_type, rediscoveryWaitTime));
 		rediscoverQ.setScheduled();
 	}
@@ -494,13 +497,15 @@ void R2Kademlia::rediscoverContacts(RediscoveryState::rediscoverQ_type qtype, si
 	// traverse list of scheduled contacts for rediscovery
 	// the list is sorted by ID-wise vicinity, because contacts in lower buckets are more important
 	// recheck status and set to rediscover
-	rediscoverQueueClass& rediscoverQ( (qtype==RediscoveryState::rediscoverQ_type::urgent ? urgentRediscoverQueue :
+	rediscoverQueueClass& rediscoverQ( (qtype==RediscoveryState::rediscoverQ_type::physicalneighbors ? PNRediscoverQueue :
+					    (qtype==RediscoveryState::rediscoverQ_type::urgent ? urgentRediscoverQueue :
 					     (qtype==RediscoveryState::rediscoverQ_type::regular ? regularRediscoverQueue :
-					      slowRediscoverQueue)) );
+					      slowRediscoverQueue))) );
 
-	EV_TRACE << ((&rediscoverQ == &slowRediscoverQueue) ? "slow" :
+	EV_TRACE << ((&rediscoverQ == &PNRediscoverQueue) ? "PN" :
+		     ((&rediscoverQ == &slowRediscoverQueue) ? "slow" :
 		     ((&rediscoverQ == &regularRediscoverQueue) ? "regular" :
-		      ((&rediscoverQ == &urgentRediscoverQueue) ? "urgent" : "unknown")))
+		      ((&rediscoverQ == &urgentRediscoverQueue) ? "urgent" : "unknown"))))
 	         << " rediscoverContacts called, queued: " << rediscoverQ.size() << endl;
 	unsigned short sent(0U);
 	constexpr unsigned short max_rediscovery_msg_batch= 5U;
@@ -561,7 +566,7 @@ void R2Kademlia::rediscoverContacts(RediscoveryState::rediscoverQ_type qtype, si
 	// reschedule next call to rediscover next batch of failed contacts
 	// if rediscoveryQ is now empty, next call of this procedure will be scheduled on demand
 	if (not rediscoverQ.empty()) {
-		if (qtype==RediscoveryState::rediscoverQ_type::urgent) {
+		if (qtype==RediscoveryState::rediscoverQ_type::urgent or qtype==RediscoveryState::rediscoverQ_type::physicalneighbors) {
 			addRandomizedTimer(uniform(rediscoveryWaitTime/4,rediscoveryWaitTime*3/4), 0, std::bind(&R2Kademlia::rediscoverContacts, this, qtype, rediscoveryWaitTime));
 		}
 		else {
@@ -589,14 +594,16 @@ void R2Kademlia::sendRediscovery(OverlayKey failedcontactkey, uint8_t maxFanOut,
 	// contact still exists
 	// get the correct queue object
 	RediscoveryState::rediscoverQ_type qtype(failedcontact->getRDS().rediscoverQtype);
-	rediscoverQueueClass& rediscoverQ( (qtype==RediscoveryState::rediscoverQ_type::urgent ? urgentRediscoverQueue :
+	rediscoverQueueClass& rediscoverQ( (qtype==RediscoveryState::rediscoverQ_type::physicalneighbors ? PNRediscoverQueue :
+					    (qtype==RediscoveryState::rediscoverQ_type::urgent ? urgentRediscoverQueue :
 					    (qtype==RediscoveryState::rediscoverQ_type::regular ? regularRediscoverQueue :
-					     slowRediscoverQueue)) );
+					     slowRediscoverQueue))) );
 
 	EV_TRACE << "sendRediscovery for " << failedcontact->getKey().shortStr()
-		 << " (" << ((&rediscoverQ == &slowRediscoverQueue) ? "slow" :
+		 << " (" << ((&rediscoverQ == &PNRediscoverQueue) ? "PN" :
+			     ((&rediscoverQ == &slowRediscoverQueue) ? "slow" :
 			     ((&rediscoverQ == &regularRediscoverQueue) ? "regular" :
-			      ((&rediscoverQ == &urgentRediscoverQueue) ? "urgent" : "unknown")))
+			      ((&rediscoverQ == &urgentRediscoverQueue) ? "urgent" : "unknown"))))
 		 << ')' << endl;
 
 	if (auto& via_contacts= failedcontact->getRDS().viaContacts; via_contacts.size() > 0)

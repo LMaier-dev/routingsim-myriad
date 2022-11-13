@@ -118,6 +118,7 @@ private:
 	uint8_t updateMaxNotification;
 	uint8_t updateNotifyStrategy;
 	uint8_t updatePropagateStrategy;
+	simtime_t PNRediscoveryWaitTime;
 	simtime_t urgentRediscoveryWaitTime;
 	simtime_t regularRediscoveryWaitTime;
 	simtime_t slowRediscoveryWaitTime;
@@ -155,6 +156,7 @@ private:
 	private:
 		bool scheduled;
 	};
+	rediscoverQueueClass PNRediscoverQueue;
 	rediscoverQueueClass urgentRediscoverQueue;
 	rediscoverQueueClass regularRediscoverQueue;
 	rediscoverQueueClass slowRediscoverQueue;
@@ -437,6 +439,7 @@ private:
 	//@}
 
 	/// schedule rediscovery
+	void schedulePNRediscovery(const OverlayKey& contactkey) override { scheduleRediscovery(contactkey, PNRediscoverQueue, PNRediscoveryWaitTime); };
 	void scheduleUrgentRediscovery(const OverlayKey& contactkey) override { scheduleRediscovery(contactkey, urgentRediscoverQueue, urgentRediscoveryWaitTime); };
 	void scheduleRegularRediscovery(const OverlayKey& contactkey) override { scheduleRediscovery(contactkey, regularRediscoverQueue, regularRediscoveryWaitTime); };
 	void scheduleSlowRediscovery(const OverlayKey& contactkey) override { scheduleRediscovery(contactkey, slowRediscoverQueue, slowRediscoveryWaitTime); };
@@ -547,6 +550,7 @@ public:
 inline
 R2Kademlia::R2Kademlia() :
 	routingTable(neighborTable), cmp(myOverlayKey),
+	PNRediscoverQueue(cmp),
 	urgentRediscoverQueue(cmp),
 	regularRediscoverQueue(cmp),
 	slowRediscoverQueue(cmp),

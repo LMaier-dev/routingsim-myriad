@@ -68,6 +68,7 @@ void R2Kademlia::onInitialize() {
 	}
 	probeStrategy = (uint) par("probeStrategy").intValue();
 	detailedRoutingTableStats = par("detailedRoutingTableStats").boolValue();
+	PNRediscoveryWaitTime = (simtime_t) (par("PNRediscoveryWaitTime").doubleValue() * 0.001); // given in ms
 	urgentRediscoveryWaitTime = (simtime_t) (par("urgentRediscoveryWaitTime").doubleValue() * 0.001); // given in ms
 	regularRediscoveryWaitTime = (simtime_t) (par("regularRediscoveryWaitTime").doubleValue() * 0.001); // given in ms
 	slowRediscoveryWaitTime = (simtime_t) (par("slowRediscoveryWaitTime").doubleValue() * 0.001); // given in ms
@@ -181,10 +182,14 @@ void R2Kademlia::onDisconnect( nodeid_t nid ) {
 	// after grace period (otherwise more links may fail immediately after this)
 	unsigned long threshold= 5UL * counter; // 5 corresponds to 20% (100/20) of the entries
 	// it is promoted to urgent in case there are more then a certain percentage
-	if (routingTable.isInLastBucket(key) or threshold > routingTable.getNumContactsWithoutPNs())
-		scheduleUrgentRediscovery(key);
-	else
-		scheduleRegularRediscovery(key);
+	if (threshold > routingTable.getNumContactsWithoutPNs())
+		schedulePNRediscovery(key);
+	else {
+		if (routingTable.isInLastBucket(key))
+			scheduleUrgentRediscovery(key);
+		else
+			scheduleRegularRediscovery(key);
+	}
 
 	// send UpdateRouteReq w/ failed link to ID-wise closest Nodes
 	// we can rely on routingTable.getContact(key) != nullptr, because of earlier setContactInvalid() call

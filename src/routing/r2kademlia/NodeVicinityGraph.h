@@ -17,6 +17,9 @@ public:
 };
 
 
+/***********************************************
+ * The following class describes a directed graph
+ **/
 class nodeVicinityGraph {
 public:
 	// cannot use constructor to initialize root, because ownNodeKey is only set in initialize()
@@ -50,4 +53,3 @@ nodeVicinityGraph::getNode(const OverlayKey& NodeKey) const
 } //namespace
 
 #endif // __ROUTINGSIM_R2Kademlia_H_
-

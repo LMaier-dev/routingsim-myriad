@@ -47,9 +47,10 @@ class RediscoveryState {
 public:
 	enum class rediscoverQ_type : uint8_t {
 		undefined     = 0,
-		urgent        = 1,
-		regular       = 2,
-		slow          = 3
+		physicalneighbors = 1,
+		urgent        = 2,
+		regular       = 3,
+		slow          = 4
 	};
 	RediscoveryState(const std::pair<link_t, simtime_t>& failedlink) : failedLinkList({failedlink}) {};
 	std::list<std::pair<link_t, simtime_t>> failedLinkList; // the currently failed links
