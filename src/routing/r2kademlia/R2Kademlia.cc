@@ -16,8 +16,6 @@
 #include <BaseTypes.h>
 
 #include "Statistics.h"
-#include "TrickleTimer.h"
-
 #include "R2Kademlia.h"
 #include "KadRoutingTable.h"
 #include "KadObserver.h"
@@ -931,9 +929,6 @@ bool R2Kademlia::handleProbeResponse(KadPacket_p answer, RPCState& rpcState) {
 }
 
 
-
-
-
 // FIND NODE
 void R2Kademlia::sendFindNode(const OverlayKey& destkey, bool exact, bool track) {
 	EV_TRACE << "sendFindNode for " << destkey.shortStr() << (exact ? " (NID)" : (destkey == myOverlayKey ? " (JOIN)" : " (RID)")) << endl; // Node ID or Resource ID?
@@ -1389,13 +1384,14 @@ void R2Kademlia::fillRTableRsp(KadRTableRsp& packet, const KadContactList& conta
 				packet.setPath(i, contacts[i]->getPath());
 				packet.setSeqNo(i, contacts[i]->getStateSeqNo());
 				packet.setPathInfoAge(i, contacts[i]->getAge());
+				// path + seqno + age
 				packet.addBitLength(contacts[i]->getPath().size()*OverlayKey::getLength()+32+sizeof(age_t)*8);
-
 			}
 			packet.setNodeDegree(i, contacts[i]->getNodeDegree());
 			//ASSERT((stateseqno_t) contacts[i]->getNodeDegree() > contacts[i]->getStateSeqNo());
 		}
-		packet.addBitLength(contacts.size()*(OverlayKey::getLength()+32));
+		// contact list + node degree
+		packet.addBitLength(contacts.size()*(OverlayKey::getLength()+16));
 	}
 }
 

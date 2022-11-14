@@ -29,7 +29,7 @@ public:
 	/** @name member functions needed for minimal implementation */
 	//@{
 	KadPacket(const char *name=nullptr, short kind=0) : KadPacket_Base(name, kind) {
-		setByteLength(3+4+4); // type (8), hop limit (8), src route index (8), state seq (32), node degree (32)
+		setByteLength(3+4+2); // type (8), hop limit (8), src route index (8), state seq (32), node degree (16)
 	}
 	KadPacket(const KadPacket& other) : KadPacket_Base(other), overlayHops(other.overlayHops),
 					    tracked(other.tracked) {}
