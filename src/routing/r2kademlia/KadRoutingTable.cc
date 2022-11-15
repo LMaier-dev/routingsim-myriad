@@ -462,9 +462,16 @@ bool KadRoutingTable::addPath(const OverlayKey& key, const kad_path& path, state
 }
 
 
+/// removes cycles, i.e., result is free of cycles, but
+/// outcome does not guarantee to find the optimal solution
 /// @returns true if path was simplified, false if not
 bool KadRoutingTable::simplifyPath(kad_path& path, const OverlayKey* destination) const
 {
+	/*
+	 * the algorithm may not achieve an optimal solution depending on how cycles overlap
+	 * [ A B C D E F B X F ] may here be shortened to [ A B C D E F ] instead of [ A B X F ]
+	 *
+	 */
 	if (path.size() < 2) // nothing to optimize here
 		return false;
 
@@ -472,8 +479,9 @@ bool KadRoutingTable::simplifyPath(kad_path& path, const OverlayKey* destination
 		path.push_back(*destination);
 
 	bool modified(false);
+	// start from the end of the path (right)
 	for (auto right = path.end()-1; right != path.begin(); right--) {
-		// find element starting from the left
+		// try to find element starting from the left
 		auto left = std::find(path.begin(), right, *right);
 		if (left != right) { // element found, erase sequence
 			// erase returns new location of the element that followed
@@ -943,7 +951,7 @@ void KadRoutingTable::updatePaths(const KadContact& improvedContact)
 		for (auto& contact : b.contacts) {
 			// check for existence of improvedContact in path and replace path
 			// (either shorter or more current)
-			if (auto& path= contact->getPath(); path.size() > 0 and contact->isValid()) {
+			if (auto& path= contact->getPath(); path.size() > 0) {
 				bool found(false);
 				for (auto revpathit= path.rbegin(); revpathit!= path.rend() and !found; revpathit++) {
 					if (*revpathit == improvedContact.getKey()) {
@@ -960,10 +968,28 @@ void KadRoutingTable::updatePaths(const KadContact& improvedContact)
 							newpath.push_back(*fwdpathit);
 						}
 
-						bool pathimproved(newpath != contact->getPath() and newpath.size() < contact->getPath().size());
+						bool pathrepaired(contact->isInvalid());
+						if (contact->isInvalid()) {
+							// check whether new path repaired a failed link
+							for (const auto& failedlink : contact->getRDS().failedLinkList) {
+								if (containsUndirectedLink(myKey, contact->getKey(), newpath, failedlink.first)) {
+									// provided new path does not repair this broken link
+									pathrepaired= false;
+								}
+							} // end for
+							// path is only repaired in case no failed links remain
+							if (pathrepaired)
+								EV_TRACE << "updatePaths: broken path " << contact->getPath() << " repaired by new " << newpath << endl;
+						}
+
+						bool pathimproved((contact->isInvalid() and pathrepaired)
+								  or
+								  (newpath != contact->getPath() and newpath.size() < contact->getPath().size()));
 						// set new path (must be more current than old one)
-						// note: this will set the contact to be valid
-						contact->updatePath( myKey, newpath );
+						// note: this will set the contact to be valid!
+						if (contact->isValid() or (contact->isInvalid() and pathrepaired))
+							contact->updatePath( myKey, newpath );
+
 						if (pathimproved) {
 							// call onImprovement(contact) also for updating PID
 							policy->onImprovement(*contact);
