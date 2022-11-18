@@ -131,6 +131,7 @@ private:
 	//@}
 
 	// a list that is used to send rediscover messages
+	// UpdateList_t is std::list< std::pair<KadContact, KadRouteUpdateAction> >
 	std::unordered_map< OverlayKey, UpdateList_t > updateQueue;
 	// selfMessage
 	bool updateScheduled= false;

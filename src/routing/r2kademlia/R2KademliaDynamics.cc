@@ -75,9 +75,9 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadUpdateRouteReq> packet) {
 				EV_TRACE << "UpdateRouteReq Announce for contact " << contactkey.shortStr() << endl;
 			        routingTable.addPath(contactkey, path, packet->getSeqNo(i), packet->getPathInfoAge(i), nodeDegree, source_path);
 				
-				if (updatePropagateStrategy == 2 ||
-						updatePropagateStrategy == 4 ||
-						updatePropagateStrategy == 5) propagateUpdate = true;
+				if (updatePropagateStrategy == 2 or
+				    updatePropagateStrategy == 4 or
+				    updatePropagateStrategy == 5) propagateUpdate = true;
 				break;
 
 			case KAD_Withdraw:
@@ -90,9 +90,9 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadUpdateRouteReq> packet) {
 				EV_TRACE << "UpdateRouteReq Change for contact " << contactkey.shortStr() << endl;
 			        routingTable.addPath(contactkey, path, packet->getSeqNo(i), packet->getPathInfoAge(i), nodeDegree, source_path);
 
-				if (updatePropagateStrategy == 3 ||
-						updatePropagateStrategy == 4 ||
-						updatePropagateStrategy == 5) propagateUpdate = true;
+				if (updatePropagateStrategy == 3 or
+				    updatePropagateStrategy == 4 or
+				    updatePropagateStrategy == 5) propagateUpdate = true;
 				break;
 
 			case KAD_Unreachable:
@@ -111,8 +111,8 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadUpdateRouteReq> packet) {
 					EV_TRACE << "ignored news about me or my PN" << endl;
 				}
 
-				if (updatePropagateStrategy == 1 ||
-						updatePropagateStrategy == 5) propagateUpdate = true;
+				if (updatePropagateStrategy == 1 or
+				    updatePropagateStrategy == 5) propagateUpdate = true;
 				break;
 
 			default:
@@ -177,6 +177,8 @@ void R2Kademlia::scheduleUpdate(const KadContact& affectedContact, KadRouteUpdat
 			}
 
 			// create new entry or append update
+			// the updateQueue contains the contacts to which the updates are sent
+			// and for each entry there is a list of affected contacts and actions std::list< std::pair<KadContact, KadRouteUpdateAction> >
 			if ( auto entry= updateQueue.find(notifyContact->getKey()); entry == updateQueue.end() ) {
 				// need to create new entry
 				// in case of KAD_Unreachable we want to report also the failed link
@@ -195,8 +197,17 @@ void R2Kademlia::scheduleUpdate(const KadContact& affectedContact, KadRouteUpdat
 				// entry exists, so we need to append this update to the list (or replace an existing action)
 				auto existelem= std::find_if(entry->second.rbegin(), entry->second.rend(),
 							     [&](const auto& p1) { return p1.first.getKey() == newelem.first.getKey(); });
-				if (existelem != entry->second.rend()) { // if exists: replace with newer info
-					*existelem= newelem;
+				if (existelem != entry->second.rend()) {
+                                        // if exists: replace with newer info in case of a KAD_Change or KAD_Announce
+					// if it is a KAD_Unreachable prepend it
+					if (existelem->second == KAD_Change or existelem->second == KAD_Announce)
+						*existelem= newelem;
+					else {
+						existelem++; // required, because of .base() returning the next element
+						// in the worst case the iterator is now at .rend()
+						// insert before the found entry
+						entry->second.insert(existelem.base(),newelem);
+					}
 				}
 				else { // not found, append
 					entry->second.emplace_back(newelem);
@@ -320,20 +331,16 @@ void R2Kademlia::sendUrgentUpdates()
 
 			for (auto affectedcontact_it= updatelist.begin(); affectedcontact_it != updatelist.end(); /* see loop */ )
 			{ // affectedcontactentry is std::pair<KadContact, KadRouteUpdateAction>
-				if (affectedcontact_it->second == KAD_Unreachable) {
-					// only queue this if contact still exists and state seq fits
-					if (KadContact_p affcontactnow= routingTable.getContact(affectedcontact_it->first.getKey());
-					    affcontactnow != nullptr and affcontactnow->getStateSeqNo() == affectedcontact_it->first.getStateSeqNo())
-						urgentupdatelist.push_back(*affectedcontact_it);
-					else
-						EV_TRACE << "sendUrgentUpdates() - dismiss obsolete " << affectedcontact_it->first << endl;
-
-					affectedcontact_it= updatelist.erase(affectedcontact_it);
-				}
+				// only queue this if contact still exists and state seq fits
+				if (KadContact_p affcontactnow= routingTable.getContact(affectedcontact_it->first.getKey());
+				    affcontactnow != nullptr and affcontactnow->getStateSeqNo() == affectedcontact_it->first.getStateSeqNo())
+					urgentupdatelist.push_back(*affectedcontact_it);
 				else
-					affectedcontact_it++;
+					EV_TRACE << "sendUrgentUpdates() - dismiss obsolete " << affectedcontact_it->first << endl;
+
+				affectedcontact_it= updatelist.erase(affectedcontact_it);
 			}
-			//EV_TRACE << "sendUrgentUpdates() - found urgent updates:" << urgentupdatelist.size() << endl;
+			EV_TRACE << "sendUrgentUpdates() - found urgent updates:" << urgentupdatelist.size() << endl;
 
 			if (not urgentupdatelist.empty()) {
 				// UpdateRouteReqs are not expecting an answer, so no RPC call
@@ -342,11 +349,12 @@ void R2Kademlia::sendUrgentUpdates()
 				// write down all routing notifications for a specific contact
 				packet->setContactArraySize(urgentupdatelist.size());
 				packet->setPathArraySize(urgentupdatelist.size());
-				packet->setActionArraySize(urgentupdatelist.size());
 				packet->setSeqNoArraySize(urgentupdatelist.size());
+				packet->setPathInfoAgeArraySize(urgentupdatelist.size());
 				packet->setNodeDegreeArraySize(urgentupdatelist.size());
+				packet->setActionArraySize(urgentupdatelist.size());
 
-				//EV_TRACE << "UrgentUpdateRoute packet to " << notifyContact_it->first.shortStr() << " w/ ";
+				EV_TRACE << "UrgentUpdateRoute packet to " << notifyContact_it->first.shortStr() << " w/ ";
 
 				// now construct the routing information by the information from urgentupdatelist
 				std::size_t i= 0;
@@ -355,19 +363,28 @@ void R2Kademlia::sendUrgentUpdates()
 					packet->setContact(i, affectedContact.getKey());
 					packet->setPath(i, affectedContact.getPath());
 					packet->setSeqNo(i, affectedContact.getStateSeqNo());
+					packet->setPathInfoAge(i, affectedContact.getPathAge());
 					packet->setNodeDegree(i, affectedContact.getNodeDegree());
 					packet->setAction(i, action);
-					//EV_TRACE << affectedContact << "; ";
+					EV_TRACE << ' ' <<
+						((action == 0) ? 'A' :
+						 ((action == 1) ? 'W' :
+						  ((action == 2) ? 'C' :
+						   ((action == 3) ? 'U' : '?'))))
+						 << ' ' << affectedContact << "; ";
 					i++;
 				}
-				//EV_TRACE << endl;
+				EV_TRACE << endl;
 				if ( i > 0 ) {
 					// send UpdateRouteReq w/ failed link
 					sendPacket(std::move(packet));
 					sentRouteUpdates++;
 				}
 			} // end if something to send
-		} // if contact is valid
+		} // if contact to be notified is valid
+		else {
+			EV_TRACE << "skipped invalid notify contact " << notifyContact_it->first.shortStr() << endl;
+		}
 	}
 
 	// non urgent entries still there
@@ -382,6 +399,8 @@ void R2Kademlia::sendUrgentUpdates()
 /// send all updates
 void R2Kademlia::sendUpdates()
 {
+	EV_TRACE << "sendUpdates() enter. Queued Updates:" << updateQueue.size() << endl;
+
 	// the queue (map) will be traversed
 	// std::unordered_map< OverlayKey, UpdateList_t > updateQueue;
 	for ( auto notifyContact_it= updateQueue.begin();
@@ -394,7 +413,7 @@ void R2Kademlia::sendUpdates()
 			// UpdateRouteReqs are not expecting an answer, so no RPC call
 			auto packet = makePacket<KadUpdateRouteReq>(notify_target, "UpdateRouteReq");
 			packet->setDstNodeID(notify_target->getKey());
-			//EV_TRACE << "UpdateRoute packet to " << notifyContact_it->first.shortStr() << " w/ ";
+			EV_TRACE << "UpdateRoute packet to " << notifyContact_it->first.shortStr() << " w/ ";
 			auto& updatelist(notifyContact_it->second);
 			// sanitize list first, i.e., remove obsolete entries
 			for (auto affcontact_it= updatelist.begin(); affcontact_it != updatelist.end(); /* see loop */)
@@ -403,9 +422,9 @@ void R2Kademlia::sendUpdates()
 				{
 					if (affcontactnow->getStateSeqNo() > affcontact_it->first.getStateSeqNo())
 					{ // current state for contact is newer, there should be another update for this
-						//EV_TRACE << "(obsolete " << affcontact_it->first
-						//	 << " #" << affcontactnow->getStateSeqNo()
-						//	 << " > #" << affcontact_it->first.getStateSeqNo() << ") ";
+						EV_TRACE << "(obsolete " << affcontact_it->first
+							 << " #" << affcontactnow->getStateSeqNo()
+							 << " > #" << affcontact_it->first.getStateSeqNo() << ") ";
 
 						affcontact_it= updatelist.erase(affcontact_it);
 					}
@@ -414,7 +433,7 @@ void R2Kademlia::sendUpdates()
 				}
 				else // contact not known anymore, probably replaced already
 				{
-					//EV_TRACE << "(removed " << affcontact_it->first.getKey().shortStr() << ") ";
+					EV_TRACE << "(removed " << affcontact_it->first.getKey().shortStr() << ") ";
 
 					affcontact_it= updatelist.erase(affcontact_it);
 				}
@@ -439,15 +458,23 @@ void R2Kademlia::sendUpdates()
 				packet->setPathInfoAge(i, affectedContact.getAge());
 				packet->setNodeDegree(i, affectedContact.getNodeDegree());
 				packet->setAction(i, action);
-				//EV_TRACE << affectedContact << "; ";
+				EV_TRACE << ' ' <<
+					((action == 0) ? 'A' :
+					  ((action == 1) ? 'W' :
+					    ((action == 2) ? 'C' :
+					      ((action == 3) ? 'U' : '?'))))
+					 << ' ' << affectedContact << "; ";
 				i++;
 			}
-			//EV_TRACE << endl;
+			EV_TRACE << endl;
 			// send UpdateRouteReq w/ failed link
 			if ( i > 0 ) {
 				sendPacket(std::move(packet));
 				sentRouteUpdates++;
 			};
+		} // if contact to be notified is valid
+		else {
+			EV_TRACE << "skipped invalid notify contact " << notifyContact_it->first.shortStr() << endl;
 		}
 	}
 
