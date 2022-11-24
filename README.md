@@ -8,7 +8,8 @@ Singapore, SGP, December 14-16, 2011, 305–310, IEEE, Piscataway, NJ.
 doi:10.1109/ICON.2011.6168493 
 https://ieeexplore.ieee.org/document/6168493
 
-The current version has been tested with OMNeT++ 5.6.2 (5.6.1, 5.5.1 and 5.4.1 as well).
+The current version has been tested with OMNeT++ 5.7 (5.6.1, 5.5.1 and 5.4.1 as well). 
+OMNeT++ 6.x support is not yet provided.
 
 # Installation
 Get OMNeT++ from https://omnetpp.org/ and install it according to
