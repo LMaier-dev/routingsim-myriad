@@ -13,15 +13,25 @@ namespace ph = std::placeholders;
 
 // Path Setup Request/Response
 void R2Kademlia::sendPathSetup(KadContact_p contact) {
-	EV_TRACE << "sending PathSetupReq from " << myOverlayKey.shortStr() << " to " << contact->getKey().shortStr() << endl;
-	sentPathSetup++;
-	std::unique_ptr<KadPathSetupReq> packet(makePacket<KadPathSetupReq>(contact, "KadPathSetupReq"));
-	packet->setContactLastSeen(contact->getLastSeen());
-	packet->setContactSeqNo(contact->getStateSeqNo());
-	sendRpcCall(std::move(packet),
-		std::bind(&R2Kademlia::handlePathSetupResponse, this, ph::_1, ph::_2),
-		std::bind(&R2Kademlia::handlePathSetupResponse, this, ph::_1, ph::_2),
-		std::bind(&R2Kademlia::handleRPCTimeOut, this, ph::_1, ph::_2));
+	if ( contact->getPathLength() > 2*nodeVicinityGraph::vicinityDiscoveryRadius ) { // p >= 5 (6 hops as destination is not included)
+		// send a path setup request packet for installing PIDs in intermediate nodes for this route
+		// note that this will usually stop three hops before the destination node
+		// we only need to start for paths that have 6 hops in total as then
+		// there is only the 3rd hop that needs to install an NID->PID mapping 
+		EV_TRACE << "sending PathSetupReq from " << myOverlayKey.shortStr() << " to " << contact->getKey().shortStr() << endl;
+		sentPathSetup++;
+
+		std::unique_ptr<KadPathSetupReq> packet(makePacket<KadPathSetupReq>(contact, "KadPathSetupReq"));
+		packet->setContactLastSeen(contact->getLastSeen());
+		packet->setContactSeqNo(contact->getStateSeqNo());
+		sendRpcCall(std::move(packet),
+			    std::bind(&R2Kademlia::handlePathSetupResponse, this, ph::_1, ph::_2),
+			    std::bind(&R2Kademlia::handlePathSetupResponse, this, ph::_1, ph::_2),
+			    std::bind(&R2Kademlia::handleRPCTimeOut, this, ph::_1, ph::_2));
+	}
+	else {
+		EV_WARN << "PathSetupReq scheduled, but not sent, because path too short: " << *contact << endl;
+	}
 }
 
 
@@ -35,7 +45,7 @@ void R2Kademlia::sendPathTeardown(KadContact_p contact) {
 }
 
 
-// this will never be called, because a node hops before should have answered the PathSetupReq due to precomputed PathIDs
+// this will never be called, because a node two hops before should have answered the PathSetupReq due to precomputed PathIDs
 void R2Kademlia::handlePacket(std::unique_ptr<KadPathSetupReq> packet) {
 	EV_TRACE << "received PathSetupReq from " << packet->getSource().shortStr() << " to " << packet->getTarget().shortStr()
 		 << " sending back answer" << endl;
@@ -44,26 +54,43 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadPathSetupReq> packet) {
 }
 
 
+// this installs a NID/PID mapping and PID entry
 bool R2Kademlia::handlePathSetupResponse(KadPacket_p answer, RPCState& rpcState) {
 	if (rpcState.status != RPC_SUCCESS) return true;
 
 	std::unique_ptr<KadPathSetupRsp> pathSetupRsp = safe_packet_cast<KadPathSetupRsp>(answer);
 
-	// original intended path for setup should be set in answer
-	ASSERT(pathSetupRsp->getFwdSourcePathArraySize()>0);
+	// originally complete path to contact should be set in answer
+	ASSERT(pathSetupRsp->getFwdSourcePathArraySize() > 2*(nodeVicinityGraph::vicinityDiscoveryRadius+1));
 
+	// construct original contact path that was used as source path for PathSetupReq
+	kad_path originalpath;
+	// the setup path ends earlier: three hops before the target!
 	kad_path setuppath;
 	OverlayKey target(pathSetupRsp->getFwdSourcePath(pathSetupRsp->getFwdSourcePathArraySize()-1));
 	// note that FwdSourcePath includes the source and the target node
-	if (pathSetupRsp->getFwdSourcePathArraySize() > 2) {
-		setuppath.resize(pathSetupRsp->getFwdSourcePathArraySize()-2);
-		for (unsigned int i= 1; i<pathSetupRsp->getFwdSourcePathArraySize()-1; i++)
-			setuppath[i-1]= pathSetupRsp->getFwdSourcePath(i);
-
+	// pathSetupRsp->getFwdSourcePathArraySize()+1 is number hops and that must be at least 6
+	if (pathSetupRsp->getFwdSourcePathArraySize() > 2*(nodeVicinityGraph::vicinityDiscoveryRadius+1)) {
+		// original contact path excludes source and target node
+		originalpath.resize(pathSetupRsp->getFwdSourcePathArraySize()-2);
+		// shorten setuppath to what is expected (by 2 hops) (also remove source and target nodes)
+		setuppath.resize(pathSetupRsp->getFwdSourcePathArraySize()-1-(nodeVicinityGraph::vicinityDiscoveryRadius+1));
+		for (unsigned int i= 1; i<pathSetupRsp->getFwdSourcePathArraySize(); i++) {
+			originalpath[i-1]= pathSetupRsp->getFwdSourcePath(i);
+			if (i<pathSetupRsp->getFwdSourcePathArraySize()-nodeVicinityGraph::vicinityDiscoveryRadius)
+				setuppath[i-1]= pathSetupRsp->getFwdSourcePath(i);
+		}
 	}
-	KadContact tmpcontact(target, setuppath);
+	else
+	{
+		EV_ERROR << "Received PathSetupRsp for a too short path (nr of hops: " << pathSetupRsp->getFwdSourcePathArraySize() << ")" << endl;
+		ASSERT(pathSetupRsp->getFwdSourcePathArraySize() > 2*(nodeVicinityGraph::vicinityDiscoveryRadius+1));
+		return false;
+	}
 
-	EV_TRACE << "Received PathSetupRsp, source path: " << setuppath << " to " << target.shortStr() << endl;
+	KadContact tmpcontact(target, originalpath);
+
+	EV_TRACE << "Received PathSetupRsp, setup path: " << setuppath << " to " << target.shortStr() << endl;
 
 	bool addthispath(false);
 	// meanwhile the contact may have been replaced or deleted etc.
@@ -75,8 +102,9 @@ bool R2Kademlia::handlePathSetupResponse(KadPacket_p answer, RPCState& rpcState)
 		if (contactp->getStateSeqNo() < pathSetupRsp->getContactSeqNo() or
 		    (contactp->getStateSeqNo() == pathSetupRsp->getContactSeqNo() and
 		     tmpcontact.getLastSeen() < pathSetupRsp->getContactLastSeen())) {
-                    if (contactp->isValid() and contactp->getPathLength() < tmpcontact.getPathLength()){
+                    if (contactp->isValid() and contactp->getPathLength() < tmpcontact.getPathLength()) {
                         // do nothing we have a valid shorter path in our contact
+			// next path setup should have been scheduled then, or PID was precomputed
                     } else {
 			addthispath= true;
                         contactp->updateLastPathRefresh();
@@ -85,7 +113,7 @@ bool R2Kademlia::handlePathSetupResponse(KadPacket_p answer, RPCState& rpcState)
 		else {
 			// Last Seen of current contact is more recent
 			// check whether path has changed, then we should better ignore this PathSetup as obsolete and ignore
-			if (contactp->getPathLength() != setuppath.size() or contactp->getPath() != setuppath) {
+			if (contactp->getPathLength() != originalpath.size()+nodeVicinityGraph::vicinityDiscoveryRadius or contactp->getPath() != originalpath) {
 				EV_WARN << "PathSetupRsp: ignoring, because Last Seen of current contact is more recent and path has changed meanwhile:" << tmpcontact.getLastSeen() << endl;
 				// TODO: initiate Teardown of the obsolete path
 
@@ -102,14 +130,14 @@ bool R2Kademlia::handlePathSetupResponse(KadPacket_p answer, RPCState& rpcState)
 	}
 
 	if (addthispath) {
-		if (auto pidentry= fwdTablePathID.NIDPIDTable.find(tmpcontact.getKey()); pidentry != fwdTablePathID.NIDPIDTable.end()) {
+		if (auto pidentry= fwdTablePathID.NIDPIDTable.find(target); pidentry != fwdTablePathID.NIDPIDTable.end()) {
 			// contact to PID mapping exists already, so call modEntry()
-			fwdTablePathID.modEntry(&tmpcontact, false);
+			fwdTablePathID.modEntry(target, setuppath, false);
 		}
 		else {
 			// add new PID and mapping
-			if (auto [added, incomingPID]= fwdTablePathID.addLocalEntry(&tmpcontact, false); incomingPID != PathID::UndefinedPathID) {
-				fwdTablePathID.setNIDtoPIDmapping(tmpcontact.getKey(),incomingPID);
+			if (auto [added, incomingPID]= fwdTablePathID.addLocalEntry(setuppath, false); incomingPID != PathID::UndefinedPathID) {
+				fwdTablePathID.setNIDtoPIDmapping(target, incomingPID);
 			}
 		}
 	}
@@ -138,7 +166,6 @@ void R2Kademlia::schedulePathSetup(const OverlayKey& contactkey)
 	}
 	else
 		EV_TRACE << "PathSetup already scheduled for contact " << contactkey.shortStr() << endl;
-
 
 	if (not pathSetupScheduled)
 	{
@@ -186,11 +213,14 @@ std::unique_ptr<KadPathSetupRsp>
 R2Kademlia::makeAnswerKadPathSetupRsp(const KadPathSetupReq& original)
 {
 	auto responsepacket= makeAnswer<KadPathSetupRsp>(original);
-	// copy source path from KadPathSetupReq
+	// copy complete(!) source path from KadPathSetupReq
+	// the PathSetupReq usually returns much earlier and does not reach the target
 	responsepacket->setFwdSourcePathArraySize(original.getRouteArraySize());
 	for (unsigned int i= 0; i < original.getRouteArraySize(); i++)
 		responsepacket->setFwdSourcePath(i, original.getRoute(i));
-	// just reflect the time stamp
+
+	// this echoes the contact state at the originator
+	// so that the originator can check whether this Rsp is obsolete when received
 	responsepacket->setContactLastSeen(original.getContactLastSeen());
 	responsepacket->setContactSeqNo(original.getContactSeqNo());
 	return responsepacket;

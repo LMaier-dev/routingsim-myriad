@@ -309,10 +309,10 @@ private:
 	void countDropped(KadDataPacket& packet, const OverlayKey& target, uint8_t reason);
 	/// try a shortcut route and modify source route of the packet
 	void applyShortcut(KadPacket& packet, const OverlayKey& destination);
-	/// try to install path from path setup response packet
-	bool checkForPathInstallation(KadPacket& packet);
+	/// determine if pathID installation is necessary (e.g., when processing path setup request)
+	bool checkForPathIDInstallation(const KadPacket& packet);
 	/// remove path ID if possible
-	void checkForPathTeardown(KadPacket& packet);
+	void checkForPathTeardown(const KadPacket& packet);
 
 	/// for a new neighborhoodcontact, installed any known paths within discoveryRadius
 	void vicinityPathIDCompletion(const KadContact& neighborhoodContact);
@@ -337,6 +337,9 @@ private:
 
 	// processes present Not Via information and returns true if own Node ID is already present
 	bool processNotViaInformation(const KadPacket& packet);
+
+	// processes packets while forwarding
+	void intermediateNodeProcessing(const KadPacket& packet);
 
 	kad_path concatViaPath(const kad_path& viaPath, const OverlayKey& viaKey, const kad_path& path);
 

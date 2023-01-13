@@ -135,9 +135,9 @@ void R2Kademlia::onContactRemoval(KadContact_p contact)
 		return;
 
 	// delete from Forwarding table PID (not for vicinity nodes)
-	// TODO: this can be scheduled for happening later
-	if (usePathIDs and contact->getPathLength() >= nodeVicinityGraph::vicinityDiscoveryRadius)
-	{
+	// TODO: this can be scheduled for happpening later
+	if (usePathIDs and contact->getPathLength() > 2*nodeVicinityGraph::vicinityDiscoveryRadius)
+	{ // this condition must be aligned with the sendPathSetup
 		// check for pending/scheduled PathSetup first
 		if (std::find(pathSetupQueue.cbegin(),pathSetupQueue.cend(),contact->getKey()) == pathSetupQueue.cend())
 			sendPathTeardown(contact);
@@ -219,24 +219,42 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 				// it is required to add all PIDs to nodes within the discovery radius
 				// (and without signaling one can extend this by one hop)
 				// since the contact path excludes the contact itself the above condition includes nodes <= vicinityDiscoveryRadius+1
-				if (auto [added,incomingPID]= fwdTablePathID.addLocalEntry(contact, contact->getPathLength()<nodeVicinityGraph::vicinityDiscoveryRadius); incomingPID != PathID::UndefinedPathID) {
+				kad_path newpath(contact->getPath());
+				newpath.push_back(contact->getKey());
+				if (auto [added,incomingPID]= fwdTablePathID.addLocalEntry(newpath, contact->getPathLength()<nodeVicinityGraph::vicinityDiscoveryRadius); incomingPID != PathID::UndefinedPathID) {
 					// PID was added, it can directly be used, because no path setup necessary within vicinity
 					EV_TRACE << "added local NID " << contact->getKey() << " and PID entry " << incomingPID << endl;
 					fwdTablePathID.setNIDtoPIDmapping(contact->getKey(), incomingPID);
 					vicinityPathIDCompletion(*contact);
 				}
 			}
-			else
-			if (contact->getPathLength() > nodeVicinityGraph::vicinityDiscoveryRadius)
-			{  // send a path setup request packet for installing PIDs in intermediate nodes for this route
-				// only do this for paths longer than (vicinityDiscoveryRadius+1) (e.g., for vdr=2 -> contacts 4 hops away) hops:
-				// the next node precalculated already all path IDs within its own discovery radius and
-				// we are just one hop away, so only required setup for paths longer than (discovery radius+1)
-				// note that the contact->getPath() excludes the contact itself
-				EV_TRACE << "Triggering path setup to " << contact->getKey().shortStr() << ": " << contact->getPath() << endl;
-				schedulePathSetup(contact->getKey());
+			else {
+				// check for required PathSetup
+				// assume this is node (x) and the contact is (hi), vicinityDiscoveryRadius==2:
+				// (x)-(h1)-(h2)-(h3)-(h4)-(h5)-(h6)-(h7)-(h8)
+				// n: hop distance p: path length of contact
+				// n: 1 p: 0 (h1) -> PID out: NID h1, no viaContact, precalculated -> see above
+				// n: 2 p: 1 (h2) -> PID out: PID H(h1,h2), no viaContact, precalculated -> see above
+				// n: 3 p: 2 (h3) -> PID out: PID H(h1,h2,h3) (no path setup required), no viaContact required -> see above
+				// n: 4 p: 3 (h4) -> PID out: PID H(h1,h2,h3) (no path setup required), viaContact: h4, no local PID installation required
+				// n: 5 p: 4 (h5) -> PID out: PID H(h1,h2,h3) (no path setup required), viaContact: h5, no local PID installation required
+				// n: 6 p: 5 (h6) -> PID out: PID H(h1,h2,h3) (path setup required, h3 needs to install h6->PID(h4,h5,h6)), viaContact: h6
+				// n: 7 p: 6 (h7) -> PID out: PID H(h1,h2,h3,h4) (path setup required, h4 needs to install h7->PID(h5,h6,h7)), viaContact: h7, setup ends at h4
+				// n: 8 p: 7 (h8) -> PID out: PID H(h1,h2,h3,h4,h5) (path setup required, h5 needs to install h8->PID(h6,h7,h8) ), viaContact: h8, setup ends at h5
+				// and so on
+
+				if ( contact->getPathLength() > 2*nodeVicinityGraph::vicinityDiscoveryRadius ) { // p >= 5
+					// send a path setup request packet for installing PIDs in intermediate nodes for this route
+
+					// only do this for paths longer than 2*(vicinityDiscoveryRadius+1)-1 (e.g., for vdr=2 -> contacts 6 hops away) hops:
+					// the next node precalculated already all path IDs within its own discovery radius and
+					// we are just one hop away, so only required setup for paths longer than (discovery radius+1)
+					// note that the contact->getPath() excludes the contact itself
+					EV_TRACE << "Triggering path setup for contact " << contact->getKey().shortStr() << ": " << contact->getPath() << endl;
+					schedulePathSetup(contact->getKey());
+				}
 			}
-		}
+		} // endif usePathIDs
 	}
 
 	scheduleUpdate(*contact, KAD_Announce);
@@ -251,9 +269,9 @@ void R2Kademlia::onImprovement(const KadContact& contact) {
 
 	if (usePathIDs and contact.isValid()) {
 
-		// no need to setup routes within discovery radius + 1 distance
+		// no need to setup paths for paths that are shorter than 6 hops
 		// (note/remember: getPathLength() does not include the last hop)
-		if ( contact.getPathLength() > nodeVicinityGraph::vicinityDiscoveryRadius ) {
+		if ( contact.getPathLength() > 2*nodeVicinityGraph::vicinityDiscoveryRadius ) {
 			// send a path setup request packet for installing PIDs in intermediate nodes for this route
 			//EV_TRACE << "Triggering path setup to " << contact.getKey().shortStr() << endl;
 			// modentry() will be called by handlePathSetupResponse
@@ -261,7 +279,9 @@ void R2Kademlia::onImprovement(const KadContact& contact) {
 		}
 		else {
 			// for paths within discovery radius: update the PID entry
-			fwdTablePathID.modEntry(&contact, false);
+			auto newpath(contact.getPath());
+			newpath.push_back(contact.getKey());
+			fwdTablePathID.modEntry(contact.getKey(), newpath, false);
 		}
 	}
 
@@ -299,7 +319,9 @@ void R2Kademlia::onPathChange(const KadContact& contact) {
 		}
 		else {
 			// for paths within discovery radius: update the PID entry
-			fwdTablePathID.modEntry(&contact, false);
+			auto newpath(contact.getPath());
+			newpath.push_back(contact.getKey());
+			fwdTablePathID.modEntry(contact.getKey(), newpath, false);
 		}
 	}
 

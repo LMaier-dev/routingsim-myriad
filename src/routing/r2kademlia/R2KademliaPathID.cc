@@ -10,40 +10,81 @@ namespace routingsim {
 
 // returns false if path already exists, returns true if path was installed
 // this is called during PathSetupReq
-bool R2Kademlia::checkForPathInstallation(KadPacket& packet)
+bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 {
 	if ( usePathIDs == false )
 		return false;
-	EV_TRACE << "checkForPathInstallation: " << packet.getSrcPath()
+
+	EV_TRACE << "checkForPathIDInstallation: " << packet.getSrcPath()
 		 << " Progress: " << packet.getProgress() << " SrcPathLen:" << packet.getRouteArraySize() << endl;
+	
+	// assume this is node (x) and the end of the source routing path is (hi) == viaContact, vicinityDiscoveryRadius==2:
+	// n: hop distance left
+	// (x)-(h1)
+	// n: 1 (h1) -> PID out: NID h1, precalculated, return (PathSetupReq should not have arrived here)
+	// (x)-(h1)-(h2)
+	// n: 2 (h2) -> PID out: PID H(h1,h2), precalculated, return (PathSetupReq should not have arrived here)
+	// (x)-(h1)-(h2)-(h3)
+	// n: 3 (h3) -> PID out: PID H(h1,h2,h3), need to locally install PID, return
+	// (x)-(h1)-(h2)-(h3)-(h4)
+	// n: 4 (h4) -> PID out: PID H(h1,h2,h3), need to locally install PID, return
+	// (x)-(h1)-(h2)-(h3)-(h4)-(h5)-(h6)-(h7)-(h8)
+	// n: 5 (h5) -> PID out: PID H(h1,h2,h3), need to locally install PID, return
+	// (x)-(h1)-(h2)-(h3)-(h4)-(h5)-(h6)-(h7)-(h8)
+	// n: 6 (h6) -> PID out: PID H(h1,h2,h3) (h3 needs to install h6->PID(h4,h5,h6)), viaContact: h6
+	// (x)-(h1)-(h2)-(h3)-(h4)-(h5)-(h6)-(h7)-(h8)
+	// n: 7 (h7) -> PID out: PID H(h1,h2,h3,h4) (h4 needs to install h7->PID(h5,h6,h7)), viaContact: h7, setup ends at h4
+	// n: 8 (h8) -> PID out: PID H(h1,h2,h3,h4,h5) (h5 needs to install h8->PID(h6,h7,h8) ), viaContact: h8, setup ends at h5
+	// and so on
 
-	// if rest of path is within vicinity discovery radius, we have a precalculated entry
-	// note: this is a source route, so it includes the destination node
-	// calc number of hops to go: packet.getRouteArraySize()-1-(packet.getProgress()+1)+1 = hops left
-	// example progress 2: pathlen: 6 => 5-3+1= 3 hops to go
-	//
-	// PIDs for destinations in vicinityDiscoveryRadius (2) hops are pre-computed,
-	// but must be locally installed for >vicinityDiscoveryRadius (3) hops
-	if (packet.getRouteArraySize()-packet.getProgress() <= nodeVicinityGraph::vicinityDiscoveryRadius+1)
+	// if overall pathlen < 6 hops we should not see a request to set up a PathID
+	// (but it may be a ProbeReq)
+	// note: packet.getRouteArraySize()+1 == number of hops
+	if (packet.getRouteArraySize()+1 < 2*(nodeVicinityGraph::vicinityDiscoveryRadius+1)) {
+		EV_TRACE << "checkForPathIDInstallation: aborted – path too short" << endl;
 		return false;
-	// will install path in data forward direction
-	// ASSERT(packet.hasRemainingHops()); // this will be true because checkForPathInstallation() is called only then
-	KadContact tmpcontact(packet.getTarget(),
-			      packet.getSrcPath(packet.getProgress()+1, packet.getRouteArraySize()-1));
+	}
 
-	// PID must be installed if hops > vicinityDiscoveryRadius
-	EV_TRACE << "checkForPathInstallation: path to " << tmpcontact;
-	if (auto [added,incomingPID]= fwdTablePathID.addForeignEntry(&tmpcontact); added == true) {
-		// no need to install NodeId to PID mapping as this is probably no local contact
-		EV_TRACE << " added " << incomingPID << endl;
-		return true;
+	// if three hops left to destination: install NID to PID mapping here for the destination NodeID
+	if (packet.hopsLeft() == (nodeVicinityGraph::vicinityDiscoveryRadius+1)) {
+
+		const auto pathtoadd(packet.getSrcPath(packet.getProgress()+1, packet.getRouteArraySize()));
+		// PID must be installed if hops > vicinityDiscoveryRadius
+		EV_TRACE << "checkForPathIDInstallation: path to " << packet.getTarget() << ": " << pathtoadd;
+		if (auto [added,incomingPID]= fwdTablePathID.addForeignEntry(pathtoadd); added == true) {
+			// no need to install NodeId to PID mapping as this is probably no local contact
+			EV_TRACE << " added " << incomingPID << endl;
+			return true;
+		}
+		else {
+			// touch entry and reset obsolete flag
+			auto& fwdtableentry= fwdTablePathID.PIDFwdTable.at(incomingPID);
+			fwdtableentry.unsetObsolete();
+			EV_TRACE << " already present/ignored" << endl;
+			return false;
+		}
 	}
 	else {
-		// touch entry and reset obsolete flag
-		auto& fwdtableentry= fwdTablePathID.PIDFwdTable.at(incomingPID);
-		fwdtableentry.unsetObsolete();
-		EV_TRACE << " already present/ignored" << endl;
-		return false;
+		if (packet.hopsLeft() < 2*(nodeVicinityGraph::vicinityDiscoveryRadius+1))
+			return false;
+		else { // at least six hops left to destination: install PID to node three hops before destination
+			const auto target(packet.getRoute(packet.getRouteArraySize()-1-nodeVicinityGraph::vicinityDiscoveryRadius-1));
+			const auto pathtoadd(packet.getSrcPath(packet.getProgress()+1, packet.getRouteArraySize()-nodeVicinityGraph::vicinityDiscoveryRadius-1));
+			// PID must be installed if hops > vicinityDiscoveryRadius
+			EV_TRACE << "checkForPathIDInstallation: path to " << target << ": " << pathtoadd;
+			if (auto [added,incomingPID]= fwdTablePathID.addForeignEntry(pathtoadd); added == true) {
+				// no need to install NodeId to PID mapping as this is probably no local contact
+				EV_TRACE << " added " << incomingPID << endl;
+				return true;
+			}
+			else {
+				// touch entry and reset obsolete flag
+				auto& fwdtableentry= fwdTablePathID.PIDFwdTable.at(incomingPID);
+				fwdtableentry.unsetObsolete();
+				EV_TRACE << " already present/ignored" << endl;
+				return false;
+			}
+		}
 	}
 }
 
@@ -203,12 +244,12 @@ void R2Kademlia::vicinityPathIDCompletion(const KadContact& neighborhoodContact)
 			//EV_TRACE << "vicinityPathIDCompletion - currentNodep: " << currentNodep->nodeKey->shortStr() << endl;
 			// if at or beyond "new" node add pathID  for path
 			if (currentLevel+1 >= newnode->distance) {
-				kad_path basicpath;
+				kad_path pathtoadd;
 				for (auto v : currentpath)
-					basicpath.push_back(*v);
-				KadContact tmpContact(*(currentNodep->nodeKey), basicpath);
+					pathtoadd.push_back(*v);
+				pathtoadd.push_back(*(currentNodep->nodeKey));
 				//EV_TRACE << "vicinityPathIDCompletion - trying to add " << tmpContact.getPath() << " " << tmpContact.getKey().shortStr() << endl;
-				fwdTablePathID.addPrecalcEntry(&tmpContact);
+				fwdTablePathID.addPrecalcEntry(pathtoadd);
 			}
 			// enter next level of current node by using its children
 			if (currentLevel < nodeVicinityGraph::vicinityDiscoveryRadius and not currentNodep->children.empty()) {
@@ -232,7 +273,7 @@ void R2Kademlia::vicinityPathIDCompletion(const KadContact& neighborhoodContact)
 }
 
 
-void R2Kademlia::checkForPathTeardown(KadPacket& packet)
+void R2Kademlia::checkForPathTeardown(const KadPacket& packet)
 {
 	if ( usePathIDs == false )
 		return;
@@ -240,7 +281,7 @@ void R2Kademlia::checkForPathTeardown(KadPacket& packet)
 	EV_TRACE << "checkForPathTeardown: " << packet.getSrcPath()
 		 << " Progress: " << packet.getProgress() << " PathLen:" << packet.getRouteArraySize() << endl;
 
-	// if the rest is precalculated, nothing to do
+	// the rest is precalculated, nothing to do
 	if (packet.getRouteArraySize()-packet.getProgress() <= nodeVicinityGraph::vicinityDiscoveryRadius+1)
 		return;
 

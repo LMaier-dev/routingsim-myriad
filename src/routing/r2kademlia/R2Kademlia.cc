@@ -259,132 +259,8 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	if (packet->hasRemainingHops()) {
 		// we are not the recipient
 
-		// special actions while forwarding packets
-		switch (packet->getType())
-		{
-
-			case KAD_PathSetupReq:
-			{
-				// as intermediate node I need to check to path ID installation
-				// returns true if path was installed: forward to next hop only if
-				// hops left > vicinityDiscoveryRadius+1
-				bool return_answer(false);
-				if ( checkForPathInstallation(*packet) ) {
-					// PID was locally installed
-					// send response if hops to go <= vicinityDiscoveryRadius+1
-					if (packet->getRouteArraySize()-packet->getProgress()
-					    <= nodeVicinityGraph::vicinityDiscoveryRadius+2)
-						return_answer= true;
-				}
-				else { // send back response if path ID already present/installed
-					EV_TRACE << "KadPathSetupReq: PID for spath " << packet->getSrcPath(packet->getProgress())
-						 << " already present" << endl;
-					return_answer= true;
-				}
-
-				if (return_answer) {
-					// check for path improvements since this returns early here
-					if (pathSnooping) {
-						kad_path path_of_interest(packet->reversePath(packet->getSrcPath(1, packet->getProgress())));
-						if (path_of_interest.size() > 0)
-						{
-							routingTable.addPath(packet->getSource(), path_of_interest, packet->getStateSeqNo(), 0, packet->getSrcNodeDegree());
-						}
-					}
-					const KadPathSetupReq* setupreq = static_cast<const KadPathSetupReq *>(packet.get());
-					sendPacket(makeAnswerKadPathSetupRsp(*setupreq));
-					return; // this will delete the original packet
-				}
-				forwardedPathSetup++;
-			}
-			break;
-
-			case KAD_PathTeardownReq:
-			{
-				// as intermediate node I need to check to path ID teardown
-				checkForPathTeardown(*packet);
-
-				if (packet->getRouteArraySize()-packet->getProgress() <= nodeVicinityGraph::vicinityDiscoveryRadius+2) {
-					EV_TRACE << "KadPathTeardown: terminated here, the rest is precomputed" << endl;
-					return;  // this will delete the original packet
-				}
-
-				forwardedPathTeardown++;
-			}
-			break;
-
-			case KAD_PathSetupRsp:
-			{
-				EV_TRACE << "forwarding PathSetupRsp, origin spath: "
-					 << packet->reversePath(packet->getSrcPath()) << endl;
-			}
-			break;
-
-			case KAD_ProbeReq: // this is for path probing
-			{
-				const KadProbeReq* probereq= dynamic_cast<const KadProbeReq*>(packet.get());
-				// usually the following is not necessary, but sometimes
-				// PathSetup was scheduled but not performed and a newer seq of a longer
-				// path start a path check, resulting in the ProbeReq
-				if (usePathIDs and probereq->getPathCheck()) {
-					if (checkForPathInstallation(*packet))
-						EV_TRACE << "POST Installed PathID by ProbeReq PathCheck" << endl;
-				}
-			}
-			break;
-
-			case KAD_UpdateRouteReq: // check for unreachable info
-				evalUpdateReq(static_cast<const KadUpdateRouteReq*>(packet.get()));
-				break;
-
-			case KAD_QueryRouteRsp: // check for interesting contacts
-				evalQueryRouteRsp(static_cast<const KadQueryRouteRsp*>(packet.get()));
-				break;
-
-		        case KAD_Error: // check for contact invalidation due to SegmentFailure
-				if (auto errorpkt= static_cast<const KadError*>(packet.get());
-				    errorpkt != nullptr and (errorpkt->getErrorType() == KAD_SegmentFailure))
-				{
-					KadPacket* original = check_and_cast<KadPacket *>(errorpkt->getEncapsulatedPacket());
-					// find out the failed link
-					auto reportingNode(errorpkt->getSource());
-					const auto originalPath(original->getSrcPath());
-					// use progress in original path to find the correct link
-					// just finding the reporting node in the source path isn't safe due to cycles in forwarding path!
-					short unsigned int index(original->getProgress());
-					// the following should be true, otherwise we are getting
-					// an error from some off path node
-					ASSERT(originalPath[index] == reportingNode and index+1U < originalPath.size());
-					// the next hop is the one that failed
-					if (index+1U < originalPath.size()) {
-						auto failedNextHop = originalPath[index+1];
-						link_t failedlink(reportingNode, failedNextHop);
-						EV_INFO << "Check for invalid contacts because of failed link " << failedlink << " in error packet" << endl;
-						// this segment or node error is current and should invalidate all affected contacts
-						// a rediscovery will be triggered automatically if necessary
-						routingTable.invalidateContacts(failedlink, (simTime()-errorpkt->getCreationTime()).inUnit(SIMTIME_MS));
-					}
-				}
-				break;
-
-		} // end switch
-
-		if (pathSnooping) {
-			// aka PATH OVERHEARING
-			//TODO optimization use isPathInteresting
-
-			// one can only trust the so far traversed path to work and exist
-			// this is especially important for rediscovery messages: they may use still somewhat obsolete path information
-			// also: avoid learning about supposed physical Neighbors
-			kad_path path_of_interest(packet->reversePath(packet->getSrcPath(1, packet->getProgress())));
-			if (path_of_interest.size() > 0)
-			{
-				routingTable.addPath(packet->getSource(), path_of_interest, packet->getStateSeqNo(), 0, packet->getSrcNodeDegree());
-			}
-
-			// NOTE: the rest of the source routing path should not be used for improvement
-			// we will probably get the path back in the response message
-		}
+		// perform (optional) processing while forwarding to its ultimate destination
+		intermediateNodeProcessing(*packet);
 
 		forwardPacket(std::move(packet), std::move(pkt));
 		return;
@@ -1451,7 +1327,9 @@ void R2Kademlia::readRTableRsp(const KadRTableRsp& packet) {
 				//bool expandDiscovery(viaPath.size() + packet.getPath(i).size() + 1  < nodeVicinityGraph::vicinityDiscoveryRadius);
 				// add PID entry as this neighbor is in our vicinityDiscoveryRadius
 				if (usePathIDs and nodeOrLinkAdded) {
-					fwdTablePathID.addPrecalcEntry(&neighborhoodContact);
+					auto pathtoadd(neighborhoodContact.getPath());
+					pathtoadd.push_back(neighborhoodContact.getKey());
+					fwdTablePathID.addPrecalcEntry(pathtoadd);
 					vicinityPathIDCompletion(neighborhoodContact);
 				}
 			} // endif entry within vicinitydiscovery

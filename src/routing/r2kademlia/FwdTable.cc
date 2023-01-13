@@ -146,30 +146,30 @@ bool FwdTablePathID::existsEntry(KadContact_p contact)
 }
 
 
-// contact is sometimes a temporary variable, i.e., the contact may not be part of the routing table yet
-// precalc is set for contacts within the discovery range
+// this path should contain all subsequent hops, e.g. , <h1 h2 h3 h4 h5> -> outgoing PathID = H(h1|h2|h3|h4|h5)
+// furthermore, the path may stop three hops before the contact if it is a path longer than 5 hops
+// precalc is set for contacts within the vicinity discovery range
 // @returns true if entry was newly added/created, otherwise false (for existing entry)
 // the incomingPathID is returned
 std::pair<bool, PathID>
-FwdTablePathID::addEntry(KadContact_p contact, bool isForeignPID, bool precalc)
+FwdTablePathID::addEntry(const kad_path& path_to_add, bool isForeignPID, bool precalc)
 {
-       	if (contact == nullptr)
+	ASSERT(not path_to_add.empty());
+
+	// in case the path is empty, it makes no sense to add anything
+	// this should never happen actually
+	if (path_to_add.empty())
 		return std::make_pair(false, PathID::UndefinedPathID);
 
 	// Routingtable entry on node 4: Dest 5: < 3 2 >
 	//EV_TRACE << "addEntry(): called for contact " << *contact << " with path ";
 
-	// note: this path may be empty for physical neighbors
-	// Incoming PathIDs are required for physical neighbors, outgoing PathIDs not
-	kad_path currentpath(contact->getPath());
-	// add destination node ID to end of the path (will never be empty then)
-	currentpath.push_back(contact->getKey());
 
-	//EV_TRACE << currentpath << endl;
+	//EV_TRACE << path_to_add << endl;
 	//ASSERT((not precalc and (currentpath.size()>nodeVicinityGraph::vicinityDiscoveryRadius))
 	//       or (precalc and currentpath.size()<=nodeVicinityGraph::vicinityDiscoveryRadius));
 	// prepend own nodeID for incoming PathID
-	PathID incomingPathID(getPathID(*ownNodeID, currentpath));
+	PathID incomingPathID(getPathID(*ownNodeID, path_to_add));
 
 	// check for already existing PID
 	if ( auto pidentry= PIDFwdTable.find(incomingPathID); pidentry != PIDFwdTable.end() )
@@ -194,9 +194,9 @@ FwdTablePathID::addEntry(KadContact_p contact, bool isForeignPID, bool precalc)
 	// create new PID entry
 	FwdTableEntry fwdentry;
 
-	fwdentry.outgoingPathID= (currentpath.size() > 1) ? getPathID(currentpath) : PathID::UndefinedPathID;
-	fwdentry.setPathLength(currentpath.size());
-	fwdentry.nextHopNode= currentpath[0];
+	fwdentry.outgoingPathID= (path_to_add.size() > 1) ? getPathID(path_to_add) : PathID::UndefinedPathID;
+	fwdentry.setPathLength(path_to_add.size());
+	fwdentry.nextHopNode= path_to_add[0];
 	fwdentry.setValid();
 	if (isForeignPID)
 		fwdentry.setForeign();
@@ -207,13 +207,13 @@ FwdTablePathID::addEntry(KadContact_p contact, bool isForeignPID, bool precalc)
 		fwdentry.setPrecalc();
 
 	fwdentry.fwdAction=
-		(currentpath.size()==1) // next hop is our physical neighbor
+		(path_to_add.size()==1) // next hop is our physical neighbor
 		? FwdTableEntry::Action::fwdNextNodeId : FwdTableEntry::Action::fwdNextPathID;
 
 	PIDFwdTable[incomingPathID]= fwdentry;
 
 	EV_TRACE << "addEntry(): inPID: " << incomingPathID << " outPID: "
-		 << fwdentry.outgoingPathID << " spath: " << currentpath << " " << fwdentry.str() << endl;
+		 << fwdentry.outgoingPathID << " spath: " << path_to_add << " " << fwdentry.str() << endl;
 
 	return std::make_pair(true, incomingPathID);
 }
@@ -248,25 +248,19 @@ void FwdTablePathID::invalidateEntry(KadContact_p contact)
 // returns false if entry is not accepted (e.g., path is longer)
 // note that modEntry() may also be called while a path setup is still pending, i.e.,
 // there is no NIDPID and PID entry yet and a shorter path may have been found meanwhile
-bool FwdTablePathID::modEntry(KadContact_p contact, bool isForeignPID)
+bool FwdTablePathID::modEntry(const OverlayKey& contact_key, const kad_path& newpath, bool isForeignPID)
 {
-       	if (contact == nullptr)
-		return false;
-
 	PathID priorPathID= PathID::UndefinedPathID;
 	bool additionalEntry= false;
-	kad_path newpath(contact->getPath());
-	// add destination node ID to path (will never be empty then)
-	newpath.push_back(contact->getKey());
 	// calculate incomingPathID
 	PathID incomingPathID(getPathID(*ownNodeID, newpath));
 
 	// Lookup old entry if it exists
 	// (which should be mostly the case, however in case a PathSetupReq is ongoing it may be missing)
-	auto pidentry= NIDPIDTable.find(contact->getKey());
+	auto pidentry= NIDPIDTable.find(contact_key);
 	if ( pidentry != NIDPIDTable.end() )
 	{
-		EV_TRACE << "modEntry(): Dest NodeID " << contact->getKey().shortStr() << newpath << endl;
+		EV_TRACE << "modEntry(): Dest NodeID " << contact_key.shortStr() << " new PID path " << newpath << endl;
 
 		// Routingtable entry on node 4: Dest 5: < 3 2 >
 		priorPathID= pidentry->second;
@@ -274,7 +268,6 @@ bool FwdTablePathID::modEntry(KadContact_p contact, bool isForeignPID)
 		{
 			EV_ERROR << "FwdTablePathID::modEntry earlier PathID not found" << endl;
 			return false;
-
 		}
 		else if (priorPathID == incomingPathID)
 		{ // same PathID already existed, just return
@@ -352,7 +345,7 @@ bool FwdTablePathID::modEntry(KadContact_p contact, bool isForeignPID)
 
 	// activate new mapping for replacements (or new entries)
 	// only if path setup is not required
-	NIDPIDTable[contact->getKey()]= incomingPathID;
+	NIDPIDTable[contact_key]= incomingPathID;
 
 	EV_TRACE << "modEntry(): inPID:" << incomingPathID << " outPID:"
 		 << fwdentry.outgoingPathID

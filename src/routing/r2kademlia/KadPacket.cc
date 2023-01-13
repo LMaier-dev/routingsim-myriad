@@ -93,6 +93,7 @@ void KadPacket::appendRoute(const KadContact& contact) {
 }
 
 
+// returns source routing path from "from" until "to", but excluding "to"
 kad_path KadPacket::getSrcPath(uint from, uint to) const {
 	// index bounds are checked in getHop 
 	if(from > to)

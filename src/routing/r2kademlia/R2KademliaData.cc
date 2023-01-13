@@ -21,14 +21,20 @@ namespace routingsim {
 
 template<typename T>
 std::unique_ptr<T> R2Kademlia::makeDataPacket(const OverlayKey& dstNodeID, const KadContact* viacontact, const char *name) {
+	// viacontact is the next overlay hop we neeed to reach
 	auto packet = std::make_unique<T>();
 	packet->setName(name);
 	packet->setType(KAD_Data);
 	packet->setSrcNodeID(myOverlayKey);
 	packet->setDstNodeID(dstNodeID);
+	// insert via NodeID if necessary
+	if (viacontact->getKey() != dstNodeID) {
+		packet->setViaNodeID(viacontact->getKey());
+	}
 	packet->setHopLimit(hopLimit);
 
-	// when creating a packet we set everything so that we can forward the packet to the next overlay hop
+	// since we only forward to known contacts, we also have a PID for them
+	// this PID may only lead to the Node three hops before the contact
 	auto pidentry= fwdTablePathID.NIDPIDTable.find(viacontact->getKey());
 	if ( pidentry != fwdTablePathID.NIDPIDTable.end() )
 	{ // pidentry.second is incomingPathID
@@ -104,7 +110,9 @@ void R2Kademlia::handleDataPacket(NodePkt_p pkt) {
 	
 	EV_TRACE << "received data packet from "
 	   << packet->getSrcNodeID().shortStr() << " to "
-	   << packet->getDstNodeID().shortStr() << " HL:" << packet->getHopLimit() << endl;
+	   << packet->getDstNodeID().shortStr() << " via "
+	   << (packet->getViaNodeID().isUnspecified() ? "-" : packet->getViaNodeID().shortStr())
+	   << " HL:" << packet->getHopLimit() << endl;
 
 	// we should check whether the link via this message travelled is
 	// still active, otherwise we should drop this message as it was affected
@@ -363,6 +371,8 @@ void R2Kademlia::sendPacket(KadDataPacket_p packet) {
 
 void R2Kademlia::sendData(const OverlayKey& finaldestkey) {
 	EV_TRACE << "sendData to " << finaldestkey.shortStr() << endl;
+
+	// find closest contact toward final destination NodeID
 	auto contacts = routingTable.getClosestContacts(finaldestkey, findNodeNumber, true);
 	//ASSERT(contacts.size() > 0);
 	if (contacts.size() > 0)

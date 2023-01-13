@@ -42,7 +42,7 @@ public:
 	enum class Action {
 		undefined     = 0,
 		fwdNextPathID = 1, // forward with new outgoing PathID
-		fwdNextNodeId = 2, // forward to next NodeID
+		fwdNextNodeId = 2, // forward to next NodeID (must be direct neighbor)
 		fwdlocal      = 3
 	} fwdAction = Action::undefined;
 
@@ -102,12 +102,12 @@ public:
 
 	inline void setNIDtoPIDmapping(const OverlayKey& nid, const PathID incomingPathID);
 
-	std::pair<bool, PathID> addPrecalcEntry(KadContact_p contact) { return addEntry(contact, false, true); }
-	std::pair<bool, PathID> addForeignEntry(KadContact_p contact) { return addEntry(contact, true, false); }
-	std::pair<bool, PathID> addLocalEntry(KadContact_p contact, bool precalc) { return addEntry(contact, false, precalc); }
+	std::pair<bool, PathID> addPrecalcEntry(const kad_path& path_to_add) { return addEntry(path_to_add, false, true); }
+	std::pair<bool, PathID> addForeignEntry(const kad_path& path_to_add) { return addEntry(path_to_add, true, false); }
+	std::pair<bool, PathID> addLocalEntry(const kad_path& path_to_add, bool precalc) { return addEntry(path_to_add, false, precalc); }
 
 	// modify PID for path to contact
-	bool modEntry(KadContact_p contact, bool foreignPID);
+	bool modEntry(const OverlayKey& contact_key, const kad_path& newpath, bool foreignPID);
 	void delEntry(KadContact_p contact);
 	void invalidateEntry(KadContact_p contact);
 
@@ -126,7 +126,7 @@ public:
 	virtual std::string str() const;
 protected:
 	// try to add PID for path to contact, returns incomingPID or undefined on failure
-	std::pair<bool, PathID> addEntry(KadContact_p contact, bool foreignPID, bool precalc);
+	std::pair<bool, PathID> addEntry(const kad_path& path_to_add, bool foreignPID, bool precalc);
 
 private:
 	const OverlayKey* ownNodeID = nullptr;

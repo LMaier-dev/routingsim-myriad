@@ -1,3 +1,5 @@
+# RoutingSim
+
 This is RoutingSim, an event-discrete simulator for routing protocols based on 
 OMNet++.
 
@@ -11,10 +13,13 @@ https://ieeexplore.ieee.org/document/6168493
 The current version has been tested with OMNeT++ 5.7 (5.6.1, 5.5.1 and 5.4.1 as well). 
 OMNeT++ 6.x support is not yet provided.
 
-# Installation
+## Installation
+While OMNeT++ is able to run under Windows, the recommended and
+tested environment is a native Linux installation (e.g., Ubuntu)
 Get OMNeT++ from https://omnetpp.org/ and install it according to
-the manual. You should make sure that CXXFLAGS=-std=c++17
-is set in configure.user of OMNeT++.
+the manual. You should make sure that
+`CXXFLAGS=-std=c++17`
+is set in `configure.user` of OMNeT++.
 
 Additionally, one needs boost, e.g., libboost-all-dev
 as well as libgmp (libgmp-dev).
@@ -44,10 +49,10 @@ and compiled with MODE=release.
 Result files are stored in ../simulations/r2kademlia/results
 for the example above.
 
-# State Export
-The state Export functionality allows to dump the contents of all routingtables at the end of a simulation for offline analysis.
+## State Export
+The state export functionality allows to dump the contents of all routingtables at the end of a simulation for offline analysis.
 
-## Dependencies
+### Dependencies
 For the state-export functionality one needs [https://github.com/nlohmann/json](https://github.com/nlohmann/json) version 3.10.5:
 
 - The library is also available in some package managers. In that case you cane install it and skip the rest.
@@ -64,10 +69,10 @@ export JSON_INCL_DIR=/path/to/extracted/folder/single_include
 - Then run make makefiles
 
 
-## Feature Flag
+### Feature Flag
 Activate the compiletime flag during compilation: ```make -j8 MODE=release CFLAGS="-DR2K_RT_EXPORT"```
 
-## Activate in ```eval.ini```:
+### Activate in ```eval.ini```:
 ```ini
 **.dumpRTState = true
 ```

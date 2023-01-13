@@ -69,7 +69,7 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 						  1);
 
 		if (usePathIDs and node_added) {
-			fwdTablePathID.addPrecalcEntry(&neighborcontact);
+			fwdTablePathID.addPrecalcEntry({neighborcontact.getKey()});
 			vicinityPathIDCompletion(neighborcontact);
 		}
 
@@ -93,7 +93,6 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 
 
 // Request Physical Neighbors from contact
-// it seems crucial for slightly better stretch that this happens without any further delay
 // @returns a delay value for the next call of this method
 simtime_t R2Kademlia::sendGetPhysicalNeighbors(KadContact_p contact)
 {
@@ -132,7 +131,9 @@ simtime_t R2Kademlia::sendGetPhysicalNeighbors(KadContact_p contact)
 					       contact->getStateSeqNo(),
 					       contact->getPath().size()+1);
 	if (usePathIDs and nodeOrLinkAdded) {
-		fwdTablePathID.addPrecalcEntry(contact);
+		auto newpath(contact->getPath());
+		newpath.push_back(contact->getKey());
+		fwdTablePathID.addPrecalcEntry(newpath);
 		vicinityPathIDCompletion(*contact);
 	}
 	// return delay for next call
@@ -266,7 +267,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadPNDiscReq> packet) {
 	bool node_added= vicinity.addNode(myOverlayKey, packet->getSource(), packet->getStateSeqNo(), 1);
 	KadContact pncontact(packet->getSource(), kad_path());
 	if (usePathIDs and node_added) {
-		fwdTablePathID.addPrecalcEntry(&pncontact);
+		fwdTablePathID.addPrecalcEntry({pncontact.getKey()});
 		vicinityPathIDCompletion(pncontact);
 	}
 
@@ -288,7 +289,9 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadPNDiscReq> packet) {
 								  packet->getPhyNeighborSeqNo(i), 2);
 				if (usePathIDs and node_added) {
 					KadContact nncontact(packet->getPhyNeighbor(i), {packet->getSource()});
-					fwdTablePathID.addPrecalcEntry(&nncontact);
+					auto newpath(path);
+					newpath.push_back(nncontact.getKey());
+					fwdTablePathID.addPrecalcEntry(newpath);
 					vicinityPathIDCompletion(nncontact);
 				}
 			}

@@ -83,6 +83,7 @@ packet KadRTableRsp extends KadAnswer {
 	// bool intermediateFlag[];
 }
 
+
 // FIND NODE
 packet KadFindNodeReq extends KadRTableReq {
 	type = KAD_FindNodeReq;
@@ -112,10 +113,10 @@ packet KadUpdateRouteReq extends KadPacket {
 }
 
 // KadDataMsg
-packet KadDataMsg extends KadDataPacket {
-       type = KAD_Data;
-       bool redirected;
-}
+//packet KadDataMsg extends KadDataPacket {
+//       type = KAD_Data;
+//       bool redirected;
+//}
 // ------------
 
 // ERROR
@@ -163,14 +164,18 @@ packet KadProbeRsp extends KadAnswer {
 // PATHSETUP
 packet KadPathSetupReq extends KadPacket {
 	type = KAD_PathSetupReq;
+	// transmit contact state at the originator
 	simtime_t contactLastSeen;
 	stateseqno_t contactSeqNo;
 }
 
 packet KadPathSetupRsp extends KadAnswer {
 	type = KAD_PathSetupRsp;
+	// this echoes the contact state at the originator
+	// so that the originator can check whether this Rsp is obsolete
 	simtime_t contactLastSeen;
 	stateseqno_t contactSeqNo;
+	// need to record the complete original path as Rsp is sent back earlier
 	OverlayKey fwdSourcePath[];
 }
 
