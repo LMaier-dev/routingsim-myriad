@@ -75,9 +75,9 @@ bool R2Kademlia::handlePathSetupResponse(KadPacket_p answer, RPCState& rpcState)
 		originalpath.resize(pathSetupRsp->getFwdSourcePathArraySize()-2);
 		// shorten setuppath to what is expected (by 2 hops) (also remove source and target nodes)
 		setuppath.resize(pathSetupRsp->getFwdSourcePathArraySize()-1-(nodeVicinityGraph::vicinityDiscoveryRadius+1));
-		for (unsigned int i= 1; i<pathSetupRsp->getFwdSourcePathArraySize(); i++) {
+		for (unsigned int i= 1; i<pathSetupRsp->getFwdSourcePathArraySize()-1; i++) {
 			originalpath[i-1]= pathSetupRsp->getFwdSourcePath(i);
-			if (i<pathSetupRsp->getFwdSourcePathArraySize()-nodeVicinityGraph::vicinityDiscoveryRadius)
+			if (i < pathSetupRsp->getFwdSourcePathArraySize()-(nodeVicinityGraph::vicinityDiscoveryRadius+1))
 				setuppath[i-1]= pathSetupRsp->getFwdSourcePath(i);
 		}
 	}
@@ -88,9 +88,10 @@ bool R2Kademlia::handlePathSetupResponse(KadPacket_p answer, RPCState& rpcState)
 		return false;
 	}
 
-	KadContact tmpcontact(target, originalpath);
+	EV_TRACE << "Received PathSetupRsp, setup path: " << setuppath << " to " << target.shortStr()
+		 << " original path: " << originalpath << endl;
 
-	EV_TRACE << "Received PathSetupRsp, setup path: " << setuppath << " to " << target.shortStr() << endl;
+	KadContact tmpcontact(target, std::move(originalpath));
 
 	bool addthispath(false);
 	// meanwhile the contact may have been replaced or deleted etc.
@@ -113,7 +114,7 @@ bool R2Kademlia::handlePathSetupResponse(KadPacket_p answer, RPCState& rpcState)
 		else {
 			// Last Seen of current contact is more recent
 			// check whether path has changed, then we should better ignore this PathSetup as obsolete and ignore
-			if (contactp->getPathLength() != originalpath.size()+nodeVicinityGraph::vicinityDiscoveryRadius or contactp->getPath() != originalpath) {
+			if (contactp->getPathLength() != tmpcontact.getPath().size()+nodeVicinityGraph::vicinityDiscoveryRadius or contactp->getPath() != tmpcontact.getPath()) {
 				EV_WARN << "PathSetupRsp: ignoring, because Last Seen of current contact is more recent and path has changed meanwhile:" << tmpcontact.getLastSeen() << endl;
 				// TODO: initiate Teardown of the obsolete path
 

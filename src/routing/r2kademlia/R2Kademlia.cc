@@ -260,7 +260,9 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		// we are not the recipient
 
 		// perform (optional) processing while forwarding to its ultimate destination
-		intermediateNodeProcessing(*packet);
+		// the processing of the packet may abort early here (PathSetupReq or PathTeardownReq)
+		if (intermediateNodeProcessing(*packet) == true)
+			return;
 
 		forwardPacket(std::move(packet), std::move(pkt));
 		return;

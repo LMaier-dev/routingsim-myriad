@@ -16,7 +16,8 @@
 
 namespace routingsim {
 
-void
+// returns true if forwarding should stop here
+bool
 R2Kademlia::intermediateNodeProcessing(const KadPacket& packet) {
 
 	// special actions while forwarding packets
@@ -58,7 +59,7 @@ R2Kademlia::intermediateNodeProcessing(const KadPacket& packet) {
 			}
 			const KadPathSetupReq* setupreq = static_cast<const KadPathSetupReq *>(&packet);
 			sendPacket(makeAnswerKadPathSetupRsp(*setupreq));
-			return; // this will delete the original packet
+			return true; // this will delete the original packet
 		}
 		forwardedPathSetup++;
 	}
@@ -71,7 +72,7 @@ R2Kademlia::intermediateNodeProcessing(const KadPacket& packet) {
 
 		if (packet.getRouteArraySize()-packet.getProgress() <= nodeVicinityGraph::vicinityDiscoveryRadius+2) {
 			EV_TRACE << "KadPathTeardown: terminated here, the rest is precomputed" << endl;
-			return;  // this will delete the original packet
+			return true;  // this will delete the original packet
 		}
 
 		forwardedPathTeardown++;
@@ -150,6 +151,8 @@ R2Kademlia::intermediateNodeProcessing(const KadPacket& packet) {
 		// NOTE: the rest of the source routing path should not be used for improvement
 		// we will probably get the path back in the response message
 	}
+
+	return false;
 }
 
 } // end namespace

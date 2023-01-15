@@ -339,7 +339,7 @@ private:
 	bool processNotViaInformation(const KadPacket& packet);
 
 	// processes packets while forwarding
-	void intermediateNodeProcessing(const KadPacket& packet);
+	bool intermediateNodeProcessing(const KadPacket& packet);
 
 	kad_path concatViaPath(const kad_path& viaPath, const OverlayKey& viaKey, const kad_path& path);
 

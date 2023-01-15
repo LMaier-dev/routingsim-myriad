@@ -84,7 +84,7 @@ public:
 				     nodeDegree(k.nodeDegree),
 				     rds_p(std::move(k.rds_p)) {};
         explicit KadContact(const OverlayKey& key): key(key), lastseen(SIMTIME_ZERO), lastPathRefresh(SIMTIME_ZERO), path(), state(State::undefined), nodeDegree(0), rds_p(nullptr) {};
-        KadContact(const OverlayKey& key, kad_path opath, stateseqno_t seqno= stateseqno_t::invalidSeqNo) :
+        KadContact(const OverlayKey& key, kad_path&& opath, stateseqno_t seqno= stateseqno_t::invalidSeqNo) :
 		key(key), lastseen(SIMTIME_ZERO), lastPathRefresh(SIMTIME_ZERO), path(std::move(opath)), pathHashSum(HashSum(path,key)), seqno(seqno),
 		state(State::valid), physicalNeighbor(path.empty() == true), nodeDegree(0), rds_p(nullptr) // simply path.empty() doesn't work correctly!
 		{};
