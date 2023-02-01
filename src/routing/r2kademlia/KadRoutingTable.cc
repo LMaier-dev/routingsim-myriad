@@ -442,7 +442,8 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 		updatePaths(*contact);
 	}
 	else {
-		policy->onPathChange(*contact);
+		if (not identical_path)
+			policy->onPathChange(*contact);
 	}
 
 	return true;

@@ -32,7 +32,7 @@ std::string FwdTableEntry::str() const {
 			default:
 				out << '?';
 		} // end switch;
-
+		out << ":" << getReferenceCount();
 		out << ") nh <" << nextHopNode.shortStr() << ">(" << getPathLength() << ")";
 
 		return out.str();
@@ -162,10 +162,7 @@ FwdTablePathID::addEntry(const kad_path& path_to_add, bool isForeignPID, bool pr
 		return std::make_pair(false, PathID::UndefinedPathID);
 
 	// Routingtable entry on node 4: Dest 5: < 3 2 >
-	//EV_TRACE << "addEntry(): called for contact " << *contact << " with path ";
-
-
-	//EV_TRACE << path_to_add << endl;
+	EV_TRACE << "addEntry(): called for path " << path_to_add << endl;
 	//ASSERT((not precalc and (currentpath.size()>nodeVicinityGraph::vicinityDiscoveryRadius))
 	//       or (precalc and currentpath.size()<=nodeVicinityGraph::vicinityDiscoveryRadius));
 	// prepend own nodeID for incoming PathID
@@ -182,8 +179,10 @@ FwdTablePathID::addEntry(const kad_path& path_to_add, bool isForeignPID, bool pr
 		// set foreign or local flag
 		if (isForeignPID)
 			pidentry->second.setForeign();
-		else
+		else {
 			pidentry->second.setLocal();
+			pidentry->second.incrementReferenceCount();
+		}
 
 		if (precalc)
 			pidentry->second.setPrecalc();
@@ -200,8 +199,10 @@ FwdTablePathID::addEntry(const kad_path& path_to_add, bool isForeignPID, bool pr
 	fwdentry.setValid();
 	if (isForeignPID)
 		fwdentry.setForeign();
-	else
+	else {
+	        fwdentry.incrementReferenceCount();
 		fwdentry.setLocal();
+	}
 
 	if (precalc)
 		fwdentry.setPrecalc();
@@ -212,8 +213,9 @@ FwdTablePathID::addEntry(const kad_path& path_to_add, bool isForeignPID, bool pr
 
 	PIDFwdTable[incomingPathID]= fwdentry;
 
+	// tpath: path including the target
 	EV_TRACE << "addEntry(): inPID: " << incomingPathID << " outPID: "
-		 << fwdentry.outgoingPathID << " spath: " << path_to_add << " " << fwdentry.str() << endl;
+		 << fwdentry.outgoingPathID << " tpath: " << path_to_add << " " << fwdentry.str() << endl;
 
 	return std::make_pair(true, incomingPathID);
 }
@@ -225,13 +227,30 @@ void FwdTablePathID::invalidateEntry(KadContact_p contact)
 	if (contact == nullptr)
 		return;
 
-	kad_path currentpath(contact->getPath());
-	// do not invalidate any paths in vicinity
-	if (currentpath.size() < nodeVicinityGraph::vicinityDiscoveryRadius)
+	// do not invalidate any paths in vicinity as they are precalculated
+	if (contact->getPathLength() < nodeVicinityGraph::vicinityDiscoveryRadius)
 		return;
-	// add destination node ID to end of the path (will never be empty then)
-	currentpath.push_back(contact->getKey());
 
+	// we have to check whether the PID part is actually affected by the broken link
+	kad_path currentpath(contact->getPath());
+	if (contact->getPathLength() <= nodeVicinityGraph::vicinityDiscoveryRadius) {
+	// add destination node ID to end of the path (will never be empty then)
+		currentpath.push_back(contact->getKey());
+	}
+	else {
+		if (contact->getPathLength() <= 2*nodeVicinityGraph::vicinityDiscoveryRadius) {
+			// for paths with 4 or 5 hops: stop at 3rd hop
+			currentpath.resize(nodeVicinityGraph::vicinityDiscoveryRadius+1);
+		}
+		else {
+			// stop three hops before destination
+			currentpath.resize(contact->getPathLength()-2);
+		}
+	}
+
+	// check if broken link is within this path
+	// TODO!!
+	
 	// prepend own nodeID for incoming PathID
 	PathID incomingPathID(getPathID(*ownNodeID, currentpath));
 
@@ -256,17 +275,17 @@ bool FwdTablePathID::modEntry(const OverlayKey& contact_key, const kad_path& new
 	PathID incomingPathID(getPathID(*ownNodeID, newpath));
 
 	// Lookup old entry if it exists
-	// (which should be mostly the case, however in case a PathSetupReq is ongoing it may be missing)
+	// (which should be mostly the case, however in case a PathSetupReq is ongoing or was not necessary, it may be missing)
 	auto pidentry= NIDPIDTable.find(contact_key);
 	if ( pidentry != NIDPIDTable.end() )
 	{
-		EV_TRACE << "modEntry(): Dest NodeID " << contact_key.shortStr() << " new PID path " << newpath << endl;
+		EV_TRACE << "modEntry(): Dest NodeID " << contact_key.shortStr() << " new PID tpath " << newpath << endl;
 
 		// Routingtable entry on node 4: Dest 5: < 3 2 >
 		priorPathID= pidentry->second;
 		if ( PIDFwdTable.find(priorPathID) == PIDFwdTable.end() )
 		{
-			EV_ERROR << "FwdTablePathID::modEntry earlier PathID not found" << endl;
+			EV_ERROR << "FwdTablePathID::modEntry earlier PathID " << priorPathID << " not found" << endl;
 			return false;
 		}
 		else if (priorPathID == incomingPathID)
@@ -278,8 +297,10 @@ bool FwdTablePathID::modEntry(const OverlayKey& contact_key, const kad_path& new
 				it->second.unsetObsolete();
 				if (isForeignPID)
 					it->second.setForeign();
-				else
+				else {
+					it->second.incrementReferenceCount();
 					it->second.setLocal();
+				}
 			}
 
 			return false;
@@ -289,8 +310,12 @@ bool FwdTablePathID::modEntry(const OverlayKey& contact_key, const kad_path& new
 			FwdTableEntry& priorfwdentry(PIDFwdTable[pidentry->second]);
 
 			// mark it obsolete unless it was precalculated
-			if (not priorfwdentry.isPrecalc())
+			if (not priorfwdentry.isPrecalc()) {
 				priorfwdentry.setObsolete();
+				// not referenced anymore
+				if (priorfwdentry.isLocal())
+					priorfwdentry.decrementReferenceCount();
+			}
 			// delete the entry before priorPathID (i.e., the one before the penultimate entry)
 			//TODO make this configurable in depth
 			if (priorfwdentry.prevPathID != PathID::UndefinedPathID)
@@ -300,7 +325,7 @@ bool FwdTablePathID::modEntry(const OverlayKey& contact_key, const kad_path& new
 				{
 					// remove entry before priorPathID if still obsolete and not in use otherwise
 					// it may still have the local flag
-					if (it->second.isObsolete() and not it->second.isPrecalc() and not it->second.isForeign())
+					if (it->second.isObsolete() and not it->second.isPrecalc() and not it->second.isForeign() and it->second.getReferenceCount()==0)
 					{
 						EV_TRACE << "deleting PID entry " << priorfwdentry.prevPathID << endl;
 						PIDFwdTable.erase(it);
@@ -318,8 +343,10 @@ bool FwdTablePathID::modEntry(const OverlayKey& contact_key, const kad_path& new
 		it->second.setValid();
 		if (isForeignPID)
 			it->second.setForeign();
-		else
+		else {
 			it->second.setLocal();
+			it->second.incrementReferenceCount();
+		}
 
 		// only used for debugging output afterwards
 		fwdentry= it->second;
@@ -332,8 +359,10 @@ bool FwdTablePathID::modEntry(const OverlayKey& contact_key, const kad_path& new
 		fwdentry.setValid();
 		if (isForeignPID)
 			fwdentry.setForeign();
-		else
+		else {
 			fwdentry.setLocal();
+			fwdentry.incrementReferenceCount();
+		}
 
 		fwdentry.setPathLength(newpath.size());
 		fwdentry.fwdAction=
@@ -345,12 +374,12 @@ bool FwdTablePathID::modEntry(const OverlayKey& contact_key, const kad_path& new
 
 	// activate new mapping for replacements (or new entries)
 	// only if path setup is not required
-	NIDPIDTable[contact_key]= incomingPathID;
+	setNIDtoPIDmapping(contact_key, incomingPathID);
 
 	EV_TRACE << "modEntry(): inPID:" << incomingPathID << " outPID:"
 		 << fwdentry.outgoingPathID
 		 << (additionalEntry ? " additional entry" : ((pidentry != NIDPIDTable.end()) ? " replacement" : " new"))
-		 << " spath: " << newpath << endl;
+		 << " tpath: " << newpath << endl;
 
 	return true;
 }
@@ -378,9 +407,9 @@ void FwdTablePathID::delPIDEntry(PathID pid)
 
 		// local and precalculated PID entries will not be deleted here,
 		// foreign entries should be deleted by PathTeardown messages by unsetting their foreign bit first
-		if ( not it->second.isLocal() and not it->second.isForeign() and not it->second.isPrecalc()) {
+		if ( not it->second.isLocal() and not it->second.isForeign() and not it->second.isPrecalc() and it->second.getReferenceCount()==0) {
 			it->second.setDeleted();
-			EV_TRACE << "FwdTablePathID::delPIDEntry PathID " << pid << " deleted." << endl;
+			EV_TRACE << "FwdTablePathID::delPIDEntry PathID " << pid << " marked for deletion." << endl;
 			// actually delete this PID Entry
 			// suspended until garbageCollect()
 			// PIDFwdTable.erase(it);
@@ -417,7 +446,11 @@ void FwdTablePathID::delEntry(KadContact_p contact)
 
 				alreadySeenPIDSet.insert(fwdentry_it->first);
 
-				fwdentry_it->second.unsetLocal();
+				if (fwdentry_it->second.isLocal()) {
+					fwdentry_it->second.decrementReferenceCount();
+					if (fwdentry_it->second.getReferenceCount() == 0)
+						fwdentry_it->second.unsetLocal();
+				}
 
 				if (fwdentry_it->second.prevPathID == PathID::UndefinedPathID)
 					break;
@@ -432,7 +465,7 @@ void FwdTablePathID::delEntry(KadContact_p contact)
 		EV_TRACE << "delEntry(): NIDPID entry for " << contact->getKey().shortStr() << " deleted" << endl;
 
 	}
-	else // maybe only the PID exists (e.g., in case of PathSetupReq)
+	else // maybe only the PID exists but no NID -> PID mapping (e.g., in case of PathSetupReq)
 	{
 		kad_path newpath(contact->getPath());
 		// add destination node ID to path (will never be empty then)

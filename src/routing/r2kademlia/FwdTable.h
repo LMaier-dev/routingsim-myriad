@@ -22,6 +22,7 @@ private:
 	uint8_t fwdState = State::undefined;
 	uint16_t pathlen = 0; // default: number of hops to destination
 	unsigned long usageCount = 0;
+	unsigned long referenceCount = 0;
 	simtime_t last_touched = SIMTIME_ZERO; // age for soft state refresh in ms
 public:
 	PathID outgoingPathID = PathID::UndefinedPathID;
@@ -84,6 +85,17 @@ public:
 	void incrementUsageCount() { usageCount++; }
 	unsigned long getUsageCount() const { return usageCount; }
 
+	unsigned long incrementReferenceCount() { return ++usageCount; }
+	unsigned long decrementReferenceCount() { 
+		if (usageCount > 0)
+			return --usageCount;
+		else {
+			EV_TRACE << "Reference Count Violation:" << str() << endl;
+			ASSERT(usageCount > 0);
+			return usageCount;}
+	}
+	unsigned long getReferenceCount() const { return usageCount; }
+
 	std::string str() const;
 };
 
@@ -133,6 +145,8 @@ private:
 };
 
 
+// map an NID to a PID, note that several NIDs may be mapped to the same PID,
+// because the rest of the path to the viacontact may diverge then 
 inline
 void
 FwdTablePathID::setNIDtoPIDmapping(const OverlayKey& nid, const PathID incomingPathID) {

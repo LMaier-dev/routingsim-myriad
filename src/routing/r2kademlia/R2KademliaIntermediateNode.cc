@@ -40,7 +40,11 @@ R2Kademlia::intermediateNodeProcessing(const KadPacket& packet) {
 		else { // send back response if path ID already present/installed
 			EV_TRACE << "KadPathSetupReq: PID for spath " << packet.getSrcPath(packet.getProgress(), packet.getRouteArraySize()-nodeVicinityGraph::vicinityDiscoveryRadius)
 			     << " already present" << endl;
-			return_answer= true;
+
+			if (packet.hopsLeft() <= (nodeVicinityGraph::vicinityDiscoveryRadius+1))
+				return_answer= true;
+			// we have to forward until three hops before the destination at least
+			// to make sure that the path is installed there
 		}
 
 	        // always send response if hops to go <= vicinityDiscoveryRadius+1

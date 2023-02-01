@@ -1263,7 +1263,7 @@ void R2Kademlia::fillRTableRsp(KadRTableRsp& packet, const KadContactList& conta
 				packet.setSeqNo(i, contacts[i]->getStateSeqNo());
 				packet.setPathInfoAge(i, contacts[i]->getAge());
 				// path + seqno + age
-				packet.addBitLength(contacts[i]->getPath().size()*OverlayKey::getLength()+32+sizeof(age_t)*8);
+				packet.addBitLength(contacts[i]->getPathLength()*OverlayKey::getLength()+32+sizeof(age_t)*8);
 			}
 			packet.setNodeDegree(i, contacts[i]->getNodeDegree());
 			//ASSERT((stateseqno_t) contacts[i]->getNodeDegree() > contacts[i]->getStateSeqNo());
@@ -1322,7 +1322,7 @@ void R2Kademlia::readRTableRsp(const KadRTableRsp& packet) {
 				bool nodeOrLinkAdded= vicinity.addNode(neighborhoodContact.getPath().empty() ? myOverlayKey : neighborhoodContact.getPath().back(), // parent node
 								  neighborhoodContact.getKey(), // new child node
 								  neighborhoodContact.getStateSeqNo(),
-								  neighborhoodContact.getPath().size()+1); // distance of child node to us
+								  neighborhoodContact.getPathLength()+1); // distance of child node to us
 
 				// still room for one more hop in neighborhood exploration?
 				// the same is done for new contacts in RT (see onNewContact)

@@ -129,7 +129,7 @@ simtime_t R2Kademlia::sendGetPhysicalNeighbors(KadContact_p contact)
 	bool nodeOrLinkAdded= vicinity.addNode(contact->getPath().empty() ? myOverlayKey : contact->getPath().back(), // parent
 					       contact->getKey(), // new child
 					       contact->getStateSeqNo(),
-					       contact->getPath().size()+1);
+					       contact->getPathLength()+1);
 	if (usePathIDs and nodeOrLinkAdded) {
 		auto newpath(contact->getPath());
 		newpath.push_back(contact->getKey());
