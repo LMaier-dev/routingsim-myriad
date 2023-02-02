@@ -34,11 +34,11 @@ R2Kademlia::intermediateNodeProcessing(const KadPacket& packet) {
 			// PID was locally installed
 
 			EV_TRACE << "KadPathSetupReq: PID for spath "
-				 << packet.getSrcPath(packet.getProgress(), packet.getRouteArraySize()-nodeVicinityGraph::vicinityDiscoveryRadius)
+				 << packet.getSrcPath(packet.getProgress(), (packet.hopsLeft() == (nodeVicinityGraph::vicinityDiscoveryRadius+1)) ? packet.getRouteArraySize() : packet.getRouteArraySize()-nodeVicinityGraph::vicinityDiscoveryRadius-1)
 				 << " installed " << endl;
 		}
 		else { // send back response if path ID already present/installed
-			EV_TRACE << "KadPathSetupReq: PID for spath " << packet.getSrcPath(packet.getProgress(), packet.getRouteArraySize()-nodeVicinityGraph::vicinityDiscoveryRadius)
+			EV_TRACE << "KadPathSetupReq: PID for spath " << packet.getSrcPath(packet.getProgress(), (packet.hopsLeft() == (nodeVicinityGraph::vicinityDiscoveryRadius+1)) ? packet.getRouteArraySize() : packet.getRouteArraySize()-nodeVicinityGraph::vicinityDiscoveryRadius-1)
 			     << " already present" << endl;
 
 			if (packet.hopsLeft() <= (nodeVicinityGraph::vicinityDiscoveryRadius+1))

@@ -16,7 +16,7 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 		return false;
 
 	EV_TRACE << "checkForPathIDInstallation: " << packet.getSrcPath()
-		 << " Progress: " << packet.getProgress() << " SrcPathLen:" << packet.getRouteArraySize() << endl;
+		 << " Progress: " << packet.getProgress() << " SrcPathLen:" << packet.getRouteArraySize() << " hops left:" << packet.hopsLeft() <<  endl;
 	
 	// assume this is node (x) and the end of the source routing path is (hi) == viaContact, vicinityDiscoveryRadius==2:
 	// n: hop distance left
@@ -50,10 +50,12 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 
 		const auto pathtoadd(packet.getSrcPath(packet.getProgress()+1, packet.getRouteArraySize()));
 		// PID must be installed if hops > vicinityDiscoveryRadius
-		EV_TRACE << "checkForPathIDInstallation: path to " << packet.getTarget() << ": " << pathtoadd;
+		EV_TRACE << "checkForPathIDInstallation: path to " << packet.getTarget().shortStr() << ": " << pathtoadd;
 		if (auto [added,incomingPID]= fwdTablePathID.addForeignEntry(pathtoadd); added == true) {
-			// no need to install NodeId to PID mapping as this is probably no local contact
 			EV_TRACE << " added " << incomingPID << endl;
+			// need to install NID to PID mapping
+			fwdTablePathID.setNIDtoPIDmapping(packet.getTarget(),incomingPID);
+
 			return true;
 		}
 		else {
@@ -61,6 +63,9 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 			auto& fwdtableentry= fwdTablePathID.PIDFwdTable.at(incomingPID);
 			fwdtableentry.unsetObsolete();
 			EV_TRACE << " already present/ignored" << endl;
+			// need to install NID to PID mapping
+			fwdTablePathID.setNIDtoPIDmapping(packet.getTarget(),incomingPID);
+
 			return false;
 		}
 	}
@@ -71,7 +76,7 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 			const auto target(packet.getRoute(packet.getRouteArraySize()-1-nodeVicinityGraph::vicinityDiscoveryRadius-1));
 			const auto pathtoadd(packet.getSrcPath(packet.getProgress()+1, packet.getRouteArraySize()-nodeVicinityGraph::vicinityDiscoveryRadius-1));
 			// PID must be installed if hops > vicinityDiscoveryRadius
-			EV_TRACE << "checkForPathIDInstallation: path to " << target << ": " << pathtoadd;
+			EV_TRACE << "checkForPathIDInstallation: path to " << target.shortStr() << ": " << pathtoadd;
 			if (auto [added,incomingPID]= fwdTablePathID.addForeignEntry(pathtoadd); added == true) {
 				// no need to install NodeId to PID mapping as this is probably no local contact
 				EV_TRACE << " added " << incomingPID << endl;

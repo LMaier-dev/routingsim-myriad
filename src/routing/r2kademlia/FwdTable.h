@@ -148,7 +148,7 @@ private:
 };
 
 
-// map an NID to a PID, note that several NIDs may be mapped to the same PID,
+// map an NID to an (incoming) PID, note that several NIDs may be mapped to the same PID,
 // because the rest of the path to the viacontact may diverge then 
 inline
 void

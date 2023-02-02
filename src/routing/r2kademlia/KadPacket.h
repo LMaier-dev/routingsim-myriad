@@ -93,7 +93,7 @@ public:
 	/// returns true if the packet still has hops to take
 	inline bool hasRemainingHops() const { return getNextHopIndex() < route_arraysize; }
 	/// returns the number of hops left (i.e., still to go)
-	inline uint16_t hopsLeft() const { return route_arraysize-progress; }
+	inline uint16_t hopsLeft() const { return route_arraysize-1-progress; }
 	/// reverses the given path, returns the result
 	inline kad_path reversePath(kad_path path) const { std::reverse(path.begin(), path.end()); return path; }
 	/// returns the source route as a kad_path (std::vector) only excluding target and source

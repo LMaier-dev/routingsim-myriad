@@ -357,7 +357,7 @@ void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 			EV_TRACE << "using PID for via dest " << nextdest.shortStr() << ": " << pidentry->second << endl;
 		}
 		else {
-			EV_ERROR << "PID to " << nextdest.shortStr() << "not found" << endl;
+			EV_ERROR << "PID to " << nextdest.shortStr() << " not found" << endl;
 			packet->setDestPathID(PathID::UndefinedPathID);
 		}
 
