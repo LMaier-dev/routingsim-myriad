@@ -87,10 +87,13 @@ public:
 
 	unsigned long incrementReferenceCount() { return ++usageCount; }
 	unsigned long decrementReferenceCount() { 
-		if (usageCount > 0)
+		if (usageCount > 0) {
+			if (usageCount == 1)
+				EV_TRACE << "Reference Count to ZERO:" << str() << endl;
 			return --usageCount;
+		}
 		else {
-			EV_TRACE << "Reference Count Violation:" << str() << endl;
+			EV_WARN << "Reference Count Violation:" << str() << endl;
 			ASSERT(usageCount > 0);
 			return usageCount;}
 	}

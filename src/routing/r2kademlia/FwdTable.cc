@@ -180,8 +180,8 @@ FwdTablePathID::addEntry(const kad_path& path_to_add, bool isForeignPID, bool pr
 		if (isForeignPID)
 			pidentry->second.setForeign();
 		else {
-			pidentry->second.setLocal();
 			pidentry->second.incrementReferenceCount();
+			pidentry->second.setLocal();
 		}
 
 		if (precalc)
@@ -313,8 +313,10 @@ bool FwdTablePathID::modEntry(const OverlayKey& contact_key, const kad_path& new
 			if (not priorfwdentry.isPrecalc()) {
 				priorfwdentry.setObsolete();
 				// not referenced anymore
-				if (priorfwdentry.isLocal())
-					priorfwdentry.decrementReferenceCount();
+				if (priorfwdentry.isLocal()) {
+					if (priorfwdentry.decrementReferenceCount() == 0)
+						priorfwdentry.unsetLocal();
+				}
 			}
 			// delete the entry before priorPathID (i.e., the one before the penultimate entry)
 			//TODO make this configurable in depth
@@ -447,8 +449,7 @@ void FwdTablePathID::delEntry(KadContact_p contact)
 				alreadySeenPIDSet.insert(fwdentry_it->first);
 
 				if (fwdentry_it->second.isLocal()) {
-					fwdentry_it->second.decrementReferenceCount();
-					if (fwdentry_it->second.getReferenceCount() == 0)
+					if (fwdentry_it->second.decrementReferenceCount() == 0)
 						fwdentry_it->second.unsetLocal();
 				}
 
