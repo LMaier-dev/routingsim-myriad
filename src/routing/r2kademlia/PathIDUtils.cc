@@ -17,10 +17,10 @@ getSegmentPathIDs(const OverlayKey ownNodeID, const kad_path& path)
 	else { // we have two segments
 		kad_path firstpathsegment(path);
 		
-		// for paths with length 4 or 5 hops (length 5 or 6) the second segment is only 2 hops long (length 3)
-		auto secondpathsegment_begin_index= path.size() - nodeVicinityGraph::vicinityDiscoveryRadius;
+		// for paths with length 4 or 5 hops the second segment is only 2 hops long (length 3)
+		auto secondpathsegment_begin_index= path.size() - nodeVicinityGraph::vicinityDiscoveryRadius - 1;
 		// for longer paths, the last segment is one hop longer
-		if (path.size() > (2*nodeVicinityGraph::vicinityDiscoveryRadius+1))
+		if (path.size() > 2*nodeVicinityGraph::vicinityDiscoveryRadius+1)
 			secondpathsegment_begin_index--;
 
 		// copy the rest into second segment

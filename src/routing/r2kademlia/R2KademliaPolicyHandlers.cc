@@ -240,10 +240,10 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 
 				auto [firstSegmentPID,secondSegmentPID]=  getSegmentPathIDs(myOverlayKey,newpath);
 				if (newpath.size() > 2*nodeVicinityGraph::vicinityDiscoveryRadius)
-					newpath.resize(nodeVicinityGraph::vicinityDiscoveryRadius+2);
+					newpath.resize(nodeVicinityGraph::vicinityDiscoveryRadius+1);
 				else
 				if (newpath.size() == 2*nodeVicinityGraph::vicinityDiscoveryRadius)
-					newpath.resize(nodeVicinityGraph::vicinityDiscoveryRadius+1);
+					newpath.resize(nodeVicinityGraph::vicinityDiscoveryRadius);
 
 				if (auto [added,incomingPID]= fwdTablePathID.addLocalEntry(newpath, contact->getPathLength()<nodeVicinityGraph::vicinityDiscoveryRadius); incomingPID != PathID::UndefinedPathID) {
 					ASSERT(incomingPID == firstSegmentPID);
