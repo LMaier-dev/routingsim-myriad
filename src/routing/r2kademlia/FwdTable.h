@@ -108,14 +108,16 @@ public:
 	// This stores incoming PathID -> PathID/NextHop mappings plus state and action
 	std::unordered_map<PathID,FwdTableEntry> PIDFwdTable;
 	// This stores NodeID to incoming PathID mapping
-	// (outgoing PID can be determined by lookup in PIDFwdTable)
+	// (outgoing PID for the first segment can be determined by lookup in PIDFwdTable)
 	std::unordered_map<OverlayKey,PathID> NIDPIDTable;
+	// This stores NodeID to second segment PathID (which will start at a different node)
+	std::unordered_map<OverlayKey,PathID> NIDPIDTableLastSeg;
 	// cannot use constructor to set ID, because OnInitialize generates the Node ID
 	void setOwnNodeID(const OverlayKey* myownNodeID) { ownNodeID= myownNodeID; };
 	// returns true if exactly this PID exists for path to contact
 	bool existsEntry(KadContact_p contact);
 
-	inline void setNIDtoPIDmapping(const OverlayKey& nid, const PathID incomingPathID);
+	inline void setNIDtoPIDmapping(const OverlayKey& nid, const PathID incomingPathID, const PathID LastSegmentPathID= PathID::UndefinedPathID);
 
 	std::pair<bool, PathID> addPrecalcEntry(const kad_path& path_to_add) { return addEntry(path_to_add, false, true); }
 	std::pair<bool, PathID> addForeignEntry(const kad_path& path_to_add) { return addEntry(path_to_add, true, false); }
@@ -152,8 +154,10 @@ private:
 // because the rest of the path to the viacontact may diverge then 
 inline
 void
-FwdTablePathID::setNIDtoPIDmapping(const OverlayKey& nid, const PathID incomingPathID) {
+FwdTablePathID::setNIDtoPIDmapping(const OverlayKey& nid, const PathID incomingPathID, const PathID LastSegmentPathID) {
 	NIDPIDTable[nid]= incomingPathID;
+	if (LastSegmentPathID != PathID::UndefinedPathID)
+		NIDPIDTableLastSeg[nid]= LastSegmentPathID;
 }
 
 } // end namespace

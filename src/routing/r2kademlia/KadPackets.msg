@@ -85,6 +85,7 @@ packet KadRTableRsp extends KadAnswer {
 
 
 // FIND NODE
+// tries to reach dstNodeID via Overlay routing strategy
 packet KadFindNodeReq extends KadRTableReq {
 	type = KAD_FindNodeReq;
 
@@ -181,12 +182,15 @@ packet KadPathSetupRsp extends KadAnswer {
 
 
 // PATHTEARDOWN
+// this is a kind of optimization as soft states will also remove orphans
 packet KadPathTeardownReq extends KadPacket {
 	type = KAD_PathTeardownReq;
 }
 
 
 // QUERY ROUTE
+// request routing table information from node
+// in contast to FindNodeReq only sent to contacts directly (no overlay routing)
 packet KadQueryRouteReq extends KadRTableReq {
 	type = KAD_QueryRouteReq;
 }

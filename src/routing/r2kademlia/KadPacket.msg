@@ -82,10 +82,10 @@ class noncobject PathID;
 // a fast path Data packet
 packet KadDataPacket {
 	@customize(true);
-	PathID destPathID = PathID::UndefinedPathID;
+	PathID firstPathID = PathID::UndefinedPathID;
+	PathID secondPathID = PathID::UndefinedPathID;
 	OverlayKey dstNodeID = OverlayKey::UNSPECIFIED_KEY;
 	OverlayKey srcNodeID = OverlayKey::UNSPECIFIED_KEY;
-	OverlayKey viaNodeID = OverlayKey::UNSPECIFIED_KEY;
 	uint8_t type enum(KadPDUType);
 	uint16_t hopLimit = 255;
 }

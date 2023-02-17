@@ -13,6 +13,7 @@
 // along with this program.  If not, see http://www.gnu.org/licenses/.
 // 
 #include "R2Kademlia.h"
+#include "PathIDUtils.h"
 
 namespace routingsim {
 
@@ -216,41 +217,44 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 		}
 
 		if (usePathIDs) {
+			// assume this is node (x) and the contact is (hi), vicinityDiscoveryRadius==2:
+			// (x)-(h1)-(h2)-(h3)-(h4)-(h5)-(h6)-(h7)-(h8)
+			// n: hop distance p: path length of contact
+			// n: 1 p: 0 (h1) -> PID out: NID h1, , precalculated -> see above
+			// n: 2 p: 1 (h2) -> PID out: PID H(h1,h2), , precalculated -> see above
+			// n: 3 p: 2 (h3) -> PID out: PID H(h1,h2,h3) (no path setup required)
+			// n: 4 p: 3 (h4) -> PID out: PID H(h1,h2,h3) (no path setup required), 2ndPID H(h3,h4), no local PID installation required
+			// n: 5 p: 4 (h5) -> PID out: PID H(h1,h2,h3) (no path setup required), 2ndPID H(h3,h4,h5), no local PID installation required
+			// n: 6 p: 5 (h6) -> PID out: PID H(h1,h2,h3) (path setup required, h3 needs to install inPID(h3,h4,h5,h6)->outPID(h4,h5,h6))
+			// n: 7 p: 6 (h7) -> PID out: PID H(h1,h2,h3,h4) (path setup required in h1, h4 needs to install inPID(h4,h5,h6,h7)->outPID(h5,h6,h7), setup ends at h4
+			// n: 8 p: 7 (h8) -> PID out: PID H(h1,h2,h3,h4,h5) (path setup required in h1+h2, h5 needs to install inPID(h5,h6,h7,h8)->outPID(h6,h7,h8) ), setup ends at h5
+			// and so on
+
+			// note: the contact path excludes the contact itself and path length = hops + 1
+			// paths with less than 6 hops do not need a path setup, so PIDs can be directly installed here
 			if (contact->getPathLength() <= 2*nodeVicinityGraph::vicinityDiscoveryRadius) {
-				// it is required to add all PIDs to nodes within the discovery radius
-				// (and without signaling one can extend this by one hop)
-				// note: the contact path excludes the contact itself
-				// for paths up to 3 hops: include contact
-				// for paths with 4 or 5 hops: stop at 3rd hop
+				// for paths up to 3 hops
+				// for paths with 4 or 5 hops: stop 2 hops before end, the PID of the 2nd segment has been precomputed there
 				kad_path newpath(contact->getPath());
-				if (contact->getPathLength() <= nodeVicinityGraph::vicinityDiscoveryRadius)
-					newpath.push_back(contact->getKey());
+				newpath.push_back(contact->getKey());
+
+				auto [firstSegmentPID,secondSegmentPID]=  getSegmentPathIDs(myOverlayKey,newpath);
+				if (newpath.size() > 2*nodeVicinityGraph::vicinityDiscoveryRadius)
+					newpath.resize(nodeVicinityGraph::vicinityDiscoveryRadius+2);
 				else
+				if (newpath.size() == 2*nodeVicinityGraph::vicinityDiscoveryRadius)
 					newpath.resize(nodeVicinityGraph::vicinityDiscoveryRadius+1);
 
 				if (auto [added,incomingPID]= fwdTablePathID.addLocalEntry(newpath, contact->getPathLength()<nodeVicinityGraph::vicinityDiscoveryRadius); incomingPID != PathID::UndefinedPathID) {
+					ASSERT(incomingPID == firstSegmentPID);
 					// PID was added, it can directly be used, because no path setup necessary within 5 hops
-					EV_TRACE << "added local NID " << contact->getKey() << " and PID entry " << incomingPID << endl;
-					fwdTablePathID.setNIDtoPIDmapping(contact->getKey(), incomingPID);
+					EV_TRACE << "added local NID " << contact->getKey() << " and PID entry " << incomingPID << " 2ndPID: " << secondSegmentPID <<  endl;
+					fwdTablePathID.setNIDtoPIDmapping(contact->getKey(), incomingPID, secondSegmentPID);
 					if (contact->getPathLength() < nodeVicinityGraph::vicinityDiscoveryRadius)
 						vicinityPathIDCompletion(*contact);
 				}
 			}
 			else {
-				// check for required PathSetup
-				// assume this is node (x) and the contact is (hi), vicinityDiscoveryRadius==2:
-				// (x)-(h1)-(h2)-(h3)-(h4)-(h5)-(h6)-(h7)-(h8)
-				// n: hop distance p: path length of contact
-				// n: 1 p: 0 (h1) -> PID out: NID h1, no viaContact, precalculated -> see above
-				// n: 2 p: 1 (h2) -> PID out: PID H(h1,h2), no viaContact, precalculated -> see above
-				// n: 3 p: 2 (h3) -> PID out: PID H(h1,h2,h3) (no path setup required), no viaContact required -> see above
-				// n: 4 p: 3 (h4) -> PID out: PID H(h1,h2,h3) (no path setup required), viaContact: h4, no local PID installation required
-				// n: 5 p: 4 (h5) -> PID out: PID H(h1,h2,h3) (no path setup required), viaContact: h5, no local PID installation required
-				// n: 6 p: 5 (h6) -> PID out: PID H(h1,h2,h3) (path setup required, h3 needs to install h6->PID(h4,h5,h6)), viaContact: h6
-				// n: 7 p: 6 (h7) -> PID out: PID H(h1,h2,h3,h4) (path setup required, h4 needs to install h7->PID(h5,h6,h7)), viaContact: h7, setup ends at h4
-				// n: 8 p: 7 (h8) -> PID out: PID H(h1,h2,h3,h4,h5) (path setup required, h5 needs to install h8->PID(h6,h7,h8) ), viaContact: h8, setup ends at h5
-				// and so on
-
 				// send a path setup request packet for installing PIDs in intermediate nodes for this route
 
 				// only do this for paths longer than 2*(vicinityDiscoveryRadius+1)-1 (e.g., for vdr=2 -> contacts 6 hops away) hops:

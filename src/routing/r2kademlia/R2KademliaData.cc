@@ -16,6 +16,7 @@
 
 #include "R2Kademlia.h"
 #include "KadObserver.h"
+#include "PathIDUtils.h"
 
 namespace routingsim {
 
@@ -27,19 +28,20 @@ std::unique_ptr<T> R2Kademlia::makeDataPacket(const OverlayKey& dstNodeID, const
 	packet->setType(KAD_Data);
 	packet->setSrcNodeID(myOverlayKey);
 	packet->setDstNodeID(dstNodeID);
-	// insert via NodeID if necessary
-	if (viacontact->getKey() != dstNodeID) {
-		packet->setViaNodeID(viacontact->getKey());
-	}
 	packet->setHopLimit(hopLimit);
 
 	// since we only forward to known contacts, we also have a PID for them
 	// this PID may only lead to the Node three hops before the contact
-	auto pidentry= fwdTablePathID.NIDPIDTable.find(viacontact->getKey());
-	if ( pidentry != fwdTablePathID.NIDPIDTable.end() )
+	if ( auto pidentry= fwdTablePathID.NIDPIDTable.find(viacontact->getKey());
+	     pidentry != fwdTablePathID.NIDPIDTable.cend() )
 	{ // pidentry.second is incomingPathID
 		// this will be used to lookup the outgoing PID in forwardDataPacket()
-		packet->setDestPathID(pidentry->second);
+		packet->setFirstPathID(pidentry->second);
+		// in case that we have a longer path, a second PID for the last path segment needs to be specified
+		if ( auto secondpidentry= fwdTablePathID.NIDPIDTableLastSeg.find(viacontact->getKey());
+		     secondpidentry != fwdTablePathID.NIDPIDTableLastSeg.cend() ) {
+			packet->setSecondPathID(secondpidentry->second);
+		}
 	}
 	else
 	{
@@ -110,8 +112,7 @@ void R2Kademlia::handleDataPacket(NodePkt_p pkt) {
 	
 	EV_TRACE << "received data packet from "
 	   << packet->getSrcNodeID().shortStr() << " to "
-	   << packet->getDstNodeID().shortStr() << " via "
-	   << (packet->getViaNodeID().isUnspecified() ? "-" : packet->getViaNodeID().shortStr())
+	   << packet->getDstNodeID().shortStr() 
 	   << " HL:" << packet->getHopLimit() << endl;
 
 	// we should check whether the link via this message travelled is
@@ -143,29 +144,31 @@ bool R2Kademlia::forwardDataPacketToNextHop(KadDataPacket_p& packet, NodePkt_p& 
 	bool packetorigin(packet->getSrcNodeID() == myOverlayKey);
 	// lookup outgoing PathID (next hop) based on incoming PathID
 
-	auto fwdentry= fwdTablePathID.PIDFwdTable.find(packet->getDestPathID());
+	auto fwdentry= fwdTablePathID.PIDFwdTable.find(packet->getFirstPathID());
 	if (fwdentry != fwdTablePathID.PIDFwdTable.end())
 	{ // entry found
 		FwdTableEntry& nh= fwdentry->second;
 		if (nh.isValid() or nh.isObsolete() or nh.isInvalid())
 		{
 			if (nh.isInvalid()) {
-				EV_ERROR << "invalid PathID entry hit: " << packet->getDestPathID() << endl;
+				EV_ERROR << "invalid PathID entry hit: " << packet->getFirstPathID() << endl;
 			}
 
 			if (nh.isObsolete()) { // obsolete, but maybe still good enough to forward
-				EV_WARN << "obsolete PathID entry hit: " << packet->getDestPathID() << endl;
+				EV_WARN << "obsolete PathID entry hit: " << packet->getFirstPathID() << endl;
 			}
 
 			if (nh.fwdAction == FwdTableEntry::Action::fwdNextPathID)
 			{ // set new outgoing PathID
-				packet->setDestPathID(nh.outgoingPathID);
+				packet->setFirstPathID(nh.outgoingPathID);
 				EV_TRACE << "Outgoing PathID: " << nh.outgoingPathID << endl;
 			}
 			else
 			if (nh.fwdAction == FwdTableEntry::Action::fwdNextNodeId)
-			{ // next hop will be destination NID
-				packet->setDestPathID(PathID::UndefinedPathID);
+			{ // next hop will be the next overlay hop where the path ends
+				// basically pop the First PID
+				packet->setFirstPathID(packet->getSecondPathID());
+				packet->setSecondPathID(PathID::UndefinedPathID);
 				EV_TRACE << "Forward to Next NodeID: " << nh.nextHopNode.shortStr() << endl;
 			}
 			else
@@ -228,8 +231,7 @@ void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
         ASSERT(packet->hasRemainingHops());
 
 	const auto& finaldest(packet->getDstNodeID());
-	const auto& viadest(packet->getViaNodeID());
-	EV_TRACE << "forwardDATAPacket: finaldest=" << finaldest.shortStr() << " viadest=" << viadest.shortStr() << endl;
+	EV_TRACE << "forwardDATAPacket: finaldest=" << finaldest.shortStr() << endl;
 	
 	if (packet->hasRemainingHops() == false)
 	{ // Loop detected: this should not occur
@@ -253,134 +255,93 @@ void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 	}
 
 	//  own originated packets will possess the right (incoming) DestPathID, see makeDataPacket()
-	PathID incomingPathID(packet->getDestPathID());
+	PathID incomingPathID(packet->getFirstPathID());
 
 	// incomingPathID is only undefined for packets whose PathID determined Path ends here
 	if (incomingPathID == PathID::UndefinedPathID)
 	{ // next hop (intermediate) destination ID of this path (final destination may be elsewhere)
-		if (viadest == myOverlayKey) { // we must find next overlay hop according to finaldest
-			// increase overlayHop count
-			packet->countOverlayHop();
-			uint8_t reasoncode(unspecified);
-			// Since our NIDPIDTable only allows for exact matches, we use our routing table for lookup
-			auto contacts = routingTable.getClosestContacts(finaldest, findNodeNumber, true);
-			if (contacts.size() > 0)
+		// increase overlayHop count
+		packet->countOverlayHop();
+		uint8_t reasoncode(unspecified);
+		// Since our NIDPIDTable only allows for exact matches, we use our routing table for lookup
+		auto contacts = routingTable.getClosestContacts(finaldest, findNodeNumber, true);
+		if (contacts.size() > 0)
+		{
+			// we need to check every contact for a valid NID entry
+			for (auto cit(contacts.cbegin()); cit != contacts.cend(); cit++)
 			{
-				// we need to check every contact for a valid NID entry
-				for (auto cit(contacts.cbegin()); cit != contacts.cend(); cit++)
-				{
-					cit = chooseNextHop(contacts, finaldest, cit);
-					auto& contact(**cit);
-					ASSERT(contact.isValid());
-					ASSERT(!contact.getKey().isUnspecified());
+				cit = chooseNextHop(contacts, finaldest, cit);
+				auto& contact(**cit);
+				ASSERT(contact.isValid());
+				ASSERT(!contact.getKey().isUnspecified());
+				
+				// next hop is not closer than this node
+				if ((contact.getKey() ^ finaldest) > (myOverlayKey ^ finaldest)) {
+					EV_WARN << "next overlay hop is " << contact.getKey().shortStr()
+						<< " - cannot get closer, dropping packet" << endl;
+					packet->setControlInfo(nodePkt.release());
+					countDropped(*packet, finaldest, routeFailureDeadEnd);
+					return;
+				}
 
-					// next hop is not closer than this node
-					if ((contact.getKey() ^ finaldest) > (myOverlayKey ^ finaldest)) {
-						EV_WARN << "next overlay hop is " << contact.getKey().shortStr()
-							<< " - cannot get closer, dropping packet" << endl;
-						packet->setControlInfo(nodePkt.release());
-						countDropped(*packet, finaldest, routeFailureDeadEnd);
+				EV_TRACE << "next overlay hop is " << contact.getKey().shortStr()
+					 << " (" << contact.getPathLength()+1 << " hops)" << endl;
+
+				// now try to find a PathID to the next overlay hop
+				
+				if (auto pidentry= fwdTablePathID.NIDPIDTable.find(contact.getKey());
+				    pidentry != fwdTablePathID.NIDPIDTable.end() ) { // pidentry.second is incomingPathID
+					// NID -> PID mapping exists
+					// this will be used to lookup the outgoing PID in forwardDataPacket()
+					packet->setFirstPathID(pidentry->second);
+					EV_TRACE << "new PID for dest " << contact.getKey().shortStr() << ": " << pidentry->second << endl;
+					if (auto secondpidentry= fwdTablePathID.NIDPIDTableLastSeg.find(contact.getKey());
+					    secondpidentry != fwdTablePathID.NIDPIDTableLastSeg.end() ) {
+						ASSERT(packet->getSecondPathID() == PathID::UndefinedPathID);
+						packet->setSecondPathID(secondpidentry->second);
+					}
+
+					if (not forwardDataPacketToNextHop(packet, nodePkt))
+					{
+						EV_WARN << "PID based forwarding failed while trying to forward to next hop. Dropping packet" << endl;
+						if (packet->getControlInfo() == nullptr)
+							packet->setControlInfo(nodePkt.release());
+						
+						countDropped(*packet, finaldest, missingPID);
+						returnToSender(KAD_PathIDUnknown, std::move(packet));
+						
 						return;
 					}
-					
-					// set new viaNodeID
-					if (contact.getKey() != finaldest)
-						packet->setViaNodeID(contact.getKey());
-					else
-						packet->setViaNodeID(OverlayKey::UNSPECIFIED_KEY);
-					
-					EV_TRACE << "next overlay hop is " << contact.getKey().shortStr()
-						 << " (" << contact.getPathLength()+1 << " hops)" << endl;
-
-					// now try to find a PathID to the next overlay hop
-					auto pidentry= fwdTablePathID.NIDPIDTable.find(contact.getKey());
-					if ( pidentry != fwdTablePathID.NIDPIDTable.end() ) { // pidentry.second is incomingPathID
-						// NID -> PID mapping exists
-						// this will be used to lookup the outgoing PID in forwardDataPacket()
-						packet->setDestPathID(pidentry->second);
-						EV_TRACE << "new PID for dest " << contact.getKey().shortStr() << ": " << pidentry->second << endl;
-						
-						if (not forwardDataPacketToNextHop(packet, nodePkt))
-						{
-							EV_WARN << "PID based forwarding failed while trying to forward to next hop. Dropping packet" << endl;
-							if (packet->getControlInfo() == nullptr)
-								packet->setControlInfo(nodePkt.release());
-
-							countDropped(*packet, finaldest, missingPID);
-							returnToSender(KAD_PathIDUnknown, std::move(packet));
-
-							return;
-						}
-						else // forwardDataPacketToNextHop had success or dropped
-							return;
-					}
-					else {
-						// no PID found this may be the case when PathSetup has been completely finished
-						// try next contact instead
-						EV_TRACE << "No NID entry found for " << contact.getKey().shortStr() << " trying next contact" << endl;
-					}
-				} // end for
+					else // forwardDataPacketToNextHop had success or dropped
+						return;
+				}
+				else {
+					// no PID found this may be the case when PathSetup has been completely finished
+					// try next contact instead
+					EV_TRACE << "No NID entry found for " << contact.getKey().shortStr() << " trying next contact" << endl;
+				}
+			} // end for
 
 				EV_ERROR << "forwardDataPacket: No usable contact found in " << contacts.size() << " contacts – NID and PID missing – Dropping packet" << endl;
 				reasoncode= missingPID;
-			}
-			else
-			{
-				// Trying to send to a next hop that is not known
-				// That will not fly...
-				EV_ERROR << "forwardDataPacket: next hop for destination " << finaldest.shortStr() << " cannot be found (0 contacts)" << endl;
-				// forwarding failed
-				reasoncode= routeFailureDeadEnd;
-			}
-
-			// this is an error condition
-			packet->setControlInfo(nodePkt.release());
-			countDropped(*packet, finaldest, reasoncode);
-			return;
-		} // end else (must find next overlay hop)
-
-		// here: viadest != myOverlayKey
-		// forward rest of the path via PID again
-		const auto& nextdest(viadest != OverlayKey::UNSPECIFIED_KEY ? viadest : finaldest);
-
-		// if viadest is direct neighbor, forward w/o PathID is possible,
-		// but internally, forwardDataPacketToNextHop() requires an incomingPID
-
-		// take the rest of the path using PathIDs
-		// lookup NID->PID
-		// now try to find a PathID to the next overlay hop
-		auto pidentry= fwdTablePathID.NIDPIDTable.find(nextdest);
-		if ( pidentry != fwdTablePathID.NIDPIDTable.end() ) { // pidentry.second is incomingPathID
-			// NID -> PID mapping exists
-			// this will be used to lookup the outgoing PID in forwardDataPacket()
-			packet->setDestPathID(pidentry->second);
-			EV_TRACE << "using PID for via dest " << nextdest.shortStr() << ": " << pidentry->second << endl;
 		}
-		else {
-			EV_ERROR << "PID to " << nextdest.shortStr() << " not found" << endl;
-			packet->setDestPathID(PathID::UndefinedPathID);
-		}
-
-		// forwardDataPacketToNextHop uses a PID entry to forward to the next hop
-		// PID must be set here
-		if (not forwardDataPacketToNextHop(packet, nodePkt))
+		else
 		{
-			EV_WARN << (packet->getDestPathID() != PathID::UndefinedPathID ? "PID based" : "direct")
-				<< " forwarding failed while trying to forward to via destination. Dropping packet" << endl;
-			if (packet->getControlInfo() == nullptr)
-				packet->setControlInfo(nodePkt.release());
-
-			countDropped(*packet, finaldest, missingPID);
-			returnToSender(KAD_PathIDUnknown, std::move(packet));
-
-			return;
+			// Trying to send to a next hop that is not known
+			// That will not fly...
+			EV_ERROR << "forwardDataPacket: next hop for destination " << finaldest.shortStr() << " cannot be found (0 contacts)" << endl;
+			// forwarding failed
+			reasoncode= routeFailureDeadEnd;
 		}
-		else // forwardDataPacketToNextHop had success or dropped
-			return;
+
+		// this is an error condition
+		packet->setControlInfo(nodePkt.release());
+		countDropped(*packet, finaldest, reasoncode);
+		return;
 	} // if incoming PathID is undefined
 
 	// incomingPathID is present, simply look it up and forward accordingly
-	packet->setDestPathID(incomingPathID);
+	packet->setFirstPathID(incomingPathID);
 	if (not forwardDataPacketToNextHop(packet, nodePkt))
 	{ // incoming PathID not found
 		// may be the case if entry already deleted/overwritten, or
@@ -442,8 +403,8 @@ void R2Kademlia::sendData(const OverlayKey& finaldestkey) {
 void R2Kademlia::onMissingNeighbor(KadDataPacket_p packet, NodePkt_p pkt) {
 //  	getStatistics().dropMessage(pkt, undefined_node);
 	EV_WARN << "onMissingNeighbor(data) called - packet next hop should be ";
-	if (packet->getDestPathID() != PathID::UndefinedPathID) {
-		EV_WARN << "PID: " << packet->getDestPathID() << endl;
+	if (packet->getFirstPathID() != PathID::UndefinedPathID) {
+		EV_WARN << "PID: " << packet->getFirstPathID() << endl;
 	}
 	else {
 		EV_WARN << "NID: " << packet->getDstNodeID() << endl;

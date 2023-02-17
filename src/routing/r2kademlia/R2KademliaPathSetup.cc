@@ -67,6 +67,7 @@ bool R2Kademlia::handlePathSetupResponse(KadPacket_p answer, RPCState& rpcState)
 	kad_path originalpath;
 	// the setup path ends earlier: three hops before the target!
 	kad_path setuppath;
+	kad_path lastsegmentpath;
 	OverlayKey target(pathSetupRsp->getFwdSourcePath(pathSetupRsp->getFwdSourcePathArraySize()-1));
 	// note that FwdSourcePath includes the source and the target node
 	// pathSetupRsp->getFwdSourcePathArraySize()+1 is number hops and that must be at least 6

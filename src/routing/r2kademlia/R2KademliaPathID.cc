@@ -1,4 +1,5 @@
 #include "R2Kademlia.h"
+#include "PathIDUtils.h"
 
 /*********************************************************
  * This file contains PathID related code from the 

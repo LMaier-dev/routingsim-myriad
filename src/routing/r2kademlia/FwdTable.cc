@@ -1,5 +1,6 @@
 #include "FwdTable.h"
 #include "R2Kademlia.h"
+#include "PathIDUtils.h"
 
 namespace routingsim {
 
@@ -146,8 +147,8 @@ bool FwdTablePathID::existsEntry(KadContact_p contact)
 }
 
 
-// this path should contain all subsequent hops, e.g. , <h1 h2 h3 h4 h5> -> outgoing PathID = H(h1|h2|h3|h4|h5)
-// furthermore, the path may stop three hops before the contact if it is a path longer than 5 hops
+// adds/updates a mapping from incomingPID -> outgoingPID, calculated from path_to_add
+// path_to_add should contain all subsequent hops, e.g. , <h1 h2 h3 h4 h5> -> outgoing PathID = H(h1|h2|h3|h4|h5)
 // precalc is set for contacts within the vicinity discovery range
 // @returns true if entry was newly added/created, otherwise false (for existing entry)
 // the incomingPathID is returned
@@ -463,6 +464,7 @@ void FwdTablePathID::delEntry(KadContact_p contact)
 
 		// delete anchor entry in NIDPIDTable
 		NIDPIDTable.erase(pidentry);
+		NIDPIDTableLastSeg.erase(contact->getKey());
 		EV_TRACE << "delEntry(): NIDPID entry for " << contact->getKey().shortStr() << " deleted" << endl;
 
 	}
