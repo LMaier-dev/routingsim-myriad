@@ -273,7 +273,7 @@ bool FwdTablePathID::modEntry(const OverlayKey& contact_key, const kad_path& new
 	PathID priorPathID= PathID::UndefinedPathID;
 	bool additionalEntry= false;
 	// calculate incomingPathID
-	PathID incomingPathID(getPathID(*ownNodeID, newpath));
+	auto [incomingPathID,lastsegmentPathID]= getSegmentPathIDs(*ownNodeID, newpath);
 
 	// Lookup old entry if it exists
 	// (which should be mostly the case, however in case a PathSetupReq is ongoing or was not necessary, it may be missing)
@@ -377,10 +377,10 @@ bool FwdTablePathID::modEntry(const OverlayKey& contact_key, const kad_path& new
 
 	// activate new mapping for replacements (or new entries)
 	// only if path setup is not required
-	setNIDtoPIDmapping(contact_key, incomingPathID);
+	setNIDtoPIDmapping(contact_key, incomingPathID, lastsegmentPathID);
 
 	EV_TRACE << "modEntry(): inPID:" << incomingPathID << " outPID:"
-		 << fwdentry.outgoingPathID
+		 << fwdentry.outgoingPathID << " 2nd PID:" << lastsegmentPathID
 		 << (additionalEntry ? " additional entry" : ((pidentry != NIDPIDTable.end()) ? " replacement" : " new"))
 		 << " tpath: " << newpath << endl;
 

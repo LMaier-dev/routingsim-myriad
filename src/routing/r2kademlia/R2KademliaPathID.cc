@@ -18,25 +18,6 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 
 	EV_TRACE << "checkForPathIDInstallation: " << packet.getSrcPath()
 		 << " Progress: " << packet.getProgress() << " SrcPathLen:" << packet.getRouteArraySize() << " hops left:" << packet.hopsLeft() <<  endl;
-	
-	// assume this is node (x) and the end of the source routing path is (hi) == viaContact, vicinityDiscoveryRadius==2:
-	// n: hop distance left
-	// (x)-(h1)
-	// n: 1 (h1) -> PID out: NID h1, precalculated, return (PathSetupReq should not have arrived here)
-	// (x)-(h1)-(h2)
-	// n: 2 (h2) -> PID out: PID H(h1,h2), precalculated, return (PathSetupReq should not have arrived here)
-	// (x)-(h1)-(h2)-(h3)
-	// n: 3 (h3) -> PID out: PID H(h1,h2,h3), need to locally install PID, return
-	// (x)-(h1)-(h2)-(h3)-(h4)
-	// n: 4 (h4) -> PID out: PID H(h1,h2,h3), need to locally install PID, return
-	// (x)-(h1)-(h2)-(h3)-(h4)-(h5)-(h6)-(h7)-(h8)
-	// n: 5 (h5) -> PID out: PID H(h1,h2,h3), need to locally install PID, return
-	// (x)-(h1)-(h2)-(h3)-(h4)-(h5)-(h6)-(h7)-(h8)
-	// n: 6 (h6) -> PID out: PID H(h1,h2,h3) (h3 needs to install h6->PID(h4,h5,h6)), viaContact: h6
-	// (x)-(h1)-(h2)-(h3)-(h4)-(h5)-(h6)-(h7)-(h8)
-	// n: 7 (h7) -> PID out: PID H(h1,h2,h3,h4) (h4 needs to install h7->PID(h5,h6,h7)), viaContact: h7, setup ends at h4
-	// n: 8 (h8) -> PID out: PID H(h1,h2,h3,h4,h5) (h5 needs to install h8->PID(h6,h7,h8) ), viaContact: h8, setup ends at h5
-	// and so on
 
 	// if overall pathlen < 6 hops we should not see a request to set up a PathID
 	// (but it may be a ProbeReq)
@@ -52,7 +33,7 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 		const auto pathtoadd(packet.getSrcPath(packet.getProgress()+1, packet.getRouteArraySize()));
 		// PID must be installed if hops > vicinityDiscoveryRadius
 		EV_TRACE << "checkForPathIDInstallation: path to " << packet.getTarget().shortStr() << ": " << pathtoadd;
-		if (auto [added,incomingPID]= fwdTablePathID.addForeignEntry(pathtoadd); added == true) {
+ 		if (auto [added,incomingPID]= fwdTablePathID.addForeignEntry(pathtoadd); added == true) {
 			EV_TRACE << " added " << incomingPID << endl;
 			// need to install NID to PID mapping
 			fwdTablePathID.setNIDtoPIDmapping(packet.getTarget(),incomingPID);

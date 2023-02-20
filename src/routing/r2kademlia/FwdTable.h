@@ -158,6 +158,8 @@ FwdTablePathID::setNIDtoPIDmapping(const OverlayKey& nid, const PathID incomingP
 	NIDPIDTable[nid]= incomingPathID;
 	if (LastSegmentPathID != PathID::UndefinedPathID)
 		NIDPIDTableLastSeg[nid]= LastSegmentPathID;
+	else
+		NIDPIDTableLastSeg.erase(nid);
 }
 
 } // end namespace

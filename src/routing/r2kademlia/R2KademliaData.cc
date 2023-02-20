@@ -165,11 +165,13 @@ bool R2Kademlia::forwardDataPacketToNextHop(KadDataPacket_p& packet, NodePkt_p& 
 			}
 			else
 			if (nh.fwdAction == FwdTableEntry::Action::fwdNextNodeId)
-			{ // next hop will be the next overlay hop where the path ends
+			{ // next hop will be the next hop where the path ends
+				// either next PID will be used or next overlay hop will determine next segment
 				// basically pop the First PID
 				packet->setFirstPathID(packet->getSecondPathID());
 				packet->setSecondPathID(PathID::UndefinedPathID);
 				EV_TRACE << "Forward to Next NodeID: " << nh.nextHopNode.shortStr() << endl;
+				EV_TRACE << "Outgoing PID: " << packet->getFirstPathID() << endl;
 			}
 			else
 			if (nh.fwdAction == FwdTableEntry::Action::fwdlocal)
@@ -231,7 +233,7 @@ void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
         ASSERT(packet->hasRemainingHops());
 
 	const auto& finaldest(packet->getDstNodeID());
-	EV_TRACE << "forwardDATAPacket: finaldest=" << finaldest.shortStr() << endl;
+	EV_TRACE << "forwardDATAPacket: finaldest=" << finaldest.shortStr() << " 1st PID=" << packet->getFirstPathID() << " 2nd PID=" << packet->getSecondPathID()  << endl;
 	
 	if (packet->hasRemainingHops() == false)
 	{ // Loop detected: this should not occur
@@ -294,11 +296,12 @@ void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 					// NID -> PID mapping exists
 					// this will be used to lookup the outgoing PID in forwardDataPacket()
 					packet->setFirstPathID(pidentry->second);
-					EV_TRACE << "new PID for dest " << contact.getKey().shortStr() << ": " << pidentry->second << endl;
+					EV_TRACE << "new inPID for dest " << contact.getKey().shortStr() << ": " << pidentry->second << endl;
 					if (auto secondpidentry= fwdTablePathID.NIDPIDTableLastSeg.find(contact.getKey());
 					    secondpidentry != fwdTablePathID.NIDPIDTableLastSeg.end() ) {
 						ASSERT(packet->getSecondPathID() == PathID::UndefinedPathID);
 						packet->setSecondPathID(secondpidentry->second);
+						EV_TRACE << "2nd segment PID: " << secondpidentry->second << endl;
 					}
 
 					if (not forwardDataPacketToNextHop(packet, nodePkt))
@@ -389,7 +392,8 @@ void R2Kademlia::sendData(const OverlayKey& finaldestkey) {
 			return;
 		}
 		auto packet = makeDataPacket<KadDataPacket>(finaldestkey, &contact, "KadDataPacket");
-		EV_TRACE << "sending KadDataPacket id=" << packet->getId() << " via " << contact.getKey().shortStr() << " to " << finaldestkey.shortStr() <<  endl;
+		EV_TRACE << "sending KadDataPacket id=" << packet->getId() << " via " << contact.getKey().shortStr() << " to " << finaldestkey.shortStr()
+			 << " 1st PID=" << packet->getFirstPathID() << " 2nd PID=" << packet->getSecondPathID() << endl;
 		// note that makeDataPacket sets DestPathID accordingly!
 		sendPacket(std::move(packet));
 	}

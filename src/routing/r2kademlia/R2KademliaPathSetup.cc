@@ -1,6 +1,7 @@
 #include "R2Kademlia.h"
 //#include "KadRoutingTable.h"
 //#include "FwdTable.h"
+#include "PathIDUtils.h"
 
 /*********************************************************
  * This file contains PathSetup and PathTeardown related code from the 
@@ -67,7 +68,8 @@ bool R2Kademlia::handlePathSetupResponse(KadPacket_p answer, RPCState& rpcState)
 	kad_path originalpath;
 	// the setup path ends earlier: three hops before the target!
 	kad_path setuppath;
-	kad_path lastsegmentpath;
+	kad_path lastsegmentpath(nodeVicinityGraph::vicinityDiscoveryRadius+2);
+	lastsegmentpath.at(0)=pathSetupRsp->getFwdSourcePath(pathSetupRsp->getFwdSourcePathArraySize()-(nodeVicinityGraph::vicinityDiscoveryRadius+2));
 	OverlayKey target(pathSetupRsp->getFwdSourcePath(pathSetupRsp->getFwdSourcePathArraySize()-1));
 	// note that FwdSourcePath includes the source and the target node
 	// pathSetupRsp->getFwdSourcePathArraySize()+1 is number hops and that must be at least 6
@@ -80,17 +82,20 @@ bool R2Kademlia::handlePathSetupResponse(KadPacket_p answer, RPCState& rpcState)
 			originalpath[i-1]= pathSetupRsp->getFwdSourcePath(i);
 			if (i < pathSetupRsp->getFwdSourcePathArraySize()-(nodeVicinityGraph::vicinityDiscoveryRadius+1))
 				setuppath[i-1]= pathSetupRsp->getFwdSourcePath(i);
+			else
+				lastsegmentpath.at(i-pathSetupRsp->getFwdSourcePathArraySize()+nodeVicinityGraph::vicinityDiscoveryRadius+2)= pathSetupRsp->getFwdSourcePath(i);
 		}
+		lastsegmentpath.at(nodeVicinityGraph::vicinityDiscoveryRadius+1)= target;
 	}
 	else
 	{
-		EV_ERROR << "Received PathSetupRsp for a too short path (nr of hops: " << pathSetupRsp->getFwdSourcePathArraySize() << ")" << endl;
+		EV_ERROR << "Received PathSetupRsp for a too short path (# of hops: " << pathSetupRsp->getFwdSourcePathArraySize() << ")" << endl;
 		ASSERT(pathSetupRsp->getFwdSourcePathArraySize() > 2*(nodeVicinityGraph::vicinityDiscoveryRadius+1));
 		return false;
 	}
 
 	EV_TRACE << "Received PathSetupRsp, setup path: " << setuppath << " to " << target.shortStr()
-		 << " original path: " << originalpath << endl;
+		 << " original path: " << originalpath << " last segment:" << lastsegmentpath << endl;
 
 	KadContact tmpcontact(target, std::move(originalpath));
 
@@ -139,7 +144,10 @@ bool R2Kademlia::handlePathSetupResponse(KadPacket_p answer, RPCState& rpcState)
 		else {
 			// add new PID and mapping
 			if (auto [added, incomingPID]= fwdTablePathID.addLocalEntry(setuppath, false); incomingPID != PathID::UndefinedPathID) {
-				fwdTablePathID.setNIDtoPIDmapping(target, incomingPID);
+				if (not lastsegmentpath.empty())
+					fwdTablePathID.setNIDtoPIDmapping(target, incomingPID, getPathID(lastsegmentpath));
+				else
+					fwdTablePathID.setNIDtoPIDmapping(target, incomingPID);
 			}
 		}
 	}
