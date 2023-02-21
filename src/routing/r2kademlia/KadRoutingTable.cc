@@ -219,8 +219,14 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 	simplifyPath(path, &key);
 
 	// try to shorten the path using local routing table
-	if (path.size() > 0)
-		shortenPath(path);
+	if (path.size() > 0) {
+		if (shortenPath(path)) {
+			// we must simplify again as it could be the case
+			// that we have a cycle with the destination now
+			simplifyPath(path, &key);
+		}
+	}
+
 
 	// sanity check: do not use paths that lead via an invalid neighbor as first hop
 	if (path.size() > 0 and not neighbortable.isNeighbor(path[0]))
