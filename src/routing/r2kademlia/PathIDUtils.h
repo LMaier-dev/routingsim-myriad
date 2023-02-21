@@ -5,7 +5,7 @@
 
 namespace routingsim {
 
-std::tuple<PathID, PathID> getSegmentPathIDs(const OverlayKey ownNodeID, const kad_path& path);
+std::tuple<PathID, PathID, PathID> getSegmentPathIDs(const OverlayKey ownNodeID, const kad_path& path);
 
 PathID getPathID(const kad_path& path);
 

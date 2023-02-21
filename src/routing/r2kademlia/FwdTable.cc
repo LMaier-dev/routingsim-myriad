@@ -163,7 +163,7 @@ FwdTablePathID::addEntry(const kad_path& path_to_add, bool isForeignPID, bool pr
 		return std::make_pair(false, PathID::UndefinedPathID);
 
 	// Routingtable entry on node 4: Dest 5: < 3 2 >
-	EV_TRACE << "addEntry(): called for path " << path_to_add << endl;
+	//EV_TRACE << "addEntry(): called for path " << path_to_add << endl;
 	//ASSERT((not precalc and (currentpath.size()>nodeVicinityGraph::vicinityDiscoveryRadius))
 	//       or (precalc and currentpath.size()<=nodeVicinityGraph::vicinityDiscoveryRadius));
 	// prepend own nodeID for incoming PathID
@@ -265,7 +265,8 @@ void FwdTablePathID::invalidateEntry(KadContact_p contact)
 }
 
 
-// returns false if entry is not accepted (e.g., path is longer)
+// returns false if entry is not accepted
+// note: newpath is the complete path to the contact, not just the first segment
 // note that modEntry() may also be called while a path setup is still pending, i.e.,
 // there is no NIDPID and PID entry yet and a shorter path may have been found meanwhile
 bool FwdTablePathID::modEntry(const OverlayKey& contact_key, const kad_path& newpath, bool isForeignPID)
@@ -273,7 +274,7 @@ bool FwdTablePathID::modEntry(const OverlayKey& contact_key, const kad_path& new
 	PathID priorPathID= PathID::UndefinedPathID;
 	bool additionalEntry= false;
 	// calculate incomingPathID
-	auto [incomingPathID,lastsegmentPathID]= getSegmentPathIDs(*ownNodeID, newpath);
+	auto [incomingPathID,outgoingPathID,lastsegmentPathID]= getSegmentPathIDs(*ownNodeID, newpath);
 
 	// Lookup old entry if it exists
 	// (which should be mostly the case, however in case a PathSetupReq is ongoing or was not necessary, it may be missing)
@@ -357,7 +358,7 @@ bool FwdTablePathID::modEntry(const OverlayKey& contact_key, const kad_path& new
 	else
 	{ // create new entry in FwdTable
 		// this may happen in case a PathSetup is still pending
-		fwdentry.outgoingPathID= getPathID(newpath);
+		fwdentry.outgoingPathID= outgoingPathID;
 		fwdentry.nextHopNode= newpath[0];
 		fwdentry.setValid();
 		if (isForeignPID)
@@ -367,7 +368,10 @@ bool FwdTablePathID::modEntry(const OverlayKey& contact_key, const kad_path& new
 			fwdentry.incrementReferenceCount();
 		}
 
-		fwdentry.setPathLength(newpath.size());
+		// use length of first segment only
+		fwdentry.setPathLength(newpath.size() <= (nodeVicinityGraph::vicinityDiscoveryRadius+1) ? newpath.size() :
+				       (newpath.size() > 2*nodeVicinityGraph::vicinityDiscoveryRadius+1 ?
+					newpath.size()-(nodeVicinityGraph::vicinityDiscoveryRadius+1) : newpath.size()-nodeVicinityGraph::vicinityDiscoveryRadius));
 		fwdentry.fwdAction=
 			(newpath.size()==1) // next hop is our physical neighbor
 			? FwdTableEntry::Action::fwdNextNodeId : FwdTableEntry::Action::fwdNextPathID;

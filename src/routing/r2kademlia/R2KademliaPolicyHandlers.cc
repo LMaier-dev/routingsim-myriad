@@ -238,7 +238,7 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 				kad_path newpath(contact->getPath());
 				newpath.push_back(contact->getKey());
 
-				auto [firstSegmentPID,secondSegmentPID]=  getSegmentPathIDs(myOverlayKey,newpath);
+				auto [firstSegmentPID,outFirstSegmentPID,secondSegmentPID]=  getSegmentPathIDs(myOverlayKey,newpath);
 				if (newpath.size() > 2*nodeVicinityGraph::vicinityDiscoveryRadius)
 					newpath.resize(nodeVicinityGraph::vicinityDiscoveryRadius+1);
 				else

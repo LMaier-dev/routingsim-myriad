@@ -5,15 +5,15 @@
 namespace routingsim {
 
 // the given path will be split into two segments and this function
-// will return the incoming PIDs for each segment
-// it is assumed that the path is includes the destination (excludes the source)
-std::tuple<PathID, PathID>
+// returns the incoming PID and outgoing PID for the first segment and the incoming PID for the second segment
+// it is assumed that the path includes the destination (but excludes the source)
+std::tuple<PathID, PathID, PathID>
 getSegmentPathIDs(const OverlayKey ownNodeID, const kad_path& path)
 {
 	// note: path length = number of nodes = hops + 1
 	// if path is <= 3 hops, we have no second segment
 	if (path.size() <= nodeVicinityGraph::vicinityDiscoveryRadius+1)
-		return {getPathID(ownNodeID, path),PathID::UndefinedPathID};
+		return {getPathID(ownNodeID, path), getPathID(path), PathID::UndefinedPathID};
 	else { // we have two segments
 		kad_path firstpathsegment(path);
 		
@@ -30,9 +30,9 @@ getSegmentPathIDs(const OverlayKey ownNodeID, const kad_path& path)
 		// now cut first segment
 		firstpathsegment.resize(secondpathsegment_begin_index+1);
 
-		EV_TRACE << "Whole path: " << path << " First segment: " << firstpathsegment << " Second segment: " << secondpathsegment << endl;
+		//EV_TRACE << "Whole path: " << path << " First segment: " << firstpathsegment << " Second segment: " << secondpathsegment << endl;
 
-		return {getPathID(ownNodeID, firstpathsegment),getPathID(secondpathsegment)};
+		return {getPathID(ownNodeID, firstpathsegment), getPathID(firstpathsegment), getPathID(secondpathsegment)};
 	}
 }
 
