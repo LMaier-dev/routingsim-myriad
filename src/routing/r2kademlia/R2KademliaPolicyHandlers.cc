@@ -291,11 +291,7 @@ void R2Kademlia::onImprovement(const KadContact& contact) {
 			
 			// for these paths update the PID entry (max to 3rd hop)
 			auto newpath(contact.getPath());
-			if (contact.getPathLength() <= nodeVicinityGraph::vicinityDiscoveryRadius)
-				newpath.push_back(contact.getKey());
-			else
-				newpath.resize(nodeVicinityGraph::vicinityDiscoveryRadius+1);
-
+			newpath.push_back(contact.getKey());
 			fwdTablePathID.modEntry(contact.getKey(), newpath, false);
 		}
 	}
@@ -336,10 +332,7 @@ void R2Kademlia::onPathChange(const KadContact& contact) {
 
 			// for these paths update the PID entry (max to 3rd hop)
 			auto newpath(contact.getPath());
-			if (contact.getPathLength() <= nodeVicinityGraph::vicinityDiscoveryRadius)
-				newpath.push_back(contact.getKey());
-			else
-				newpath.resize(nodeVicinityGraph::vicinityDiscoveryRadius+1);
+			newpath.push_back(contact.getKey());
 			
 			fwdTablePathID.modEntry(contact.getKey(), newpath, false);
 		}
