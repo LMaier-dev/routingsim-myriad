@@ -139,7 +139,7 @@ bool R2Kademlia::handlePathSetupResponse(KadPacket_p answer, RPCState& rpcState)
 	if (addthispath) {
 		if (auto pidentry= fwdTablePathID.NIDPIDTable.find(target); pidentry != fwdTablePathID.NIDPIDTable.end()) {
 			// contact to PID mapping exists already, so call modEntry()
-			fwdTablePathID.modEntry(target, setuppath, false);
+			fwdTablePathID.modEntry(target, tmpcontact.getPath(), false);
 		}
 		else {
 			// add new PID and mapping

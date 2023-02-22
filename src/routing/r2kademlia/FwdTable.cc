@@ -266,8 +266,8 @@ void FwdTablePathID::invalidateEntry(KadContact_p contact)
 
 
 // returns false if entry is not accepted
-// note: newpath is the complete path to the contact, not just the first segment
-// note that modEntry() may also be called while a path setup is still pending, i.e.,
+// NOTE: newpath is the complete path (w/o source and target) to the contact, not just the first segment
+// Note that modEntry() may also be called while a path setup is still pending, i.e.,
 // there is no NIDPID and PID entry yet and a shorter path may have been found meanwhile
 bool FwdTablePathID::modEntry(const OverlayKey& contact_key, const kad_path& newpath, bool isForeignPID)
 {
