@@ -992,6 +992,12 @@ void KadRoutingTable::updatePaths(const KadContact& improvedContact)
 						bool pathimproved((contact->isInvalid() and pathrepaired)
 								  or
 								  (newpath != contact->getPath() and newpath.size() < contact->getPath().size()));
+
+						// NOTE: new path may contain cycles, must remove them
+						if (pathimproved) {
+							simplifyPath(newpath, &contact->getKey());
+						}
+
 						// set new path (must be more current than old one)
 						// note: this will set the contact to be valid!
 						if (contact->isValid() or (contact->isInvalid() and pathrepaired))
