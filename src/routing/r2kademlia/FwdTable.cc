@@ -196,7 +196,7 @@ FwdTablePathID::addEntry(const kad_path& path_to_add, bool isForeignPID, bool pr
 
 	fwdentry.outgoingPathID= (path_to_add.size() > 1) ? getPathID(path_to_add) : PathID::UndefinedPathID;
 	fwdentry.setPathLength(path_to_add.size());
-	fwdentry.nextHopNode= path_to_add[0];
+	fwdentry.nextHopNode= path_to_add.at(0);
 	fwdentry.setValid();
 	if (isForeignPID)
 		fwdentry.setForeign();
@@ -273,15 +273,17 @@ bool FwdTablePathID::modEntry(const OverlayKey& contact_key, const kad_path& new
 {
 	PathID priorPathID= PathID::UndefinedPathID;
 	bool additionalEntry= false;
+	auto fullpath(newpath); // getSegmentPathIDs needs also the destination node ID
+	fullpath.push_back(contact_key);
 	// calculate incomingPathID
-	auto [incomingPathID,outgoingPathID,lastsegmentPathID]= getSegmentPathIDs(*ownNodeID, newpath);
+	auto [incomingPathID,outgoingPathID,lastsegmentPathID]= getSegmentPathIDs(*ownNodeID, fullpath);
 
 	// Lookup old entry if it exists
 	// (which should be mostly the case, however in case a PathSetupReq is ongoing or was not necessary, it may be missing)
 	auto pidentry= NIDPIDTable.find(contact_key);
 	if ( pidentry != NIDPIDTable.end() )
 	{
-		EV_TRACE << "modEntry(): Dest NodeID " << contact_key.shortStr() << " new PID tpath " << newpath << endl;
+		EV_TRACE << "modEntry(): Dest NodeID " << contact_key.shortStr() << " new PID path " << newpath << endl;
 
 		// Routingtable entry on node 4: Dest 5: < 3 2 >
 		priorPathID= pidentry->second;
@@ -359,7 +361,7 @@ bool FwdTablePathID::modEntry(const OverlayKey& contact_key, const kad_path& new
 	{ // create new entry in FwdTable
 		// this may happen in case a PathSetup is still pending
 		fwdentry.outgoingPathID= outgoingPathID;
-		fwdentry.nextHopNode= newpath[0];
+		fwdentry.nextHopNode= fullpath.at(0); // fullpath will never be empty
 		fwdentry.setValid();
 		if (isForeignPID)
 			fwdentry.setForeign();
@@ -369,11 +371,11 @@ bool FwdTablePathID::modEntry(const OverlayKey& contact_key, const kad_path& new
 		}
 
 		// use length of first segment only
-		fwdentry.setPathLength(newpath.size() <= (nodeVicinityGraph::vicinityDiscoveryRadius+1) ? newpath.size() :
-				       (newpath.size() > 2*nodeVicinityGraph::vicinityDiscoveryRadius+1 ?
-					newpath.size()-(nodeVicinityGraph::vicinityDiscoveryRadius+1) : newpath.size()-nodeVicinityGraph::vicinityDiscoveryRadius));
+		fwdentry.setPathLength(fullpath.size() <= (nodeVicinityGraph::vicinityDiscoveryRadius+1) ? fullpath.size() :
+				       (fullpath.size() > 2*nodeVicinityGraph::vicinityDiscoveryRadius+1 ?
+					fullpath.size()-(nodeVicinityGraph::vicinityDiscoveryRadius+1) : fullpath.size()-nodeVicinityGraph::vicinityDiscoveryRadius));
 		fwdentry.fwdAction=
-			(newpath.size()==1) // next hop is our physical neighbor
+			(fullpath.size()==1) // next hop is our physical neighbor
 			? FwdTableEntry::Action::fwdNextNodeId : FwdTableEntry::Action::fwdNextPathID;
 		fwdentry.prevPathID= priorPathID;
 		PIDFwdTable[incomingPathID]= fwdentry;
@@ -386,7 +388,7 @@ bool FwdTablePathID::modEntry(const OverlayKey& contact_key, const kad_path& new
 	EV_TRACE << "modEntry(): inPID:" << incomingPathID << " outPID:"
 		 << fwdentry.outgoingPathID << " 2nd PID:" << lastsegmentPathID
 		 << (additionalEntry ? " additional entry" : ((pidentry != NIDPIDTable.end()) ? " replacement" : " new"))
-		 << " tpath: " << newpath << endl;
+		 << " path: " << newpath << endl;
 
 	return true;
 }

@@ -142,7 +142,7 @@ public:
 	// from cObject()
 	virtual std::string str() const;
 protected:
-	// try to add PID for path to contact, returns incomingPID or undefined on failure
+	// try to add PID for path to contact (needs to be included in path_to_add), returns incomingPID or undefined on failure
 	std::pair<bool, PathID> addEntry(const kad_path& path_to_add, bool foreignPID, bool precalc);
 
 private:

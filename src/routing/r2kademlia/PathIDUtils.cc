@@ -4,7 +4,7 @@
 
 namespace routingsim {
 
-// the given path will be split into two segments and this function
+// the given path (must include the destination ID) will be split into two segments and this function
 // returns the incoming PID and outgoing PID for the first segment and the incoming PID for the second segment
 // it is assumed that the path includes the destination (but excludes the source)
 std::tuple<PathID, PathID, PathID>

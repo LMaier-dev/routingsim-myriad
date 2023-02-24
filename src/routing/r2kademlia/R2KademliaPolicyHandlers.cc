@@ -290,9 +290,7 @@ void R2Kademlia::onImprovement(const KadContact& contact) {
 		else {  // 5 hops or less
 			
 			// for these paths update the PID entry (max to 3rd hop)
-			auto newpath(contact.getPath());
-			newpath.push_back(contact.getKey());
-			fwdTablePathID.modEntry(contact.getKey(), newpath, false);
+			fwdTablePathID.modEntry(contact.getKey(), contact.getPath(), false);
 		}
 	}
 
@@ -331,10 +329,7 @@ void R2Kademlia::onPathChange(const KadContact& contact) {
 		else { // 5 hops or less
 
 			// for these paths update the PID entry (max to 3rd hop)
-			auto newpath(contact.getPath());
-			newpath.push_back(contact.getKey());
-			
-			fwdTablePathID.modEntry(contact.getKey(), newpath, false);
+			fwdTablePathID.modEntry(contact.getKey(), contact.getPath(), false);
 		}
 	}
 

@@ -143,6 +143,9 @@ bool R2Kademlia::handlePathSetupResponse(KadPacket_p answer, RPCState& rpcState)
 		}
 		else {
 			// add new PID and mapping
+			// for addLocalEntry() the path needs to include the target node
+			if (lastsegmentpath.empty())
+				setuppath.push_back(tmpcontact.getKey());
 			if (auto [added, incomingPID]= fwdTablePathID.addLocalEntry(setuppath, false); incomingPID != PathID::UndefinedPathID) {
 				if (not lastsegmentpath.empty())
 					fwdTablePathID.setNIDtoPIDmapping(target, incomingPID, getPathID(lastsegmentpath));
