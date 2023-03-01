@@ -749,6 +749,7 @@ R2Kademlia::chooseNextHop(const KadContactList& contacts, const OverlayKey& targ
 
 
 // Path Probing: sends a ProbeReq to check for validity of an existing path
+// This will also refresh PathIDs that have been installed in intermediate nodes
 void R2Kademlia::sendPathProbe(const OverlayKey& destinationNodeID) {
 	KadContact_p contact(routingTable.getContact(destinationNodeID));
 	// must be a valid contact
@@ -759,7 +760,9 @@ void R2Kademlia::sendPathProbe(const OverlayKey& destinationNodeID) {
 
 	EV_TRACE << "sending ProbeReq from " << myOverlayKey.shortStr() << " to " << destinationNodeID.shortStr() << endl;
 	auto probereq= makePacket<KadProbeReq>(contact, "KadProbeReq");
-	probereq->setPathCheck(true);
+	if (contact->getPathLength()>2*nodeVicinityGraph::vicinityDiscoveryRadius)
+		probereq->setPathCheck(true);
+
 	sendRpcCall(std::move(probereq),
 		std::bind(&R2Kademlia::handleProbeResponse, this, ph::_1, ph::_2),
 		std::bind(&R2Kademlia::handleProbeResponse, this, ph::_1, ph::_2),

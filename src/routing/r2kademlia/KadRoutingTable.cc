@@ -873,7 +873,7 @@ void KadRoutingTable::getContactsforPathRefresh(std::list<OverlayKey>& result) c
 				auto kadcontactp(it->get());
 				if ( kadcontactp!= nullptr
 				     and kadcontactp->isValid()
-				     and kadcontactp->getPathLength() > nodeVicinityGraph::vicinityDiscoveryRadius
+				     and kadcontactp->getPathLength() > 2*nodeVicinityGraph::vicinityDiscoveryRadius
 				     and kadcontactp->getPathAge() > R2Kademlia::PathRefreshThreshold ) {
 					result.push_back(kadcontactp->getKey());
 				}

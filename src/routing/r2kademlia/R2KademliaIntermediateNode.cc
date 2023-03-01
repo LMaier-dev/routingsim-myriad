@@ -90,7 +90,7 @@ R2Kademlia::intermediateNodeProcessing(const KadPacket& packet) {
 	}
 	break;
 
-	case KAD_ProbeReq: // this is for path probing
+	case KAD_ProbeReq: // this is for path probing and refreshes of forwarding entries
 	{
 		const KadProbeReq* probereq= dynamic_cast<const KadProbeReq*>(&packet);
 		// usually the following is not necessary, but sometimes

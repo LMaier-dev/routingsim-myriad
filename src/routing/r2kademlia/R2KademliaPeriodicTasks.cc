@@ -279,17 +279,20 @@ void R2Kademlia::doProbeContacts(short timerId)
 
 	// check for reachability of neighbors
 	bool probed(false);
-	while (probeContactQueue.size() > 0 and !probed)
+	while (probeContactQueue.size() > 0 and not probed)
 	{
 		// do not probe in case contact not found or too young
 		if (auto contactp= routingTable.getContact(probeContactQueue.front());
 		    contactp != nullptr and (
                         contactp->getAge() > R2Kademlia::PathInfoAgeThreshold or
                         contactp->getPathAge() > R2Kademlia::PathRefreshThreshold)) {
-                            EV_TRACE << "probing for contact: " << probeContactQueue.front() << endl;
-                            //sendFindNode(probeContactQueue.front(), true);
+			EV_TRACE << "probing for contact: " << probeContactQueue.front() << " age:" << contactp->getAge()
+				 << " path refresh age:" << contactp->getPathAge() << endl;
                             sendPathProbe(probeContactQueue.front());
-                            probed= true;
+			    // send multiple probes in case path refreshes are required
+			    if (contactp->getPathAge() < R2Kademlia::PathRefreshThreshold) {
+				    probed= true;
+			    }
 		}
 		else
 			EV_TRACE << "skipped contact: " << probeContactQueue.front() << endl; 
@@ -449,7 +452,7 @@ void R2Kademlia::doReachabilityTest(short timerId)
 void R2Kademlia::doRefreshSetupPaths(short timerId)
 {
 	std::list<OverlayKey> contactlist;
-	// refresh contacts with paths longer than vicinityDiscoveryRadius+1 by sending a ProbeReq
+	// refresh contacts with paths longer than 2*vicinityDiscoveryRadius+1 (>=6 hops in total) by sending a ProbeReq
 	routingTable.getContactsforPathRefresh(contactlist);
 	EV_TRACE << "doRefreshSetupPaths: number of contacts " << contactlist.size() << endl;
 	for (const auto& key: contactlist)
@@ -457,7 +460,7 @@ void R2Kademlia::doRefreshSetupPaths(short timerId)
 		// check if contact already in the list
 		if (std::find(probeContactQueue.cbegin(),probeContactQueue.cend(),key) == probeContactQueue.cend()) {
 			EV_TRACE << "adding contact " << key.shortStr() << " to probeContactQueue for SetupPath refresh" << endl;
-			probeContactQueue.push_back(key);
+			probeContactQueue.push_front(key);
 		}
 	}
 }

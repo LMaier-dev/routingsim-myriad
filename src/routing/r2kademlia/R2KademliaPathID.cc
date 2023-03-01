@@ -41,7 +41,7 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 			return true;
 		}
 		else {
-			// touch entry and reset obsolete flag
+			// touch entry and reset obsolete flag / refresh entry
 			auto& fwdtableentry= fwdTablePathID.PIDFwdTable.at(incomingPID);
 			fwdtableentry.unsetObsolete();
 			EV_TRACE << " already present/ignored" << endl;
