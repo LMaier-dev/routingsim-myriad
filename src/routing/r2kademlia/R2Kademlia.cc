@@ -789,6 +789,9 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadProbeReq> packet) {
 
 
 bool R2Kademlia::handleProbeResponse(KadPacket_p answer, RPCState& rpcState) {
+	// callback will be invoked by RPCProtocol::handleAnswer()
+	// in case the response contained an error it will be handled by onErrorPacket first
+	// in case of failure we need to return true since this RPC is finished then
 	if (rpcState.status != RPC_SUCCESS) return true;
 	ASSERT(answer->getSource() == rpcState.original_packet->getTarget());
 	std::unique_ptr<KadProbeRsp> probeRsp = safe_packet_cast<KadProbeRsp>(answer);
