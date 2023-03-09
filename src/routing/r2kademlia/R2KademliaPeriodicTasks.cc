@@ -470,7 +470,7 @@ void R2Kademlia::doGarbageCollectPathIDs(short timerId)
 {
 	ASSERT(timerId < 0); // assume fixed timer
 	EV_TRACE << "PathID garbage collection called" << endl;
-	fwdTablePathID.garbageCollect();
+	fwdTablePathID.garbageCollect(3*R2Kademlia::PathRefreshThreshold);
 }
 
 } // end namespace

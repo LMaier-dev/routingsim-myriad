@@ -1,5 +1,6 @@
 #include "PathID.h"
 #include "SHA1.h"
+#include <iomanip>
 
 namespace routingsim {
 
@@ -31,7 +32,7 @@ PathID::PathID(const kad_path& path)
 std::ostream& operator<<(std::ostream& os, const PathID& pid)
 {
 	std::ios_base::fmtflags f( os.flags() );  // save flags state
-	os << std::hex << pid.pathId;
+	os << std::hex << std::setfill('0') << std::setw(16) << pid.pathId;
 	os.flags( f );  // restore flags state
 	return os;
 }

@@ -15,8 +15,6 @@
 
 namespace routingsim {
 
-constexpr unsigned long fwdentry_refresh_timeout_ms= 180000;
-
 class FwdTableEntry {
 private:
 	uint8_t fwdState = State::undefined;
@@ -131,7 +129,7 @@ public:
 	void delPIDEntry(PathID pid);
 
 	// garbage collect, actually delete unnecessary entries
-	void garbageCollect();
+	void garbageCollect(const unsigned long fwdentry_refresh_timeout_ms);
 
 	// for gathering statistics
 	size_type getNumEntries() const { return PIDFwdTable.size(); };

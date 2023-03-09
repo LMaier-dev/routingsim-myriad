@@ -485,7 +485,7 @@ private:
 	virtual void sampleStatistics (Statistics &stats) override;
 public:
         R2Kademlia();
-	virtual void finish() override { fwdTablePathID.garbageCollect(); RPCProtocol::finish(); stopAllTimers(); }
+	virtual void finish() override { fwdTablePathID.garbageCollect(3*R2Kademlia::PathRefreshThreshold); RPCProtocol::finish(); stopAllTimers(); }
 	/** @name policy functions called by routing table */
 	//@{
 	/** called when last contact is removed from a bucket*/

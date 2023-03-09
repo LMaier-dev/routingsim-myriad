@@ -272,17 +272,25 @@ void R2Kademlia::checkForPathTeardown(const KadPacket& packet)
 	if (packet.getRouteArraySize()-packet.getProgress() <= nodeVicinityGraph::vicinityDiscoveryRadius+1)
 		return;
 
-	// will tear down path in data forward direction
-	KadContact tmpcontact(packet.getTarget(),
-			      packet.getSrcPath(packet.getProgress()+1, packet.getRouteArraySize()-1));
+	// if three hops left to destination: install NID to PID mapping here for the destination NodeID
+	if (packet.hopsLeft() == (nodeVicinityGraph::vicinityDiscoveryRadius+1)) {
 
-	kad_path newpath(tmpcontact.getPath());
-	// add destination node ID to path (will never be empty then)
-	newpath.push_back(tmpcontact.getKey());
-	PathID incomingPathID(getPathID(myOverlayKey, newpath));
-
-	EV_TRACE << "checkForPathTeardown: delete pathID " << incomingPathID << endl;
-	fwdTablePathID.delPIDEntry(incomingPathID);
+		const auto pathtoremove(packet.getSrcPath(packet.getProgress()+1, packet.getRouteArraySize()));
+		PathID incomingPathID(getPathID(myOverlayKey, pathtoremove));
+		EV_TRACE << "checkForPathTeardown: delete pathID " << incomingPathID << endl;
+		fwdTablePathID.delPIDEntry(incomingPathID);
+	}
+	else {
+		if (packet.hopsLeft() < 2*(nodeVicinityGraph::vicinityDiscoveryRadius+1)) {
+			return;
+		}
+		else { // at least six hops left to destination: remove PID to node three hops before destination
+			const auto pathtoremove(packet.getSrcPath(packet.getProgress()+1, packet.getRouteArraySize()-nodeVicinityGraph::vicinityDiscoveryRadius-1));
+			PathID incomingPathID(getPathID(myOverlayKey, pathtoremove));
+			EV_TRACE << "checkForPathTeardown: delete pathID " << incomingPathID << endl;
+			fwdTablePathID.delPIDEntry(incomingPathID);
+		}
+	}
 
 	return;
 }

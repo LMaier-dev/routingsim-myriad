@@ -111,8 +111,8 @@ void R2Kademlia::onInitialize() {
 	if (usePathIDs) {
 		// if PathRefreshThreshold is 20s, refresh is scheduled between [10s,30s]
 		addRandomizedTimer(SimTime(PathRefreshThreshold/2,SIMTIME_MS), SimTime(PathRefreshThreshold,SIMTIME_MS), std::bind(&R2Kademlia::doRefreshSetupPaths, this, ph::_1));
-		// garbageCollection would happen after 60s
-		addFixedTimer(SimTime(3*PathRefreshThreshold,SIMTIME_MS), SimTime(3*PathRefreshThreshold,SIMTIME_MS), std::bind(&R2Kademlia::doGarbageCollectPathIDs, this, ph::_1));
+		// garbageCollection would happen after 90s + every 10s
+		addFixedTimer(SimTime(3*PathRefreshThreshold,SIMTIME_MS), SimTime(10000,SIMTIME_MS), std::bind(&R2Kademlia::doGarbageCollectPathIDs, this, ph::_1));
 	}
 
 	if (sendDataPackets)

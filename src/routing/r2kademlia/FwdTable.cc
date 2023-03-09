@@ -426,8 +426,6 @@ void FwdTablePathID::delPIDEntry(PathID pid)
 		else
 			EV_TRACE << "FwdTablePathID::delPIDEntry PathID " << pid << " not yet deleted." << endl;
 	}
-	else
-		EV_ERROR << "FwdTablePathID::delPIDEntry PathID " << pid << " not found" << endl;
 }
 
 
@@ -495,18 +493,19 @@ void FwdTablePathID::delEntry(KadContact_p contact)
 }
 
 
-void FwdTablePathID::garbageCollect()
+void FwdTablePathID::garbageCollect(const unsigned long fwdentry_refresh_timeout_ms)
 {
 	auto it= PIDFwdTable.begin();
 	while ( it != PIDFwdTable.end() )
 	{
-		if (it->second.isDeleted() and not it->second.isLocal() and not it->second.isForeign() and not it->second.isPrecalc()
+		if (it->second.isForeign() and not it->second.isLocal() and not it->second.isPrecalc()
 		    and it->second.getAge() > fwdentry_refresh_timeout_ms) {
 			EV_TRACE << "garbageCollect(): actually deleting PID " << it->first << ": " << it->second.str() << endl;
 			it= PIDFwdTable.erase(it);
 		}
-		else
+		else {
 			it++;
+		}
 	} // end while
 }
 
