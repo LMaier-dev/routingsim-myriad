@@ -27,7 +27,7 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 		return false;
 	}
 
-	// if three hops left to destination: install NID to PID mapping here for the destination NodeID
+	// if three hops left to destination: install PID here for the destination NodeID for last segments
 	if (packet.hopsLeft() == (nodeVicinityGraph::vicinityDiscoveryRadius+1)) {
 
 		const auto pathtoadd(packet.getSrcPath(packet.getProgress()+1, packet.getRouteArraySize()));
@@ -35,8 +35,6 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 		EV_TRACE << "checkForPathIDInstallation: path to " << packet.getTarget().shortStr() << ": " << pathtoadd;
  		if (auto [added,incomingPID]= fwdTablePathID.addForeignEntry(pathtoadd); added == true) {
 			EV_TRACE << " added " << incomingPID << endl;
-			// need to install NID to PID mapping
-			fwdTablePathID.setNIDtoPIDmapping(packet.getTarget(),incomingPID);
 
 			return true;
 		}
@@ -44,9 +42,8 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 			// touch entry and reset obsolete flag / refresh entry
 			auto& fwdtableentry= fwdTablePathID.PIDFwdTable.at(incomingPID);
 			fwdtableentry.unsetObsolete();
-			EV_TRACE << " already present/ignored" << endl;
-			// need to install NID to PID mapping
-			fwdTablePathID.setNIDtoPIDmapping(packet.getTarget(),incomingPID);
+			fwdtableentry.setForeign();
+ 			EV_TRACE << " already present/ignored. " << fwdtableentry.str() << endl;
 
 			return false;
 		}
@@ -68,6 +65,7 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 				// touch entry and reset obsolete flag
 				auto& fwdtableentry= fwdTablePathID.PIDFwdTable.at(incomingPID);
 				fwdtableentry.unsetObsolete();
+				fwdtableentry.setForeign();
 				EV_TRACE << " already present/ignored" << endl;
 				return false;
 			}
@@ -277,8 +275,8 @@ void R2Kademlia::checkForPathTeardown(const KadPacket& packet)
 
 		const auto pathtoremove(packet.getSrcPath(packet.getProgress()+1, packet.getRouteArraySize()));
 		PathID incomingPathID(getPathID(myOverlayKey, pathtoremove));
-		EV_TRACE << "checkForPathTeardown: delete pathID " << incomingPathID << endl;
-		fwdTablePathID.delPIDEntry(incomingPathID);
+		EV_TRACE << "checkForPathTeardown: unset foreign pathID " << incomingPathID << endl;
+		fwdTablePathID.delForeignPIDEntry(incomingPathID);
 	}
 	else {
 		if (packet.hopsLeft() < 2*(nodeVicinityGraph::vicinityDiscoveryRadius+1)) {
@@ -287,8 +285,8 @@ void R2Kademlia::checkForPathTeardown(const KadPacket& packet)
 		else { // at least six hops left to destination: remove PID to node three hops before destination
 			const auto pathtoremove(packet.getSrcPath(packet.getProgress()+1, packet.getRouteArraySize()-nodeVicinityGraph::vicinityDiscoveryRadius-1));
 			PathID incomingPathID(getPathID(myOverlayKey, pathtoremove));
-			EV_TRACE << "checkForPathTeardown: delete pathID " << incomingPathID << endl;
-			fwdTablePathID.delPIDEntry(incomingPathID);
+			EV_TRACE << "checkForPathTeardown: unset foreign pathID " << incomingPathID << endl;
+			fwdTablePathID.delForeignPIDEntry(incomingPathID);
 		}
 	}
 

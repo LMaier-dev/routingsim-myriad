@@ -30,7 +30,7 @@ public:
 	enum State : uint8_t {
 		undefined     = 0,
 		valid         = 1, // path intact so far
-		local         = 2, // locally wanted (contact or neighbor)
+		local         = 2, // locally wanted (contact or PN)
 		foreign       = 4, // PID wanted by KadPathSetup
 		obsolete      = 8, // if overwritten by a newer entry
 		precalc       = 16, // typically all paths in the vicinity discovery radius
@@ -127,6 +127,7 @@ public:
 	void invalidateEntry(KadContact_p contact);
 
 	void delPIDEntry(PathID pid);
+	void delForeignPIDEntry(PathID pid);
 
 	// garbage collect, actually delete unnecessary entries
 	void garbageCollect(const unsigned long fwdentry_refresh_timeout_ms);

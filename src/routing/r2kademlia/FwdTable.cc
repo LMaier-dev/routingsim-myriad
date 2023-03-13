@@ -421,10 +421,23 @@ void FwdTablePathID::delPIDEntry(PathID pid)
 			EV_TRACE << "FwdTablePathID::delPIDEntry PathID " << pid << " marked for deletion." << endl;
 			// actually delete this PID Entry
 			// suspended until garbageCollect()
-			// PIDFwdTable.erase(it);
 		}
 		else
 			EV_TRACE << "FwdTablePathID::delPIDEntry PathID " << pid << " not yet deleted." << endl;
+	}
+}
+
+
+void FwdTablePathID::delForeignPIDEntry(const PathID pid)
+{
+	if (pid == PathID::UndefinedPathID)
+		return;
+
+	if ( auto it= PIDFwdTable.find(pid); it != PIDFwdTable.end() )
+	{ // entry exists -> unset foreign flag (may be restored by next refresh)
+		it->second.unsetForeign();
+		// try to mark entry for deletion (in case it is not local or precalculated)
+		delPIDEntry(pid);
 	}
 }
 
@@ -479,16 +492,7 @@ void FwdTablePathID::delEntry(KadContact_p contact)
 		newpath.push_back(contact->getKey());
 		PathID incomingPathID(getPathID(*ownNodeID, newpath));
 		// try to find PID entry and unset the foreign flag
-		if (auto it= PIDFwdTable.find(incomingPathID); it != PIDFwdTable.end())
-		{
-			EV_TRACE << "delEntry(): inPID " << incomingPathID << " delete foreign flag" << endl;
-			it->second.unsetForeign();
-			delPIDEntry(incomingPathID);
-		}
-		else
-		{
-			EV_WARN << "delEntry(): no entry for PID " << incomingPathID  << " found" << endl;
-		}
+		delForeignPIDEntry(incomingPathID);
 	}
 }
 
@@ -498,7 +502,8 @@ void FwdTablePathID::garbageCollect(const unsigned long fwdentry_refresh_timeout
 	auto it= PIDFwdTable.begin();
 	while ( it != PIDFwdTable.end() )
 	{
-		if (it->second.isForeign() and not it->second.isLocal() and not it->second.isPrecalc()
+		// not used entries are marked for deletion and also have lost their foreign bit
+		if (it->second.isDeleted() and not it->second.isLocal() and not it->second.isPrecalc()
 		    and it->second.getAge() > fwdentry_refresh_timeout_ms) {
 			EV_TRACE << "garbageCollect(): actually deleting PID " << it->first << ": " << it->second.str() << endl;
 			it= PIDFwdTable.erase(it);

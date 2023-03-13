@@ -93,9 +93,7 @@ R2Kademlia::intermediateNodeProcessing(const KadPacket& packet) {
 	case KAD_ProbeReq: // this is for path probing and refreshes of forwarding entries
 	{
 		const KadProbeReq* probereq= dynamic_cast<const KadProbeReq*>(&packet);
-		// usually the following is not necessary, but sometimes
-		// PathSetup was scheduled but not performed and a newer seq of a longer
-		// path start a path check, resulting in the ProbeReq
+		// usually the following is necessary for path refresh
 		if (usePathIDs and probereq->getPathCheck()) {
 			if (checkForPathIDInstallation(packet))
 				EV_TRACE << "POST Installed PathID by ProbeReq PathCheck" << endl;
