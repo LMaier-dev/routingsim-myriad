@@ -176,7 +176,6 @@ FwdTablePathID::addEntry(const kad_path& path_to_add, bool isForeignPID, bool pr
 		pidentry->second.unsetDeleted();
 		pidentry->second.setValid();
 
-		//EV_TRACE << "addEntry(): inPID entry " << incomingPathID << " exists already" << endl;
 		// set foreign or local flag
 		if (isForeignPID)
 			pidentry->second.setForeign();
@@ -187,6 +186,8 @@ FwdTablePathID::addEntry(const kad_path& path_to_add, bool isForeignPID, bool pr
 
 		if (precalc)
 			pidentry->second.setPrecalc();
+
+		EV_TRACE << "addEntry(): inPID entry " << incomingPathID << " exists already. " << pidentry->second.str() << endl;
 
 		return std::make_pair(false, incomingPathID); // already there, fine
 	}
@@ -285,60 +286,38 @@ bool FwdTablePathID::modEntry(const OverlayKey& contact_key, const kad_path& new
 	{
 		EV_TRACE << "modEntry(): Dest NodeID " << contact_key.shortStr() << " new PID path " << newpath << endl;
 
-		// Routingtable entry on node 4: Dest 5: < 3 2 >
+		// we probably want to keep the old PID in case there are still packets inflight
 		priorPathID= pidentry->second;
 		if ( PIDFwdTable.find(priorPathID) == PIDFwdTable.end() )
 		{
+			// this should not happen
 			EV_ERROR << "FwdTablePathID::modEntry earlier PathID " << priorPathID << " not found" << endl;
-			return false;
-		}
-		else if (priorPathID == incomingPathID)
-		{ // same PathID already existed, just return
-			EV_TRACE << "modEntry(): same PID entry " << incomingPathID << " for contact already existed" << endl;
-			if (auto it= PIDFwdTable.find(incomingPathID); it != PIDFwdTable.end())
-			{
-				it->second.setValid();
-				it->second.unsetObsolete();
-				if (isForeignPID)
-					it->second.setForeign();
-				else {
-					it->second.incrementReferenceCount();
-					it->second.setLocal();
-				}
-			}
+
+			if (not isForeignPID and newpath.size() <= 2*nodeVicinityGraph::vicinityDiscoveryRadius)
+				setNIDtoPIDmapping(contact_key, incomingPathID, lastsegmentPathID);
 
 			return false;
 		}
-		else
-		{ // set old entry to obsolete state if local update
-			FwdTableEntry& priorfwdentry(PIDFwdTable[pidentry->second]);
+		else {
+			if (priorPathID != incomingPathID)
+			{ // this is a different PID than before, but maybe it exists already (will be handled below)
+                          // set old PID entry to obsolete state if local update and not referenced anymore
+				FwdTableEntry& priorfwdentry(PIDFwdTable[pidentry->second]);
 
-			// mark it obsolete unless it was precalculated
-			if (not priorfwdentry.isPrecalc()) {
-				priorfwdentry.setObsolete();
-				// not referenced anymore
+				// mark it obsolete (may be still in use by foreign nodes)
+				// if entry is local, we need to decrement the reference counter
 				if (priorfwdentry.isLocal()) {
-					if (priorfwdentry.decrementReferenceCount() == 0)
+					if (priorfwdentry.decrementReferenceCount() == 0) {
+						// last reference not a local entry anymore
 						priorfwdentry.unsetLocal();
-				}
-			}
-			// delete the entry before priorPathID (i.e., the one before the penultimate entry)
-			//TODO make this configurable in depth
-			if (priorfwdentry.prevPathID != PathID::UndefinedPathID)
-			{
-				auto it= PIDFwdTable.find(priorfwdentry.prevPathID);
-				if (it != PIDFwdTable.end())
-				{
-					// remove entry before priorPathID if still obsolete and not in use otherwise
-					// it may still have the local flag
-					if (it->second.isObsolete() and not it->second.isPrecalc() and not it->second.isForeign() and it->second.getReferenceCount()==0)
-					{
-						EV_TRACE << "deleting PID entry " << priorfwdentry.prevPathID << endl;
-						PIDFwdTable.erase(it);
+						priorfwdentry.setObsolete(); // obsolete means: no longer locally used (implies referenceCounter == 0)
+						// note: entry may still be precalculated or required by foreign nodes
 					}
 				}
 			}
-		}
+			// else: priorPathID == incomingPathID
+			// this will also be handled correctly below
+		} // end else
 	}
 
 	FwdTableEntry fwdentry;
@@ -383,12 +362,13 @@ bool FwdTablePathID::modEntry(const OverlayKey& contact_key, const kad_path& new
 
 	// activate new mapping for replacements (or new entries)
 	// only if path setup is not required
-	setNIDtoPIDmapping(contact_key, incomingPathID, lastsegmentPathID);
+	if (not isForeignPID)
+		setNIDtoPIDmapping(contact_key, incomingPathID, lastsegmentPathID);
 
 	EV_TRACE << "modEntry(): inPID:" << incomingPathID << " outPID:"
 		 << fwdentry.outgoingPathID << " 2nd PID:" << lastsegmentPathID
 		 << (additionalEntry ? " additional entry" : ((pidentry != NIDPIDTable.end()) ? " replacement" : " new"))
-		 << " path: " << newpath << endl;
+		 << " path: " << newpath << " Fwdentry:" << fwdentry.str() << endl;
 
 	return true;
 }
@@ -401,29 +381,24 @@ void FwdTablePathID::delPIDEntry(PathID pid)
 
 	if ( auto it= PIDFwdTable.find(pid); it != PIDFwdTable.end() )
 	{ // entry exists
-		// detect any cycles: stop recursion here
-		if (it->second.isDeleted())
-			return;
-
+		EV_TRACE << "FwdTablePathID::delPIDEntry called for " << pid << " " << it->second.str() << endl;
 		// delete all related PID entries (prior entries)
-		if (it->second.prevPathID != PathID::UndefinedPathID)
-		{ // recurse here
-			// mark this entry for deletion
-			it->second.setDeleted();
-			delPIDEntry(it->second.prevPathID);
-			it->second.prevPathID= PathID::UndefinedPathID;
-		}
 
 		// local and precalculated PID entries will not be deleted here,
 		// foreign entries should be deleted by PathTeardown messages by unsetting their foreign bit first
 		if ( not it->second.isLocal() and not it->second.isForeign() and not it->second.isPrecalc() and it->second.getReferenceCount()==0) {
 			it->second.setDeleted();
-			EV_TRACE << "FwdTablePathID::delPIDEntry PathID " << pid << " marked for deletion." << endl;
-			// actually delete this PID Entry
-			// suspended until garbageCollect()
+			EV_TRACE << "FwdTablePathID::delPIDEntry PathID " << pid << " marked for deletion " << it->second.str() << endl;
+			// entry cannot be deleted here, because there may be other foreign nodes
+			// that require it still. Need to wait for garbage collection.
+			return;
 		}
-		else
-			EV_TRACE << "FwdTablePathID::delPIDEntry PathID " << pid << " not yet deleted." << endl;
+		else { // Precalc or Foreign or still locally used
+			EV_TRACE << "FwdTablePathID::delPIDEntry PathID " << pid << " not yet deleted." << it->second.str() << endl;
+		}
+
+		EV_TRACE << "FwdTablePathID::delPIDEntry finished for " << pid << " " << it->second.str() << endl;
+
 	}
 }
 
@@ -452,28 +427,6 @@ void FwdTablePathID::delEntry(KadContact_p contact)
 	{
 		// delete all PID entries related to this contact except when they were precalculated
 		if (PathID currentPathID= pidentry->second; currentPathID != PathID::UndefinedPathID) {
-			std::unordered_set<PathID> alreadySeenPIDSet;
-			// get fwdentry and remove local flag for related PIDs because the local contact gets deleted
-			for (auto fwdentry_it= PIDFwdTable.find(currentPathID);
-			     fwdentry_it != PIDFwdTable.end() and fwdentry_it->first != PathID::UndefinedPathID;
-			     fwdentry_it= PIDFwdTable.find(fwdentry_it->second.prevPathID)) {
-				// if the next condition holds, we got a cycle
-				if (alreadySeenPIDSet.find(fwdentry_it->first) != alreadySeenPIDSet.end()) {
-					EV_TRACE << "CYCLE detected, fwdentry: " << fwdentry_it->first
-						 << endl;
-					break;
-				}
-
-				alreadySeenPIDSet.insert(fwdentry_it->first);
-
-				if (fwdentry_it->second.isLocal()) {
-					if (fwdentry_it->second.decrementReferenceCount() == 0)
-						fwdentry_it->second.unsetLocal();
-				}
-
-				if (fwdentry_it->second.prevPathID == PathID::UndefinedPathID)
-					break;
-			}
 
 			// now try to delete the PID entries
 			delPIDEntry(currentPathID);
@@ -503,7 +456,7 @@ void FwdTablePathID::garbageCollect(const unsigned long fwdentry_refresh_timeout
 	while ( it != PIDFwdTable.end() )
 	{
 		// not used entries are marked for deletion and also have lost their foreign bit
-		if (it->second.isDeleted() and not it->second.isLocal() and not it->second.isPrecalc()
+		if (not it->second.isLocal() and not it->second.isPrecalc()
 		    and it->second.getAge() > fwdentry_refresh_timeout_ms) {
 			EV_TRACE << "garbageCollect(): actually deleting PID " << it->first << ": " << it->second.str() << endl;
 			it= PIDFwdTable.erase(it);

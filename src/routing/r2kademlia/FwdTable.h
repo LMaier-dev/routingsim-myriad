@@ -83,19 +83,23 @@ public:
 	void incrementUsageCount() { usageCount++; }
 	unsigned long getUsageCount() const { return usageCount; }
 
-	unsigned long incrementReferenceCount() { return ++usageCount; }
+	unsigned long incrementReferenceCount() {
+		EV_TRACE << "incrementReferenceCount(): " << str() << endl;
+		return ++referenceCount; }
 	unsigned long decrementReferenceCount() { 
-		if (usageCount > 0) {
-			if (usageCount == 1)
-				EV_TRACE << "Reference Count to ZERO:" << str() << endl;
-			return --usageCount;
+		if (referenceCount > 0) {
+			EV_TRACE << "decrementReferenceCount(): " << str() << endl;
+
+			if (referenceCount == 1)
+				EV_TRACE << "Reference Count to ZERO: " << str() << endl;
+			return --referenceCount;
 		}
 		else {
-			EV_WARN << "Reference Count Violation:" << str() << endl;
-			ASSERT(usageCount > 0);
-			return usageCount;}
+			EV_WARN << "Reference Count Violation: " << str() << endl;
+			ASSERT(referenceCount > 0);
+			return referenceCount;}
 	}
-	unsigned long getReferenceCount() const { return usageCount; }
+	unsigned long getReferenceCount() const { return referenceCount; }
 
 	std::string str() const;
 };

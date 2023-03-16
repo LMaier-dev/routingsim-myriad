@@ -420,6 +420,7 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 		if (pathHashSum.isUnspecified())
 			pathHashSum= HashSum(path, key);
 
+		//TODO before overwriting the old path, need to check for sending a PathTeardown
 		contact->setPath(std::move(path), std::move(pathHashSum)); // will set contact automatically to valid
 	}
 	else { // new path is identical with old path
