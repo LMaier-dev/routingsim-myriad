@@ -178,16 +178,16 @@ void R2Kademlia::onDisconnect( nodeid_t nid ) {
 
 	// Try to rediscover that contact
 	// after grace period (otherwise more links may fail immediately after this)
-	unsigned long threshold= 5UL * counter; // 5 corresponds to 20% (100/20) of the entries
+	//unsigned long threshold= 5UL * counter; // 5 corresponds to 20% (100/20) of the entries
 	// it is promoted to urgent in case there are more then a certain percentage
-	if (threshold > routingTable.getNumContactsWithoutPNs())
+	//if (threshold > routingTable.getNumContactsWithoutPNs())
 		schedulePNRediscovery(key);
-	else {
-		if (routingTable.isInLastBucket(key))
-			scheduleUrgentRediscovery(key);
-		else
-			scheduleRegularRediscovery(key);
-	}
+		//else {
+		//if (routingTable.isInLastBucket(key))
+		//	scheduleUrgentRediscovery(key);
+		//else
+		//	scheduleRegularRediscovery(key);
+		//}
 
 	// send UpdateRouteReq w/ failed link to ID-wise closest Nodes
 	// we can rely on routingTable.getContact(key) != nullptr, because of earlier setContactInvalid() call
@@ -212,7 +212,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	const hop_t taken_hop= pkt->getHop();
 	//ASSERT(Node::getNode(this)->getNodeId() == taken_hop.to);
 
-	ASSERT(pkt->getEncapsulatedPacket() != nullptr);
+	ASSERT(pkt->hasEncapsulatedPacket());
 
 	if (not getNetworkManager()->getTopology().isConnected(taken_hop.from,taken_hop.to))
 	{
@@ -268,6 +268,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		return;
 	}
 	else { // no hops left, packet is addressed to me
+
 		packet->setControlInfo(pkt.release());
 
 		// learn route from packet
@@ -285,9 +286,10 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		// these types may forward packets, so they count themselves
 		if (handleIfFitting<KadFindNodeReq>(packet)) return;
 		if (handleIfFitting<KadUpdateRouteReq>(packet)) return;
-		// these types never forwardpackets
+		// the following types never forward packets
 		countReceived(*packet);
 		if (handleIfFitting<KadQueryRouteReq>(packet)) return;
+		// handle RPC answer packets (including Errors)
 		if (handleIfFitting<KadAnswer>(packet)) return;
 		if (handleIfFitting<KadPathSetupReq>(packet)) return;
 		if (handleIfFitting<KadPathTeardownReq>(packet)) return;
@@ -314,11 +316,17 @@ void R2Kademlia::reset() {
 
 
 
-
+// process answer packets
 void R2Kademlia::handlePacket(KadAnswer_p packet) {
-	EV_DEBUG << "received " << packet->getName() << "(for nonce=" << packet->getNonce() << ") from " << packet->getSource().shortStr() << endl;
+	EV_DEBUG << "received " << packet->getName() << " (for nonce=" << packet->getNonce() << ") from " << packet->getSource().shortStr() << endl;
 	if (packet->getType() == KAD_Error) {
-		onErrorPacket(*check_and_cast<KadError *>(packet.get()));
+		auto errorpkt_p(check_and_cast<KadError *>(packet.get()));
+		if (onErrorPacket(*errorpkt_p)) {
+			// if returned true we need to forward the Error packet closer to its final destination
+			const auto finaldest( errorpkt_p->getDstNodeID() );
+			forwardCloser(std::move(packet), finaldest);
+			return;
+		}
 		// note that handleAnswer() will be called  afterwards for processing the RPC result
 	}
 	else if (packet->getType() == KAD_FindNodeRsp) {
@@ -499,7 +507,7 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt, simtime_t 
 	} // end else (no next hop found)
 
 	EV_ERROR << "forwardPacket(): could not find next hop!" << endl;
-	onMissingNeighbor(std::move(packet), std::move(nodePkt));
+	onMissingNeighbor(std::move(packet), std::move(nodePkt), nextHop);
 }
 
 
@@ -596,8 +604,42 @@ void R2Kademlia::reroutePacket(const OverlayKey& finaldest, KadPacket_p packet, 
 
 	EV_ERROR << "reroutePacket(): no (more) contacts found" << endl;
 
+	const OverlayKey nextHop(packet->getNextHop());
 	// if we get here: bad luck
-	onMissingNeighbor(std::move(packet), std::move(nodePkt));
+	onMissingNeighbor(std::move(packet), std::move(nodePkt), nextHop);
+}
+
+
+void R2Kademlia::forwardCloser(KadPacket_p packet, const OverlayKey& destContactKey)
+{
+	size_t contactsLen = std::max((size_t)findNodeNumber, routingTable.getSplitSize());
+	std::list<std::pair<link_t,age_t>> notvialist;
+	if (packet->getNotVia())
+	{
+		for (uint i= 0; i < packet->getFailedLinkArraySize(); i++) {
+			notvialist.push_back(make_pair(packet->getFailedLink(i),packet->getFailedLinkAge(i)));
+		}
+	}
+	KadContactList closeContacts(routingTable.getClosestContacts(destContactKey, contactsLen, true, notvialist));
+
+	if (closeContacts.empty()) {
+		EV_TRACE << "forwardCloser(): forwarding ends here. No contact found" << endl;
+		return;
+	}
+
+	const KadContact& contact = chooseNextHop(closeContacts, destContactKey);
+	// check whether that contact is closer to the target than we are (but do not send back to source)
+	if ( contact.isValid() and (contact.getKey() ^ myOverlayKey) > (contact.getKey() ^ destContactKey) and not packet->isOverlayHopInPath(contact.getKey()) )
+	{
+		packet->appendRoute(contact);
+		EV_TRACE << "forwardCloser(): final dest: " << destContactKey.shortStr() << ", next dest: " << contact << endl;
+	        resendPacket(std::move(packet));
+	}
+	else
+	{
+		EV_TRACE << "forwardCloser(): Update forwarding ends, final dest: " << destContactKey.shortStr() << ", next dest: " << contact << endl;
+	}
+	// if no chance of getting closer to the destination: packet will be deleted here!!
 }
 
 
@@ -1387,7 +1429,7 @@ void R2Kademlia::countDropped(KadPacket& packet, const OverlayKey& target, uint8
 }
 
 
-void R2Kademlia::returnToSender(uint8_t errorType, KadPacket_p packet) {
+void R2Kademlia::returnToSender(uint8_t errorType, KadPacket_p packet, const OverlayKey& failedNextHopNodeID) {
 	KadError_p answer = makeAnswer<KadError>(*packet);
 	answer->setErrorType(errorType);
 
@@ -1395,6 +1437,9 @@ void R2Kademlia::returnToSender(uint8_t errorType, KadPacket_p packet) {
 	for (const auto& c : answer->getSrcPath())
 		EV_TRACE << ' ' << c.shortStr();
 	EV_TRACE << endl;
+	answer->setDstNodeID(packet->getSource());
+	answer->setFailedNextHopNodeID(failedNextHopNodeID);
+	answer->setOrigDstNodeID(packet->getTarget());
 	answer->encapsulate(packet.release());
 	if (answer->hasRemainingHops())
 		sendPacket(std::move(answer));

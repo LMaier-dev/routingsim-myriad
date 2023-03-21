@@ -324,8 +324,8 @@ private:
 	 * the original packet is encapsulated on the error packet
 	 * @errorType the error type for the error packet
 	 */
-	void returnToSender(uint8_t errorType, KadPacket_p packet);
-	void returnToSender(uint8_t errorType, KadDataPacket_p packet);
+	void returnToSender(uint8_t errorType, KadPacket_p packet, const OverlayKey& failedNextHopNodeID= OverlayKey::UNSPECIFIED_KEY);
+	void notifySender(uint8_t errorType, KadDataPacket_p packet, const OverlayKey& failedNextHopNodeID);
 	/**
 	 * Tries to cast packet to type T.
 	 * If this succeeds, the method handlePacket(T) is called, the given pointer
@@ -462,6 +462,8 @@ private:
 
 	/// adds routing table updates for contacts to an update queue
 	void scheduleUpdate(const KadContact& affectedcontact, KadRouteUpdateAction action);
+	/// forwards packet close to destcontactKey using the closest overlay neighbors
+	void forwardCloser(KadPacket_p packet, const OverlayKey& destContactKey);
 	/// send Update closer towards target contacts
 	void propagateUpdateReq(std::unique_ptr<KadUpdateRouteReq> packet);
 	/// sends all queued updates
@@ -477,10 +479,10 @@ private:
 
 	/** @name policy foo */
 	//@{
-	void onMissingNeighbor(KadPacket_p packet, NodePkt_p pkt);
-	void onMissingNeighbor(KadDataPacket_p packet, NodePkt_p pkt);
+	void onMissingNeighbor(KadPacket_p packet, NodePkt_p pkt, const OverlayKey& missingNeighborNodeID);
+	void onMissingNeighbor(KadDataPacket_p packet, NodePkt_p pkt, const OverlayKey& missingNeighborNodeID);
 	/** Called when an error packet is encountered, updates routing information */
-	void onErrorPacket(KadError& error);
+	bool onErrorPacket(KadError& error);
 	//@}
 	virtual void sampleStatistics (Statistics &stats) override;
 public:
@@ -621,12 +623,12 @@ template<typename T>
 std::unique_ptr<T> R2Kademlia::makeAnswer(const KadPacket& original) {
 	auto answer = std::make_unique<T>();
 	answer->setName((std::string(original.getName()) + std::string("Answer")).c_str());
-	answer->setShortened(answer->setSimplifiedReturnPathFrom(original));
-
+	answer->setSimplifiedReturnPathFrom(original);
 	ASSERT(answer->getSource() == myOverlayKey);
 	answer->setNonce(original.getNonce());
 	answer->setStateSeqNo(getLSSeqNo());
 	answer->setSrcNodeDegree(neighborTable.size());
+
 	// now copy the notvia information to let the source update its obsolete routes, too
 	if (original.getNotVia()) {
 		answer->setNotVia(true);
@@ -640,6 +642,7 @@ std::unique_ptr<T> R2Kademlia::makeAnswer(const KadPacket& original) {
 		}
 
 	}
+
 	return answer;
 }
 

@@ -19,7 +19,7 @@ namespace routingsim {
 
 // -------------- kad policy -------------
 
-void R2Kademlia::onMissingNeighbor(KadPacket_p packet, NodePkt_p pkt) {
+void R2Kademlia::onMissingNeighbor(KadPacket_p packet, NodePkt_p pkt, const OverlayKey& missingNeighborNodeID) {
 //  	getStatistics().dropMessage(pkt, undefined_node);
 	EV_WARN << "onMissingNeighbor called - packet next hop should be " << packet->getNextHop().shortStr() << endl;
 	droppedPackets++;
@@ -39,17 +39,19 @@ void R2Kademlia::onMissingNeighbor(KadPacket_p packet, NodePkt_p pkt) {
 				return;
 			}
 			else
-				returnToSender(KAD_SegmentFailure, std::move(packet));
+				returnToSender(KAD_SegmentFailure, std::move(packet), missingNeighborNodeID);
 		}
 	} // end switch
 }
 
 
 
+/// returns true if Error should be forwarded closer to its final destination
+/// (usually only necessary for ErrorInd caused by Data packets)
+bool
+R2Kademlia::onErrorPacket(KadError& error) {
 
-void R2Kademlia::onErrorPacket(KadError& error) {
-
-	EV_INFO << "received ERROR packet (" << (unsigned int) error.getErrorType() << ") ";
+	EV_INFO << "received ERROR packet (" << (unsigned int) error.getErrorType() << ") for " << error.getDstNodeID().shortStr() << ": ";
 	switch (error.getErrorType()) {
 		case KAD_NoError:
 			EV_INFO << "No Error";
@@ -72,10 +74,6 @@ void R2Kademlia::onErrorPacket(KadError& error) {
 	}
 	EV_INFO	<< endl;
 	
-	ASSERT(error.getEncapsulatedPacket() != nullptr);
-	KadPacket* original = check_and_cast<KadPacket *>(error.getEncapsulatedPacket());
-	ASSERT(original->getNonce() == error.getNonce());
-	ASSERT(original->getSource() == myOverlayKey);
 	switch (error.getErrorType()) {
 
 		// the following errors indicate a problem with the route to the contact
@@ -85,31 +83,20 @@ void R2Kademlia::onErrorPacket(KadError& error) {
 
 			// find out the failed link
 		        auto reportingNode(error.getSource());
-		        const auto originalPath(original->getSrcPath());
-			// use progress in original path to find the correct link
-			// just finding the reporting node in the source path isn't safe due to cycles in forwarding path!
-		        short unsigned int index(original->getProgress());
-			// the following should be true, otherwise we are getting
-			// an error from some off path node
-			ASSERT(originalPath[index] == reportingNode and index+1U < originalPath.size());
-			// the next hop is the one that failed
-			if (index+1U < originalPath.size()) {
-				auto failedNextHop = originalPath[index+1];
-				link_t failedlink(reportingNode, failedNextHop);
-				EV_INFO << "Check for invalid contacts because of failed link " << failedlink << " in error packet" << endl;
-				// this segment or node error is current and should invalidate all affected contacts
-				// a rediscovery will be triggered automatically if necessary
-				routingTable.invalidateContacts(failedlink, (simTime()-error.getCreationTime()).inUnit(SIMTIME_MS));
-			}
-			else
-				EV_ERROR << "onErrorPacket: failed link collapsed to node " << reportingNode << " path:" << originalPath << endl;
+			link_t failedlink(reportingNode, error.getFailedNextHopNodeID());
+			EV_INFO << "Check for invalid contacts because of failed link " << failedlink << " in error packet" << endl;
+			// this segment or node error is current and should invalidate all affected contacts
+			// a rediscovery will be triggered automatically if necessary
+			routingTable.invalidateContacts(failedlink, (simTime()-error.getCreationTime()).inUnit(SIMTIME_MS));
+			if (error.getDstNodeID() != OverlayKey::UNSPECIFIED_KEY and error.getDstNodeID() != myOverlayKey)
+				return true;
 		};
 		break;
 
 		case KAD_PathIDUnknown:
-		{ // KAD_PathIDUnknown: we should try to setup the path
-			auto affectedContact= routingTable.getContact(original->getTarget());
-			if (affectedContact and affectedContact->isValid() and affectedContact->getPathLength() > nodeVicinityGraph::vicinityDiscoveryRadius)
+		{ // KAD_PathIDUnknown: we should try to setup the path again
+			auto affectedContact= routingTable.getContact(error.getOrigDstNodeID());
+			if (affectedContact and affectedContact->isValid() and affectedContact->getPathLength() > 2*nodeVicinityGraph::vicinityDiscoveryRadius+1)
 			{
 				schedulePathSetup(affectedContact->getKey());
 			}
@@ -120,6 +107,9 @@ void R2Kademlia::onErrorPacket(KadError& error) {
 			// currently there are no more error types to handle
 			break;
 	} // end switch
+
+	// default is to not forward the error
+	return false;
 }
 
 

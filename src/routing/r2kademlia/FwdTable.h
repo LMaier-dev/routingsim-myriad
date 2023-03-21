@@ -84,11 +84,11 @@ public:
 	unsigned long getUsageCount() const { return usageCount; }
 
 	unsigned long incrementReferenceCount() {
-		EV_TRACE << "incrementReferenceCount(): " << str() << endl;
+		//EV_TRACE << "incrementReferenceCount(): " << str() << endl;
 		return ++referenceCount; }
 	unsigned long decrementReferenceCount() { 
 		if (referenceCount > 0) {
-			EV_TRACE << "decrementReferenceCount(): " << str() << endl;
+			//EV_TRACE << "decrementReferenceCount(): " << str() << endl;
 
 			if (referenceCount == 1)
 				EV_TRACE << "Reference Count to ZERO: " << str() << endl;

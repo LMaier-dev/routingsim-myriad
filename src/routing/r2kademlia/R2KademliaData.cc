@@ -26,6 +26,7 @@ std::unique_ptr<T> R2Kademlia::makeDataPacket(const OverlayKey& dstNodeID, const
 	auto packet = std::make_unique<T>();
 	packet->setName(name);
 	packet->setType(KAD_Data);
+	packet->setPathSrcNodeID(myOverlayKey);
 	packet->setSrcNodeID(myOverlayKey);
 	packet->setDstNodeID(dstNodeID);
 	packet->setHopLimit(hopLimit);
@@ -112,7 +113,7 @@ void R2Kademlia::handleDataPacket(NodePkt_p pkt) {
 	
 	EV_TRACE << "received data packet from "
 	   << packet->getSrcNodeID().shortStr() << " to "
-	   << packet->getDstNodeID().shortStr() 
+	   << packet->getDstNodeID().shortStr() << " overlaysrc: " << packet->getPathSrcNodeID().shortStr()
 	   << " HL:" << packet->getHopLimit() << endl;
 
 	// we should check whether the link via this message travelled is
@@ -206,7 +207,7 @@ bool R2Kademlia::forwardDataPacketToNextHop(KadDataPacket_p& packet, NodePkt_p& 
 				packet->setControlInfo(nodePkt.release());
 				countDropped(*packet, packet->getDstNodeID(), missingNeighbor);
 				// send back segment failure
-				onMissingNeighbor(std::move(packet), std::move(nodePkt));
+				onMissingNeighbor(std::move(packet), std::move(nodePkt), nh.nextHopNode);
 			}
 			else { // else: wrong source route (TODO: this cannot happen during data packet forwarding)
 				EV_ERROR << "forwardDataPacketToNextHop: wrong next hop"
@@ -233,7 +234,9 @@ void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
         ASSERT(packet->hasRemainingHops());
 
 	const auto& finaldest(packet->getDstNodeID());
-	EV_TRACE << "forwardDATAPacket: finaldest=" << finaldest.shortStr() << " 1st PID=" << packet->getFirstPathID() << " 2nd PID=" << packet->getSecondPathID()  << endl;
+	EV_TRACE << "forwardDATAPacket: finaldest=" << finaldest.shortStr()
+		 << " overlaysrc=" << packet->getPathSrcNodeID().shortStr()
+		 << " 1st PID=" << packet->getFirstPathID() << " 2nd PID=" << packet->getSecondPathID()  << endl;
 	
 	if (packet->hasRemainingHops() == false)
 	{ // Loop detected: this should not occur
@@ -241,7 +244,7 @@ void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 			packet->setControlInfo(nodePkt.release());
 
 		countDropped(*packet, finaldest, hopLimitExceeded);
-		returnToSender(KAD_HopLimitExceeded, std::move(packet));
+		notifySender(KAD_HopLimitExceeded, std::move(packet), OverlayKey::UNSPECIFIED_KEY);
 		return;
 	}
 
@@ -286,6 +289,8 @@ void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 					return;
 				}
 
+				// set new source for the next segment
+				packet->setPathSrcNodeID(myOverlayKey);
 				EV_TRACE << "next overlay hop is " << contact.getKey().shortStr()
 					 << " (" << contact.getPathLength()+1 << " hops)" << endl;
 
@@ -293,9 +298,12 @@ void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 				
 				if (auto pidentry= fwdTablePathID.NIDPIDTable.find(contact.getKey());
 				    pidentry != fwdTablePathID.NIDPIDTable.end() ) { // pidentry.second is incomingPathID
-					// NID -> PID mapping exists
+					// TODO check whether PID/FwdEntry is valid
+
+					// NID -> PID mapping exists and is valid
 					// this will be used to lookup the outgoing PID in forwardDataPacket()
 					packet->setFirstPathID(pidentry->second);
+
 					EV_TRACE << "new inPID for dest " << contact.getKey().shortStr() << ": " << pidentry->second << endl;
 					if (auto secondpidentry= fwdTablePathID.NIDPIDTableLastSeg.find(contact.getKey());
 					    secondpidentry != fwdTablePathID.NIDPIDTableLastSeg.end() ) {
@@ -311,7 +319,7 @@ void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 							packet->setControlInfo(nodePkt.release());
 						
 						countDropped(*packet, finaldest, missingPID);
-						returnToSender(KAD_PathIDUnknown, std::move(packet));
+						notifySender(KAD_PathIDUnknown, std::move(packet), OverlayKey::UNSPECIFIED_KEY);
 						
 						return;
 					}
@@ -354,7 +362,7 @@ void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 
 		packet->setControlInfo(nodePkt.release());
 		countDropped(*packet, finaldest, missingPID);
-		returnToSender(KAD_PathIDUnknown, std::move(packet));
+		notifySender(KAD_PathIDUnknown, std::move(packet), OverlayKey::UNSPECIFIED_KEY);
 	}
 	// else: Packet was sent off or dropped by function
 }
@@ -404,14 +412,14 @@ void R2Kademlia::sendData(const OverlayKey& finaldestkey) {
 }
 
 
-void R2Kademlia::onMissingNeighbor(KadDataPacket_p packet, NodePkt_p pkt) {
+void R2Kademlia::onMissingNeighbor(KadDataPacket_p packet, NodePkt_p pkt, const OverlayKey& missingNeighborNodeID) {
 //  	getStatistics().dropMessage(pkt, undefined_node);
 	EV_WARN << "onMissingNeighbor(data) called - packet next hop should be ";
 	if (packet->getFirstPathID() != PathID::UndefinedPathID) {
 		EV_WARN << "PID: " << packet->getFirstPathID() << endl;
 	}
 	else {
-		EV_WARN << "NID: " << packet->getDstNodeID() << endl;
+		EV_WARN << "NID: " << packet->getDstNodeID().shortStr() << endl;
 	}
 
 	if (packet->getSrcNodeID() == myOverlayKey)
@@ -420,7 +428,7 @@ void R2Kademlia::onMissingNeighbor(KadDataPacket_p packet, NodePkt_p pkt) {
 		return;
 	}
 	else {
-		returnToSender(KAD_SegmentFailure, std::move(packet));
+		notifySender(KAD_SegmentFailure, std::move(packet), missingNeighborNodeID);
 	}
 }
 
@@ -447,19 +455,39 @@ void R2Kademlia::countDropped(KadDataPacket& packet, const OverlayKey& target, u
 }
 
 
-void R2Kademlia::returnToSender(uint8_t errorType, KadDataPacket_p packet) {
-	// KadError_p answer = makeAnswer<KadError>(*packet);
-	// answer->setErrorType(errorType);
-	
-	// EV_TRACE << "returnToSender() - return path:";
-	// for (const auto& c : answer->getSrcPath())
-	// 	EV_TRACE << ' ' << c.shortStr();
-	// EV_TRACE << endl;		
-	// answer->encapsulate(packet.release());
-	// if (answer->hasRemainingHops())
-	// 	sendPacket(std::move(answer));
-	// else // we sent this packet!
-	// 	handleAnswer(std::move(answer));
+void R2Kademlia::notifySender(uint8_t errorType, KadDataPacket_p origpacket, const OverlayKey& failedNextHopNodeID) {
+
+	EV_TRACE << "notifySender(): to " << origpacket->getPathSrcNodeID().shortStr();
+	// find closest contact toward last overlay source NodeID
+	auto contacts = routingTable.getClosestContacts(origpacket->getPathSrcNodeID(), findNodeNumber, true);
+	//ASSERT(contacts.size() > 0);
+	if (contacts.size() > 0)
+	{
+		const KadContact& contact = chooseNextHop(contacts, origpacket->getPathSrcNodeID());
+		ASSERT(contact.isValid());
+		ASSERT(!contact.getKey().isUnspecified());
+		if (contact.getKey() == myOverlayKey)
+		{
+			EV_ERROR << "I'm the next hop for the destination. Will not send anything." << endl;
+			return;
+		}
+		// generate error message to inform the source overlay hop about the broken link
+		KadError_p packet = std::make_unique<KadError>();
+		packet->setErrorType(errorType);
+		packet->setFailedNextHopNodeID(failedNextHopNodeID);
+		packet->setOrigDstNodeID(origpacket->getDstNodeID());
+		packet->setName("KadErrorInd");
+		packet->setDstNodeID(origpacket->getPathSrcNodeID());
+		packet->setSource(myOverlayKey);
+		packet->setHopLimit(hopLimit);
+		packet->appendRoute(contact);
+		packet->setStateSeqNo(getLSSeqNo());
+		packet->setSrcNodeDegree(neighborTable.size());
+
+		EV_TRACE << "Sending error packet " << (int) errorType  << " back to " << origpacket->getPathSrcNodeID().shortStr()
+			 << " via " << contact.getKey().shortStr() << endl;
+		sendPacket(std::move(packet));
+	}
 }
 
 } // end namespace

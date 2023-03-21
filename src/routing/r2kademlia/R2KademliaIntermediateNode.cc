@@ -113,25 +113,14 @@ R2Kademlia::intermediateNodeProcessing(const KadPacket& packet) {
 		if (auto errorpkt= static_cast<const KadError*>(&packet);
 		    errorpkt != nullptr and (errorpkt->getErrorType() == KAD_SegmentFailure))
 		{
-			KadPacket* original = check_and_cast<KadPacket *>(errorpkt->getEncapsulatedPacket());
 			// find out the failed link
 			auto reportingNode(errorpkt->getSource());
-			const auto originalPath(original->getSrcPath());
-			// use progress in original path to find the correct link
-			// just finding the reporting node in the source path isn't safe due to cycles in forwarding path!
-			short unsigned int index(original->getProgress());
-			// the following should be true, otherwise we are getting
-			// an error from some off path node
-			ASSERT(originalPath[index] == reportingNode and index+1U < originalPath.size());
-			// the next hop is the one that failed
-			if (index+1U < originalPath.size()) {
-				auto failedNextHop = originalPath[index+1];
-				link_t failedlink(reportingNode, failedNextHop);
-				EV_INFO << "Check for invalid contacts because of failed link " << failedlink << " in error packet" << endl;
-				// this segment or node error is current and should invalidate all affected contacts
-				// a rediscovery will be triggered automatically if necessary
-				routingTable.invalidateContacts(failedlink, (simTime()-errorpkt->getCreationTime()).inUnit(SIMTIME_MS));
-			}
+			link_t failedlink(reportingNode, errorpkt->getFailedNextHopNodeID());
+
+			EV_INFO << "Check for invalid contacts because of failed link " << failedlink << " in error packet" << endl;
+			// this segment or node error is current and should invalidate all affected contacts
+			// a rediscovery will be triggered automatically if necessary
+			routingTable.invalidateContacts(failedlink, (simTime()-errorpkt->getCreationTime()).inUnit(SIMTIME_MS));
 		}
 		break;
 		

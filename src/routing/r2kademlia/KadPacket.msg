@@ -84,6 +84,7 @@ packet KadDataPacket {
 	@customize(true);
 	PathID firstPathID = PathID::UndefinedPathID;
 	PathID secondPathID = PathID::UndefinedPathID;
+	OverlayKey pathSrcNodeID = OverlayKey::UNSPECIFIED_KEY;
 	OverlayKey dstNodeID = OverlayKey::UNSPECIFIED_KEY;
 	OverlayKey srcNodeID = OverlayKey::UNSPECIFIED_KEY;
 	uint8_t type enum(KadPDUType);

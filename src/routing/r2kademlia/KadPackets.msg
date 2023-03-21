@@ -56,10 +56,11 @@ enum KadRouteUpdateAction {
      KAD_Unreachable = 3;
 }
 
-packet KadAnswer extends KadPacket {
-	bool shortened = false; // true if return path was shortened (removed cycles)
-}
 
+// currently nothing special for response packets
+// just to better distinguish them in the code
+packet KadAnswer extends KadPacket {
+}
 
 /// compare RTableRequestType from Spec
 packet KadRTableReq extends KadPacket {
@@ -89,7 +90,7 @@ packet KadRTableRsp extends KadAnswer {
 packet KadFindNodeReq extends KadRTableReq {
 	type = KAD_FindNodeReq;
 
-	OverlayKey dstNodeID;
+	OverlayKey dstNodeID = OverlayKey::UNSPECIFIED_KEY;
 	bool exact = false;
 	bool rediscovery = false;
 }
@@ -103,7 +104,7 @@ packet KadFindNodeRsp extends KadRTableRsp {
 packet KadUpdateRouteReq extends KadPacket {
        type = KAD_UpdateRouteReq;
 
-       OverlayKey dstNodeID;
+       OverlayKey dstNodeID = OverlayKey::UNSPECIFIED_KEY;
 
        OverlayKey contact[];
        key_vector_t path[];
@@ -113,18 +114,16 @@ packet KadUpdateRouteReq extends KadPacket {
        uint8_t action[] enum(KadRouteUpdateAction);
 }
 
-// KadDataMsg
-//packet KadDataMsg extends KadDataPacket {
-//       type = KAD_Data;
-//       bool redirected;
-//}
-// ------------
 
 // ERROR
 packet KadError extends KadAnswer {
 	type = KAD_Error;
 	uint8_t errorType enum(KadErrorType);
+	OverlayKey dstNodeID = OverlayKey::UNSPECIFIED_KEY;
+	OverlayKey failedNextHopNodeID = OverlayKey::UNSPECIFIED_KEY;
+	OverlayKey origDstNodeID = OverlayKey::UNSPECIFIED_KEY;
 }
+
 
 // HELLO
 // compare PNHello
@@ -198,5 +197,4 @@ packet KadQueryRouteReq extends KadRTableReq {
 packet KadQueryRouteRsp extends KadRTableRsp {
 	type = KAD_QueryRouteRsp;
 }
-
 
