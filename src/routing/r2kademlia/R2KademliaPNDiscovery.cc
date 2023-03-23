@@ -58,6 +58,11 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 	}
 	else
 	{ // new physical neighbor, first contact: either wait for PNDiscReq or send one
+                
+                // connected or reconnected to first neighbor reset join timer
+                if (neighborTable.size() == 0) {
+                    resetTimer(probeTimerId, SimTime(100,SIMTIME_MS));
+                }
 
 		// we need to add the node to our neighbortable, because we need to send a Req
 		neighborTable.addNeighbor(packet->getSourceId(), packet->getSource());
