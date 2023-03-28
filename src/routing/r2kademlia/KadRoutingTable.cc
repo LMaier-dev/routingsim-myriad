@@ -184,13 +184,20 @@ void KadRoutingTable::addPNContact(const OverlayKey& key, stateseqno_t stateseqn
 		       // next PNHello from this PN should fix that
 		}
 
+                // contact will be validated which is an improvement
+                if (not contact->isValid()) {
+                    improved = true;
+                }
+
 		// set the current path irrespective of the sequence number to empty
 		// as we heard a direct message from the neighbor NOW
 		// contact will be automatically set to valid
 		contact->setPath(kad_path(),{});
 		// the following call is important, because it calls incLSSeqNo()
-		if (improved)
+		if (improved) {
 			policy->onImprovement(*contact);
+                        updatePaths(*contact);
+                }
 
 	} // end else (=contact already known)
 }
@@ -954,6 +961,8 @@ size_type KadRoutingTable::getNumContactsWithoutPNs() const
 
 void KadRoutingTable::updatePaths(const KadContact& improvedContact)
 {
+        // this will probably revalidate many contacts
+        bool reconnected(improvedContact.isPhysicalNeighbor() and neighbortable.size() == 1);
 	// iterate over all buckets and contacts (not PNcontacts, because this does not make any sense)
 	for (KadBucket& b : buckets) {
 		for (auto& contact : b.contacts) {
@@ -1018,6 +1027,15 @@ void KadRoutingTable::updatePaths(const KadContact& improvedContact)
 			}
 		} // end for inner loop over all contacts
 	} // end for over all buckets
+        // if we reconnected with this contact send pathchecks to all revalidated 
+        // closest contacts to restore reachability
+        // TODO: potentially space this out a bit
+        if (reconnected) {
+            for (auto& contact: getClosestContacts(myKey,getSplitSize()/10, false)) {
+                    policy->onPathCheck(*contact);
+            }
+        }
+
 }
 
 
@@ -1029,6 +1047,9 @@ void KadRoutingTable::invalidateContact(KadContact& contact, const link_t& faile
 	{
 		if (contact.getAge() > failedLinkAge and contact.isContainedinPath(myKey, failedLink))
 		{ // link somewhere in the path
+                  //
+                        bool lastlinkfailed((failedLink.first == contact.getKey() or failedLink.second == contact.getKey())
+                                            and contact.getNodeDegree() == 1); 
 
 			if (contact.isValid()) {
 
@@ -1040,17 +1061,22 @@ void KadRoutingTable::invalidateContact(KadContact& contact, const link_t& faile
 				EV_TRACE << "Set Contact to invalid due to failed link " << failedLink
 					 << " (age: " << failedLinkAge << ") " << contact << endl;
 				// if contact is important neighbor: send rediscovery immediately
-				// otherwise schedule slow rediscovery
-				if (isInLastBucket(contact.getKey()))
-					policy->scheduleUrgentRediscovery(contact.getKey());
-				else
-					policy->scheduleSlowRediscovery(contact.getKey());
+				// otherwise schedule slow rediscovery if it lost its last link 
+                                // a rediscovery does not make sense if the link is repaired the node should come back to us
+				if (not lastlinkfailed) {
+                                    if (isInLastBucket(contact.getKey()))
+                                            policy->scheduleUrgentRediscovery(contact.getKey());
+                                    else
+                                            policy->scheduleSlowRediscovery(contact.getKey());
+                                }
 			}
 			else
 			if (contact.isInvalid()) { // contact already invalid or rediscovering
 				// add potentially further failed link
 				contact.setInvalid(failedLink, failedLinkAge);
 				contact.updateLastSeen();
+                                // TODO stop any rediscoveries that don't have any chance of success
+                                //if (lastlinkfailed)
 			}
 		}
 	}

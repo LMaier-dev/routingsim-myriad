@@ -178,10 +178,13 @@ void R2Kademlia::onDisconnect( nodeid_t nid ) {
 
 	// Try to rediscover that contact
 	// after grace period (otherwise more links may fail immediately after this)
-	// unsigned long threshold= 5UL * counter; // 5 corresponds to 20% (100/20) of the entries
+	// but not if the only link has failed 
+	//unsigned long threshold= 5UL * counter; // 5 corresponds to 20% (100/20) of the entries
 	// it is promoted to urgent in case there are more than a certain percentage
 	//if (threshold > routingTable.getNumContactsWithoutPNs())
-	schedulePNRediscovery(key);
+
+        if (routingTable.getContact(key)->getNodeDegree() > 1) {
+		schedulePNRediscovery(key);
 	//else {
 	//if (routingTable.isInLastBucket(key))
 	//	scheduleUrgentRediscovery(key);
@@ -189,6 +192,7 @@ void R2Kademlia::onDisconnect( nodeid_t nid ) {
 	//	scheduleRegularRediscovery(key);
 	//}
 
+        }
 	// send UpdateRouteReq w/ failed link to ID-wise closest Nodes
 	// we can rely on routingTable.getContact(key) != nullptr, because of earlier setContactInvalid() call
 	scheduleUpdate(*(routingTable.getContact(key)), KAD_Unreachable);
@@ -1107,7 +1111,7 @@ bool R2Kademlia::handleFindNodeResponse(KadPacket_p answer_, RPCState& rpcState)
 				// send a new find node req
 				// fanout set to one, because each failed rediscovery request
 				// should only trigger a single new retry
-				ASSERT(contactp->getRDS().rediscoverQtype != RediscoveryState::rediscoverQ_type::undefined);
+				//ASSERT(contactp->getRDS().rediscoverQtype != RediscoveryState::rediscoverQ_type::undefined);
 				simtime_t rediscoveryWaitTime((contactp->getRDS().rediscoverQtype == RediscoveryState::rediscoverQ_type::urgent) ? urgentRediscoveryWaitTime :
 							      (contactp->getRDS().rediscoverQtype == RediscoveryState::rediscoverQ_type::regular) ? regularRediscoveryWaitTime : slowRediscoveryWaitTime);
 
