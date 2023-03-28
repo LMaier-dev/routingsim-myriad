@@ -120,7 +120,7 @@ public:
 	bool existsEntry(KadContact_p contact);
 
 	inline void setNIDtoPIDmapping(const OverlayKey& nid, const PathID incomingPathID, const PathID LastSegmentPathID= PathID::UndefinedPathID);
-
+	inline void eraseNIDtoPIDmapping(const OverlayKey& nid);
 	std::pair<bool, PathID> addPrecalcEntry(const kad_path& path_to_add) { return addEntry(path_to_add, false, true); }
 	std::pair<bool, PathID> addForeignEntry(const kad_path& path_to_add) { return addEntry(path_to_add, true, false); }
 	std::pair<bool, PathID> addLocalEntry(const kad_path& path_to_add, bool precalc) { return addEntry(path_to_add, false, precalc); }
@@ -163,6 +163,15 @@ FwdTablePathID::setNIDtoPIDmapping(const OverlayKey& nid, const PathID incomingP
 		NIDPIDTableLastSeg[nid]= LastSegmentPathID;
 	else
 		NIDPIDTableLastSeg.erase(nid);
+}
+
+
+inline
+void
+FwdTablePathID::eraseNIDtoPIDmapping(const OverlayKey& nid) {
+	EV_TRACE << "erasing NID to PID mappings for " << nid.shortStr() << endl;
+	NIDPIDTable.erase(nid);
+	NIDPIDTableLastSeg.erase(nid);
 }
 
 } // end namespace

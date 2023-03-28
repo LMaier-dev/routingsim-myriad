@@ -178,16 +178,16 @@ void R2Kademlia::onDisconnect( nodeid_t nid ) {
 
 	// Try to rediscover that contact
 	// after grace period (otherwise more links may fail immediately after this)
-	//unsigned long threshold= 5UL * counter; // 5 corresponds to 20% (100/20) of the entries
-	// it is promoted to urgent in case there are more then a certain percentage
+	// unsigned long threshold= 5UL * counter; // 5 corresponds to 20% (100/20) of the entries
+	// it is promoted to urgent in case there are more than a certain percentage
 	//if (threshold > routingTable.getNumContactsWithoutPNs())
-		schedulePNRediscovery(key);
-		//else {
-		//if (routingTable.isInLastBucket(key))
-		//	scheduleUrgentRediscovery(key);
-		//else
-		//	scheduleRegularRediscovery(key);
-		//}
+	schedulePNRediscovery(key);
+	//else {
+	//if (routingTable.isInLastBucket(key))
+	//	scheduleUrgentRediscovery(key);
+	//else
+	//	scheduleRegularRediscovery(key);
+	//}
 
 	// send UpdateRouteReq w/ failed link to ID-wise closest Nodes
 	// we can rely on routingTable.getContact(key) != nullptr, because of earlier setContactInvalid() call

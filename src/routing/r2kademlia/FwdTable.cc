@@ -229,40 +229,40 @@ void FwdTablePathID::invalidateEntry(KadContact_p contact)
 	if (contact == nullptr)
 		return;
 
-	// do not invalidate any paths in vicinity as they are precalculated
-	if (contact->getPathLength() < nodeVicinityGraph::vicinityDiscoveryRadius)
-		return;
+	// simply delete the NID to PID mapping
+	eraseNIDtoPIDmapping(contact->getKey());
 
 	// we have to check whether the PID part is actually affected by the broken link
-	kad_path currentpath(contact->getPath());
-	if (contact->getPathLength() <= nodeVicinityGraph::vicinityDiscoveryRadius) {
-	// add destination node ID to end of the path (will never be empty then)
-		currentpath.push_back(contact->getKey());
-	}
-	else {
-		if (contact->getPathLength() <= 2*nodeVicinityGraph::vicinityDiscoveryRadius) {
-			// for paths with 4 or 5 hops: stop at 3rd hop
-			currentpath.resize(nodeVicinityGraph::vicinityDiscoveryRadius+1);
-		}
-		else {
-			// stop three hops before destination
-			currentpath.resize(contact->getPathLength()-2);
-		}
-	}
+	// kad_path currentpath(contact->getPath());
+	// if (contact->getPathLength() <= nodeVicinityGraph::vicinityDiscoveryRadius) {
+	// 	// add destination node ID to end of the path (will never be empty then)
+	// 	currentpath.push_back(contact->getKey());
+	// }
+	// else {
+	// 	if (contact->getPathLength() <= 2*nodeVicinityGraph::vicinityDiscoveryRadius) {
+	// 		// for paths with 4 or 5 hops: stop at 3rd hop
+	// 		currentpath.resize(nodeVicinityGraph::vicinityDiscoveryRadius+1);
+	// 	}
+	// 	else {
+	// 		// stop three hops before destination
+	// 		currentpath.resize(contact->getPathLength()-2);
+	// 	}
+	// }
 
-	// check if broken link is within this path
-	// TODO!!
-	
-	// prepend own nodeID for incoming PathID
-	PathID incomingPathID(getPathID(*ownNodeID, currentpath));
+	// // invalidateEntry is called by on ContactInvalidation
+	// // need to determine whether the failure is in the first segment
+	// // (this will affect probably also other contacts)
 
-	if (auto it= PIDFwdTable.find(incomingPathID); it != PIDFwdTable.end()) {
-		FwdTableEntry& fwdentry= it->second;
-		fwdentry.setInvalid();
-	}
-	else {
-		EV_ERROR << "no FwdTable entry found for PID " << incomingPathID << endl;
-	}
+	// // prepend own nodeID for incoming PathID
+	// PathID incomingPathID(getPathID(*ownNodeID, currentpath));
+
+	// if (auto it= PIDFwdTable.find(incomingPathID); it != PIDFwdTable.end()) {
+	// 	FwdTableEntry& fwdentry= it->second;
+	// 	fwdentry.setInvalid();
+	// }
+	// else {
+	// 	EV_ERROR << "no FwdTable entry found for PID " << incomingPathID << endl;
+	// }
 }
 
 

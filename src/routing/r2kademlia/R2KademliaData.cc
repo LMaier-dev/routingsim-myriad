@@ -295,7 +295,7 @@ void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 					 << " (" << contact.getPathLength()+1 << " hops)" << endl;
 
 				// now try to find a PathID to the next overlay hop
-				
+
 				if (auto pidentry= fwdTablePathID.NIDPIDTable.find(contact.getKey());
 				    pidentry != fwdTablePathID.NIDPIDTable.end() ) { // pidentry.second is incomingPathID
 					// TODO check whether PID/FwdEntry is valid
@@ -457,7 +457,7 @@ void R2Kademlia::countDropped(KadDataPacket& packet, const OverlayKey& target, u
 
 void R2Kademlia::notifySender(uint8_t errorType, KadDataPacket_p origpacket, const OverlayKey& failedNextHopNodeID) {
 
-	EV_TRACE << "notifySender(): to " << origpacket->getPathSrcNodeID().shortStr();
+	EV_TRACE << "notifySender(): to " << origpacket->getPathSrcNodeID().shortStr() << endl;
 	// find closest contact toward last overlay source NodeID
 	auto contacts = routingTable.getClosestContacts(origpacket->getPathSrcNodeID(), findNodeNumber, true);
 	//ASSERT(contacts.size() > 0);

@@ -1132,6 +1132,8 @@ KadRoutingTable::invalidateContactsPN(const OverlayKey& failedNodeKey)
 				if (path[0] == failedNodeKey) // failed node is first hop
 				{
 					if (contact->isValid()) {
+						policy->onContactInvalidation(contact.get());
+
 						contact->setInvalid({failedNodeKey, myKey},0);
 						if (counter < std::numeric_limits<decltype(counter)>::max())
 							counter++;
@@ -1166,6 +1168,9 @@ KadRoutingTable::invalidateContactsPN(const OverlayKey& failedNodeKey)
 
 					if (contact->isValid()) {
 						contact->setInvalid({failedNodeKey, myKey},0);
+
+						policy->onContactInvalidation(contact.get());
+
 						if (counter < std::numeric_limits<decltype(counter)>::max())
 							counter++;
 						EV_TRACE << "Set Contact to invalid due to PN first hop failure: "  << *contact << endl;
