@@ -994,9 +994,6 @@ void KadRoutingTable::updatePaths(const KadContact& improvedContact)
 									pathrepaired= false;
 								}
 							} // end for
-							// path is only repaired in case no failed links remain
-							if (pathrepaired)
-								EV_TRACE << "updatePaths: broken path " << contact->getPath() << " repaired by new " << newpath << endl;
 						}
 
 						bool pathimproved((contact->isInvalid() and pathrepaired)
@@ -1007,6 +1004,9 @@ void KadRoutingTable::updatePaths(const KadContact& improvedContact)
 						if (pathimproved) {
 							simplifyPath(newpath, &contact->getKey());
 						}
+						// path is only repaired in case no failed links remain
+						if (pathrepaired)
+							EV_TRACE << "updatePaths: broken path " << contact->getPath() << " repaired by new " << newpath << endl;
 
 						// set new path (must be more current than old one)
 						// note: this will set the contact to be valid!

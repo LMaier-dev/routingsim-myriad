@@ -101,8 +101,9 @@ void R2Kademlia::doDataProbe(short timerID) {
 
 		maxtries--;
 	} while ( nodefound == false and maxtries > 0 );
-	
-	sendData(*probeKey);
+
+	if (nodefound and probeKey != nullptr)
+		sendData(*probeKey);
 }
 
 
@@ -204,6 +205,37 @@ bool R2Kademlia::forwardDataPacketToNextHop(KadDataPacket_p& packet, NodePkt_p& 
 			// to inform the sender about the problem
 			if (auto contact_p= routingTable.getContact(nh.nextHopNode);
 			    contact_p != nullptr and contact_p->isPhysicalNeighbor()) {
+				// we try to reroute to the next hop in case the path should have ended there
+				if (auto pidentry= fwdTablePathID.NIDPIDTable.find(nh.nextHopNode);
+				    contact_p->isValid()
+				    and nh.fwdAction == FwdTableEntry::Action::fwdNextNodeId
+				    and pidentry != fwdTablePathID.NIDPIDTable.cend()
+				    and pidentry->second != PathID::UndefinedPathID)
+				{
+					EV_TRACE << "forwardDataPacketToNextHop: link to " << nh.nextHopNode.shortStr() << " not available, try to reroute " << contact_p->getPath() << endl;
+					ASSERT(pidentry->second != packet->getFirstPathID());
+					// must check for 2nd segment PID
+					auto lastpidentry= fwdTablePathID.NIDPIDTable.find(nh.nextHopNode);
+					if ( lastpidentry != fwdTablePathID.NIDPIDTable.cend() ) {
+						// second segment required for detour to failex next hop (path is at least 4 hops)
+						if (packet->getFirstPathID() == PathID::UndefinedPathID) {
+							// if there is no second segment used yet, we can reroute now
+							// otherwise we do not want to introduce more nested PID stacking
+							// (to avoid overwriting the 2nd segment) and packet will be dropped instead
+							packet->setFirstPathID(pidentry->second);
+							packet->setSecondPathID(lastpidentry->second);
+							// recursive call
+							return forwardDataPacketToNextHop(packet, nodePkt);
+						}
+					}
+					else {
+						packet->setSecondPathID(packet->getFirstPathID());
+						packet->setFirstPathID(pidentry->second);
+						// recursive call
+						return forwardDataPacketToNextHop(packet, nodePkt);
+					}
+				}
+
 				packet->setControlInfo(nodePkt.release());
 				countDropped(*packet, packet->getDstNodeID(), missingNeighbor);
 				// send back segment failure
@@ -419,7 +451,7 @@ void R2Kademlia::onMissingNeighbor(KadDataPacket_p packet, NodePkt_p pkt, const 
 		EV_WARN << "PID: " << packet->getFirstPathID() << endl;
 	}
 	else {
-		EV_WARN << "NID: " << packet->getDstNodeID().shortStr() << endl;
+		EV_WARN << "NID: " << missingNeighborNodeID.shortStr() << endl;
 	}
 
 	if (packet->getSrcNodeID() == myOverlayKey)
@@ -431,6 +463,7 @@ void R2Kademlia::onMissingNeighbor(KadDataPacket_p packet, NodePkt_p pkt, const 
 		notifySender(KAD_SegmentFailure, std::move(packet), missingNeighborNodeID);
 	}
 }
+
 
 void R2Kademlia::countReceived(KadDataPacket& packet) {
 	receivedDataPackets++;

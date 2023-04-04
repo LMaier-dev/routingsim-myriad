@@ -170,6 +170,9 @@ void R2Kademlia::onDisconnect( nodeid_t nid ) {
 		EV_ERROR << "missing contact " << nid << " " << key << " on node " << node().getNodeId() << endl;
 		return;
 	}
+	else {  // due to the if condition we know that routingTable.getContact(key) will not return nullptr
+		onContactInvalidation(routingTable.getContact(key));
+	}
 
 	// contacts from routing table with this neighbor as next hop are not usable until rediscovered
 	auto counter= routingTable.invalidateContactsPN(key);
