@@ -278,7 +278,8 @@ void R2Kademlia::evalUpdateReq(const KadUpdateRouteReq* packet)
 // this functions tries to send an UpdateReq closer to the destination (ID-wise) neighborhood
 void R2Kademlia::propagateUpdateReq(std::unique_ptr<KadUpdateRouteReq> packet)
 {
-	forwardCloser(std::move(packet), packet->getDstNodeID());
+	auto destinationID(packet->getDstNodeID());
+	forwardCloser(std::move(packet), destinationID);
 }
 
 
