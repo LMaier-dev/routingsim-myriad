@@ -64,16 +64,16 @@ void NetworkManager::initialize() {
 		topology->extractFromNetwork(this);
 	}
 
-	if (par("spathFile").stdstringValue().size() != 0) {
-		if (topology->readShortestPathMatrix(par("spathFile").stdstringValue())) {
-			/*
-			if (topology->compareSPM())
-				EV << "shortest path matrix matches" << endl;
-			else
-				EV << "shortest path matrix doesn't match!!" << endl;
-			*/
-		}
-	}
+	// if (par("spathFile").stdstringValue().size() != 0) {
+	// 	if (topology->readShortestPathMatrix(par("spathFile").stdstringValue())) {
+
+	// 		if (topology->compareSPM())
+	// 			EV << "shortest path matrix matches" << endl;
+	// 		else
+	// 			EV << "shortest path matrix doesn't match!!" << endl;
+
+	// 	}
+	// }
 
 	topology->setShortestPathCalculationMode(par("shortestPathCalculationMode").stdstringValue());
 	std::cout << "shortestPathCalculationMode: " << par("shortestPathCalculationMode").stdstringValue() << endl;
