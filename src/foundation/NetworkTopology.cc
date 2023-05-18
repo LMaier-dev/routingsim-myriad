@@ -15,19 +15,24 @@
 
 #include "NetworkTopology.h"
 
+#include <map>
+#include <fstream>
+#include <sstream>
+#include <filesystem>
+#include <cmodule.h>
 #include <cchannel.h>
+
 #include <boost/tokenizer.hpp>
 #include <boost/lexical_cast.hpp>
 #include <boost/foreach.hpp>
 #include <boost/unordered_set.hpp>
-#include <map>
-#include <fstream>
-#include <sstream>
-#include <cmodule.h>
+#include <boost/iostreams/filtering_streambuf.hpp>
+#include <boost/iostreams/copy.hpp>
+#include <boost/iostreams/filter/gzip.hpp>
+
 
 namespace routingsim {
 
-using namespace boost;
 using std::string;
 using std::pair;
 using std::vector;
@@ -57,7 +62,7 @@ NetworkTopology::~NetworkTopology() {
 }
 
 
-void NetworkTopology::readTopology(string path, string topologytype, bool useOnlyLargestConnectedComponent, bool makeLinksBidirectional, bool allowNodeIdRemapping, bool compressNodeIDs) {
+void NetworkTopology::readTopology(const string& topofilename, string topologytype, bool useOnlyLargestConnectedComponent, bool makeLinksBidirectional, bool allowNodeIdRemapping, bool compressNodeIDs) {
 	// store edges of topology
 	vector< pair<nodeid_t, nodeid_t> > edgesRead;
 	// store node properties
@@ -65,17 +70,17 @@ void NetworkTopology::readTopology(string path, string topologytype, bool useOnl
 	// sanity check for number of nodes
 	std::set<nodeid_t> nodeset;
 
-	EV_INFO << "Reading Topology from " << path << "(file format: " << topologytype << ")" << endl;
+	EV_INFO << "Reading Topology from " << topofilename << "(file format: " << topologytype << ")" << endl;
 
-	std::ifstream topologyFile(path.c_str());
+	std::ifstream topologyFile(topofilename.c_str());
 	if (!topologyFile) {
 		string msg("Could not open topology file ");
-		msg+=path;
+		msg+=topofilename;
 		throw cRuntimeError("While reading topology: %s",msg.c_str());
 	}
 
 	if (!topologytype.compare("SELF_DEFINED")) {
-		EV_INFO << "using bidirectional parameter read from topology file " << path << "!" << endl;
+		EV_INFO << "using bidirectional parameter read from topology file " << topofilename << "!" << endl;
 		readSelfDefinedTopology(topologyFile, nodeset, edgesRead, nodeproperties);
 	}
 	else if (!topologytype.compare("DIMES")) {
@@ -481,17 +486,65 @@ void NetworkTopology::readDimesTopology(std::ifstream &topologyFile, std::set<no
 	}
 }
 
-bool NetworkTopology::readShortestPaths(string shortestPathFile) {
-	EV_ERROR << "readShortestPaths currently not implemented (shortest paths are calculated)" << endl;
 
-	// TODO:
-	/* read shortest paths into bgl distance matrix
-	 * set 	bool topologyAltered to false (if we read in a spath matrix, we assume it matches the current network
+bool NetworkTopology::readShortestPathMatrix(const string& shortestPathFileName) {
+
+	if (not std::filesystem::exists(networkManager->par("spathFile").stdstringValue()))
+		return false;
+	// read shortest paths into bgl distance matrix
+	std::ifstream inzipfile(shortestPathFileName.c_str(), std::ios_base::in | std::ios_base::binary);
+
+	boost::iostreams::filtering_streambuf<boost::iostreams::input> inputfilter;
+	inputfilter.push(boost::iostreams::gzip_decompressor());
+	inputfilter.push(inzipfile);
+	std::istream instream(&inputfilter);
+
+	auto totalNodes(getActiveNumberNodes());
+
+	// allocate memory for spath
+	spath= allocateSPM(totalNodes, spath);
+
+	unsigned long read_bytes(0UL);
+	for (unsigned long i= 0; i < spathMatrixSize; i++) {
+		instream.read(reinterpret_cast<char *>(spath[i]), sizeof(float)*spathMatrixSize);
+		read_bytes+= instream.gcount();
+		if (instream.bad())
+			break;
+	}
+
+	EV_INFO << "read " << read_bytes << " bytes from " << shortestPathFileName << endl;
+	inzipfile.close();
+
+	/*
 	 * set spathAvailable to true to indicate that further lookups are supposed to happen directly to the stored spaths
+	 * set bool topologyAltered to false (if we read in a spath matrix, we assume it matches the current network)
 	 */
+	spathAvailable = true;
+	topologyAltered = false;
 
 	return true;
 }
+
+
+void NetworkTopology::writeShortestPathMatrix(const string& shortestPathFileName) {
+	// write bgl distance matrix into shortest paths matrix file
+	std::ofstream outfile(shortestPathFileName.c_str(), std::ios_base::out | std::ios_base::binary);
+	unsigned int written_bytes(0);
+	boost::iostreams::filtering_streambuf<boost::iostreams::output> outbuf;
+	outbuf.push(boost::iostreams::gzip_compressor());
+	outbuf.push(outfile);
+	std::ostream outstream(&outbuf);
+
+	for (unsigned long i= 0; i < spathMatrixSize; i++) {
+		outstream.write(reinterpret_cast<char *>(spath[i]), sizeof(float)*spathMatrixSize);
+		written_bytes+= sizeof(float)*spathMatrixSize;
+	}
+	outstream.flush();
+        boost::iostreams::close(outbuf);
+	outfile.close();
+	EV_INFO << "written " << written_bytes << " bytes to " << shortestPathFileName << endl;
+}
+
 
 nodeid_t NetworkTopology::getRandomNode(cRNG *rng) const {
 	ActiveBGLVertexIt vi, vi_end;
@@ -501,6 +554,7 @@ nodeid_t NetworkTopology::getRandomNode(cRNG *rng) const {
 	std::advance(vi, rng->intRand(n));
 	return *vi;
 }
+
 
 vector<pair<nodeid_t, nodeid_t> > NetworkTopology::getRandomNodePairs( cRNG *rng, size_t k ) const {
 	vector<pair<nodeid_t, nodeid_t> > res;
@@ -572,6 +626,7 @@ size_t NetworkTopology::getNodeDegree(nodeid_t node) const {
 	return 0;
 }
 
+
 size_t NetworkTopology::getNodeDegrees( std::map<nodeid_t, unsigned long> &retDegreeMap) const {
 	ActiveBGLVertexIt vi, ve;
 	FilteredGraph fg(*BGLtopology, activeEdges<topologyGraph>(*BGLtopology), activeNodes<topologyGraph>(*BGLtopology));
@@ -600,6 +655,7 @@ void NetworkTopology::getNodeIDs(vector<nodeid_t> &v) const {
 	return;
 }
 
+
 void NetworkTopology::getNeighborNodeIDs(nodeid_t fromID, vector<nodeid_t> &neighborIDs) const {
 	ActiveBGLAdjacencyIt ai, ae;
 	FilteredGraph fg(*BGLtopology, activeEdges<topologyGraph>(*BGLtopology), activeNodes<topologyGraph>(*BGLtopology));
@@ -609,6 +665,7 @@ void NetworkTopology::getNeighborNodeIDs(nodeid_t fromID, vector<nodeid_t> &neig
 		neighborIDs.push_back(*ai);
 	}
 }
+
 
 vector<nodeid_t>  NetworkTopology::getHighestDegreeNodes( unsigned int count ) const {
 	std::map<nodeid_t, unsigned long> nodeDegrees;
@@ -670,6 +727,7 @@ void NetworkTopology::addLink(nodeid_t from, nodeid_t to) {
 	topologyAltered = true; // requires shortest path recalculation
 }
 
+
 bool NetworkTopology::isConnected(nodeid_t node1, nodeid_t node2) const {
 	BGLEdgeDesc e;
 	bool edgeExists;
@@ -702,10 +760,10 @@ unsigned long NetworkTopology::getNumPartitions() const {
 }
 
 
-void NetworkTopology::extractFromNetwork(cModule *networkManager) {
+void NetworkTopology::extractFromNetwork(const cModule *networkManager) {
 	vector< pair<nodeid_t, nodeid_t> > edges;
 	cModule* mod = getSimulation()->getContextModule();
-	while(mod->getParentModule()!=NULL) mod = mod->getParentModule();
+	while(mod->getParentModule()!=nullptr) mod = mod->getParentModule();
 
 	// check that the top level module is actually a network
 	if ( mod->getModuleType()->isNetwork() ) {
@@ -749,6 +807,7 @@ void NetworkTopology::extractFromNetwork(cModule *networkManager) {
 
 void NetworkTopology::createNetwork(cModule *parent) {
 
+	networkManager= parent;
 	// create nodes from bgl representation
 	BGLVertexIt vi, ve;
 	cModuleType *moduleType = cModuleType::get("routingsim.foundation.NodeWrapper");
@@ -843,6 +902,7 @@ void NetworkTopology::createNetwork(cModule *parent) {
 	EV_INFO << "Modules started." << endl;
 }
 
+
 void NetworkTopology::disableLink(nodeid_t f, nodeid_t t) {
 	cModule *from, *to;
 
@@ -866,13 +926,14 @@ void NetworkTopology::disableLink(nodeid_t f, nodeid_t t) {
 	from = moduleMap[f];
 	to = moduleMap[t];
 
-	if (from == NULL || to == NULL) {
+	if (from == nullptr || to == nullptr) {
 		EV_WARN << "Could not determine cModule (Node) for " << f << " or " << t
 				<< endl;
 		return;
 	}
 	Node::getNode(from)->disableLink(Node::getNode(to), "toNeighbors$o");
 }
+
 
 void NetworkTopology::enableLink(nodeid_t f, nodeid_t t) {
 	cModule *from, *to;
@@ -902,7 +963,7 @@ void NetworkTopology::enableLink(nodeid_t f, nodeid_t t) {
 	from = moduleMap[f];
 	to = moduleMap[t];
 
-	if (from == NULL || to == NULL) {
+	if (from == nullptr || to == nullptr) {
 		EV_WARN << "Could not determine cModule (Node) for " << f << " or " << t
 				<< endl;
 		return;
@@ -1004,6 +1065,70 @@ unsigned long NetworkTopology::getActiveNumberLinks() const {
 	return cnt;
 }
 
+// allocate memory for the shortest path matrix
+float** NetworkTopology::allocateSPM(unsigned long numberOfNodes, float **spath) {
+	spathMatrixSize= numberOfNodes;
+
+	if (spathMatrixSize == 0)
+		throw cRuntimeError("allocateSPM() called with spathMatrixSize == 0");
+
+	if (spath != nullptr) {
+		for  (unsigned long i=0; i<spathMatrixSize; i++) {
+			delete[] spath[i];
+		}
+		delete[] spath;
+		throw;
+	}
+
+	spath = new float*[spathMatrixSize];
+
+	// set to nullptr for cleanup in case of exception
+	for (unsigned long i=0; i<spathMatrixSize; i++) {
+		spath[i] = nullptr;
+	}
+
+	// try/catch to cleanup in case of exception
+	try {
+		for (unsigned long i=0; i<spathMatrixSize; i++) {
+			spath[i] = new float[spathMatrixSize];
+		}
+	} catch (...) {
+		for  (unsigned long i=0; i<spathMatrixSize; i++) {
+			delete[] spath[i];
+		}
+		delete[] spath;
+		throw;
+	}
+	return spath;
+}
+
+
+// bool NetworkTopology::compareSPM() {
+// 	float **cspath = nullptr;
+// 	unsigned long totalNodes = num_vertices(*BGLtopology);
+// 	cspath = allocateSPM(totalNodes, cspath);
+// 	FilteredGraph fg(*BGLtopology, activeEdges<topologyGraph>(*BGLtopology), activeNodes<topologyGraph>(*BGLtopology));
+// 	johnson_all_pairs_shortest_paths(fg, cspath, weight_map(get(&BGLEdge::weight, fg)));
+// 	for (unsigned long i= 0; i < totalNodes; i++)
+// 		for (unsigned long j= 0; j < totalNodes; j++)
+// 			if (spath[i][j] != cspath[i][j]) {
+// 				for (unsigned long i= 0; i < totalNodes; i++) {
+// 					delete[] cspath[i];
+// 				}
+// 				delete[] cspath;
+
+// 				return false;
+// 			}
+
+// 	for (unsigned long i= 0; i < totalNodes; i++) {
+// 		delete[] cspath[i];
+// 	}
+// 	delete[] cspath;
+
+// 	return true;
+// }
+
+
 float NetworkTopology::getDistance(nodeid_t from, nodeid_t to) {
 	time_t start, end;
 
@@ -1018,38 +1143,10 @@ float NetworkTopology::getDistance(nodeid_t from, nodeid_t to) {
 		// note that num_vertices() and num_edges() on a filtered graph do return the unfiltered sizes!
 
 		unsigned long totalNodes = num_vertices(*BGLtopology);
+		unsigned long totalEdges = num_edges(*BGLtopology);
 
 		// make sure we have enough storage
-		if ( spathMatrixSize < totalNodes ) {
-			if (spath != NULL) {
-				for  (unsigned long i=0; i<spathMatrixSize; i++) {
-					delete[] spath[i];
-				}
-				delete[] spath;
-				throw;
-			}
-
-			spath = new float*[totalNodes];
-
-			// set to NULL for cleanup in case of exception
-			for (unsigned long i=0; i<totalNodes; i++) {
-				spath[i] = NULL;
-			}
-
-			// try/catch to cleanup in case of exception
-			try {
-				for (unsigned long i=0; i<totalNodes; i++) {
-					spath[i] = new float[totalNodes];
-				}
-				spathMatrixSize = totalNodes;
-			} catch(...) {
-				for  (unsigned long i=0; i<totalNodes; i++) {
-					delete[] spath[i];
-				}
-				delete[] spath;
-				throw;
-			}
-		}
+		spath= allocateSPM(totalNodes, spath);
 
 		FilteredGraph fg(*BGLtopology, activeEdges<topologyGraph>(*BGLtopology), activeNodes<topologyGraph>(*BGLtopology));
 		EV_DETAIL << "Recalculating Shortest Paths at Simtime " << simTime()
@@ -1069,6 +1166,16 @@ float NetworkTopology::getDistance(nodeid_t from, nodeid_t to) {
 		}
 		time(&end);
 		EV_DETAIL << "... took " << difftime(end, start) << " seconds." << endl;
+
+		// only save initial state when not existing
+		if (spathAvailable == false and networkManager != nullptr and
+		    not networkManager->par("spathFile").stdstringValue().empty() and
+		    getActiveNumberLinks() == totalEdges and
+		    getActiveNumberNodes() == totalNodes and
+		    not std::filesystem::exists(networkManager->par("spathFile").stdstringValue())) {
+			writeShortestPathMatrix(networkManager->par("spathFile").stdstringValue());
+		}
+
 		spathAvailable = true;
 		topologyAltered = false;
 

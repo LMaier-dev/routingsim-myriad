@@ -36,11 +36,6 @@
 #include <boost/graph/floyd_warshall_shortest.hpp>
 #include <boost/graph/johnson_all_pairs_shortest.hpp>
 
-/// forward declaration
-namespace routingsim {
-class NetworkTopology;
-}
-
 #include <Node.h>
 
 namespace routingsim {
@@ -124,6 +119,7 @@ private:
 	/// link between the graph and the omnet network
 	std::unordered_map<nodeid_t, cModule *> moduleMap;
 
+	cModule *networkManager = nullptr;
 	/// Bool to keep track of whether the topology was changed since last
 	/// shortest path calculation; needs to be set to true by topology-
 	/// modifying functions
@@ -134,7 +130,13 @@ private:
 	float **spath; // two dimensional array of floats as distance (float is usually 4 bytes)
 	string shortestPathCalculationMode;
 
+	/**
+	 * Allocate Memory for the shortest path matrix
+	 *
+	 **/
+	float** allocateSPM(unsigned long numberOfNodes, float **spath);
 public:
+	//bool compareSPM();
 	/**
 	 * Constructs an empty network topology.
 	 */
@@ -150,7 +152,7 @@ public:
 	 * This function dispatches the actual reading to specialized functions
 	 * depending on topologytype (for possible values see NetworkManager.ned)
 	 */
-	void readTopology(string topologyFile, string topologytype = "SELF_DEFINED", bool useOnlyLargestConnectedComponent=true, bool makeLinksBidirectional=true, bool allowNodeIdRemapping=false, bool compressIDs=false);
+	void readTopology(const string& topologyFileName, string topologytype = "SELF_DEFINED", bool useOnlyLargestConnectedComponent=true, bool makeLinksBidirectional=true, bool allowNodeIdRemapping=false, bool compressIDs=false);
 
 	/**
 	 * Read our own
@@ -165,11 +167,17 @@ public:
 	void readDimesTopology(std::ifstream &topologyFile, std::set<nodeid_t> &nodeset, vector< std::pair<nodeid_t, nodeid_t> > &edges, boost::unordered_map < nodeid_t, properties_t > &nodeproperties, bool makeBidirectional=true);
 
 	/**
-	 * Read shortest paths from file with shortest-path pre-calculations.
+	 * Read shortest paths from file with shortest-path pre-calculations
 	 *
 	 * @return False, if file not exists or parsing goes wrong
 	 */
-	bool readShortestPaths(string shortestPathsFile);
+	bool readShortestPathMatrix(const string& shortestPathFileName);
+
+	/**
+	 * Write shortest paths to file with shortest-path pre-calculations
+	 *
+	 */
+        void writeShortestPathMatrix(const string& shortestPathFileName);
 
 	/**
 	 * Builds the network topology with given modules.
@@ -184,7 +192,7 @@ public:
 	 * NetworkManager (or another module of the network) should be
 	 * passed as  cModule
 	 */
-	void extractFromNetwork(cModule *networkManager);
+	void extractFromNetwork(const cModule *networkManager);
 
 	/**
 	 * Returns a random node from the set of active nodes

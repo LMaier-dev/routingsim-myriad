@@ -47,7 +47,7 @@ void NetworkManager::initialize() {
 
 	// create network topology
 	topology = new NetworkTopology();
-	if (par("topologyFile").stdstringValue().size()!=0)
+	if (par("topologyFile").stdstringValue().size() != 0)
 		topology->readTopology(
 				par("topologyFile").stdstringValue(),
 				par("topologyFileType").stdstringValue(),
@@ -56,14 +56,24 @@ void NetworkManager::initialize() {
 				par("allowNodeIdRemapping").boolValue(),
 				par("compressNodeIDs").boolValue()
 				);
-	if (par("spathFile").stdstringValue().size()!=0)
-		topology->readShortestPaths(par("spathFile").stdstringValue());
-	if (par("topologyFile").stdstringValue().size()!=0) {
+
+	if (par("topologyFile").stdstringValue().size() != 0) {
 		topology->createNetwork(this);
 	} else {
 		// the network was built from a ned file
 		topology->extractFromNetwork(this);
 	}
+
+	// if (par("spathFile").stdstringValue().size() != 0) {
+	// 	if (topology->readShortestPathMatrix(par("spathFile").stdstringValue())) {
+
+	// 		if (topology->compareSPM())
+	// 			EV << "shortest path matrix matches" << endl;
+	// 		else
+	// 			EV << "shortest path matrix doesn't match!!" << endl;
+
+	// 	}
+	// }
 
 	topology->setShortestPathCalculationMode(par("shortestPathCalculationMode").stdstringValue());
 	std::cout << "shortestPathCalculationMode: " << par("shortestPathCalculationMode").stdstringValue() << endl;
