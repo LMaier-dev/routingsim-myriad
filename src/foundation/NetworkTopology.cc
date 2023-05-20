@@ -489,7 +489,7 @@ void NetworkTopology::readDimesTopology(std::ifstream &topologyFile, std::set<no
 
 bool NetworkTopology::readShortestPathMatrix(const string& shortestPathFileName) {
 
-	if (not std::filesystem::exists(networkManager->par("spathFile").stdstringValue()))
+	if (not std::filesystem::exists(shortestPathFileName))
 		return false;
 	// read shortest paths into bgl distance matrix
 	std::ifstream inzipfile(shortestPathFileName.c_str(), std::ios_base::in | std::ios_base::binary);
@@ -514,6 +514,14 @@ bool NetworkTopology::readShortestPathMatrix(const string& shortestPathFileName)
 
 	EV_INFO << "read " << read_bytes << " bytes from " << shortestPathFileName << endl;
 	inzipfile.close();
+
+	if (read_bytes != sizeof(float)*totalNodes*totalNodes) {
+		EV_WARN << "existing file " << shortestPathFileName << " has not the correct file size, ignoring" << endl;
+		spathAvailable = false;
+		topologyAltered = false;
+		return false;
+	}
+
 
 	/*
 	 * set spathAvailable to true to indicate that further lookups are supposed to happen directly to the stored spaths
