@@ -65,11 +65,11 @@ std::string KadRoutingTable::str() const
 	for (const auto& b : buckets)
 	{
 		out << "B[" << i << "]:{";
-		for (const auto& contact : b.contacts) {
+		for (const auto& contact : b.getContacts()) {
 			out << ' ' << *contact;
 		}
 		out << "}+{";
-		for (const auto& econtact : b.PNContacts) {
+		for (const auto& econtact : b.getPNContacts()) {
 			out << ' ' << *econtact;
 		}
 		out << '}';
@@ -162,10 +162,10 @@ void KadRoutingTable::addPNContact(const OverlayKey& key, stateseqno_t stateseqn
 			improved= true; // must increase Local State Sequence number
 			// move over to PNcontacts
 			KadBucket& bucket = getBucket(key);
-			auto it = bucket.findContact(key);
-			if (it != bucket.contacts.end()) {
-				bucket.PNContacts.push_back(std::move(*it));
-				bucket.contacts.erase(it);
+			auto it = bucket.findContactWrite(key);
+			if (it != bucket.getContacts().end()) {
+				bucket.insertPNContact(std::move(*it));
+				bucket.removeContact(it);
 			}
 			else
 				EV_ERROR << "Contact existed already, but not found" << endl;
@@ -264,10 +264,10 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 
 		// move over to PNcontacts
 		KadBucket& bucket = getBucket(key);
-		auto it = bucket.findContact(key);
-		if (it != bucket.contacts.end()) {
-			bucket.PNContacts.push_back(std::move(*it));
-			bucket.contacts.erase(it);
+		auto it = bucket.findContactWrite(key);
+		if (it != bucket.getContacts().end()) {
+			bucket.insertPNContact(std::move(*it));
+			bucket.removeContact(it);
 		}
 		else
 			EV_ERROR << "Contact existed already, but not found" << endl;
@@ -583,17 +583,17 @@ bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, sta
 	{
 		contact->updateLastSeen();
 		policy->onNewContact(contact.get()); // this should be safe even when contact is not yet added to bucket
-		bucket.PNContacts.push_back(std::move(contact));
+		bucket.insertPNContact(std::move(contact));
 
 		return true;
 	}
 
 	// from here on the contact is not a physical Neighbor:
 	// add if space left or perform contact replacement
-	if (bucket.contacts.size() < bucketSize)
+	if (bucket.getContacts().size() < bucketSize)
 	{ // still room in contacts left
 		policy->onNewContact(contact.get());
-		bucket.contacts.push_back(std::move(contact));
+		bucket.insertContact(std::move(contact));
 
 		return true;
 	}
@@ -603,7 +603,7 @@ bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, sta
 			return false;
 		}
 		// contact replacement if contact is "better" than existing ones
-		auto& contacts = bucket.contacts;
+		auto& contacts = bucket.getContactsWrite();
 		auto result = contacts.end(); // replacement candidate path length
 		auto resultconn = contacts.end(); // replacement candidate connectivity
 		size_type maxLen = contact->getPathLength();
@@ -664,12 +664,12 @@ void KadRoutingTable::splitLastBucket()
 	}
 	buckets.resize(newSize);
 	// sort contacts into new buckets
-	for (auto& contact : oldBucket.contacts)
-		getBucket(contact.get()).contacts.push_back(std::move(contact));
+	for (auto& contact : oldBucket.getContactsWrite())
+		getBucket(contact.get()).insertContact(std::move(contact));
 
 	// sort PNcontacts into new buckets
-	for (auto& contact : oldBucket.PNContacts)
-		getBucket(contact.get()).PNContacts.push_back(std::move(contact));
+	for (auto& contact : oldBucket.getPNContactsWrite())
+		getBucket(contact.get()).insertPNContact(std::move(contact));
 }
 
 
@@ -739,8 +739,8 @@ KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_t
 	// so we need to check after this for result.size()
 	if (startbucket->size() >= n)
 	{
-		copyContactsFn(startbucket->contacts, result);
-		copyContactsFn(startbucket->PNContacts, result);
+		copyContactsFn(startbucket->getContacts(), result);
+		copyContactsFn(startbucket->getPNContacts(), result);
 	}
 	else
 	{ // this bucket has not been considered, so do not skip in next routine
@@ -764,15 +764,15 @@ KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_t
 			//EV_TRACE << "getClosestContacts() level index: " << buckets.cend() - level << endl;
 			// if it is the very last bucket try to copy content
 			if (level == buckets.cend()-1 and level != startbucket) {
-				copyContactsFn(level->contacts, result);
-				copyContactsFn(level->PNContacts, result);
+				copyContactsFn(level->getContacts(), result);
+				copyContactsFn(level->getPNContacts(), result);
 			}
 			else { // always insert the whole level
 				for (uint i = 0; i < width and level+i < buckets.cend(); i++)
 				{
 					if (level+i != startbucket) {
-						copyContactsFn(level[i].contacts, result);
-						copyContactsFn(level[i].PNContacts, result);
+						copyContactsFn(level[i].getContacts(), result);
+						copyContactsFn(level[i].getPNContacts(), result);
 					}
 				}
 			}
@@ -783,8 +783,8 @@ KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_t
 		while (result.size() < n and otherBucket != buckets.cbegin()) {
 			otherBucket--;
 			if (otherBucket != startbucket) {
-				copyContactsFn(otherBucket->contacts, result);
-				copyContactsFn(otherBucket->PNContacts, result);
+				copyContactsFn(otherBucket->getContacts(), result);
+				copyContactsFn(otherBucket->getPNContacts(), result);
 			}
 		}
 	}
@@ -807,8 +807,8 @@ KadContactList KadRoutingTable::getAllContacts() const
 	result.reserve(bucketSize * buckets.size());
 	for (auto& bucket : buckets)
 	{
-		copyAllContacts(bucket.contacts, result);
-		copyAllContacts(bucket.PNContacts, result);
+		copyAllContacts(bucket.getContacts(), result);
+		copyAllContacts(bucket.getPNContacts(), result);
 	}
 	return result;
 }
@@ -820,9 +820,9 @@ KadContactList KadRoutingTable::getAllValidContacts(bool noPN) const
 	result.reserve(bucketSize * buckets.size());
 	for (auto& bucket : buckets)
 	{
-		copyValidContacts(bucket.contacts, result);
+		copyValidContacts(bucket.getContacts(), result);
 		if (noPN == false)
-			copyValidContacts(bucket.PNContacts, result);
+			copyValidContacts(bucket.getPNContacts(), result);
 	}
 
 	return result;
@@ -834,8 +834,8 @@ KadContactList KadRoutingTable::getValidContactsFromBucket(size_t index) const
     if (buckets.size() > index) {
         auto& bucket = buckets[index];
 	result.reserve(bucketSize);
-        copyValidContacts(bucket.contacts, result);
-        copyValidContacts(bucket.PNContacts, result);
+        copyValidContacts(bucket.getContacts(), result);
+        copyValidContacts(bucket.getPNContacts(), result);
     }
     return result;
 }
@@ -854,7 +854,7 @@ KadContact_p KadRoutingTable::getRandomContact() const
 		for (const auto& bucket : buckets)
 		{
 			if ((index + bucket.sizeWithoutPNContacts()) > randomContactIndex) { // the contact must be in the current bucket
-				auto contact_p= bucket.contacts[randomContactIndex-index].get();
+				auto contact_p= bucket.getContacts().at(randomContactIndex-index).get();
 				if (contact_p != nullptr and contact_p->isValid()) {
 					return contact_p;
 				}
@@ -876,7 +876,7 @@ void KadRoutingTable::getContactsforPathRefresh(std::list<OverlayKey>& result) c
 
 	for (auto& bucket : buckets)
 	{
-		for (auto it = bucket.contacts.cbegin(); it != bucket.contacts.cend(); it++) {
+		for (auto it = bucket.getContacts().cbegin(); it != bucket.getContacts().cend(); it++) {
 			if (*it != nullptr) {
 				auto kadcontactp(it->get());
 				if ( kadcontactp!= nullptr
@@ -902,7 +902,7 @@ void KadRoutingTable::getOldestValidContacts(std::list<OverlayKey>& result) cons
 	{
 		KadContact_p oldest(nullptr);
 		KadContact_p secondoldest(nullptr);
-		for (auto it = bucket.contacts.cbegin(); it != bucket.contacts.cend(); it++) {
+		for (auto it = bucket.getContacts().cbegin(); it != bucket.getContacts().cend(); it++) {
 			if (*it != nullptr) {
 				auto kadcontactp(it->get());
 				if ( kadcontactp != nullptr and kadcontactp->getAge() > R2Kademlia::PathInfoAgeThreshold ) {
@@ -965,7 +965,7 @@ void KadRoutingTable::updatePaths(const KadContact& improvedContact)
         bool reconnected(improvedContact.isPhysicalNeighbor() and neighbortable.size() == 1);
 	// iterate over all buckets and contacts (not PNcontacts, because this does not make any sense)
 	for (KadBucket& b : buckets) {
-		for (auto& contact : b.contacts) {
+		for (auto& contact : b.getContacts()) {
 			// check for existence of improvedContact in path and replace path
 			// (either shorter or more current)
 			if (auto& path= contact->getPath(); path.size() > 0) {
@@ -1107,12 +1107,12 @@ void KadRoutingTable::checkContacts(const link_t& failedlink)
 {
 	// iterate over all buckets and contacts (even PNcontacts, because they may use redirected paths)
 	for (KadBucket& b : buckets) {
-		for (auto& contact : b.contacts) {
+		for (auto& contact : b.getContacts()) {
 			if (contact->isValid())
 				checkPathToContact(*contact, failedlink);
 		} // end for inner loop over all contacts
 
-		for (auto& contact : b.PNContacts) {
+		for (auto& contact : b.getPNContacts()) {
 			if (contact->isValid())
 				checkPathToContact(*contact, failedlink);
 		} // end for inner loop over all PN contacts
@@ -1126,11 +1126,11 @@ void KadRoutingTable::invalidateContacts(const link_t& failedLink, age_t failedL
 	//EV_TRACE << "invalidateContacts(" << failedNodeKey << ")" << endl;
 	// iterate over all buckets and contacts (even PNcontacts, because they may use redirected paths)
 	for (KadBucket& b : buckets) {
-		for (auto& contact : b.contacts) {
+		for (auto& contact : b.getContacts()) {
 			invalidateContact(*contact, failedLink, failedLinkAge);
 		} // end for inner loop over all contacts
 
-		for (auto& contact : b.PNContacts) {
+		for (auto& contact : b.getPNContacts()) {
 			invalidateContact(*contact, failedLink, failedLinkAge);
 		} // end for inner loop over all PN contacts
 	} // end for over all buckets
@@ -1149,7 +1149,7 @@ KadRoutingTable::invalidateContactsPN(const OverlayKey& failedNodeKey)
 	//EV_TRACE << "invalidateContactsPN(" << failedNodeKey << ")" << endl;
 	// iterate over all buckets and contacts
 	for (KadBucket& b : buckets) {
-		for (auto& contact : b.contacts) {
+		for (auto& contact : b.getContacts()) {
 			const auto& path= contact->getPath();
 			if (path.size() >= 1)
 			{
@@ -1183,7 +1183,7 @@ KadRoutingTable::invalidateContactsPN(const OverlayKey& failedNodeKey)
 
 		// note: it may seem odd to iterate through the PNs here, but in case of failed links
 		// they may currently have a longer route and thus depend on the failed PN link, too
-		for (auto& contact : b.PNContacts) {
+		for (auto& contact : b.getPNContacts()) {
 			// we found a failed link in the path, mark contact invalid
 			const auto& path= contact->getPath();
 			// only check PNs that are currently not directly connected
@@ -1229,14 +1229,14 @@ double KadRoutingTable::getAveragePathLength() const
 	uint count = 0;
 	double sum = 0;
 	for (const KadBucket& b : buckets) {
-		for (auto& contact : b.contacts) {
+		for (auto& contact : b.getContacts()) {
 			// stored paths exclude the destination node
 			sum += contact->getPathLength()+1;
 			count++;
 		}
 		// need to also iterate over each PNContact:
 		// it could be the case that we currently use a detour due to link failure
-		for (auto& contact : b.PNContacts) {
+		for (auto& contact : b.getPNContacts()) {
 			// stored paths exclude the destination node
 			sum += contact->getPathLength()+1;
 			count++;
@@ -1251,7 +1251,7 @@ double KadRoutingTable::getAveragePathStretch() const
 	uint count = 0;
 	double sum = 0;
 	for (const KadBucket& b : buckets) {
-		for (auto& contact : b.contacts) {
+		for (auto& contact : b.getContacts()) {
 			if (uint phy_distance(getKadObserver().getPhysicalDistance(myKey, contact->getKey())); phy_distance > 0) {
 				if (getNetworkManager()->getFailedNodes().size() > 0) {
 					// in case of failed links or nodes: check path validity of contact path
@@ -1265,7 +1265,7 @@ double KadRoutingTable::getAveragePathStretch() const
 					<< ": " << myKey << " to " << contact->getKey().shortStr() << endl;
 		}
 
-		for (auto& contact : b.PNContacts) {
+		for (auto& contact : b.getPNContacts()) {
 			// stored paths exclude the destination node
 			if (uint phy_distance(getKadObserver().getPhysicalDistance(myKey, contact->getKey())); phy_distance > 0) {
 				if (getNetworkManager()->getFailedNodes().size() > 0) {
@@ -1299,12 +1299,6 @@ bool KadRoutingTable::removeContact(const OverlayKey& key)
 		policy->onBucketEmpty(bucket);
 
 	return result;
-}
-
-
-KadContact_p KadRoutingTable::getContact(const OverlayKey& key) const
-{
-	return getBucket(key).getContact(key);
 }
 
 
@@ -1357,23 +1351,6 @@ bool KadBucket::removeContact(const OverlayKey& key)
 	}
 	// if we arrive here, nothing found
 	return false;
-}
-
-// only iterates over non PN contacts, see findPNContact for other case
-std::vector<std::unique_ptr<KadContact>>::iterator KadBucket::findContact(const OverlayKey& key)
-{
-	auto it = contacts.begin();
-	for (; it !=  contacts.end() and !(*it)->hasKey(key); it++);
-
-	return it;
-}
-
-
-std::vector<std::unique_ptr<KadContact>>::iterator KadBucket::findPNContact(const OverlayKey& key)
-{
-	auto it = PNContacts.begin();
-	for (; it !=  PNContacts.end() and !(*it)->hasKey(key); it++);
-	return it;
 }
 
 

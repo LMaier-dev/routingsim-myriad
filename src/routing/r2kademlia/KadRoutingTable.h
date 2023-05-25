@@ -36,19 +36,28 @@ class NeighborTable;
 
 typedef uint32_t age_t;
 
-
+// this class implements a single R²/Kad Bucket that distinguishes between normal contacts and physical neighbor contacts
 class KadBucket
 {
-	friend KadRoutingTable;
+	using BucketElement = std::unique_ptr<KadContact>;
+	using BucketType = std::vector<BucketElement>;
 public:
 	/** returns the contact if found, nullptr otherwise */
 	KadContact *getContact(const OverlayKey& key);
-	KadContact_p getContact(const OverlayKey& key) const
-	{ return const_cast<KadBucket*>(this)->getContact(key); }
+	KadContact_p getContact(const OverlayKey& key) const { return const_cast<KadBucket*>(this)->getContact(key); }
+	inline void insertContact(BucketType& bucket, BucketElement contactp);
+	void insertContact(BucketElement contactp) { insertContact(contacts, std::move(contactp)); } ;
+	void insertPNContact(BucketElement contactp) { insertContact(PNContacts,std::move(contactp)); } ;
+	const BucketType& getContacts() const { return contacts; }
+	BucketType& getContactsWrite() { return contacts; }
+	const BucketType& getPNContacts() const { return PNContacts; }
+	BucketType& getPNContactsWrite() { return PNContacts; }
 	/** tries to remove the contact, returns true if found */
 	inline bool removeContact(const OverlayKey& key);
+	inline auto removeContact(BucketType::iterator it) { return contacts.erase(it); }
+	inline auto removePNContact(BucketType::iterator it) { return PNContacts.erase(it); }
 	/** returns true if the contact list is empty */
-	inline bool empty() { return contacts.empty() && PNContacts.empty(); }
+	inline bool empty() { return contacts.empty() and PNContacts.empty(); }
 	/** returns the size of the contact list including PNcontacts */
 	inline size_type size() const { return contacts.size() + PNContacts.size(); }
 	/** returns the size of the contact list without PNcontacts */
@@ -57,20 +66,34 @@ public:
 	friend std::ostream& operator<<(std::ostream& os, const KadBucket& b) {
 		return os << b.contacts.size()+ b.PNContacts.size() << " contacts (PN: " << b.PNContacts.size() << ")";
 	}
-protected:
 	/**
 	 * Returns an iterator at the contact's position.
 	 * Returns contacts->end() if the contact is not found.
 	 */
-	std::vector<std::unique_ptr<KadContact>>::iterator findContact(const OverlayKey& key);
-	std::vector<std::unique_ptr<KadContact>>::iterator findPNContact(const OverlayKey& key);
+	BucketType::iterator findContactWrite(const OverlayKey& key) { auto res= std::lower_bound(contacts.begin(),contacts.end(),key,[](const BucketElement& lhs, const OverlayKey& key) -> bool { return lhs.get()->getKey() < key; }); if (res != contacts.end()) { return (res->get()->getKey() != key) ? contacts.end() : res; } else { return res; } }
+	BucketType::iterator findPNContactWrite(const OverlayKey& key) { auto res= std::lower_bound(PNContacts.begin(),PNContacts.end(),key,[](const BucketElement& lhs, const OverlayKey& key) -> bool { return lhs.get()->getKey() < key; }); if (res != PNContacts.end()) { return (res->get()->getKey() != key) ? PNContacts.end() : res; } else { return res; } }
+
+	BucketType::const_iterator findContact(const OverlayKey& key) const { auto res= std::lower_bound(contacts.cbegin(),contacts.cend(),key,[](const BucketElement& lhs, const OverlayKey& key) -> bool { return lhs.get()->getKey() < key; }); if (res != contacts.cend()) { return (res->get()->getKey() != key) ? contacts.cend() : res; } else { return res; } }
+	BucketType::const_iterator findPNContact(const OverlayKey& key) const { auto res= std::lower_bound(PNContacts.cbegin(),PNContacts.cend(),key,[](const BucketElement& lhs, const OverlayKey& key) -> bool { return lhs.get()->getKey() < key; }); if (res != PNContacts.cend()) { return (res->get()->getKey() != key) ? PNContacts.cend() : res; } else { return res; } }
+
+private:
 
 	// regular Kademlia bucket
-	std::vector<std::unique_ptr<KadContact>> contacts;
-	// extends the bucket by physical neighbors only that should be known,
+	BucketType contacts;
+	// extends the bucket by _all_ physical neighbors,
 	// but do not fit into the regular bucket anymore
-	std::vector<std::unique_ptr<KadContact>> PNContacts; 
+	// this is not strictly necessary, but saves overlay hops
+	BucketType PNContacts;
 };
+
+
+/// inserts a KadContact into a bucket (kept sorted order)
+inline void KadBucket::insertContact(BucketType& bucket, BucketElement contactp) {
+	// note that this performs a binary search, but the insertion itself may cause O(n) move operations inside the vector
+	bucket.insert(std::upper_bound(bucket.begin(), bucket.end(), contactp,
+		      [](const BucketElement& lhs, const BucketElement& rhs) -> bool { return lhs->getKey() < rhs->getKey(); }), std::move(contactp));
+}
+
 
 /**
  * A class with callback functions that are called when the routing table
@@ -154,7 +177,7 @@ public:
 	 * Returns the contact with the specified key.
 	 * Returns a nullptr if the contact was not found.
 	 */
-	KadContact_p getContact(const OverlayKey& key) const;
+	inline KadContact_p getContact(const OverlayKey& key) const;
 
 	// set contact invalid, returns true on success, false if contact not found
 	bool setContactInvalid(const OverlayKey& key) {
@@ -307,6 +330,16 @@ private:
 };
 
 
-} //namespace
+
+inline
+KadContact_p KadRoutingTable::getContact(const OverlayKey& key) const
+{
+	return getBucket(key).getContact(key);
+}
+
+
+} // end namespace
+
+
 
 #endif // __ROUTINGSIM_KadRoutingTalbe_H_
