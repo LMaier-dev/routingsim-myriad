@@ -623,7 +623,26 @@ bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, sta
 			replacementCount++;
 			EV_DEBUG << "replacing contact (PNS), new: " << *contact << " old: " << **result << endl;
 			policy->onContactRemoval(result->get());
+
+			auto contactkey(contact->getKey());
+			auto correctpos= std::upper_bound(contacts.begin(), contacts.end(), contactkey,
+							  [](const OverlayKey& lhs, const KadBucket::BucketElement& rhs) -> bool { return lhs < rhs->getKey(); });
+
+			// this may destroy the sorted order
 			*result = std::move(contact);
+			// restore the correct order
+			// depending on the correct position we need to rotate right or left
+			if (correctpos < result) {
+				// rotate left
+				std::rotate(correctpos, result, result+1);
+			}
+			else if (correctpos > result) {
+				// rotate right
+				std::rotate(result, result+1, correctpos);
+			}
+
+			//ASSERT(is_sorted(contacts.cbegin(),contacts.cend(),[](const KadBucket::BucketElement& lhs, const KadBucket::BucketElement& rhs) -> bool { return lhs.get()->getKey() < rhs.get()->getKey(); }));
+
 			policy->onNewContact(result->get());
 
 			return true;
@@ -633,7 +652,26 @@ bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, sta
 			EV_DEBUG << "replacing contact (Conn), new: " << *contact << " (" << contact->getConnectivity() << ") old: "
 				 << **resultconn << " (" << (*resultconn)->getConnectivity()  << ")" << endl;
 			policy->onContactRemoval(resultconn->get());
+
+			auto contactkey(contact->getKey());
+			auto correctpos= std::upper_bound(contacts.begin(), contacts.end(), contactkey,
+							  [](const OverlayKey& lhs, const KadBucket::BucketElement& rhs) -> bool { return lhs < rhs->getKey(); });
+
+			// this may destroy the sorted order
 			*resultconn = std::move(contact);
+			// restore the correct order
+			// depending on the correct position we need to rotate right or left
+			if (correctpos < resultconn) {
+				// rotate left
+				std::rotate(correctpos, resultconn, resultconn+1);
+			}
+			else if (correctpos > resultconn) {
+				// rotate right
+				std::rotate(resultconn, resultconn+1, correctpos);
+			}
+
+			//ASSERT(is_sorted(contacts.cbegin(),contacts.cend(),[](const KadBucket::BucketElement& lhs, const KadBucket::BucketElement& rhs) -> bool { return lhs.get()->getKey() < rhs.get()->getKey(); }));
+
 			policy->onNewContact(resultconn->get());
 
 			return true;
@@ -1323,12 +1361,16 @@ kad_path KadRoutingTable::concatViaPath(const kad_path& viaPath, const kad_path&
 KadContact *KadBucket::getContact(const OverlayKey& key)
 {
 	auto it = findContact(key);
-	if (it != contacts.end() )
+	if (it != contacts.end() ) {
 		return it->get();
+	}
 
 	it = findPNContact(key);
-	if (it != PNContacts.end() )
+	if (it != PNContacts.end() ) {
+		//ASSERT(it == std::find_if(PNContacts.cbegin(),PNContacts.cend(),[key](const BucketElement& lhs) -> bool { return lhs.get()->getKey() == key; }));
+
 		return it->get();
+	}
 
 	return nullptr;
 }

@@ -39,9 +39,9 @@ typedef uint32_t age_t;
 // this class implements a single R²/Kad Bucket that distinguishes between normal contacts and physical neighbor contacts
 class KadBucket
 {
+public:
 	using BucketElement = std::unique_ptr<KadContact>;
 	using BucketType = std::vector<BucketElement>;
-public:
 	/** returns the contact if found, nullptr otherwise */
 	KadContact *getContact(const OverlayKey& key);
 	KadContact_p getContact(const OverlayKey& key) const { return const_cast<KadBucket*>(this)->getContact(key); }
@@ -89,9 +89,13 @@ private:
 
 /// inserts a KadContact into a bucket (kept sorted order)
 inline void KadBucket::insertContact(BucketType& bucket, BucketElement contactp) {
-	// note that this performs a binary search, but the insertion itself may cause O(n) move operations inside the vector
+	//ASSERT(is_sorted(bucket.cbegin(),bucket.cend(),[](const BucketElement& lhs, const BucketElement& rhs) -> bool { return lhs.get()->getKey() < rhs.get()->getKey(); }));
+
+	// Note that this performs a binary search, but the insertion itself may cause O(n) move operations inside the vector
 	bucket.insert(std::upper_bound(bucket.begin(), bucket.end(), contactp,
 		      [](const BucketElement& lhs, const BucketElement& rhs) -> bool { return lhs->getKey() < rhs->getKey(); }), std::move(contactp));
+
+	//ASSERT(is_sorted(bucket.cbegin(),bucket.cend(),[](const BucketElement& lhs, const BucketElement& rhs) -> bool { return lhs.get()->getKey() < rhs.get()->getKey(); }));
 }
 
 
