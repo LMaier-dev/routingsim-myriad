@@ -65,7 +65,7 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
                 }
 
 		// we need to add the node to our neighbortable, because we need to send a Req
-		neighborTable.addNeighbor(packet->getSourceId(), packet->getSource());
+		neighborTable.addNeighbor(packet->getSource(), packet->getSourceId());
 
 		// add node to vicinity
 		bool node_added= vicinity.addNode(myOverlayKey, // parent
@@ -200,7 +200,7 @@ simtime_t R2Kademlia::sendDiscoveryReq(KadContact_p contact)
 	req->setNeighborhood(1); // get only physical neighbors (1 hop away)
 	req->setContactsOnly(false);
 	// send my own physical neighbors
-	if (std::vector<OverlayKey> neighbors = neighborTable.getNeighbors(); neighbors.size() > 0) {
+	if (auto neighbors = neighborTable.getTable(); neighbors.size() > 0) {
 
 		// reserve enough space in the vectors
 		req->setPhyNeighborArraySize(neighbors.size());
@@ -208,9 +208,9 @@ simtime_t R2Kademlia::sendDiscoveryReq(KadContact_p contact)
 		req->setPhyNeighborAgeArraySize(neighbors.size());
 		req->setPhyNeighborDegreeArraySize(neighbors.size());
 		uint effective_size(0);
-		for (uint i = 0; i < neighbors.size(); i++) {
-			if (auto contactp= routingTable.getContact(neighbors[i]); contactp != nullptr and contactp->getPathLength()==0) {
-				req->setPhyNeighbor(effective_size, neighbors[i]);
+		for (auto it= neighbors.cbegin(); it != neighbors.cend(); it++) {
+			if (auto contactp= routingTable.getContact(it->first); contactp != nullptr and contactp->getPathLength()==0) {
+				req->setPhyNeighbor(effective_size, it->first);
 				req->setPhyNeighborSeqNo(effective_size, contactp->getStateSeqNo());
 				req->setPhyNeighborAge(effective_size, contactp->getAge());
 				req->setPhyNeighborDegree(effective_size, contactp->getNodeDegree());
@@ -266,7 +266,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadPNDiscReq> packet) {
 	receivedVolume+= packet->getByteLength();
 
 	// since this is a physical neighbor try to add it to our neighbortable
-	neighborTable.addNeighbor(packet->getSourceId(), packet->getSource());
+	neighborTable.addNeighbor(packet->getSource(), packet->getSourceId());
 
 	// add physical neighbor to my vicinity
 	bool node_added= vicinity.addNode(myOverlayKey, packet->getSource(), packet->getStateSeqNo(), 1);
@@ -323,7 +323,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadPNDiscReq> packet) {
 	ASSERT(packet->getNeighborhood() == 1);
 	ASSERT(not packet->getContactsOnly());
 	auto response = makeAnswer<KadPNDiscRsp>(*packet);
-	std::vector<OverlayKey> neighbors = neighborTable.getNeighbors();
+	auto neighbors = neighborTable.getTable();
 
 	response->setContactArraySize(neighbors.size());
 	response->setPathArraySize(neighbors.size());
@@ -331,10 +331,10 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadPNDiscReq> packet) {
 	response->setPathInfoAgeArraySize(neighbors.size());
 	response->setNodeDegreeArraySize(neighbors.size());
 	uint effective_size(0);
-	for (uint i = 0; i < neighbors.size(); i++) {
+	for (auto it= neighbors.cbegin(); it != neighbors.cend(); it++) {
 		// some neighbors may not yet be in the routing table (or only indirectly via other nodes)
-		if (auto contactp= routingTable.getContact(neighbors[i]); contactp != nullptr and contactp->getPathLength()==0) {
-			response->setContact(effective_size, neighbors[i]);
+		if (auto contactp= routingTable.getContact(it->first); contactp != nullptr and contactp->getPathLength()==0) {
+			response->setContact(effective_size, it->first);
 			response->setSeqNo(effective_size, contactp->getStateSeqNo());
 			response->setPathInfoAge(effective_size, contactp->getAge());
 			response->setNodeDegree(effective_size, contactp->getNodeDegree());
@@ -373,17 +373,17 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadQueryRouteReq> packet)
 	auto response = makeAnswer<KadQueryRouteRsp>(*packet);
 	if (packet->getNeighborhood() == 1)
 	{
-		std::vector<OverlayKey> neighbors(neighborTable.getNeighbors());
+		auto neighbors= neighborTable.getTable();
 		response->setContactArraySize(neighbors.size());
 		response->setPathArraySize(neighbors.size());
 		response->setSeqNoArraySize(neighbors.size());
 		response->setPathInfoAgeArraySize(neighbors.size());
 		response->setNodeDegreeArraySize(neighbors.size());
 		uint effective_size= 0;
-		for (uint i = 0; i < neighbors.size(); i++) {
-			if (auto contactp= routingTable.getContact(neighbors[i]); contactp != nullptr and contactp->getPathLength()==0)
+		for (auto it= neighbors.cbegin(); it != neighbors.cend(); it++) {
+			if (auto contactp= routingTable.getContact(it->first); contactp != nullptr and contactp->getPathLength()==0)
 			{
-				response->setContact(effective_size, neighbors[i]);
+				response->setContact(effective_size, it->first);
 				response->setSeqNo(effective_size, contactp->getStateSeqNo());
 				response->setPathInfoAge(effective_size, contactp->getAge());
 				response->setNodeDegree(effective_size, contactp->getNodeDegree());

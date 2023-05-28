@@ -17,69 +17,6 @@
 
 namespace routingsim {
 
-bool NeighborTable::addNeighbor(nodeid_t nodeId, const OverlayKey& key){
-	//TODO assert nodeId != undefined_node;
-	auto itId = getIter(nodeId);
-	auto itKey = getIter(key);
-	if (itId == itKey) {
-		if(itId == table.end()) { // new entry
-			table.emplace_back(key, nodeId);
-		}
-		else // identical pair exists
-			return false;
-	}
-	else if (itKey != table.end()) { // Key exists already
-		// update nodeId
-		std::get<nodeid_t>(*itKey) = nodeId;
-		if (itId != table.end()) // both id and key existed, we erase the id.
-			table.erase(itId);
-	}
-	else if (itId != table.end()) { // NodeID existed already
-		// update the key
-		std::get<OverlayKey>(*itId) = key;
-	}
-
-	return true;
-}
-
-void NeighborTable::removeNeighbor(nodeid_t nodeId){
-	auto it = getIter(nodeId);
-	if (it != table.end())
-		table.erase(it);
-}
-
-std::vector<OverlayKey> NeighborTable::getNeighbors() const
-{
-	std::vector<OverlayKey> result{};
-	result.reserve(table.size());
-	for (auto& pair : table) {
-		result.push_back(std::get<OverlayKey>(pair));
-	}
-	return result;
-}
-
-
-nodeid_t NeighborTable::getNodeId(const OverlayKey& key) const {
-	auto it = getIter(key);
-	if (it != table.end())
-		return std::get<nodeid_t>(*it);
-	else
-		return undefined_node;
-}
-
-const OverlayKey& NeighborTable::getOverlayKey(nodeid_t nodeId) const {
-	auto it = getIter(nodeId);
-	if (it != table.end())
-		return std::get<OverlayKey>(*it);
-	else
-		return OverlayKey::UNSPECIFIED_KEY;
-}
-
-void NeighborTable::clear()
-{
-	table.clear();
-}
-
 
 std::ostream& operator<<(std::ostream& os, const NeighborTable& c) {
 	os << "(" << c.table.size() << ") ";

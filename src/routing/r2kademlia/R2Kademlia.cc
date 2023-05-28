@@ -156,13 +156,14 @@ void R2Kademlia::onDisconnect( nodeid_t nid ) {
 	if (neighborTable.size() == 0)
 		return;
 
-	OverlayKey key = neighborTable.getOverlayKey(nid);
+
+	OverlayKey key = getKadObserver().getNodeKey(nid);
 	ASSERT(not key.isUnspecified());
 	ASSERT(neighborTable.getNodeId(key) == nid );
 
 	// change in physical neighborhood increases the Sequence Number
 	incLSSeqNo();
-	neighborTable.removeNeighbor(nid);
+	neighborTable.removeNeighbor(key);
 	ASSERT(neighborTable.getNodeId(key) == undefined_node);
 	// set contact invalid (was routingTable.removeContact(key))
 	if (not routingTable.setContactInvalid(key)) {
