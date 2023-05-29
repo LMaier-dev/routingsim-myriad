@@ -31,7 +31,7 @@
 uint32_t OverlayKey::keyLength = MAX_KEYLENGTH;
 
 OverlayKey::overlaykey_t OverlayKey::MSB_MASK = ~((OverlayKey::overlaykey_t) 0) >> ( MAX_KEYLENGTH - keyLength );
-
+OverlayKey::overlaykey_t OverlayKey::MSB = ((OverlayKey::overlaykey_t) 1 << (keyLength-1));
 //--------------------------------------------------------------------
 // constants
 //--------------------------------------------------------------------
@@ -124,7 +124,7 @@ void OverlayKey::setKeyLength(uint32_t length)
 	keyLength = length;
 
 	MSB_MASK =  ~((overlaykey_t) 0) >> ( MAX_KEYLENGTH - keyLength );
-
+	MSB = ((OverlayKey::overlaykey_t) 1 << (keyLength-1));
 	// EV_STATICCONTEXT;
 	// EV_TRACE << "keylength: " << keyLength << " sizeof(mp_limb_t): " << sizeof(mp_limb_t)
 	// 	 << " aSize: " << aSize << " sizeof(key): " << sizeof(key)
@@ -302,14 +302,12 @@ OverlayKey OverlayKey::randomPrefix(uint32_t pos, cRNG* rng) const
 uint32_t OverlayKey::sharedPrefixLength(const OverlayKey& compKey,
 				        uint32_t bitsPerDigit) const
 {
-	const overlaykey_t msb((overlaykey_t) 1 << (keyLength-1));
-	
 	overlaykey_t diff(compKey.key ^ key);
 	if (diff == 0) // all bits match
-		return keyLength / bitsPerDigit;
+		return (bitsPerDigit == 1) ? keyLength : keyLength / bitsPerDigit;
 
 	unsigned int length= 0;
-	while (length < keyLength and (diff & msb) == 0)
+	while (length < keyLength and (diff & MSB) == 0)
 	{
 		diff= diff << 1;
 		length++;
@@ -317,7 +315,7 @@ uint32_t OverlayKey::sharedPrefixLength(const OverlayKey& compKey,
 
 	// length is number of matching bits
 	// return number of matching digits
-	return length / bitsPerDigit;
+	return (bitsPerDigit == 1) ? length : length / bitsPerDigit;
 }
 
 

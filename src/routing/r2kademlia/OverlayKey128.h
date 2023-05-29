@@ -510,6 +510,7 @@ private:
 	static constexpr uint32_t MAX_KEYLENGTH = 128; /**< maximum length of the key */
 	static uint32_t keyLength; /**< actual length of the key */
 	static overlaykey_t MSB_MASK; /**< bits to fill up if key is not full length, e.g., 112bit */
+	static overlaykey_t MSB; /** just the MSB **/
 
 	union {
 		overlaykey_t key; /**< the overlay key this object represents */
