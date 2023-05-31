@@ -336,7 +336,7 @@ void R2Kademlia::reSyncPN(const KadContact& contact, stateseqno_t expected_seqno
 	// simply trigger a PNDiscReq to update any sequence number
 	EV_TRACE << "reSyncPN scheduled for " << contact.getKey().shortStr() << " expected seqno: " << expected_seqno << endl;
 
-	schedulePNDiscReq({contact.getKey(), {}, expected_seqno});
+	schedulePNDiscReq({myOverlayKey, contact.getKey(), {}, expected_seqno});
 }
 
 

@@ -36,7 +36,7 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 	receivedPackets++;
 	receivedVolume+= packet->getByteLength();
 
-	KadContact neighborcontact(packet->getSource(), kad_path());
+	KadContact neighborcontact(myOverlayKey, packet->getSource(), kad_path());
 
 	// it could be that the node has been entered into the vicinity already
 	if (neighborTable.isNeighbor(packet->getSource()))
@@ -89,7 +89,7 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 		     ((delta == 0 or delta == 0x80000000UL) and myOverlayKey < packet->getSourceId())
 			) {
 			// schedule PNDiscReq
-			schedulePNDiscReq({packet->getSource(), {}, stateseqno_t::invalidSeqNo});
+			schedulePNDiscReq({myOverlayKey, packet->getSource(), {}, stateseqno_t::invalidSeqNo});
 		}
 	}
 
@@ -194,7 +194,7 @@ simtime_t R2Kademlia::sendDiscoveryReq(KadContact_p contact)
 	EV_TRACE << "sending PNDiscReq to " << *contact << " mySSeq#: " << getLSSeqNo();
 
 	// need to brute force the path as the contact may be known via a detour before
-	KadContact pncontact(contact->getKey(),kad_path());
+	KadContact pncontact(myOverlayKey, contact->getKey(),kad_path());
 	auto req = makePacket<KadPNDiscReq>(&pncontact, "KadPNDiscReq");
 	req->setSourceId(node().getNodeId());
 	req->setNeighborhood(1); // get only physical neighbors (1 hop away)
@@ -270,7 +270,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadPNDiscReq> packet) {
 
 	// add physical neighbor to my vicinity
 	bool node_added= vicinity.addNode(myOverlayKey, packet->getSource(), packet->getStateSeqNo(), 1);
-	KadContact pncontact(packet->getSource(), kad_path());
+	KadContact pncontact(myOverlayKey, packet->getSource(), kad_path());
 	if (usePathIDs and node_added) {
 		fwdTablePathID.addPrecalcEntry({pncontact.getKey()});
 		vicinityPathIDCompletion(pncontact);
@@ -293,7 +293,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadPNDiscReq> packet) {
 								  packet->getPhyNeighbor(i),
 								  packet->getPhyNeighborSeqNo(i), 2);
 				if (usePathIDs and node_added) {
-					KadContact nncontact(packet->getPhyNeighbor(i), {packet->getSource()});
+					KadContact nncontact(myOverlayKey, packet->getPhyNeighbor(i), {packet->getSource()});
 					auto newpath(path);
 					newpath.push_back(nncontact.getKey());
 					fwdTablePathID.addPrecalcEntry(newpath);

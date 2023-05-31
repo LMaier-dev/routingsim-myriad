@@ -399,7 +399,7 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 
 				// check for eligibility of new path with same length
 				// now check for XOR distance to own ID of Path Hash
-				pathHashSum= HashSum(path, key);
+				pathHashSum= HashSum(myKey, path, key);
 				// pathSet.insert(pathHashSum);
 				if ((pathHashSum ^ myKey) > (contact->getPathHashSum() ^  myKey)) {
 					EV_TRACE << "for contact " << key.shortStr() << " discarding path of same length: " << path <<  endl;
@@ -425,7 +425,7 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 
 		// must calculate PathHashSum unless this has been done already
 		if (pathHashSum.isUnspecified())
-			pathHashSum= HashSum(path, key);
+			pathHashSum= HashSum(myKey, path, key);
 
 		//TODO before overwriting the old path, need to check for sending a PathTeardown
 		contact->setPath(std::move(path), std::move(pathHashSum)); // will set contact automatically to valid
@@ -572,7 +572,7 @@ bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, sta
 	}
 
 	bool isPhysicalNeighbor(path.empty() == true);
-	auto contact = std::make_unique<KadContact>(key, std::move(path));
+	auto contact = std::make_unique<KadContact>(myKey, key, std::move(path));
 	contact->setStateSeqNo(stateseqno);
 	// TODO should be corrected by RTT
 	contact->updateLastSeenTo(simTime()-SimTime(pathinfo_age,SIMTIME_MS));

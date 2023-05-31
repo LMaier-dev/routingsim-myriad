@@ -28,7 +28,7 @@ bool are_equal_r(const kad_path& first_path, const kad_path& second_path) {
 };
 
 // calculates a SHA1sum of path and destkey
-OverlayKey HashSum(const kad_path& path, const OverlayKey& destkey);
+OverlayKey HashSum(const OverlayKey& seed, const kad_path& path, const OverlayKey& destkey);
 
 std::ostream& operator<<(std::ostream& os, const kad_path& c);
 

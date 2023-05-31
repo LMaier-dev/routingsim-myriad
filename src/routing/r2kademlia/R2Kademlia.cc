@@ -1360,7 +1360,8 @@ void R2Kademlia::readRTableRsp(const KadRTableRsp& packet) {
 			{
 				// for further processing we need a temporary contact object
 				// since it was not put into the routingTable
-				KadContact neighborhoodContact(packet.getContact(i),
+				KadContact neighborhoodContact(myOverlayKey,
+							       packet.getContact(i),
 							       routingTable.concatViaPath(viaPath, packet.getPath(i)),
 							       packet.getSeqNo(i));
 
@@ -1395,7 +1396,8 @@ void R2Kademlia::readRTableRsp(const KadRTableRsp& packet) {
 			// only get further PNs from node if strictly smaller than discovery radius
 			// this should improve the routing table contacts
 			if ( querynode and ((viaPath.size() + packet.getPath(i).size() + 1) < discoveryRadius) ) {
-				KadContact neighborhoodContact(packet.getContact(i),
+				KadContact neighborhoodContact(myOverlayKey,
+							       packet.getContact(i),
 							       routingTable.concatViaPath(viaPath, packet.getPath(i)),
 							       packet.getSeqNo(i));
 

@@ -71,6 +71,11 @@ public:
 	 */
 	OverlayKey( overlaykey_t num );
 
+        /**
+	 * Constructs overlay key out of two 64bit integer words
+	 */
+	OverlayKey( std::uint64_t highword, std::uint64_t lowword);
+
 	/**
 	 * Constructs a key out of a buffer
 	 * @param buffer Source buffer
@@ -369,6 +374,8 @@ public:
 	    return getBitRange(p, 1);
 	};
 
+	// return as 64bit unsigned integer (folds high and low word together with XOR)
+	std::uint64_t toUint64_t() const { return keyw[0] ^ keyw[1]; }
 	/**
 	 * Returns a hash value for the key
 	 *
@@ -611,6 +618,12 @@ OverlayKey::OverlayKey(overlaykey_t num) : key(num)
 	trim();
 }
 
+// create a key out of two 64bit integer words
+inline
+OverlayKey::OverlayKey( std::uint64_t highword, std::uint64_t lowword) : keyw{lowword, highword}
+{
+	trim();
+};
 
 
 // copy constructor

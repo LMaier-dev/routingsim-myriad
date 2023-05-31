@@ -1,5 +1,5 @@
 #include "KadPath.h"
-#include "SHA1.h"
+#include "xxh3.h"
 
 namespace routingsim {
 
@@ -82,27 +82,23 @@ bool containsUndirectedLink(const kad_path& path, const OverlayKey& firstNodeKey
 }
 
 
-// calculates SHA1sum of path and destkey
+// calculates XXH3 hashsum of path and destkey
 // the hashsum is returned as OverlayKey to be able to calculate the XOR distance
-OverlayKey HashSum(const kad_path& path, const OverlayKey& destkey)
+OverlayKey HashSum(const OverlayKey& seed, const kad_path& path, const OverlayKey& destkey)
 {
-	constexpr uint8_t sha1len= 20;
-	uint8_t temp[sha1len]; // SHA1 result
-	CSHA1 sha1;
-
-	sha1.Reset();
+	XXH3_state_t* state= XXH3_createState();
+	XXH3_128bits_reset_withSeed(state, seed.toUint64_t());
 	// hash all keys of the given path
 	const auto keylen(OverlayKey::getLength() / 8 + ((OverlayKey::getLength() % 8) != 0 ? 1 : 0));
 	for (const auto& key : path)
 	{
-		sha1.Update(key.getRawKey(), keylen);
+		XXH3_128bits_update(state, key.getRawKey(), keylen);
 	}
 
-	sha1.Update(destkey.getRawKey(), keylen);
-	sha1.Final();
-	sha1.GetHash(temp);
-
-	return OverlayKey(temp, keylen <= sha1len ? keylen : sha1len);
+	XXH3_128bits_update(state, destkey.getRawKey(), keylen);
+	XXH128_hash_t result = XXH3_128bits_digest(state);
+	XXH3_freeState(state);
+	return OverlayKey(result.high64, result.low64);
 }
 
 }

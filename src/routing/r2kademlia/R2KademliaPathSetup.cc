@@ -97,7 +97,7 @@ bool R2Kademlia::handlePathSetupResponse(KadPacket_p answer, RPCState& rpcState)
 	EV_TRACE << "Received PathSetupRsp, setup path: " << setuppath << " to " << target.shortStr()
 		 << " original path: " << originalpath << " last segment:" << lastsegmentpath << endl;
 
-	KadContact tmpcontact(target, std::move(originalpath));
+	KadContact tmpcontact(myOverlayKey, target, std::move(originalpath));
 
 	bool addthispath(false);
 	// meanwhile the contact may have been replaced or deleted etc.

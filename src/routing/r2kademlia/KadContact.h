@@ -84,8 +84,8 @@ public:
 				     nodeDegree(k.nodeDegree),
 				     rds_p(std::move(k.rds_p)) {};
         explicit KadContact(const OverlayKey& key): key(key), lastseen(SIMTIME_ZERO), lastPathRefresh(SIMTIME_ZERO), path(), state(State::undefined), nodeDegree(0), rds_p(nullptr) {};
-        KadContact(const OverlayKey& key, kad_path&& opath, stateseqno_t seqno= stateseqno_t::invalidSeqNo) :
-		key(key), lastseen(SIMTIME_ZERO), lastPathRefresh(SIMTIME_ZERO), path(std::move(opath)), pathHashSum(HashSum(path,key)), seqno(seqno),
+        KadContact(const OverlayKey& myOverlayKey, const OverlayKey& key, kad_path&& opath, stateseqno_t seqno= stateseqno_t::invalidSeqNo) :
+		key(key), lastseen(SIMTIME_ZERO), lastPathRefresh(SIMTIME_ZERO), path(std::move(opath)), pathHashSum(HashSum(myOverlayKey, path,key)), seqno(seqno),
 		state(State::valid), physicalNeighbor(path.empty() == true), nodeDegree(0), rds_p(nullptr) // simply path.empty() doesn't work correctly!
 		{};
         KadContact& operator=(const KadContact &other); // copy assignment
@@ -128,7 +128,7 @@ public:
 	/// i.e., the _intermediate hops_ between me and this contact
 	size_t getPathLength() const { return path.size(); }
 	/// sets new path (originally checked for repair of failed links, too)
-	void updatePath(const OverlayKey& myOverlayKey, kad_path newpath) { setPath(newpath, HashSum(newpath,key)); }
+	void updatePath(const OverlayKey& myOverlayKey, kad_path newpath) { setPath(newpath, HashSum(myOverlayKey,newpath,key)); }
 	/// sets the path to reach this contact (will implicitly set status to valid)
 	void setPath(kad_path path, OverlayKey&& HashSum) { this->path = std::move(path); setValid(); pathHashSum= HashSum; }
 	const kad_path& getPath() const { return path; }
