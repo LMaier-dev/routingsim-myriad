@@ -30,6 +30,7 @@
 
 #include <omnetpp.h>
 #include <crng.h>
+#include "xxh3.h"
 
 class BinaryValue;
 class OverlayKeyBit;
@@ -925,6 +926,13 @@ inline
 void OverlayKey::clear()
 {
 	key= INVALIDKEYVALUE;
+}
+
+// returns a simple hash of the key
+inline
+std::size_t OverlayKey::hash() const noexcept
+{
+	return	XXH3_64bits((const char *) &key, OverlayKey::keyLength / 8);
 }
 
 

@@ -221,7 +221,6 @@ void NetworkTopology::readTopology(const string& topofilename, string topologyty
 	if ( useOnlyLargestConnectedComponent ) {
 		FilteredGraph fg(*BGLtopology, activeEdges<topologyGraph>(*BGLtopology), activeNodes<topologyGraph>(*BGLtopology));
 		std::vector<int> component(num_vertices(fg));
-		std::vector<int>::iterator vit;
 		int numComponents;
 		int numDisabledNodes=0; // count nodes that are disabled for not being part of LCC
 		int numDisabledEdges=0;
@@ -237,7 +236,7 @@ void NetworkTopology::readTopology(const string& topofilename, string topologyty
 			vector<nodeid_t> partitionSizes(numComponents, 0);
 
 			// determine partition sizes
-			for (vit=component.begin(); vit!=component.end(); vit++) {
+			for (auto vit=component.begin(); vit!=component.end(); vit++) {
 				partitionSizes[*vit]++;
 			}
 
@@ -1080,12 +1079,11 @@ float** NetworkTopology::allocateSPM(unsigned long numberOfNodes, float **spath)
 	if (spathMatrixSize == 0)
 		throw cRuntimeError("allocateSPM() called with spathMatrixSize == 0");
 
-	if (spath != nullptr) {
+	if (spath != nullptr) { // free old SPM
 		for  (unsigned long i=0; i<spathMatrixSize; i++) {
 			delete[] spath[i];
 		}
 		delete[] spath;
-		throw;
 	}
 
 	spath = new float*[spathMatrixSize];
@@ -1105,7 +1103,7 @@ float** NetworkTopology::allocateSPM(unsigned long numberOfNodes, float **spath)
 			delete[] spath[i];
 		}
 		delete[] spath;
-		throw;
+		throw cRuntimeError("allocateSPM(): out of memory");
 	}
 	return spath;
 }
