@@ -86,19 +86,20 @@ bool containsUndirectedLink(const kad_path& path, const OverlayKey& firstNodeKey
 // the hashsum is returned as OverlayKey to be able to calculate the XOR distance
 OverlayKey HashSum(const OverlayKey& seed, const kad_path& path, const OverlayKey& destkey)
 {
-	XXH3_state_t* state= XXH3_createState();
-	XXH3_128bits_reset_withSeed(state, seed.toUint64_t());
-	// hash all keys of the given path
-	const auto keylen(OverlayKey::getLength() / 8 + ((OverlayKey::getLength() % 8) != 0 ? 1 : 0));
-	for (const auto& key : path)
-	{
-		XXH3_128bits_update(state, key.getRawKey(), keylen);
-	}
+  static const auto keylen(OverlayKey::getLength() / 8 + ((OverlayKey::getLength() % 8) != 0 ? 1 : 0));
+  char *tmpbuf= new char[(path.size()+1)*keylen];
 
-	XXH3_128bits_update(state, destkey.getRawKey(), keylen);
-	XXH128_hash_t result = XXH3_128bits_digest(state);
-	XXH3_freeState(state);
-	return OverlayKey(result.high64, result.low64);
+  size_t offset= 0;
+  for (auto &key : path) {
+    memcpy(tmpbuf+offset, key.getRawKey(), keylen);
+    offset+= keylen;
+  }
+  memcpy(tmpbuf+offset, destkey.getRawKey(), keylen);
+  offset+= keylen;
+  XXH128_hash_t result= XXH3_128bits_withSeed(tmpbuf, offset, seed.toUint64_t());
+  delete[] tmpbuf;
+
+  return OverlayKey(result.high64, result.low64);
 }
 
 }
