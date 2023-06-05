@@ -1044,7 +1044,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 						// send a join now
 						sendFindNode(myOverlayKey, false);
 						// reset timer for periodic joins to ask more frequently now
-						resetTimer(probeTimerId, SimTime(100,SIMTIME_MS));
+						resetTimer(probeTimerId, SimTime(ProbeSelfMinInterval,SIMTIME_MS));
 					}
 
 					returnToSender(KAD_RouteFailureDeadEnd, std::move(packet));

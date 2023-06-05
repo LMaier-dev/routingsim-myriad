@@ -68,7 +68,9 @@ public:
 		valid         = 1,
 		rediscovering = 2,
 		invalid       = 3,
-		dead          = 4
+		dead          = 4,
+		_get_ON       = 126, // pseudo state, not used for real contacts, see R2Kademlia::scheduleGetONReq
+		_get_PN       = 127  // pseudo state, not used for real contacts
 	};
 
 	KadContact(const KadContact& o) : key(o.key), lastseen(o.lastseen), lastPathRefresh(o.lastPathRefresh), path(o.path), pathHashSum(o.pathHashSum),

@@ -171,16 +171,16 @@ private:
 	// a list that is used to periodically probe contacts
 	std::list<OverlayKey> probeContactQueue;
 
-	// a list that is used to send PN discover request messages
-	typedef std::list<KadContact> RequestQueueType;
+	// a queue that is used to send PN/ON discover request messages
+	typedef std::vector<KadContact> RequestQueueType;
 	class RequestQueue : public RequestQueueType {
 	public:
-		RequestQueue(const std::string descriptiontxt, std::function<simtime_t(KadContact_p)> sendrequestcall, std::function<void()> sendscheduledcall, unsigned long initialScheduleDelay) : sendrequestcall(sendrequestcall), sendscheduledcall(sendscheduledcall), initialScheduleDelay(initialScheduleDelay), description(descriptiontxt), scheduled(false) {};
+		RequestQueue(const std::string descriptiontxt, std::function<simtime_t(KadContact_p, bool)> sendrequestcall, std::function<void()> sendscheduledcall, unsigned long initialScheduleDelay) : sendrequestcall(sendrequestcall), sendscheduledcall(sendscheduledcall), initialScheduleDelay(initialScheduleDelay), description(descriptiontxt), scheduled(false) {};
 		const std::string& getDescription() { return description; }
 		bool isScheduled() const { return scheduled; }
 		void setScheduled() { scheduled= true; }
 		void clearScheduled() { scheduled= false; }
-		std::function<simtime_t(KadContact_p)> sendrequestcall;
+		std::function<simtime_t(KadContact_p, bool)> sendrequestcall;
 		std::function<void()> sendscheduledcall;
 		unsigned long initialScheduleDelay = 0; // in µs
 	private:
@@ -188,7 +188,7 @@ private:
 		bool scheduled = false;
 	};
 
-	// queues for rate limiting requests
+	// queues for rate limited requests
 	RequestQueue PNDiscoverQueue; // for sending PNDiscReq
 	RequestQueue GetPNQueue;      // for sending QueryRouteReq (Physical Neighbors)
 	RequestQueue GetONQueue;      // for sending QueryRouteReq (Overlay Neighbors)
@@ -426,11 +426,11 @@ private:
 	/// sends a path teardown request to the given contact
 	void sendPathTeardown(KadContact_p contact);
 	/// sends a "get physical neighbors" call to the contact
-	simtime_t sendGetPhysicalNeighbors(KadContact_p contact);
+	simtime_t sendGetPhysicalNeighbors(KadContact_p contact, bool OverlayNeighborsSource= false);
 	/// sends a "get overlay neighbors" call to the contact
-	simtime_t sendGetOverlayNeighbors(KadContact_p contact);
+	simtime_t sendGetOverlayNeighbors(KadContact_p contact, bool _unused_arg);
 	/// sends a PNDisc Request to the Physical Neighbor
-	simtime_t sendDiscoveryReq(KadContact_p contact);
+	simtime_t sendDiscoveryReq(KadContact_p contact, bool _unused_arg);
 	/// sends a find node call to find a path this node
 	void sendFindNode(const OverlayKey& key, bool exact=false, bool track=false);
 	/// sends a find node call via viacontactkey to find a path to this node
@@ -452,7 +452,7 @@ private:
 	/// schedule sending PNDiscReq
 	void schedulePNDiscReq(const KadContact& tmpcontact) { scheduleRequest(PNDiscoverQueue, tmpcontact); };
 	void scheduleGetPNReq(const KadContact& tmpcontact) { scheduleRequest(GetPNQueue, tmpcontact); };
-	void scheduleGetONReq(const KadContact& tmpcontact) { scheduleRequest(GetONQueue, tmpcontact); };
+	void scheduleGetONReq(const KadContact& tmpcontact);
 	/// schedule sending PNDiscReq
 	void sendScheduledPNDiscReqs() { sendScheduledRequests(PNDiscoverQueue); };
 	void sendScheduledQueryRouteReqsPN() { sendScheduledRequests(GetPNQueue); };
@@ -544,12 +544,16 @@ public:
 	static constexpr unsigned long PathInfoAgeThreshold = 2000UL; // ms
 	// refresh within [0.5,1.5]*PathRefreshThreshold, garbage collection after 3*PathRefreshThreshold
 	static constexpr unsigned long PathRefreshThreshold = 30000UL; // ms
+	static constexpr unsigned long ProbeSelfMinInterval = 100; // ms
 	static constexpr unsigned long RediscoveryNextTryWaitTime = 100UL; // ms
-	static constexpr unsigned long PNDiscoverWaitTime = 1000UL; // µs
 	static constexpr unsigned long PNHelloMinInterval = 200UL; // ms
 	static constexpr unsigned long PNHelloMaxInterval = 30000UL; // ms
-	static constexpr unsigned long GetPNWaitTime = 10000UL; // µs
-	static constexpr unsigned long GetONWaitTime = 20000UL; // µs
+	static constexpr unsigned long PNDiscoverInitialWaitTime = 1000UL; // µs (1ms)
+	static constexpr unsigned long PNDiscoverWaitTime = 10000UL; // µs (10ms ~ 100 Requests/s)
+	static constexpr unsigned long GetPNInitialWaitTime = 10000UL; // µs
+	static constexpr unsigned long GetPNWaitTime = 20000UL; // µs (50 Requests/s)
+	static constexpr unsigned long GetONInitialWaitTime = 20000UL; // µs
+	static constexpr unsigned long GetONWaitTime = 40000UL; // µs (25 Requests/s)
 };
 
 
@@ -561,9 +565,9 @@ R2Kademlia::R2Kademlia() :
 	urgentRediscoverQueue(cmp),
 	regularRediscoverQueue(cmp),
 	slowRediscoverQueue(cmp),
-	PNDiscoverQueue("PNDiscover", std::bind(&R2Kademlia::sendDiscoveryReq, this, ph::_1), std::bind(&R2Kademlia::sendScheduledPNDiscReqs, this), PNDiscoverWaitTime),
-	GetPNQueue("QueryRouteReq(PN)", std::bind(&R2Kademlia::sendGetPhysicalNeighbors, this, ph::_1), std::bind(&R2Kademlia::sendScheduledQueryRouteReqsPN, this), GetPNWaitTime),
-	GetONQueue("QueryRouteReq(ON)", std::bind(&R2Kademlia::sendGetOverlayNeighbors, this, ph::_1), std::bind(&R2Kademlia::sendScheduledQueryRouteReqsON, this), GetONWaitTime)
+	PNDiscoverQueue("PNDiscover", std::bind(&R2Kademlia::sendDiscoveryReq, this, ph::_1, ph::_2), std::bind(&R2Kademlia::sendScheduledPNDiscReqs, this), PNDiscoverInitialWaitTime),
+	GetPNQueue("QueryRouteReq(PN)", std::bind(&R2Kademlia::sendGetPhysicalNeighbors, this, ph::_1, ph::_2), std::bind(&R2Kademlia::sendScheduledQueryRouteReqsPN, this), GetPNInitialWaitTime),
+	GetONQueue("QueryRouteReq(ON)", std::bind(&R2Kademlia::sendGetOverlayNeighbors, this, ph::_1, ph::_2), std::bind(&R2Kademlia::sendScheduledQueryRouteReqsON, this), GetONInitialWaitTime)
 {
 };
 
