@@ -1,4 +1,5 @@
 #include "NodeVicinityGraph.h"
+#include <algorithm>
 
 namespace routingsim {
 
@@ -52,17 +53,16 @@ nodeVicinityGraph::addNode(const OverlayKey& parentNodeKey, const OverlayKey& ch
 			}
 		}
 
-		auto child_it= parentnode_it->second.children.cbegin();
+		auto& childrenlist(parentnode_it->second.children);
 		// check for existing child node in children list of parent (if exists: link already known)
-		for (; child_it != parentnode_it->second.children.cend(); child_it++) {
-			if (*child_it == childnodeptr)
-				break;
-		}
+		auto child_it= std::lower_bound(childrenlist.cbegin(),childrenlist.cend(), childnodeptr);
 		// if not found, add (parent, child) as new link
-		if (child_it == parentnode_it->second.children.cend()) {
-			parentnode_it->second.children.push_back(childnodeptr);
+		if (child_it == childrenlist.cend() or *child_it != childnodeptr) {
+			childrenlist.insert(child_it, childnodeptr);
 			modified= true;
 		}
+		//ASSERT(std::is_sorted(childrenlist.cbegin(),childrenlist.cend()));
+
 	}
 	else { // parent node not found
 		EV_ERROR << "cannot add child " << childNodeKey.shortStr() << ", because parent " << parentNodeKey << " not found" << endl;
@@ -90,7 +90,9 @@ nodeVicinityGraph::removeNode(const OverlayKey& nodeKey)
 		// now find all nodes at node.distance-1, because they may point to this node as being its child
 		for (auto graphit= graph.begin(); graphit != graph.end(); graphit++) {
 			// remove any potential referrals to this node
-			graphit->second.children.remove(node);
+			if (auto pc_it= std::lower_bound(graphit->second.children.cbegin(), graphit->second.children.cend(), node); *pc_it == node) {
+				graphit->second.children.erase(pc_it);
+			}
 		}
 		graph.erase(it);
 	}

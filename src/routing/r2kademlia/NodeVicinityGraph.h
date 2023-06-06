@@ -13,7 +13,7 @@ public:
 	const OverlayKey* nodeKey = nullptr;
 	unsigned short distance = 0; // distance in hops from node
 	stateseqno_t stateseqno;
-	std::list<const nodeVicinityNode*> children; // list of pointer to children
+	std::vector<const nodeVicinityNode*> children; // (sorted) list of pointer to children
 };
 
 
