@@ -10,6 +10,8 @@
 namespace routingsim {
 
 constexpr uint64_t UndefinedPathID_u64= 0x0ULL;
+// just a random seed for the XXhash
+constexpr uint64_t PathIDseed= 0xfe246b05927bd2d7ULL;
 
 class PathID {
 

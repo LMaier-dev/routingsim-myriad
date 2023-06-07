@@ -30,7 +30,8 @@
 
 #include <omnetpp.h>
 #include <crng.h>
-#include "xxh3.h"
+#define XXH_INLINE_ALL
+#include "xxhash.h"
 
 class BinaryValue;
 class OverlayKeyBit;
@@ -41,6 +42,9 @@ using namespace omnetpp;
  * A common overlay key class based on int128
  *
  */
+
+constexpr uint32_t OverlayKeyDefaultLength = 112;
+
 class OverlayKey : public cObject
 {
 public:
@@ -472,18 +476,11 @@ public:
 	//-------------------------------------------------------------------------
 
 	/**
-	 * Set the length of an OverlayKey
-	 *
-	 * @param length keylength in bits
-	 */
-	static void setKeyLength(uint32_t length);
-
-	/**
 	 * Returns the length in number of bits.
 	 *
 	 * @return The length in number of bits.
 	 */
-	static uint32_t getLength();
+	constexpr static uint32_t getLength() { return OverlayKey::keyLength; };
 
 	/**
 	 * Returns a random key.
@@ -515,10 +512,10 @@ public:
 private:
 	// private constants
 
-	static constexpr uint32_t MAX_KEYLENGTH = 128; /**< maximum length of the key */
-	static uint32_t keyLength; /**< actual length of the key */
-	static overlaykey_t MSB_MASK; /**< bits to fill up if key is not full length, e.g., 112bit */
-	static overlaykey_t MSB; /** just the MSB **/
+	static constexpr uint32_t MAX_KEYLENGTH = 128; /**< maximum length of the key, this is fixed in Overlay128.h */
+	static constexpr uint32_t keyLength = OverlayKeyDefaultLength; /**< actual length of the key */
+	static constexpr overlaykey_t MSB_MASK = ~((OverlayKey::overlaykey_t) 0) >> ( MAX_KEYLENGTH - keyLength );; /**< bits to fill up if key is not full length, e.g., 112bit */
+	static constexpr overlaykey_t MSB = ((OverlayKey::overlaykey_t) 1 << (keyLength-1));; /** just the MSB **/
 
 	union {
 		overlaykey_t key; /**< the overlay key this object represents */
@@ -639,14 +636,6 @@ inline
 OverlayKey::OverlayKey(OverlayKey&& rhs) : cObject(rhs), key(rhs.key)
 {
 	rhs.key= INVALIDKEYVALUE;
-}
-
-
-// returns the length in bits
-inline
-uint32_t OverlayKey::getLength()
-{
-	return OverlayKey::keyLength;
 }
 
 

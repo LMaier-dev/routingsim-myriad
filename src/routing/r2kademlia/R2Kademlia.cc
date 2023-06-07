@@ -31,7 +31,6 @@ Define_Module(R2Kademlia);
 
 void R2Kademlia::onInitialize() {
 	EV << "R2Kademlia::onInitialize()" << endl;
-	OverlayKey::setKeyLength(OverlayKeyLength);
 	myOverlayKey = OverlayKey::random(getRNG(0));
 	fwdTablePathID.setOwnNodeID(&myOverlayKey);
 	vicinity.setRoot(myOverlayKey);

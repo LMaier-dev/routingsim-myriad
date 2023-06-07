@@ -1,5 +1,4 @@
 #include "PathID.h"
-#include "SHA1.h"
 #include <iomanip>
 
 namespace routingsim {
@@ -10,21 +9,17 @@ PathID::PathID(const kad_path& path)
 {
     if (path.size() > 0)
     {
-	    uint8_t temp[20]; // SHA1 result
-	    CSHA1 sha1;
+	    constexpr auto keylen(OverlayKey::getLength() / 8 + ((OverlayKey::getLength() % 8) != 0 ? 1 : 0));
+	    char *tmpbuf= new char[path.size()*keylen];
 	    
-	    sha1.Reset();
-	    // hash all keys of the given path
-	    const auto keylen(OverlayKey::getLength() / 8 + ((OverlayKey::getLength() % 8) != 0 ? 1 : 0));
-	    for (const auto& key : path)
-	    {
-		    sha1.Update(key.getRawKey(), keylen);
+	    size_t offset= 0;
+	    for (auto &key : path) {
+		    memcpy(tmpbuf+offset, key.getRawKey(), keylen);
+		    offset+= keylen;
 	    }
-	    sha1.Final();
-	    sha1.GetHash(temp);
-
-	    // we only need 64 bits for PathId
-	    memcpy((uint8_t*) &pathId, temp, sizeof(pathId));
+	    XXH128_hash_t result= XXH3_128bits_withSeed(tmpbuf, offset, PathIDseed);
+	    delete[] tmpbuf;
+	    pathId= result.high64 ^ result.low64;
     }
 }
 
