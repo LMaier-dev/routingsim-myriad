@@ -28,10 +28,6 @@
 #include <iomanip>
 #include "OverlayKey128.h"
 
-uint32_t OverlayKey::keyLength = MAX_KEYLENGTH;
-
-OverlayKey::overlaykey_t OverlayKey::MSB_MASK = ~((OverlayKey::overlaykey_t) 0) >> ( MAX_KEYLENGTH - keyLength );
-OverlayKey::overlaykey_t OverlayKey::MSB = ((OverlayKey::overlaykey_t) 1 << (keyLength-1));
 //--------------------------------------------------------------------
 // constants
 //--------------------------------------------------------------------
@@ -112,24 +108,6 @@ OverlayKey::OverlayKey(const std::string& str, uint32_t base)
 // string representations & node key attributes
 //--------------------------------------------------------------------
 
-void OverlayKey::setKeyLength(uint32_t length)
-{
-	if ((length < 1) or (length > OverlayKey::keyLength) or (length > MAX_KEYLENGTH)) {
-		throw cRuntimeError(
-				"OverlayKey::setKeyLength(): length must be <= %i "
-				"and setKeyLength() must not be called twice "
-				"with different length!", MAX_KEYLENGTH);
-	}
-
-	keyLength = length;
-
-	MSB_MASK =  ~((overlaykey_t) 0) >> ( MAX_KEYLENGTH - keyLength );
-	MSB = ((OverlayKey::overlaykey_t) 1 << (keyLength-1));
-	// EV_STATICCONTEXT;
-	// EV_TRACE << "keylength: " << keyLength << " sizeof(mp_limb_t): " << sizeof(mp_limb_t)
-	// 	 << " aSize: " << aSize << " sizeof(key): " << sizeof(key)
-	// 	 << " MSB_MASK: " << std::hex << OverlayKey::GMP_MSB_MASK << std::dec << endl;
-}
 
 
 bool OverlayKey::isValid(const std::string& str)

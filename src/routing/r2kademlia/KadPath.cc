@@ -1,5 +1,4 @@
 #include "KadPath.h"
-#include "xxh3.h"
 
 namespace routingsim {
 
@@ -86,7 +85,7 @@ bool containsUndirectedLink(const kad_path& path, const OverlayKey& firstNodeKey
 // the hashsum is returned as OverlayKey to be able to calculate the XOR distance
 OverlayKey HashSum(const OverlayKey& seed, const kad_path& path, const OverlayKey& destkey)
 {
-  static const auto keylen(OverlayKey::getLength() / 8 + ((OverlayKey::getLength() % 8) != 0 ? 1 : 0));
+  constexpr auto keylen(OverlayKey::getLength() / 8 + ((OverlayKey::getLength() % 8) != 0 ? 1 : 0));
   char *tmpbuf= new char[(path.size()+1)*keylen];
 
   size_t offset= 0;

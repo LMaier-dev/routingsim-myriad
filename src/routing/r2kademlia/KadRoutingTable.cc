@@ -624,7 +624,8 @@ bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, sta
 			EV_DEBUG << "replacing contact (PNS), new: " << *contact << " old: " << **result << endl;
 			policy->onContactRemoval(result->get());
 
-			auto contactkey(contact->getKey());
+			const auto newcontactp(contact.get());
+			auto contactkey(newcontactp->getKey());
 			auto correctpos= std::upper_bound(contacts.begin(), contacts.end(), contactkey,
 							  [](const OverlayKey& lhs, const KadBucket::BucketElement& rhs) -> bool { return lhs < rhs->getKey(); });
 
@@ -643,7 +644,7 @@ bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, sta
 
 			//ASSERT(is_sorted(contacts.cbegin(),contacts.cend(),[](const KadBucket::BucketElement& lhs, const KadBucket::BucketElement& rhs) -> bool { return lhs.get()->getKey() < rhs.get()->getKey(); }));
 
-			policy->onNewContact(result->get());
+			policy->onNewContact(newcontactp);
 
 			return true;
 		}
@@ -653,7 +654,8 @@ bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, sta
 				 << **resultconn << " (" << (*resultconn)->getConnectivity()  << ")" << endl;
 			policy->onContactRemoval(resultconn->get());
 
-			auto contactkey(contact->getKey());
+			const auto newcontactp(contact.get());
+			auto contactkey(newcontactp->getKey());
 			auto correctpos= std::upper_bound(contacts.begin(), contacts.end(), contactkey,
 							  [](const OverlayKey& lhs, const KadBucket::BucketElement& rhs) -> bool { return lhs < rhs->getKey(); });
 
@@ -672,7 +674,7 @@ bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, sta
 
 			//ASSERT(is_sorted(contacts.cbegin(),contacts.cend(),[](const KadBucket::BucketElement& lhs, const KadBucket::BucketElement& rhs) -> bool { return lhs.get()->getKey() < rhs.get()->getKey(); }));
 
-			policy->onNewContact(resultconn->get());
+			policy->onNewContact(newcontactp);
 
 			return true;
 		}
