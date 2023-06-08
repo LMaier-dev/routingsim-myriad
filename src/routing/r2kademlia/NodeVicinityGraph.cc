@@ -89,10 +89,13 @@ nodeVicinityGraph::removeNode(const OverlayKey& nodeKey)
 		const nodeVicinityNode* node(&it->second);
 		// now find all nodes at node.distance-1, because they may point to this node as being its child
 		for (auto graphit= graph.begin(); graphit != graph.end(); graphit++) {
-			// remove any potential referrals to this node
-			if (auto pc_it= std::lower_bound(graphit->second.children.cbegin(), graphit->second.children.cend(), node); *pc_it == node) {
+		  // remove any potential referrals to this node
+		  if (not graphit->second.children.empty()) {
+			if (auto pc_it= std::lower_bound(graphit->second.children.cbegin(), graphit->second.children.cend(), node);
+			    pc_it != graphit->second.children.cend() and *pc_it == node) {
 				graphit->second.children.erase(pc_it);
 			}
+		  }
 		}
 		graph.erase(it);
 	}
