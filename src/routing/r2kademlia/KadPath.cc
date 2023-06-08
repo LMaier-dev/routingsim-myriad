@@ -80,23 +80,28 @@ bool containsUndirectedLink(const kad_path& path, const OverlayKey& firstNodeKey
 	}
 }
 
+char *tmpHashSumBuf= nullptr;
+unsigned long tmpHashSumBufSize= 0;
 
 // calculates XXH3 hashsum of path and destkey
 // the hashsum is returned as OverlayKey to be able to calculate the XOR distance
 OverlayKey HashSum(const OverlayKey& seed, const kad_path& path, const OverlayKey& destkey)
 {
   constexpr auto keylen(OverlayKey::getLength() / 8 + ((OverlayKey::getLength() % 8) != 0 ? 1 : 0));
-  char *tmpbuf= new char[(path.size()+1)*keylen];
+  if (tmpHashSumBufSize < (path.size()+1)*keylen) {
+	  delete[] tmpHashSumBuf;
+	  tmpHashSumBufSize= (path.size()+1)*keylen;
+	  tmpHashSumBuf= new char[tmpHashSumBufSize];
+  }
 
   size_t offset= 0;
   for (auto &key : path) {
-    memcpy(tmpbuf+offset, key.getRawKey(), keylen);
+    memcpy(tmpHashSumBuf+offset, key.getRawKey(), keylen);
     offset+= keylen;
   }
-  memcpy(tmpbuf+offset, destkey.getRawKey(), keylen);
+  memcpy(tmpHashSumBuf+offset, destkey.getRawKey(), keylen);
   offset+= keylen;
-  XXH128_hash_t result= XXH3_128bits_withSeed(tmpbuf, offset, seed.toUint64_t());
-  delete[] tmpbuf;
+  XXH128_hash_t result= XXH3_128bits_withSeed(tmpHashSumBuf, offset, seed.toUint64_t());
 
   return OverlayKey(result.high64, result.low64);
 }

@@ -17,6 +17,8 @@ class PathID {
 
 public:
 	static const PathID UndefinedPathID;
+	static char* tmppathIDbuf; // avoid frequent allocation/free of memory
+	static unsigned long tmppathIDbufSize;
 	
 	uint64_t pathId;
 	

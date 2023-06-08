@@ -198,11 +198,12 @@ bool R2Kademlia::forwardDataPacketToNextHop(KadDataPacket_p& packet, NodePkt_p& 
 			return true;
 		}
 		else {
-			// Trying to send to a next hop that is not a physical next hop
+			// Trying to send to a next hop that is not (available as) a physical next hop
 			// That will not fly...
 
-			// in case the link to the next hop has failed, send back segment failure
-			// to inform the sender about the problem
+			// in case the link to the next hop has failed,
+			// try to reroute if possible,
+			// send back segment failure to inform the sender about the problem
 			if (auto contact_p= routingTable.getContact(nh.nextHopNode);
 			    contact_p != nullptr and contact_p->isPhysicalNeighbor()) {
 				// we try to reroute to the next hop in case the path should have ended there
@@ -215,20 +216,23 @@ bool R2Kademlia::forwardDataPacketToNextHop(KadDataPacket_p& packet, NodePkt_p& 
 					EV_TRACE << "forwardDataPacketToNextHop: link to " << nh.nextHopNode.shortStr() << " not available, try to reroute " << contact_p->getPath() << endl;
 					ASSERT(pidentry->second != packet->getFirstPathID());
 					// must check for 2nd segment PID
-					auto lastpidentry= fwdTablePathID.NIDPIDTable.find(nh.nextHopNode);
-					if ( lastpidentry != fwdTablePathID.NIDPIDTable.cend() ) {
+					auto lastsegpidentry= fwdTablePathID.NIDPIDTableLastSeg.find(nh.nextHopNode);
+					if ( lastsegpidentry != fwdTablePathID.NIDPIDTableLastSeg.cend() ) {
 						// second segment required for detour to failex next hop (path is at least 4 hops)
 						if (packet->getFirstPathID() == PathID::UndefinedPathID) {
-							// if there is no second segment used yet, we can reroute now
+							// if there is no second segment used yet (*), we can reroute now
 							// otherwise we do not want to introduce more nested PID stacking
 							// (to avoid overwriting the 2nd segment) and packet will be dropped instead
+							// (*) note that the current FirstPathID is the former SecondPathID
 							packet->setFirstPathID(pidentry->second);
-							packet->setSecondPathID(lastpidentry->second);
+							packet->setSecondPathID(lastsegpidentry->second);
 							// recursive call
 							return forwardDataPacketToNextHop(packet, nodePkt);
 						}
 					}
-					else {
+					else { // no second segment required for detour
+						// move second segment to where it belongs and
+						// insert new PID for detour as first PID
 						packet->setSecondPathID(packet->getFirstPathID());
 						packet->setFirstPathID(pidentry->second);
 						// recursive call

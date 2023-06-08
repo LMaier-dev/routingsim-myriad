@@ -35,23 +35,26 @@ getSegmentPathIDs(const OverlayKey ownNodeID, const kad_path& path)
 	}
 }
 
-
-
 PathID getPathID(const OverlayKey& prependKey, const kad_path& path)
 {
 	if (path.size() > 0) {
 		constexpr auto keylen(OverlayKey::getLength() / 8 + ((OverlayKey::getLength() % 8) != 0 ? 1 : 0));
-		char *tmpbuf= new char[(path.size()+1)*keylen];
+		// if temporary buffer too small, reallocate
+		if (PathID::tmppathIDbufSize < (path.size()+1)*keylen) {
+			delete[] PathID::tmppathIDbuf;
+			PathID::tmppathIDbufSize= (path.size()+1)*keylen;
+			PathID::tmppathIDbuf= new char[PathID::tmppathIDbufSize];
+		}
 
 		size_t offset= 0;
-		memcpy(tmpbuf, prependKey.getRawKey(), keylen);
+		memcpy(PathID::tmppathIDbuf, prependKey.getRawKey(), keylen);
 		offset+= keylen;
 		for (auto &key : path) {
-			memcpy(tmpbuf+offset, key.getRawKey(), keylen);
+			memcpy(PathID::tmppathIDbuf+offset, key.getRawKey(), keylen);
 			offset+= keylen;
 		}
-		XXH128_hash_t result= XXH3_128bits_withSeed(tmpbuf, offset, PathIDseed);
-		delete[] tmpbuf;
+		XXH128_hash_t result= XXH3_128bits_withSeed(PathID::tmppathIDbuf, offset, PathIDseed);
+
 		return {result.high64 ^ result.low64};
 	}
 	else
