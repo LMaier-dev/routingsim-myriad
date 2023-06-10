@@ -279,18 +279,20 @@ void R2Kademlia::doProbeContacts(short timerId)
 
 	// check for reachability of neighbors
 	bool probed(false);
+	// randomoffset is used to avoid sending refresh in a bulk since most nodes startup at the same time
+	auto randomoffset= intuniform(0,R2Kademlia::PathRefreshThreshold/2);
 	while (probeContactQueue.size() > 0 and not probed)
 	{
 		// do not probe in case contact not found or too young
 		if (auto contactp= routingTable.getContact(probeContactQueue.front());
 		    contactp != nullptr and (
                         contactp->getAge() > R2Kademlia::PathInfoAgeThreshold or
-                        contactp->getPathAge() > R2Kademlia::PathRefreshThreshold)) {
+                        contactp->getPathAge() > R2Kademlia::PathRefreshThreshold-randomoffset)) {
 			EV_TRACE << "probing for contact: " << probeContactQueue.front() << " age:" << contactp->getAge()
 				 << " path refresh age:" << contactp->getPathAge() << endl;
                             sendPathProbe(probeContactQueue.front());
 			    // send multiple probes in case path refreshes are required
-			    if (contactp->getPathAge() < R2Kademlia::PathRefreshThreshold) {
+			    if (contactp->getPathAge() < R2Kademlia::PathRefreshThreshold-randomoffset) {
 				    probed= true;
 			    }
 		}
