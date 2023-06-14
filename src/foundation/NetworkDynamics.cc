@@ -32,7 +32,13 @@ void NetworkDynamics::initialize(int stage) {
 	if (stage == 1) {
 		initialize();
 		simtime_t nextSchedule = this->scheduleDynamics();
-		scheduleAt(nextSchedule, timer);
+		if (nextSchedule < SIMTIME_MAX) {
+			scheduleAt(nextSchedule, timer);
+		}
+		else { // no subsequent event
+			delete timer;
+			timer= nullptr;
+		}
 	}
 }
 
@@ -134,7 +140,13 @@ void NetworkDynamics::scheduleLinkFailure(nodeid_t from, nodeid_t to, simtime_t 
 void NetworkDynamics::handleMessage(cMessage *msg) {
 	ASSERT(msg==timer);
 	simtime_t nextSchedule = this->scheduleDynamics();
-	scheduleAt(nextSchedule,timer);
+	if (nextSchedule < SIMTIME_MAX) {
+		scheduleAt(nextSchedule,timer);
+	}
+	else { // no subsequent event
+		delete msg;
+		timer= nullptr;
+	}
 }
 
 /*

@@ -118,7 +118,7 @@ simtime_t LinkFailure::scheduleDynamics() {
 		} // end while
 		EV_TRACE << "linkSelection randomAllButOne(): scheduled bidirectional link failures=" << scheduledFailures << endl;
 		if (oneFailure) {
-			return simTime() + SIMTIME_MAX;
+			return SIMTIME_MAX;
 		} else {
 			return simTime() + period;
 		}
@@ -155,7 +155,7 @@ simtime_t LinkFailure::scheduleDynamics() {
 		}
 
 		if (oneFailure) {
-			return simTime() + SIMTIME_MAX;
+			return SIMTIME_MAX;
 		} else {
 			return simTime() + period;
 		}
@@ -211,7 +211,7 @@ simtime_t LinkFailure::scheduleDynamics() {
 
 	/// the failure is repeated each occurrence seconds, unless oneFailure is true
 	if (oneFailure) {
-		return simTime() + SIMTIME_MAX;
+		return SIMTIME_MAX;
 	} else {
 		return simTime() + period;
 	}

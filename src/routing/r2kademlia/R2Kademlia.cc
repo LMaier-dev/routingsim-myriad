@@ -683,6 +683,7 @@ void R2Kademlia::sendPacket(KadPacket_p packet, simtime_t delay) {
 	// EV_TRACE << "sendPacket(): " << packet->getName() << ", " << (int) packet->getType() << endl;
 	sentPackets++;
 	sentVolume+= packetsize;
+
 	forwardPacket(std::move(packet), std::move(nodePkt), delay);
 }
 
@@ -1039,7 +1040,9 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 					// since this node should exist, it may be a hint for inconsistency
 					// trigger discovery of own neighborhood (join) in case the contact is in our lowest bucket
 					// and backoff has already advanced beyond 1s
-					if (routingTable.isInLastBucket(contact.getKey()) and randomTimerDuration[probeTimerId] > SimTime(1000,SIMTIME_MS)) {
+					if (routingTable.getContact(query) != nullptr // contact may be present but is probably invalid already
+					    and routingTable.isInLastBucket(query)
+					    and randomTimerDuration[probeTimerId] > SimTime(1000,SIMTIME_MS)) {
 						// send a join now
 						sendFindNode(myOverlayKey, false);
 						// reset timer for periodic joins to ask more frequently now
