@@ -544,7 +544,7 @@ public:
 	static constexpr unsigned long PathInfoAgeThreshold = 2000UL; // ms
 	// refresh within [0.5,1.5]*PathRefreshThreshold, garbage collection after 3*PathRefreshThreshold
 	static constexpr unsigned long PathRefreshThreshold = 30000UL; // ms
-	static constexpr unsigned long ProbeSelfMinInterval = 100; // ms
+	static constexpr unsigned long ProbeSelfMinInterval = 250; // ms
 	static constexpr unsigned long RediscoveryNextTryWaitTime = 100UL; // ms
 	static constexpr unsigned long PNHelloMinInterval = 200UL; // ms
 	static constexpr unsigned long PNHelloMaxInterval = 30000UL; // ms
