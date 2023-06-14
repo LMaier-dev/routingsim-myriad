@@ -71,7 +71,7 @@ class R2Kademlia : public RPCProtocol, public KadPolicy, public StatisticSample
 {
 private:
 
-	~R2Kademlia() { updateQueue.clear(); pathSetupQueue.clear(); if (PathID::tmppathIDbuf != nullptr) { delete[] PathID::tmppathIDbuf; PathID::tmppathIDbuf= nullptr;} }
+	~R2Kademlia();
 	/// the overlay key of this node
 	OverlayKey myOverlayKey;
 

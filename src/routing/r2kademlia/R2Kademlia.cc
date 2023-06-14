@@ -29,6 +29,28 @@ using cbfunc_t = std::function<void(short timerId)>;
 
 Define_Module(R2Kademlia);
 
+
+
+R2Kademlia::~R2Kademlia()
+{
+	updateQueue.clear();
+	pathSetupQueue.clear();
+
+	// free static temporary buffers
+	if (PathID::tmppathIDbuf != nullptr) {
+		delete[] PathID::tmppathIDbuf; PathID::tmppathIDbuf= nullptr; PathID::tmppathIDbufSize=0;
+	}
+
+	// see KadPath.cc
+	extern char *tmpHashSumBuf;
+	extern unsigned long tmpHashSumBufSize;
+
+	if (tmpHashSumBuf != nullptr) {
+		delete[] tmpHashSumBuf; tmpHashSumBuf= nullptr; tmpHashSumBufSize= 0;
+	}
+}
+
+	
 void R2Kademlia::onInitialize() {
 	EV << "R2Kademlia::onInitialize()" << endl;
 	myOverlayKey = OverlayKey::random(getRNG(0));

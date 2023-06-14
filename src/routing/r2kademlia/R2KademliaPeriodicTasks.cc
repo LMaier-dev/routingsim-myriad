@@ -125,7 +125,7 @@ void R2Kademlia::resetTimer(short timerId, simtime_t duration)
 		}
 	}
 	else
-	if (timerId < 0) {
+	{
 		if (size_type timerIdx= -2-timerId; timerIdx < fixedTimerMsg.size()) {
 			cMessage* timermsg(fixedTimerMsg[timerIdx]);
 
