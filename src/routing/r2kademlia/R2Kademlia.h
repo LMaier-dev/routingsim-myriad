@@ -54,6 +54,8 @@ enum reasoncode : uint8_t {
 	routeFailureDeadEnd= 5, // no ID-wise progress possible
 	missingNeighbor = 7,    // forwarding entry contains non existing next hop
 	missingPID = 8,         // cannot find a corresponding (incoming) pathID
+	rerouteDataSegmentLimitExceeded = 9,    // this reroute would require more than two segment headers
+	nextHopUnknownDataFwd = 10, // next hop not available during forwarding a data packet
 	unhandledType= 128
 };
 
