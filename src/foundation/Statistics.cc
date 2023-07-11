@@ -197,6 +197,7 @@ public:
 		// since the histogram should sum up to 1, all quantile values should have been covered
 	}
 
+	// this records the values and resets them for beginning a new sampling interval
 	void record(cSimpleModule* module) {
 		ASSERT(n != 0);
 		double value = avg / n; // value is now the average value
@@ -224,6 +225,8 @@ public:
 			}
 			calcQuantiles();
 		}
+
+		// reset values
 		lastavg = value;
 		lastmin = min;
 		lastmax = max;
@@ -233,6 +236,9 @@ public:
 		max = -INFINITY;
 		min = INFINITY;
 		n = 0;
+		histogram->clear();
+		histogramAbs->clear();
+		histogramDiffQuot->clear();
 	}
 };
 
@@ -338,7 +344,7 @@ const char* messagesDeliveryRatioStr = "messagesDeliveryRatio";
 const char* messagesDeliveredStr = "messagesDelivered";
 const char* messagesDroppedStr = "messagesDropped";
 
-// this is called periodically
+// this is called periodically, see samplingtimer and handleMessage
 void Statistics::sample() {
 	if ((messagesDelivered+messagesDropped)!=0) {
 		messagesDeliveryRatio->record((double)messagesDelivered/((double)messagesDelivered+(double)messagesDropped));
