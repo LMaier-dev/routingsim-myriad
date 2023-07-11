@@ -73,9 +73,8 @@ public:
 	cOutVector* minVecDiffQuot; // Difference Quotient
 	cOutVector* maxVec;
 	cOutVector* maxVecDiffQuot; // Difference Quotient
-	cHistogram* histogram; // histogram of average values
-	cHistogram* histogramAbs; // histogram of actual values from sample set
-	cHistogram* histogramDiffQuot; // histogram of difference quotient from average values
+	cHistogram* histogramAbs; // histogram of actual values from sample set, collected during the last sampling interval
+
 	cOutVector* quantileVec[qvaluenumber]; // a vector of various quantiles (see qvalues)
 	int f;
 
@@ -97,9 +96,8 @@ public:
 				(string(name) + string("MinDiffQuot")).c_str());
 		maxVecDiffQuot = new cOutVector(
 				(string(name) + string("MaxDiffQuot")).c_str());
-		histogram = getDensityHistogram(name, "AvgDensity", size);
 		histogramAbs = getDensityHistogram(name, "Density", size);
-		histogramDiffQuot = getDensityHistogram(name, "AvgDiffQuotDensity", size);
+
 		// initialize quantile vectors
 		for (unsigned int i= 0; i < qvaluenumber; i++)
 		{
@@ -118,9 +116,7 @@ public:
 		delete avgVecDiffQuot;
 		delete minVecDiffQuot;
 		delete maxVecDiffQuot;
-		delete histogram;
 		delete histogramAbs;
-		delete histogramDiffQuot;
 		for (unsigned int i= 0; i < qvaluenumber; i++)
 		{
 			delete quantileVec[i];
@@ -129,9 +125,7 @@ public:
 	}
 
 	void finish(cSimpleModule* module) {
-		histogram->record();
 		histogramAbs->record();
-		histogramDiffQuot->record();
 
 		if (eqTrigger != INFINITY) {
 			module->recordScalar(eqTriggerName.c_str(),
@@ -201,14 +195,13 @@ public:
 	void record(cSimpleModule* module) {
 		ASSERT(n != 0);
 		double value = avg / n; // value is now the average value
-		//EV_STATICCONTEXT
+		//EV_STATICCONTEXT;
 		//EV_TRACE << "Value::record(" << avgVec->getName() << "), n=" << n << " avg=" << avg << " value: " << value << endl;
 		if (eqTrigger != INFINITY) {
 			if (eqTrigger == value)
 				eqTriggerCount++;
 			eqTriggerNum++;
 		}
-		histogram->collect(value);
 		avgVec->record(value);
 		minVec->record(min);
 		maxVec->record(max);
@@ -219,7 +212,6 @@ public:
 				avgVecDiffQuot->record((value - lastavg) / dx);
 				//EV_TRACE << "Value::record(" << avgVecDiffQuot->getName() << "), lastavg:" << lastavg << " diff:" << (value - lastavg) << " delta:" << (value - lastavg)/dx << " dx=" << dx << endl;
 
-				histogramDiffQuot->collect((value - lastavg) / dx);
 				minVecDiffQuot->record((min - lastmin) / dx);
 				maxVecDiffQuot->record((max - lastmax) / dx);
 			}
@@ -236,9 +228,12 @@ public:
 		max = -INFINITY;
 		min = INFINITY;
 		n = 0;
-		histogram->clear();
-		histogramAbs->clear();
-		histogramDiffQuot->clear();
+
+                // when a new sampling interval begins, clear the histogram, too
+		// unless we are at the end of the simulation: then we want to record the final histogram
+	        if (getStatistics().getSimTimeLimit() >= SIMTIME_ZERO and simTime() < getStatistics().getSimTimeLimit()) {
+			histogramAbs->clear();
+		}
 	}
 };
 
@@ -269,6 +264,7 @@ void Statistics::initialize(int stage) {
 		// start sampling
 		samplingInterval = par("samplingInterval");
 		recordShortestPathDeliveryRatio = par("recordShortestPathDeliveryRatio");
+		simTimeLimit= simTime().parse(getEnvir()->getConfig()->getConfigValue("sim-time-limit"));
 		samplingTimer = new cMessage("samplingTimer");
 		messagesDelivered = 0;
 		messagesDropped = 0;
