@@ -215,6 +215,7 @@ void KadObserver::recordStatistics() {
 }
 
 
+// this will only be called at KadObserver::finish()
 void KadObserver::recordMessageScalars() {
 	cModuleType* modType = cModuleType::get("routingsim.routing.r2kademlia.Dummy");
 	std::string messageDeliveredStr{"messageDelivered"};

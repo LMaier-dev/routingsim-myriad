@@ -47,6 +47,7 @@ private:
 	typedef std::unordered_map<const char*, Value*> Values;
 	Values values;
 	simtime_t samplingInterval;
+	simtime_t  simTimeLimit = SIMTIME_ZERO;
 	cMessage* samplingTimer;
 	std::vector<StatisticSample*> samples;
 	bool recordShortestPathDeliveryRatio;
@@ -89,6 +90,8 @@ public:
 
 	/// notify that the message has been delivered
 	void deliveredMessage( cMessage* msg, int hopCount );
+
+	simtime_t getSimTimeLimit() const { return simTimeLimit; };
 };
 
 extern const char* STATS_MAIN;
