@@ -1188,7 +1188,8 @@ bool R2Kademlia::handleRPCTimeOut(KadPacket_p answer_, RPCState& rpcState) {
 }
 
 
-// this is called periodically for all modules in Statistics::sample()
+// this is called periodically for _all_ modules in Statistics::sample()
+// This is not a subset, these statistics include all nodes!
 void R2Kademlia::sampleStatistics (Statistics &stats) {
 	// every value here will contribute to the average, min, max,
 	// avgDiffQuot and quantiles, a histogram is also created

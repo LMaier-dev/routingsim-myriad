@@ -76,7 +76,7 @@ public:
 	virtual ~Statistics();
 
 	void addSample( StatisticSample* sample );
-	void value(const char* name, double value = 1, bool average = true);
+	void value(const char* name, double value = 1, bool average = true, double lower_bound= 0.0);
 	void valueTrigger(const char* name, double value);
 
 	// delivery ratio of messages

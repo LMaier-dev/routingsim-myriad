@@ -21,6 +21,7 @@
 #include<algorithm>
 #include<string>
 #include<omnetpp.h>
+#include <cmath>
 
 namespace routingsim {
 Define_Module(Statistics);
@@ -29,10 +30,12 @@ static Statistics* stats = nullptr;
 static std::unordered_map<const char*, Statistics*> statsMap;
 
 // convenience method, used in Statistics::Value()
-cHistogram* getDensityHistogram(const char* name1, const char* name2, size_t size) {
+cHistogram* getDensityHistogram(const char* name1, const char* name2, size_t size, double lower_bound) {
 	cHistogram* hist = new cHistogram((string(name1) + string(name2)).c_str());
 	hist->setNumBinsHint(512);
-	hist->setNumPrecollectedValues(size*50);
+	hist->setNumPrecollectedValues((size*4)/5); // for 80% of all nodes
+	hist->setRange(lower_bound,NAN);
+	hist->setAutoExtend(true);
 	hist->setRangeExtensionFactor(2.0);
 	return hist;
 }
@@ -83,7 +86,8 @@ public:
 	int eqTriggerCount;
 	int eqTriggerNum;
 public:
-	Value(const char* name, size_t size ) :
+	// in case the Value can also take negative values, please set the lower_bound accordingly, e.g., NAN
+	Value(const char* name, size_t size, double lower_bound= 0.0) :
 		n(0), avg(0), min(INFINITY), max(-INFINITY), lastavg(0), lastmin(0),
 		lastmax(0) {
 		f=0;
@@ -96,7 +100,7 @@ public:
 				(string(name) + string("MinDiffQuot")).c_str());
 		maxVecDiffQuot = new cOutVector(
 				(string(name) + string("MaxDiffQuot")).c_str());
-		histogramAbs = getDensityHistogram(name, "Density", size);
+		histogramAbs = getDensityHistogram(name, "Density", size, lower_bound);
 
 		// initialize quantile vectors
 		for (unsigned int i= 0; i < qvaluenumber; i++)
@@ -134,10 +138,17 @@ public:
 	}
 
 	void add(double value, bool average = true) {
-		if (!first) histogramAbs->collect(value);
+		if (not first) {
+			histogramAbs->collect(value);
+		}
 		avg += value;
-		min = value < min ? value : min;
-		max = value > max ? value : max;
+
+		// update min and max
+		if (value < min)
+			min= value;
+		if (value > max)
+			max= value;
+
 		if (average)
 			n++;
 		else
@@ -152,9 +163,21 @@ public:
 		// this function calculates a number of quantiles given in qvalues[] from Absolute Values of each
 		// sampling node (not the average value) as stored in histogram
 		// this is more efficient than running getCDF() in a loop, because we are doing it in one sweep
+
+		// if histogram is still in precollection phase, we nevertheless enforce it now to set up the bins
+		if (not histogramAbs->binsAlreadySetUp()) {
+			//EV_STATICCONTEXT;
+			//EV_WARN << "calcQuantiles(): histogram " << histogramAbs->getName() << " bins still in precollection phase, counted ";
+			histogramAbs->setUpBins();
+			//EV_WARN << histogramAbs->getCount() << " entries" << endl;
+		}
+
 		int numBins = histogramAbs->getNumBins();
-		if (numBins <= 0) // cannot work with empty histogram, sorry
+		if (numBins <= 0) { // cannot work with empty histogram, sorry
+			//EV_STATICCONTEXT;
+			//EV_WARN << "calcQuantiles(): empty histogram " << histogramAbs->getName() << endl;
 			return;
+		}
 
 		unsigned int qindex= 0;
 		double lowerEdge = histogramAbs->getBinEdge(0);
@@ -366,11 +389,11 @@ void Statistics::handleMessage(cMessage *msg) {
 	scheduleAt(simTime() + samplingInterval, samplingTimer);
 }
 
-void Statistics::value(const char* name, double value, bool average) {
+void Statistics::value(const char* name, double value, bool average, double lower_bound) {
 	ASSERT(not std::isnan(value));
-	ASSERT(not std::isnan(average));
-	if (values.count(name) == 0)
-		values.insert(std::make_pair(name, new Value(name, samples.size())));
+
+	if (values.count(name) == 0) // create a new object first
+		values.insert(std::make_pair(name, new Value(name, samples.size(), lower_bound)));
 	values[name]->add(value, average);
 }
 
