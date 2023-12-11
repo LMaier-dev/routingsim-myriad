@@ -482,7 +482,7 @@ private:
 	/** @name policy foo */
 	//@{
 	void onMissingNeighbor(KadPacket_p packet, NodePkt_p pkt, const OverlayKey& missingNeighborNodeID);
-	void onMissingNeighbor(KadDataPacket_p packet, NodePkt_p pkt, const OverlayKey& missingNeighborNodeID);
+	void onMissingNeighbor(KadDataPacket_p packet, const OverlayKey& missingNeighborNodeID);
 	/** Called when an error packet is encountered, updates routing information */
 	bool onErrorPacket(KadError& error);
 	//@}

@@ -123,7 +123,6 @@ bool R2Kademlia::handlePathSetupResponse(KadPacket_p answer, RPCState& rpcState)
 			if (contactp->getPathLength() != tmpcontact.getPath().size()+nodeVicinityGraph::vicinityDiscoveryRadius or contactp->getPath() != tmpcontact.getPath()) {
 				EV_WARN << "PathSetupRsp: ignoring, because Last Seen of current contact is more recent and path has changed meanwhile:" << tmpcontact.getLastSeen() << endl;
 				// TODO: initiate Teardown of the obsolete path
-
 			}
 			else {
 				addthispath= true;

@@ -140,9 +140,10 @@ void R2Kademlia::handleDataPacket(NodePkt_p pkt) {
 
 
 // uses the PID of the packet to determine the next hop and transmits it
-// @returns true in case of successful forwarding/transmission to next hop or dropped packet
+// @returns true in case of successful forwarding/transmission to next hop or false in case of dropped packet
 bool R2Kademlia::forwardDataPacketToNextHop(KadDataPacket_p& packet, NodePkt_p& nodePkt)
 {
+	ASSERT(nodePkt != nullptr);
 	bool packetorigin(packet->getSrcNodeID() == myOverlayKey);
 	// lookup outgoing PathID (next hop) based on incoming PathID
 
@@ -205,19 +206,22 @@ bool R2Kademlia::forwardDataPacketToNextHop(KadDataPacket_p& packet, NodePkt_p& 
 			// try to reroute if possible,
 			// send back segment failure to inform the sender about the problem
 			// TODO: send also known replacement path with the error indication
-			if (auto contact_p= routingTable.getContact(nh.nextHopNode);
-			    contact_p != nullptr and contact_p->isPhysicalNeighbor()) {
+			if (auto nexthop_contact_p= routingTable.getContact(nh.nextHopNode);
+			    nexthop_contact_p != nullptr and nexthop_contact_p->isPhysicalNeighbor()) {
 
 				reasoncode dropreason(missingNeighbor);
 				// several cases possible:
-				// 1) we know the final destination as contact and have a valid route to it
+				// 1) we know the final destination as contact and have a valid route to it;
+				//    this is preferrable to the next options, as we can fully replace first and second PID
 				// 2) we can detour to the next hop by inserting a new PID (i.e., second segment PID must be empty)
-				// 3) we try to reroute to the next hop in case the path should have ended there (same as case 2)
+				// 3) we try to reroute to the next hop in case the path should have ended there
+				//    (same as case 2, but guaranteed to work as the 2nd segment is not present)
 				if (auto dst_contact_p = routingTable.getContact(packet->getDstNodeID());
 				    dst_contact_p != nullptr and
 				    dst_contact_p->isValid()) {
 
-					EV_TRACE << "forwardDataPacketToNextHop: link to " << nh.nextHopNode.shortStr() << " not available, try to reroute " << dst_contact_p->getPath() << endl;
+					EV_TRACE << "forwardDataPacketToNextHop: link to " << nh.nextHopNode.shortStr() << " not available, try to reroute to final destination "
+						 << dst_contact_p->getKey().shortStr() << " directly via " << dst_contact_p->getPath() << endl;
 					if ( auto pidentry= fwdTablePathID.NIDPIDTable.find(dst_contact_p->getKey());
 					     pidentry != fwdTablePathID.NIDPIDTable.cend() )
 					{ // pidentry.second is incomingPathID
@@ -229,25 +233,52 @@ bool R2Kademlia::forwardDataPacketToNextHop(KadDataPacket_p& packet, NodePkt_p& 
 							packet->setSecondPathID(secondpidentry->second);
 						}
 
-						// send back error message (requires copy of packet)
-						onMissingNeighbor(std::move(std::make_unique<KadDataPacket>(*packet)), nullptr, nh.nextHopNode);
+						// send back error message (requires copy of packet) to inform about broken link in source route
+						// even if we are able to reroute the data packet
+						onMissingNeighbor(std::make_unique<KadDataPacket>(*packet), nh.nextHopNode);
+						// need to check now that this next hop is available, otherwise drop to avoid endless recursion
+						if (auto newfwdentry= fwdTablePathID.PIDFwdTable.find(packet->getFirstPathID());
+						    newfwdentry != fwdTablePathID.PIDFwdTable.end())
+						{ // entry found
+							FwdTableEntry& new_nh= newfwdentry->second;
+						        if (neighborTable.getNodeId(new_nh.nextHopNode) != undefined_node) {
+								// recursive call
+								return forwardDataPacketToNextHop(packet, nodePkt);
+							}
+							else {
+								EV_TRACE << "reroute not successful, next hop " << new_nh.nextHopNode.shortStr() << " also not available" << endl;
+							}
 
-						// recursive call
-						return forwardDataPacketToNextHop(packet, nodePkt);
+							packet->setControlInfo(nodePkt.release());
+							countDropped(*packet, packet->getDstNodeID(), dropreason);
+
+							return false;
+						}
 					}
 					else { // no PID found (usually for PNs, but this is not reachable)
-						EV_ERROR << "No PID found for contact " << dst_contact_p->getKey() << endl;
+						// this can also occur when the path has not been setup yet
+						EV_ERROR << "No PID found for destination contact " << dst_contact_p->getKey() << endl;
+
+						// send back error message (requires copy of packet)
+						onMissingNeighbor(std::make_unique<KadDataPacket>(*packet), nh.nextHopNode);
+
+						packet->setControlInfo(nodePkt.release());
+						countDropped(*packet, packet->getDstNodeID(), dropreason);
+
+						return false;
 					}
 				}
 
+				// do we have another path to the next hop available that we can insert?
+				// this is only useful if the contact is in state valid
 				if (auto pidentry= fwdTablePathID.NIDPIDTable.find(nh.nextHopNode);
-				    contact_p->isValid()
+				    nexthop_contact_p->isValid()
 				    and pidentry != fwdTablePathID.NIDPIDTable.cend()
 				    and pidentry->second != PathID::UndefinedPathID)
 				{
 					ASSERT(pidentry->second != packet->getFirstPathID());
 
-					EV_TRACE << "forwardDataPacketToNextHop: link to " << nh.nextHopNode.shortStr() << " not available, try to reroute " << contact_p->getPath() << endl;
+					EV_TRACE << "forwardDataPacketToNextHop: link to " << nh.nextHopNode.shortStr() << " not available, try to reroute to next hop via " << nexthop_contact_p->getPath() << endl;
 
 					// must check for 2nd segment PID
 					auto lastsegpidentry= fwdTablePathID.NIDPIDTableLastSeg.find(nh.nextHopNode);
@@ -262,10 +293,18 @@ bool R2Kademlia::forwardDataPacketToNextHop(KadDataPacket_p& packet, NodePkt_p& 
 							packet->setSecondPathID(lastsegpidentry->second);
 
 							// send back error message (requires copy of packet)
-							onMissingNeighbor(std::move(std::make_unique<KadDataPacket>(*packet)), nullptr, nh.nextHopNode);
-
-							// recursive call
-							return forwardDataPacketToNextHop(packet, nodePkt);
+							onMissingNeighbor(std::make_unique<KadDataPacket>(*packet), nh.nextHopNode);
+							if (auto newfwdentry= fwdTablePathID.PIDFwdTable.find(packet->getFirstPathID());
+							    newfwdentry != fwdTablePathID.PIDFwdTable.end())
+							{ // entry found
+								FwdTableEntry& new_nh= newfwdentry->second;
+								if (neighborTable.getNodeId(new_nh.nextHopNode) != undefined_node) {
+									// recursive call
+									return forwardDataPacketToNextHop(packet, nodePkt);
+								}
+								else
+									EV_TRACE << "reroute not successful, next hop " << new_nh.nextHopNode.shortStr() << " also not available" << endl;
+							}
 						}
 						else
 							dropreason= rerouteDataSegmentLimitExceeded;
@@ -277,17 +316,19 @@ bool R2Kademlia::forwardDataPacketToNextHop(KadDataPacket_p& packet, NodePkt_p& 
 						packet->setFirstPathID(pidentry->second);
 
 						// send back error message (requires copy of packet)
-						onMissingNeighbor(std::move(std::make_unique<KadDataPacket>(*packet)), nullptr, nh.nextHopNode);
+						onMissingNeighbor(std::make_unique<KadDataPacket>(*packet), nh.nextHopNode);
 
 						// recursive call
 						return forwardDataPacketToNextHop(packet, nodePkt);
 					}
-				}
+				} // endif PathID to next hop available
 
 				packet->setControlInfo(nodePkt.release());
 				countDropped(*packet, packet->getDstNodeID(), dropreason);
+
 				// send back segment failure
-				onMissingNeighbor(std::move(packet), std::move(nodePkt), nh.nextHopNode);
+				onMissingNeighbor(std::move(packet), nh.nextHopNode);
+
 			}
 			else { // else: next hop not found (TODO: this cannot happen during data packet forwarding)
 				EV_ERROR << "forwardDataPacketToNextHop: wrong next hop"
@@ -297,10 +338,18 @@ bool R2Kademlia::forwardDataPacketToNextHop(KadDataPacket_p& packet, NodePkt_p& 
 				countDropped(*packet, packet->getDstNodeID(), nextHopUnknownDataFwd);
 			}
 
-			return true;
-		}
+		} // end else (next hop not available)
 
 	} // endif forwarding entry found
+	else {
+		EV_WARN << "forwardDataPacket: incoming PathID " << packet->getFirstPathID() << " not found in FwdPIDTable. Dropping packet" << endl;
+		inconsistentPathHit++;
+
+		packet->setControlInfo(nodePkt.release());
+		countDropped(*packet, packet->getDstNodeID(), missingPID);
+		notifySender(KAD_PathIDUnknown, std::move(packet), OverlayKey::UNSPECIFIED_KEY);
+
+	}
 
 	// false means forwarding failure
 	return false;
@@ -312,6 +361,7 @@ void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 	ASSERT(packet->getType() == KAD_Data);
 	ASSERT(packet->getControlInfo() == nullptr);
         ASSERT(packet->hasRemainingHops());
+	ASSERT(nodePkt != nullptr);
 
 	const auto& finaldest(packet->getDstNodeID());
 	EV_TRACE << "forwardDATAPacket: finaldest=" << finaldest.shortStr()
@@ -320,9 +370,9 @@ void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 	
 	if (packet->hasRemainingHops() == false)
 	{ // Loop detected: this should not occur
-		if (packet->getControlInfo() == nullptr)
+		if (packet->getControlInfo() == nullptr) {
 			packet->setControlInfo(nodePkt.release());
-
+		}
 		countDropped(*packet, finaldest, hopLimitExceeded);
 		notifySender(KAD_HopLimitExceeded, std::move(packet), OverlayKey::UNSPECIFIED_KEY);
 		return;
@@ -433,18 +483,8 @@ void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 
 	// incomingPathID is present, simply look it up and forward accordingly
 	packet->setFirstPathID(incomingPathID);
-	if (not forwardDataPacketToNextHop(packet, nodePkt))
-	{ // incoming PathID not found
-		// may be the case if entry already deleted/overwritten, or
-		// has never existed due to shortcut route heard from other nodes
-		EV_WARN << "forwardDataPacket: incoming PathID " << incomingPathID << " not found in FwdPIDTable. Dropping packet" << endl;
-		inconsistentPathHit++;
-
-		packet->setControlInfo(nodePkt.release());
-		countDropped(*packet, finaldest, missingPID);
-		notifySender(KAD_PathIDUnknown, std::move(packet), OverlayKey::UNSPECIFIED_KEY);
-	}
-	// else: Packet was sent off or dropped by function
+	// forwardDataPacketToNextHop will either forward (returns true) or drop the packet and report an error msg back
+	forwardDataPacketToNextHop(packet, nodePkt);
 }
 
 
@@ -492,7 +532,7 @@ void R2Kademlia::sendData(const OverlayKey& finaldestkey) {
 }
 
 
-void R2Kademlia::onMissingNeighbor(KadDataPacket_p packet, NodePkt_p pkt, const OverlayKey& missingNeighborNodeID) {
+void R2Kademlia::onMissingNeighbor(KadDataPacket_p packet, const OverlayKey& missingNeighborNodeID) {
 //  	getStatistics().dropMessage(pkt, undefined_node);
 	EV_WARN << "onMissingNeighbor(data) called - packet next hop should be ";
 	EV_WARN << "NID: " << missingNeighborNodeID.shortStr();
@@ -523,6 +563,8 @@ void R2Kademlia::countReceived(KadDataPacket& packet) {
 }
 
 
+// drops packet and counts dropped packet
+// controlInfo needs to be set properly
 void R2Kademlia::countDropped(KadDataPacket& packet, const OverlayKey& target, uint8_t reason) {
 	droppedDataPackets++;
 	getKadObserver().registerPacketDropped(packet, myOverlayKey, target, reason);

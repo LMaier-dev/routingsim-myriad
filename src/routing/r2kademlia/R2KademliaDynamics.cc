@@ -134,7 +134,7 @@ void R2Kademlia::scheduleUpdate(const KadContact& affectedContact, KadRouteUpdat
 		return;
 
 	// we collect all update information for neighbors
-	// send UpdateRouteReq to ID-wise closest Nodes
+	// send UpdateRouteReq to ID-wise closest Nodes (even if they are currently not reachable/valid)
 	size_t contactsLen = std::max((size_t)findNodeNumber, routingTable.getSplitSize());
 	OverlayKey notifyKey;
 	switch (updateNotifyStrategy) {
@@ -147,7 +147,9 @@ void R2Kademlia::scheduleUpdate(const KadContact& affectedContact, KadRouteUpdat
 		default:
 			throw cRuntimeError("unknown updateNotify strategy %u, values from 1 to 2 are allowed", updateNotifyStrategy);
 	}
-	//KadContactList closeContacts(routingTable.getClosestContacts(affectedContact.getKey(), contactsLen));
+	// note that validcontactonly == false,
+	// i.e., we also use unreachable contacts as destination and try to forward
+	// it via the overlay routing strategy as close as possible to them
 	KadContactList closeContacts(routingTable.getClosestContacts(notifyKey, contactsLen, false));
 
 	uint8_t numberOfNotifiedContacts = 0;
