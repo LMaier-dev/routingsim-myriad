@@ -108,6 +108,7 @@ void R2Kademlia::doDataProbe(short timerID) {
 
 
 void R2Kademlia::handleDataPacket(NodePkt_p pkt) {
+	ASSERT( pkt != nullptr );
 	EV_TRACE << "handleDataPacket() - ";
 	
 	KadDataPacket_p packet = std::unique_ptr<KadDataPacket>(check_and_cast<KadDataPacket*>(pkt->decapsulate()));
@@ -358,6 +359,7 @@ bool R2Kademlia::forwardDataPacketToNextHop(KadDataPacket_p& packet, NodePkt_p& 
 
 void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 
+	ASSERT(packet != nullptr);
 	ASSERT(packet->getType() == KAD_Data);
 	ASSERT(packet->getControlInfo() == nullptr);
         ASSERT(packet->hasRemainingHops());
