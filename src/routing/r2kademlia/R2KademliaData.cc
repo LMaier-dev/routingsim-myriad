@@ -329,7 +329,7 @@ bool R2Kademlia::forwardDataPacketToNextHop(KadDataPacket_p& packet, NodePkt_p& 
 
 				// send back segment failure
 				onMissingNeighbor(std::move(packet), nh.nextHopNode);
-
+				return false;
 			}
 			else { // else: next hop not found (TODO: this cannot happen during data packet forwarding)
 				EV_ERROR << "forwardDataPacketToNextHop: wrong next hop"
@@ -337,6 +337,7 @@ bool R2Kademlia::forwardDataPacketToNextHop(KadDataPacket_p& packet, NodePkt_p& 
 
 				packet->setControlInfo(nodePkt.release());
 				countDropped(*packet, packet->getDstNodeID(), nextHopUnknownDataFwd);
+				return false;
 			}
 
 		} // end else (next hop not available)
@@ -349,7 +350,7 @@ bool R2Kademlia::forwardDataPacketToNextHop(KadDataPacket_p& packet, NodePkt_p& 
 		packet->setControlInfo(nodePkt.release());
 		countDropped(*packet, packet->getDstNodeID(), missingPID);
 		notifySender(KAD_PathIDUnknown, std::move(packet), OverlayKey::UNSPECIFIED_KEY);
-
+		return false;
 	}
 
 	// false means forwarding failure
@@ -446,16 +447,10 @@ void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 
 					if (not forwardDataPacketToNextHop(packet, nodePkt))
 					{
-						EV_WARN << "PID based forwarding failed while trying to forward to next hop. Dropping packet" << endl;
-						if (packet->getControlInfo() == nullptr)
-							packet->setControlInfo(nodePkt.release());
-						
-						countDropped(*packet, finaldest, missingPID);
-						notifySender(KAD_PathIDUnknown, std::move(packet), OverlayKey::UNSPECIFIED_KEY);
-						
+						EV_WARN << "PID based forwarding failed while trying to forward to next hop." << endl;
 						return;
 					}
-					else // forwardDataPacketToNextHop had success or dropped
+					else // forwardDataPacketToNextHop had success
 						return;
 				}
 				else {
