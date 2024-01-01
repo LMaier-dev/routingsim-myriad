@@ -37,6 +37,7 @@ class noncobject key_vector_t;
 class noncobject stateseqno_t;
 class noncobject age_t;
 class noncobject nodedegree_t;
+class noncobject PathID;
 
 enum KadErrorType {
 	KAD_NoError = 0;
@@ -198,3 +199,11 @@ packet KadQueryRouteRsp extends KadRTableRsp {
 	type = KAD_QueryRouteRsp;
 }
 
+
+// Reverse Flood along PathIDs
+packet KadRevPathFlood extends KadPacket {
+        type = KAD_RevPathFlood;
+
+	// List of PathIDs for further reverse path flooding of this message
+	PathID PIDList[];
+}

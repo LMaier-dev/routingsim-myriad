@@ -59,8 +59,10 @@ enum reasoncode : uint8_t {
 	unhandledType= 128
 };
 
+
 // OverlayKey length 112 bit (16 bit prefix will be prepended to make it an IPv6 address)
 constexpr uint8_t OverlayKeyLength= 112;
+
 
 /**
  * Implementation of R2Kad.
@@ -132,12 +134,16 @@ private:
 	bool failureFocussedProbing;
 	//@}
 
+	// to notify neighbors about affected PathIDs after a failure
+	std::unordered_set<PathID> notifyPIDs;
+
 	// a list that is used to send rediscover messages
 	// UpdateList_t is std::list< std::pair<KadContact, KadRouteUpdateAction> >
 	std::unordered_map< OverlayKey, UpdateList_t > updateQueue;
 	// selfMessage
 	bool updateScheduled= false;
 	bool urgentUpdateScheduled= false;
+	bool linkFailureNotificationScheduled= false;
 
 	struct greatercmp {
 		const OverlayKey& ownkey;
@@ -361,6 +367,11 @@ private:
 	bool handleRPCTimeOut(KadPacket_p answer, RPCState& rpcState);
 	//@}
 	void incLSSeqNo() { lsseqno++; }
+
+	void notifyAffectedPathUsers(const OverlayKey &key);
+	void sendLinkFailureNotifications();
+	void scheduleLinkFailureNotification();
+
 	/// adds contact and not via link for rediscovery queue (or send it immediately)
 	void scheduleRediscovery(const OverlayKey& contactkey, rediscoverQueueClass& rediscoveryQueue, simtime_t rediscoveryWaitTime);
 	void rediscoverContacts(RediscoveryState::rediscoverQ_type qtype, simtime_t rediscoveryWaitTime);
@@ -393,6 +404,7 @@ private:
 	virtual void handlePacket(std::unique_ptr<KadQueryRouteReq> packet);
 	virtual void handlePacket(std::unique_ptr<KadUpdateRouteReq> packet);
 	virtual void handlePacket(std::unique_ptr<KadFindNodeReq> packet);
+	virtual void handlePacket(std::unique_ptr<KadRevPathFlood> packet);
 	virtual void handlePacket(KadAnswer_p packet);
 	virtual void handleDataPacket(NodePkt_p packet);
 	//@}
@@ -547,6 +559,7 @@ public:
 	// refresh within [0.5,1.5]*PathRefreshThreshold, garbage collection after 3*PathRefreshThreshold
 	static constexpr unsigned long PathRefreshThreshold = 30000UL; // ms
 	static constexpr unsigned long ProbeSelfMinInterval = 250; // ms
+	static constexpr unsigned long notifyLinkFailureWaitTime = 10UL; 
 	static constexpr unsigned long RediscoveryNextTryWaitTime = 100UL; // ms
 	static constexpr unsigned long PNHelloMinInterval = 200UL; // ms
 	static constexpr unsigned long PNHelloMaxInterval = 30000UL; // ms

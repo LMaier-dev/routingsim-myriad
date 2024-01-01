@@ -881,6 +881,20 @@ KadContactList KadRoutingTable::getValidContactsFromBucket(size_t index) const
 }
 
 
+std::list<OverlayKey> KadRoutingTable::getFailedPNs() const
+{
+	std::list<OverlayKey> resultlist;
+	for (auto& bucket : buckets)
+	{
+		for (auto& contact : bucket.getPNContacts()) {
+			if ( contact->isPhysicalNeighbor() and  contact->isInvalid() )
+				resultlist.push_back(contact->getKey());
+		}
+	}
+	return std::move(resultlist);
+}
+
+
 KadContact_p KadRoutingTable::getRandomContact() const
 {
 	size_type numContacts(getNumContactsWithoutPNs());
@@ -936,7 +950,8 @@ void KadRoutingTable::getContactsforPathRefresh(std::list<OverlayKey>& result) c
 // However, contacts that have recent information <1s will not be selected
 void KadRoutingTable::getOldestValidContacts(std::list<OverlayKey>& result) const
 {
-	// do not consider contacts younger than R2Kademlia::PathInfoAgeThreshold
+	// do not consider contacts younger than R2Kademlia::PathInfoAgeThreshold or 
+	// PNs (with active direct link)
 
 	for (auto& bucket : buckets)
 	{
@@ -1359,23 +1374,6 @@ kad_path KadRoutingTable::concatViaPath(const kad_path& viaPath, const kad_path&
 
 //----------- KadBucket --------------
 
-/// @returns the contact either from ordinary contacts or from PN contacts
-KadContact *KadBucket::getContact(const OverlayKey& key)
-{
-	auto it = findContact(key);
-	if (it != contacts.end() ) {
-		return it->get();
-	}
-
-	it = findPNContact(key);
-	if (it != PNContacts.end() ) {
-		//ASSERT(it == std::find_if(PNContacts.cbegin(),PNContacts.cend(),[key](const BucketElement& lhs) -> bool { return lhs.get()->getKey() == key; }));
-
-		return it->get();
-	}
-
-	return nullptr;
-}
 
 
 bool KadBucket::removeContact(const OverlayKey& key)

@@ -14,6 +14,8 @@
 // 
 
 #include "R2Kademlia.h"
+#include <unordered_set>
+
 /**
  * @file R2KademliaDynamics.cc
  * @see R2Kademlia.h for class documentation
@@ -669,6 +671,71 @@ void R2Kademlia::sendRediscovery(OverlayKey failedcontactkey, uint8_t maxFanOut,
 			}
 		}
 	}
+}
+
+
+void
+R2Kademlia::scheduleLinkFailureNotification() {
+	if ( not linkFailureNotificationScheduled ) {
+		addRandomizedTimer(uniform(SimTime(notifyLinkFailureWaitTime/2,SIMTIME_MS),SimTime(notifyLinkFailureWaitTime*1.5,SIMTIME_MS)), 0, std::bind(&R2Kademlia::sendLinkFailureNotifications, this));		
+		linkFailureNotificationScheduled= true;
+	}
+}
+
+
+void
+R2Kademlia::sendLinkFailureNotifications()
+{
+	for (auto cit= neighborTable.getTable().cbegin(); cit!=neighborTable.getTable().cend(); cit++) {
+		
+		auto packet = makePacket<KadRevPathFlood>(routingTable.getContact(cit->first), "LinkFailureNotification");
+		packet->setPIDListArraySize(notifyPIDs.size());
+		auto pidcit = notifyPIDs.cbegin();
+		for (unsigned long i= 0; i < notifyPIDs.size(); i++) {
+			packet->setPIDList(i,*pidcit);
+		}
+
+		auto failedPNList(routingTable.getFailedPNs());
+		packet->setNotVia(true);
+		packet->setFailedLinkArraySize(failedPNList.size());
+
+		unsigned long i= 0UL;
+		for ( auto& failedPN : failedPNList ) {
+			// add the failed local links
+			packet->setFailedLink(i,{myOverlayKey,failedPN});
+			if (auto pncontact= routingTable.getContact(failedPN); pncontact != nullptr) {
+				packet->setFailedLinkAge(i,pncontact->getAge());
+			}
+			else { // this should not happen
+				ASSERT(false);
+				// use timer min value for estimation
+				packet->setFailedLinkAge(i,notifyLinkFailureWaitTime/2);
+			}
+			i++;
+		}
+	}
+
+	linkFailureNotificationScheduled= false;
+
+}
+
+
+// find out which PathIDs are affected by the link failure and send notifications
+// note that this function may be called multiple times for each failed link
+// therefore it is useful to schedule the sending of zhe notification
+void
+R2Kademlia::notifyAffectedPathUsers(const OverlayKey& nexthop_key) {
+
+	EV_TRACE << "notifyAffectedPathUsers()" << endl;
+	// traverse the complete PIDFwdTable and check for incoming PIDs that use the outgoing link
+	for (auto it= fwdTablePathID.PIDFwdTable.cbegin(); it != fwdTablePathID.PIDFwdTable.cend(); it++) {
+		if (it->second.nextHopNode == nexthop_key) {
+			notifyPIDs.insert(it->first);
+		}
+	}
+	EV_DEBUG << "found " << notifyPIDs.size() << " affected PathIDs (total)" << endl;
+	// schedule the sending of notifications if not already scheduled
+	scheduleLinkFailureNotification();
 }
 
 } // end namespace

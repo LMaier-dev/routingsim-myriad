@@ -193,7 +193,11 @@ void R2Kademlia::onDisconnect( nodeid_t nid ) {
 		return;
 	}
 	else {  // due to the if condition we know that routingTable.getContact(key) will not return nullptr
-		onContactInvalidation(routingTable.getContact(key));
+		// since the state was updated, contact lastSeen must be updated
+		auto contactp= routingTable.getContactMutable(key);
+		contactp->updateLastSeen();
+		// call policy function
+		onContactInvalidation(contactp);
 	}
 
 	// contacts from routing table with this neighbor as next hop are not usable until rediscovered
@@ -284,6 +288,9 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	// check for presence of carried "not via" information
 	// and evaluate it (invalidate affected contacts)
 	processNotViaInformation(*packet);
+
+	if (handleIfFitting<KadRevPathFlood>(packet))
+		return;
 
 	if (packet->hasRemainingHops()) {
 		// we are not the recipient
@@ -1480,6 +1487,12 @@ void R2Kademlia::returnToSender(uint8_t errorType, KadPacket_p packet, const Ove
 		sendPacket(std::move(answer));
 	else // we sent this packet!
 		handleAnswer(std::move(answer));
+}
+
+
+void R2Kademlia::handlePacket(std::unique_ptr<KadRevPathFlood> packet) {
+	// NotVia information has been processed
+	
 }
 
 

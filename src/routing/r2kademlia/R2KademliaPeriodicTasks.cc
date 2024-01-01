@@ -299,7 +299,10 @@ void R2Kademlia::doProbeContacts(short timerId)
 	{
 		// do not probe in case contact not found or too young
 		if (auto contactp= routingTable.getContact(probeContactQueue.front());
-		    contactp != nullptr and (
+		    contactp != nullptr
+		    and
+		    contactp->getPathLength() > 0 // not necessary to probe PNs
+		    and (
                         contactp->getAge() > R2Kademlia::PathInfoAgeThreshold or
                         contactp->getPathAge() > R2Kademlia::PathRefreshThreshold-randomoffset)) {
 			EV_TRACE << "probing for contact: " << probeContactQueue.front() << " age:" << contactp->getAge()

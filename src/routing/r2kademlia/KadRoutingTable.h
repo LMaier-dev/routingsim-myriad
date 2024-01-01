@@ -42,8 +42,7 @@ class KadBucket
 public:
 	using BucketElement = std::unique_ptr<KadContact>;
 	using BucketType = std::vector<BucketElement>;
-	/** returns the contact if found, nullptr otherwise */
-	KadContact *getContact(const OverlayKey& key);
+
 	KadContact_p getContact(const OverlayKey& key) const { return const_cast<KadBucket*>(this)->getContact(key); }
 	inline void insertContact(BucketType& bucket, BucketElement contactp);
 	void insertContact(BucketElement contactp) { insertContact(contacts, std::move(contactp)); } ;
@@ -182,6 +181,7 @@ public:
 	 * Returns a nullptr if the contact was not found.
 	 */
 	inline KadContact_p getContact(const OverlayKey& key) const;
+	inline KadContact* getContactMutable(const OverlayKey& key);
 
 	// set contact invalid, returns true on success, false if contact not found
 	bool setContactInvalid(const OverlayKey& key) {
@@ -207,6 +207,8 @@ public:
 	void getOldestValidContacts(std::list<OverlayKey>& result) const;
 	/// returns a list of contacts that need a path refresh
 	void getContactsforPathRefresh(std::list<OverlayKey>& result) const;
+	/// get list of failed PNs
+	std::list<OverlayKey> getFailedPNs() const;
 
 	/// returns the number of contacts in buckets
 	size_type getNumContacts() const;
@@ -339,6 +341,12 @@ inline
 KadContact_p KadRoutingTable::getContact(const OverlayKey& key) const
 {
 	return getBucket(key).getContact(key);
+}
+
+inline
+KadContact* KadRoutingTable::getContactMutable(const OverlayKey& key)
+{
+	return const_cast<KadContact*>(getBucket(key).getContact(key));
 }
 
 
