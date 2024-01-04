@@ -205,6 +205,7 @@ void R2Kademlia::onDisconnect( nodeid_t nid ) {
 	if (counter > 0)
 		EV_TRACE << "invalidated " << counter << " contacts" << endl;
 
+	notifyAffectedPathUsers(key);
 	// Try to rediscover that contact
 	// after grace period (otherwise more links may fail immediately after this)
 	// but not if the only link has failed 
@@ -1491,8 +1492,30 @@ void R2Kademlia::returnToSender(uint8_t errorType, KadPacket_p packet, const Ove
 
 
 void R2Kademlia::handlePacket(std::unique_ptr<KadRevPathFlood> packet) {
-	// NotVia information has been processed
-	
+	// NotVia information has been processed before this method is called
+	// Therefore, only the PIDs have to be looked up and it has to be figured out
+	// which PIDs need to be propagated further "upstream"
+	EV_TRACE << "received KadRevPathFlood" << endl;
+	std::unordered_set<PathID> upstreamPIDs;
+	auto numPIDs= packet->getPIDListArraySize();
+	// iterate over all forwarding table entries
+	for (auto it= fwdTablePathID.PIDFwdTable.cbegin(); it != fwdTablePathID.PIDFwdTable.cend(); it++) {
+		if (it->second.outgoingPathID != PathID::UndefinedPathID) { // only if outgoing PID is used
+			for (unsigned long i= 0; i < numPIDs; i++) {
+				auto thisPID= packet->getPIDList(i);
+				if (it->second.outgoingPathID == thisPID) {
+					upstreamPIDs.insert(it->first);
+				}
+			}
+		}
+	}
+	if (not upstreamPIDs.empty()) {
+		EV_TRACE << "sendLinkFailureNotifications" << endl;
+		sendLinkFailureNotifications(upstreamPIDs);
+	}
+	else {
+		EV_TRACE << "not distributing linkFailureNotification any further" << endl;
+	}
 }
 
 

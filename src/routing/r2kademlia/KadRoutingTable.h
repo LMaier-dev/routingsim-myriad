@@ -43,7 +43,7 @@ public:
 	using BucketElement = std::unique_ptr<KadContact>;
 	using BucketType = std::vector<BucketElement>;
 
-	KadContact_p getContact(const OverlayKey& key) const { return const_cast<KadBucket*>(this)->getContact(key); }
+	KadContact_p getContact(const OverlayKey& key) const;
 	inline void insertContact(BucketType& bucket, BucketElement contactp);
 	void insertContact(BucketElement contactp) { insertContact(contacts, std::move(contactp)); } ;
 	void insertPNContact(BucketElement contactp) { insertContact(PNContacts,std::move(contactp)); } ;

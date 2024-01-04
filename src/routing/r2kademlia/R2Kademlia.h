@@ -369,7 +369,7 @@ private:
 	void incLSSeqNo() { lsseqno++; }
 
 	void notifyAffectedPathUsers(const OverlayKey &key);
-	void sendLinkFailureNotifications();
+	void sendLinkFailureNotifications(std::unordered_set<PathID>& notifyPIDList);
 	void scheduleLinkFailureNotification();
 
 	/// adds contact and not via link for rediscovery queue (or send it immediately)

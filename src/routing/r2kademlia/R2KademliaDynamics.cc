@@ -677,25 +677,35 @@ void R2Kademlia::sendRediscovery(OverlayKey failedcontactkey, uint8_t maxFanOut,
 void
 R2Kademlia::scheduleLinkFailureNotification() {
 	if ( not linkFailureNotificationScheduled ) {
-		addRandomizedTimer(uniform(SimTime(notifyLinkFailureWaitTime/2,SIMTIME_MS),SimTime(notifyLinkFailureWaitTime*1.5,SIMTIME_MS)), 0, std::bind(&R2Kademlia::sendLinkFailureNotifications, this));		
+		addRandomizedTimer(uniform(SimTime(notifyLinkFailureWaitTime/2,SIMTIME_MS),
+					   SimTime(notifyLinkFailureWaitTime*1.5,SIMTIME_MS)), 0, std::bind(&R2Kademlia::sendLinkFailureNotifications, this, notifyPIDs));
 		linkFailureNotificationScheduled= true;
 	}
 }
 
 
 void
-R2Kademlia::sendLinkFailureNotifications()
+R2Kademlia::sendLinkFailureNotifications(std::unordered_set<PathID>& notifyPIDList)
 {
+	EV_TRACE << "sendLinkFailureNotifications, notifyPIDList " << notifyPIDList.size() << " entries" << endl;
+	if (notifyPIDList.empty()) {
+		linkFailureNotificationScheduled= false;
+		return;
+	}
+
+	auto failedPNList(routingTable.getFailedPNs());
+
+	// iterate over all active/intact direct underlay neighbors
 	for (auto cit= neighborTable.getTable().cbegin(); cit!=neighborTable.getTable().cend(); cit++) {
 		
 		auto packet = makePacket<KadRevPathFlood>(routingTable.getContact(cit->first), "LinkFailureNotification");
-		packet->setPIDListArraySize(notifyPIDs.size());
-		auto pidcit = notifyPIDs.cbegin();
-		for (unsigned long i= 0; i < notifyPIDs.size(); i++) {
+		packet->setPIDListArraySize(notifyPIDList.size());
+		auto pidcit = notifyPIDList.cbegin();
+		for (unsigned long i= 0; i < notifyPIDList.size(); i++) {
 			packet->setPIDList(i,*pidcit);
+			pidcit++;
 		}
 
-		auto failedPNList(routingTable.getFailedPNs());
 		packet->setNotVia(true);
 		packet->setFailedLinkArraySize(failedPNList.size());
 
@@ -713,10 +723,11 @@ R2Kademlia::sendLinkFailureNotifications()
 			}
 			i++;
 		}
+		sendPacket(std::move(packet));
 	}
 
 	linkFailureNotificationScheduled= false;
-
+	notifyPIDList.clear();
 }
 
 

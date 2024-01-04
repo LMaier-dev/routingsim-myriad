@@ -887,11 +887,11 @@ std::list<OverlayKey> KadRoutingTable::getFailedPNs() const
 	for (auto& bucket : buckets)
 	{
 		for (auto& contact : bucket.getPNContacts()) {
-			if ( contact->isPhysicalNeighbor() and  contact->isInvalid() )
+			if ( contact->isPhysicalNeighbor() and  (contact->isInvalid() or contact->getPathLength()>0))
 				resultlist.push_back(contact->getKey());
 		}
 	}
-	return std::move(resultlist);
+	return resultlist;
 }
 
 
@@ -1374,6 +1374,25 @@ kad_path KadRoutingTable::concatViaPath(const kad_path& viaPath, const kad_path&
 
 //----------- KadBucket --------------
 
+
+/// @returns the contact either from ordinary contacts or from PN contacts
+KadContact_p
+KadBucket::getContact(const OverlayKey& key) const
+{
+       auto it = findContact(key);
+       if (it != contacts.end() ) {
+               return it->get();
+       }
+
+       it = findPNContact(key);
+       if (it != PNContacts.end() ) {
+               //ASSERT(it == std::find_if(PNContacts.cbegin(),PNContacts.cend(),[key](const BucketElement& lhs) -> bool { return lhs.get()->getKey() == key; }));
+
+               return it->get();
+       }
+
+       return nullptr;
+}
 
 
 bool KadBucket::removeContact(const OverlayKey& key)
