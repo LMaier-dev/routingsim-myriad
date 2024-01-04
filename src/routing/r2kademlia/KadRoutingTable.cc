@@ -884,10 +884,10 @@ KadContactList KadRoutingTable::getValidContactsFromBucket(size_t index) const
 std::list<OverlayKey> KadRoutingTable::getFailedPNs() const
 {
 	std::list<OverlayKey> resultlist;
-	for (auto& bucket : buckets)
+	for (const auto& bucket : buckets)
 	{
-		for (auto& contact : bucket.getPNContacts()) {
-			if ( contact->isPhysicalNeighbor() and  (contact->isInvalid() or contact->getPathLength()>0))
+		for (const auto& contact : bucket.getPNContacts()) {
+			if ( contact->isPhysicalNeighbor() and  (not neighbortable.isNeighbor(contact->getKey())) )
 				resultlist.push_back(contact->getKey());
 		}
 	}

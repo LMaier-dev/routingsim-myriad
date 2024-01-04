@@ -694,6 +694,7 @@ R2Kademlia::sendLinkFailureNotifications(std::unordered_set<PathID>& notifyPIDLi
 	}
 
 	auto failedPNList(routingTable.getFailedPNs());
+	EV_TRACE << "sendLinkFailureNotifications failedPNs " << failedPNList.size() << endl;
 
 	// iterate over all active/intact direct underlay neighbors
 	for (auto cit= neighborTable.getTable().cbegin(); cit!=neighborTable.getTable().cend(); cit++) {
@@ -708,7 +709,7 @@ R2Kademlia::sendLinkFailureNotifications(std::unordered_set<PathID>& notifyPIDLi
 
 		packet->setNotVia(true);
 		packet->setFailedLinkArraySize(failedPNList.size());
-
+		packet->setFailedLinkAgeArraySize(failedPNList.size());
 		unsigned long i= 0UL;
 		for ( auto& failedPN : failedPNList ) {
 			// add the failed local links
