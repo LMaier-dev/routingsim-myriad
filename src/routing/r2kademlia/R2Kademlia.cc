@@ -99,6 +99,7 @@ void R2Kademlia::onInitialize() {
 	updateMaxNotification = (uint) par("updateMaxNotification").intValue();
 	updateNotifyStrategy = (uint) par("updateNotifyStrategy").intValue();
 	updatePropagateStrategy = (uint) par("updatePropagateStrategy").intValue();
+	linkFailureNotifications = par("linkFailureNotifications").boolValue();
 	failureFocussedProbing = par("failureFocussedProbing").boolValue();
 
 	// register this module for statistics
@@ -205,7 +206,10 @@ void R2Kademlia::onDisconnect( nodeid_t nid ) {
 	if (counter > 0)
 		EV_TRACE << "invalidated " << counter << " contacts" << endl;
 
-	notifyAffectedPathUsers(key);
+	// if this option is enabled, we flood a notification in reverse path directions
+	if (linkFailureNotifications)
+		notifyAffectedPathUsers(key);
+
 	// Try to rediscover that contact
 	// after grace period (otherwise more links may fail immediately after this)
 	// but not if the only link has failed 
