@@ -1297,7 +1297,7 @@ double KadRoutingTable::getAveragePathStretch() const
 					// in case of failed links or nodes: check path validity of contact path
 				}
 
-				sum += (contact->getPathLength()+1) / phy_distance;
+				sum += (contact->getPathLength()+1.0) / (double) phy_distance;
 				count++;
 			}
 			else
@@ -1312,7 +1312,7 @@ double KadRoutingTable::getAveragePathStretch() const
 					// in case of failed links or nodes: check path validity of contact path
 				}
 
-				sum += (contact->getPathLength()+1) / phy_distance;
+				sum += (contact->getPathLength()+1.0) / (double) phy_distance;
 				count++;
 			}
 			else
