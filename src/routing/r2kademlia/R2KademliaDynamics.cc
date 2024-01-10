@@ -678,16 +678,19 @@ void
 R2Kademlia::scheduleLinkFailureNotification() {
 	if ( not linkFailureNotificationScheduled ) {
 		addRandomizedTimer(uniform(SimTime(notifyLinkFailureWaitTime/2,SIMTIME_MS),
-					   SimTime(notifyLinkFailureWaitTime*1.5,SIMTIME_MS)), 0, std::bind(&R2Kademlia::sendLinkFailureNotifications, this, notifyPIDs));
+					   SimTime(notifyLinkFailureWaitTime*1.5,SIMTIME_MS)), 0, std::bind(&R2Kademlia::sendLinkFailureNotifications, this, notifyPIDs, OverlayKey::UNSPECIFIED_KEY));
 		linkFailureNotificationScheduled= true;
 	}
 }
 
 
 void
-R2Kademlia::sendLinkFailureNotifications(std::unordered_set<PathID>& notifyPIDList)
+R2Kademlia::sendLinkFailureNotifications(std::unordered_set<PathID>& notifyPIDList, OverlayKey excludeNode)
 {
-	EV_TRACE << "sendLinkFailureNotifications, notifyPIDList " << notifyPIDList.size() << " entries" << endl;
+	EV_TRACE << "sendLinkFailureNotifications, notifyPIDList " << notifyPIDList.size() << " entries, { ";
+	for (auto pid : notifyPIDList)
+		EV_TRACE << pid << ' ';
+	EV_TRACE << '}' << endl;
 	if (notifyPIDList.empty()) {
 		linkFailureNotificationScheduled= false;
 		return;
@@ -698,7 +701,9 @@ R2Kademlia::sendLinkFailureNotifications(std::unordered_set<PathID>& notifyPIDLi
 
 	// iterate over all active/intact direct underlay neighbors
 	for (auto cit= neighborTable.getTable().cbegin(); cit!=neighborTable.getTable().cend(); cit++) {
-		
+
+		if (cit->first == excludeNode) // exclude this neighbor (usually the source of a previous flooding message)
+			continue;
 		auto packet = makePacket<KadRevPathFlood>(routingTable.getContact(cit->first), "LinkFailureNotification");
 		packet->setPIDListArraySize(notifyPIDList.size());
 		auto pidcit = notifyPIDList.cbegin();

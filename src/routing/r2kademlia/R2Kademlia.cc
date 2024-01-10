@@ -1499,9 +1499,15 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadRevPathFlood> packet) {
 	// NotVia information has been processed before this method is called
 	// Therefore, only the PIDs have to be looked up and it has to be figured out
 	// which PIDs need to be propagated further "upstream"
-	EV_TRACE << "received KadRevPathFlood" << endl;
+	EV_TRACE << "received KadRevPathFlood from " << packet->getSource().shortStr() << endl;
 	std::unordered_set<PathID> upstreamPIDs;
 	auto numPIDs= packet->getPIDListArraySize();
+	EV_TRACE << "PIDList: { ";
+	for (unsigned long i= 0; i < numPIDs; i++) {
+		EV_TRACE << packet->getPIDList(i) << ' ';
+	}
+	EV_TRACE << '}' << endl;
+
 	// iterate over all forwarding table entries
 	for (auto it= fwdTablePathID.PIDFwdTable.cbegin(); it != fwdTablePathID.PIDFwdTable.cend(); it++) {
 		if (it->second.outgoingPathID != PathID::UndefinedPathID) { // only if outgoing PID is used
@@ -1514,8 +1520,12 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadRevPathFlood> packet) {
 		}
 	}
 	if (not upstreamPIDs.empty()) {
-		EV_TRACE << "sendLinkFailureNotifications" << endl;
-		sendLinkFailureNotifications(upstreamPIDs);
+		EV_TRACE << "sendLinkFailureNotifications for upstream PIDs { ";
+		for (const auto& pid : upstreamPIDs)
+			EV_TRACE << pid << ' ';
+		EV_TRACE << '}' << endl;
+		// exclude the packet source for further flood messages
+		sendLinkFailureNotifications(upstreamPIDs, packet->getSource());
 	}
 	else {
 		EV_TRACE << "not distributing linkFailureNotification any further" << endl;
