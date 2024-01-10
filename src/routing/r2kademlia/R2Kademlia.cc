@@ -717,7 +717,7 @@ void R2Kademlia::sendPacket(KadPacket_p packet, simtime_t delay) {
 **/
 KadContactList::const_iterator
 R2Kademlia::chooseNextHop(const KadContactList& contacts, const OverlayKey& target, KadContactList::const_iterator startit) {
-	// if target falls into deepest bucket, use XOR metric instead of PNS
+	// if target falls into deepest bucket, use XOR metric instead of proximity routing
         // since the contact list is sorted by XOR, the ID-wise closest contact should be the first one
 	if (routingTable.isInLastBucket(target)) {
 		return startit;
