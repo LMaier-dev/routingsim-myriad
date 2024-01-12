@@ -137,6 +137,7 @@ private:
 
 	// to notify neighbors about affected PathIDs after a failure
 	std::unordered_set<PathID> notifyPIDs;
+	std::unordered_map<PathID, std::unordered_set<OverlayKey>> notifyFirstSegmentSources;
 
 	// a list that is used to send rediscover messages
 	// UpdateList_t is std::list< std::pair<KadContact, KadRouteUpdateAction> >
@@ -406,6 +407,7 @@ private:
 	virtual void handlePacket(std::unique_ptr<KadUpdateRouteReq> packet);
 	virtual void handlePacket(std::unique_ptr<KadFindNodeReq> packet);
 	virtual void handlePacket(std::unique_ptr<KadRevPathFlood> packet);
+	virtual void handlePacket(std::unique_ptr<KadLinkFailureNotify> packet);
 	virtual void handlePacket(KadAnswer_p packet);
 	virtual void handleDataPacket(NodePkt_p packet);
 	//@}
@@ -429,7 +431,7 @@ private:
 	void reroutePacket(const OverlayKey& finaldest, KadPacket_p packet, NodePkt_p nodePkt, simtime_t delay= 0);
 	/// routes a packet to a neighbor based on the source route in the packet
 	void sendPacket(KadPacket_p packet, simtime_t delay= 0) override;
-	/// routes a packet to a neighbor based on the  in the packet
+	/// routes a packet to a neighbor based on the Segment PIDs  in the packet
 	void sendPacket(KadDataPacket_p packet);
 	KadContactList::const_iterator chooseNextHop(const KadContactList& contacts, const OverlayKey& target, KadContactList::const_iterator startit);
 	/// chooses the contact to forward a request to according to the overlay metric.

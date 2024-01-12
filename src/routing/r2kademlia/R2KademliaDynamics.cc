@@ -704,7 +704,7 @@ R2Kademlia::sendLinkFailureNotifications(std::unordered_set<PathID>& notifyPIDLi
 
 		if (cit->first == excludeNode) // exclude this neighbor (usually the source of a previous flooding message)
 			continue;
-		auto packet = makePacket<KadRevPathFlood>(routingTable.getContact(cit->first), "LinkFailureNotification");
+		auto packet = makePacket<KadRevPathFlood>(routingTable.getContact(cit->first), "LinkFailureNotificationFlood");
 		packet->setPIDListArraySize(notifyPIDList.size());
 		auto pidcit = notifyPIDList.cbegin();
 		for (unsigned long i= 0; i < notifyPIDList.size(); i++) {

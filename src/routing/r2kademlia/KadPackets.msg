@@ -120,8 +120,11 @@ packet KadUpdateRouteReq extends KadPacket {
 packet KadError extends KadAnswer {
 	type = KAD_Error;
 	uint8_t errorType enum(KadErrorType);
+	// that is the final destination of the error
 	OverlayKey dstNodeID = OverlayKey::UNSPECIFIED_KEY;
+	// this denotes the link that failed: <packet source, failedNextHopNodeID>
 	OverlayKey failedNextHopNodeID = OverlayKey::UNSPECIFIED_KEY;
+	// origDstNodeID is the original destination of the data packet in forward direction
 	OverlayKey origDstNodeID = OverlayKey::UNSPECIFIED_KEY;
 }
 
@@ -206,4 +209,11 @@ packet KadRevPathFlood extends KadPacket {
 
 	// List of PathIDs for further reverse path flooding of this message
 	PathID PIDList[];
+}
+
+packet KadLinkFailureNotify extends KadPacket {
+        type = KAD_LinkFailureNotify;
+
+	// the final destination of the message
+	OverlayKey dstNodeID = OverlayKey::UNSPECIFIED_KEY;
 }

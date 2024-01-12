@@ -41,6 +41,7 @@ enum KadPDUType {
 
 	KAD_Error =		0x71;
 	KAD_RevPathFlood =	0x73;
+	KAD_LinkFailureNotify =	0x75;
 	KAD_ProbeReq = 		0x81;
 	KAD_ProbeRsp = 		0x82;
 

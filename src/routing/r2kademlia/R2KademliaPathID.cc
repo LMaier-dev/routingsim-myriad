@@ -35,7 +35,12 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 		EV_TRACE << "checkForPathIDInstallation: path to " << packet.getTarget().shortStr() << ": " << pathtoadd;
  		if (auto [added,incomingPID]= fwdTablePathID.addForeignEntry(pathtoadd); added == true) {
 			EV_TRACE << " added " << incomingPID << endl;
-
+			if (auto it= notifyFirstSegmentSources.find(incomingPID); it != notifyFirstSegmentSources.end()) {
+				it->second.insert(packet.getSource());
+			}
+			else {
+				notifyFirstSegmentSources.insert({incomingPID,{packet.getSource()}});
+			}
 			return true;
 		}
 		else {
@@ -44,6 +49,13 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 			fwdtableentry.unsetObsolete();
 			fwdtableentry.setForeign();
  			EV_TRACE << " already present/ignored. " << fwdtableentry.str() << endl;
+			// PID may be known, but probably not the source
+			if (auto it= notifyFirstSegmentSources.find(incomingPID); it != notifyFirstSegmentSources.end()) {
+				it->second.insert(packet.getSource());
+			}
+			else {
+				notifyFirstSegmentSources.insert({incomingPID,{packet.getSource()}});
+			}
 
 			return false;
 		}

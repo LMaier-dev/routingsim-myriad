@@ -234,6 +234,7 @@ void R2Kademlia::onDisconnect( nodeid_t nid ) {
 
 
 // called on reception of a NodePkt for this protocol, i.e., an R2/Kad packet
+// START HERE: this is the main entry point into R2/Kad protocol logic
 void R2Kademlia::onMessage( NodePkt_p pkt ) {
 
 	ASSERT(pkt->getType() == KAD_CTRL_PACKET_TYPE || pkt->getType() == KAD_DATA_PACKET_TYPE);
@@ -327,6 +328,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		// these types may forward packets, so they count themselves
 		if (handleIfFitting<KadFindNodeReq>(packet)) return;
 		if (handleIfFitting<KadUpdateRouteReq>(packet)) return;
+		if (handleIfFitting<KadLinkFailureNotify>(packet)) return;
 		// the following types never forward packets
 		countReceived(*packet);
 		if (handleIfFitting<KadQueryRouteReq>(packet)) return;
@@ -975,7 +977,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 		 << " isTracked=" << packet->isTracked() << (packet->getSource() == query ? " (JOIN)" : "") << (is_rediscovery ? " Rediscovery" : "") << endl;
 
 	size_t contactsLen = std::max((size_t)findNodeNumber, routingTable.getSplitSize());
-	// contstruct notvia list for filtering contacts
+	// construct notvia list for filtering contacts
 	std::list<std::pair<link_t,age_t>> notvialist;
 	if (packet->getNotVia())
 	{
@@ -1494,7 +1496,7 @@ void R2Kademlia::returnToSender(uint8_t errorType, KadPacket_p packet, const Ove
 		handleAnswer(std::move(answer));
 }
 
-
+// this is a non-RPC flooding message, forwarded hop-by-hop in the underlay
 void R2Kademlia::handlePacket(std::unique_ptr<KadRevPathFlood> packet) {
 	// NotVia information has been processed before this method is called
 	// Therefore, only the PIDs have to be looked up and it has to be figured out
@@ -1512,11 +1514,10 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadRevPathFlood> packet) {
 	for (auto it= fwdTablePathID.PIDFwdTable.cbegin(); it != fwdTablePathID.PIDFwdTable.cend(); it++) {
 		if (it->second.outgoingPathID != PathID::UndefinedPathID) { // only if outgoing PID is used
 			for (unsigned long i= 0; i < numPIDs; i++) {
-				auto thisPID= packet->getPIDList(i);
-				if (it->second.outgoingPathID == thisPID) {
+				if (it->second.outgoingPathID == packet->getPIDList(i)) {
 					upstreamPIDs.insert(it->first);
 				}
-			}
+			} // end for inner loop
 		}
 	}
 	if (not upstreamPIDs.empty()) {
@@ -1530,6 +1531,127 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadRevPathFlood> packet) {
 	else {
 		EV_TRACE << "not distributing linkFailureNotification any further" << endl;
 	}
+
+	// now check for nodes (sources of the first segment) to be notified
+	for (unsigned long i= 0; i < numPIDs; i++) {
+		if (const auto it= notifyFirstSegmentSources.find(packet->getPIDList(i));
+		    it != notifyFirstSegmentSources.cend()) {
+			size_t contactsLen = std::max((size_t)findNodeNumber, routingTable.getSplitSize());
+			std::list<std::pair<link_t,age_t>> notvialist;
+			if (packet->getNotVia())
+			{
+				for (uint i= 0; i < packet->getFailedLinkArraySize(); i++) {
+					notvialist.push_back(make_pair(packet->getFailedLink(i),packet->getFailedLinkAge(i)));
+				}
+			}
+
+			// entry for PID found, so notify all first segment sources with an update
+			for (const auto &notify_target : it->second) {
+				KadContactList closeContacts(routingTable.getClosestContacts(notify_target, contactsLen, true, notvialist));
+				if (not closeContacts.empty()) {
+					const KadContact& next_contact = chooseNextHop(closeContacts, notify_target);
+					// check whether that contact is closer to the target than we are (but do not send back to source)
+					if ( next_contact.isValid() and (next_contact.getKey() ^ myOverlayKey) > (next_contact.getKey() ^ notify_target) )
+					{
+						auto notify_packet = makePacket<KadLinkFailureNotify>(next_contact, "LinkFailureNotifyDirect");
+						notify_packet->setDstNodeID(notify_target);
+						// copy notvia list
+						notify_packet->setFailedLinkArraySize(packet->getFailedLinkArraySize());
+						for (uint i= 0; i < packet->getFailedLinkArraySize(); i++) {
+							notify_packet->setFailedLink(i,packet->getFailedLink(i));
+							notify_packet->setFailedLinkAge(i,packet->getFailedLinkAge(i));
+						}
+						sendPacket(std::move(notify_packet));
+					}
+				}
+			} // end for all sources to notify
+		} // end if there is an entry for this PID
+	} // end for all PIDs to check
+}
+
+
+// non-RPC notification message that is forwarded via the normal overlay routing
+// no need for reliability of this message
+void R2Kademlia::handlePacket(std::unique_ptr<KadLinkFailureNotify> packet) {
+
+	// when this method is called either we are an overlay hop or the final recipient
+	OverlayKey& target = packet->getDstNodeID(); // get the destination ID
+
+	EV_TRACE << "KadLinkFailureNotify (id=" << packet->getId() << ")" << endl;
+	if (target == myOverlayKey) { // notification is for this node and ends here
+		EV_TRACE << "KadLinkFailureNotify reached final destination " << myOverlayKey.shortStr() << endl;
+		// nothing to do, just drop the packet
+		return;
+	}
+
+	// forward via overlay routing
+	size_t contactsLen = std::max((size_t)findNodeNumber, routingTable.getSplitSize());
+	// construct notvia list for filtering contacts
+	std::list<std::pair<link_t,age_t>> notvialist;
+	if (packet->getNotVia())
+	{
+		for (uint i= 0; i < packet->getFailedLinkArraySize(); i++) {
+			notvialist.push_back(std::make_pair(packet->getFailedLink(i), packet->getFailedLinkAge(i)));
+		}
+	}
+	// ContactList is sorted according to XOR metric with respect to key
+	// the first contact is ID-wise closest to query key, however, it may not be the one with the shortest path
+	KadContactList contacts = routingTable.getClosestContacts(target, contactsLen, true, notvialist);
+
+	// remove source from the list of potential next hops to avoid loop or exclude it from answer
+	if (!contacts.empty()) {
+		// EV_TRACE << "Found contacts: ";
+		// for (const auto& thiscontact : contacts)
+		// {
+		//  	EV_TRACE << thiscontact->getKey().shortStr() << " ";
+		// }
+		// EV_TRACE << endl;
+
+		for (auto it= contacts.begin(); it != contacts.end(); it++) {
+			if (*it != nullptr and (*it)->getKey() == packet->getSource()) {
+				contacts.erase(it);
+				EV_TRACE << "removed " << packet->getSource() << " from found contacts" << endl;
+				break;
+			}
+		}
+	}
+
+	if (contacts.empty() or contacts.front()->getKey().isUnspecified())
+	{
+		EV_ERROR << "no contacts left, dead end." << endl;
+
+		return;
+	}
+
+	// precondition here: !contacts.empty(), i.e., we have a contact as potential next hop
+	// if next contact is closer to destination than us, it's ok unless we route back to the source
+	if ((contacts.front()->getKey() ^ target) < (myOverlayKey ^ target)
+	    and contacts.front()->getPathLength() < packet->getHopLimit()) {
+
+		// we have found a contact that is closer than us to target (query)
+		// => forward request
+		// note: chooseNextHop may choose the next hop with the shortest path (proximity routing)
+		const KadContact& contact = chooseNextHop(contacts, target);
+		EV_TRACE << "KadFindNodeReq received query for: " << packet->getDstNodeID().shortStr() << " next overlay hop is " << contact << endl;
+		// note: the log_2 will be smaller for a longer common prefix
+		ASSERT((contact.getKey() ^ target).log_2() <= (myOverlayKey ^ target).log_2());
+		if((contact.getKey() ^ target).log_2() > (myOverlayKey ^ target).log_2()) {
+			EV_WARN << "no prefix progress made" << endl;
+		}
+		ASSERT((contact.getKey() ^ target) < (myOverlayKey ^ target));
+		packet->appendRoute(contact);
+		ASSERT(packet->getRouteArraySize() - packet->getProgress() <= packet->getHopLimit());
+		resendPacket(std::move(packet));
+		return;
+	}
+	else {
+		// otherwise it's ok to report what we know
+		EV_TRACE << "Cannot get closer to the target, best neighbor now: " << contacts.front()->getKey() << endl;
+		EV_TRACE << "Distance for contact=" << (contacts.front()->getKey() ^ target).log_2()
+			 << " own distance=" << (myOverlayKey ^ target).log_2() << " own ID: " << myOverlayKey.shortStr() << endl;
+		return;
+	} // end else
+
 }
 
 
