@@ -37,9 +37,11 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 			EV_TRACE << " added " << incomingPID << endl;
 			if (auto it= notifyFirstSegmentSources.find(incomingPID); it != notifyFirstSegmentSources.end()) {
 				it->second.insert(packet.getSource());
+				EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources" << endl;
 			}
 			else {
 				notifyFirstSegmentSources.insert({incomingPID,{packet.getSource()}});
+				EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources" << endl;
 			}
 			return true;
 		}
@@ -52,9 +54,11 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 			// PID may be known, but probably not the source
 			if (auto it= notifyFirstSegmentSources.find(incomingPID); it != notifyFirstSegmentSources.end()) {
 				it->second.insert(packet.getSource());
+				EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources" << endl;
 			}
 			else {
 				notifyFirstSegmentSources.insert({incomingPID,{packet.getSource()}});
+				EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources" << endl;
 			}
 
 			return false;

@@ -1533,9 +1533,10 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadRevPathFlood> packet) {
 	}
 
 	// now check for nodes (sources of the first segment) to be notified
-	for (unsigned long i= 0; i < numPIDs; i++) {
-		if (const auto it= notifyFirstSegmentSources.find(packet->getPIDList(i));
+	for (const auto& incomingPID : upstreamPIDs) {
+		if (const auto it= notifyFirstSegmentSources.find(incomingPID);
 		    it != notifyFirstSegmentSources.cend()) {
+			EV_TRACE << "check for notifyFirstSegmentSources: PID " << it->first << " #sources=" << it->second.size() << endl;
 			size_t contactsLen = std::max((size_t)findNodeNumber, routingTable.getSplitSize());
 			std::list<std::pair<link_t,age_t>> notvialist;
 			if (packet->getNotVia())
@@ -1561,6 +1562,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadRevPathFlood> packet) {
 							notify_packet->setFailedLink(i,packet->getFailedLink(i));
 							notify_packet->setFailedLinkAge(i,packet->getFailedLinkAge(i));
 						}
+						EV_TRACE << "Sending LinkFailureNotify to " << notify_target.shortStr() << endl;
 						sendPacket(std::move(notify_packet));
 					}
 				}
