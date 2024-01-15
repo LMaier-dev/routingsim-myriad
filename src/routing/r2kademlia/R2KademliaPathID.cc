@@ -20,11 +20,13 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 		 << " Progress: " << packet.getProgress() << " SrcPathLen:" << packet.getRouteArraySize() << " hops left:" << packet.hopsLeft() <<  endl;
 
 	// if overall pathlen < 6 hops we should not see a request to set up a PathID
-	// (but it may be a ProbeReq)
+	// (but it may be a ProbeReq traversing the path)
 	// note: packet.getRouteArraySize()+1 == number of hops
-	if (packet.getRouteArraySize()+1 < 2*(nodeVicinityGraph::vicinityDiscoveryRadius+1)) {
-		EV_TRACE << "checkForPathIDInstallation: aborted – path too short" << endl;
-		return false;
+	if (packet.getType() == KAD_PathSetupReq) {
+		ASSERT(packet.getRouteArraySize()+1 >= 2*(nodeVicinityGraph::vicinityDiscoveryRadius+1));
+		if (packet.getRouteArraySize()+1 < 2*(nodeVicinityGraph::vicinityDiscoveryRadius+1)) {
+			return false;
+		}
 	}
 
 	// if three hops left to destination: install PID here for the destination NodeID for last segments
@@ -64,9 +66,24 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 			return false;
 		}
 	}
-	else {
-		if (packet.hopsLeft() < 2*(nodeVicinityGraph::vicinityDiscoveryRadius+1))
+	else { // either less than 3 hops to dest or more
+		if (packet.hopsLeft() < 2*(nodeVicinityGraph::vicinityDiscoveryRadius+1)) {
+			// need to check for storing the SegmentSource for last segment of two hops
+			if (packet.hopsLeft() == nodeVicinityGraph::vicinityDiscoveryRadius) {
+				const auto pathtoadd(packet.getSrcPath(packet.getProgress()+1, packet.getRouteArraySize()));
+				PathID incomingPID(getPathID(myOverlayKey, pathtoadd));
+				if (auto it= notifyFirstSegmentSources.find(incomingPID); it != notifyFirstSegmentSources.end()) {
+					it->second.insert(packet.getSource());
+					EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources" << endl;
+				}
+				else {
+					notifyFirstSegmentSources.insert({incomingPID,{packet.getSource()}});
+					EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources" << endl;
+				}
+			}
+
 			return false;
+		}
 		else { // at least six hops left to destination: install PID to node three hops before destination
 			const auto target(packet.getRoute(packet.getRouteArraySize()-1-nodeVicinityGraph::vicinityDiscoveryRadius-1));
 			const auto pathtoadd(packet.getSrcPath(packet.getProgress()+1, packet.getRouteArraySize()-nodeVicinityGraph::vicinityDiscoveryRadius-1));

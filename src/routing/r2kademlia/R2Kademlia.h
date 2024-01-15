@@ -44,6 +44,7 @@ using KadHello_p = std::unique_ptr<KadHello>;
 using KadError_p = std::unique_ptr<KadError>;
 
 using UpdateList_t = std::list< std::pair<KadContact, KadRouteUpdateAction> >;
+using NotViaList_t = std::list<std::pair<link_t,age_t>>;
 
 enum reasoncode : uint8_t {
 	unspecified = 0,
@@ -371,7 +372,7 @@ private:
 	void incLSSeqNo() { lsseqno++; }
 
 	void notifyAffectedPathUsers(const OverlayKey &key);
-	void sendLinkFailureNotifications(std::unordered_set<PathID>& notifyPIDList, OverlayKey excludeNode);
+	void sendLinkFailureNotifications(const NotViaList_t& notvialist, std::unordered_set<PathID>& notifyPIDList, OverlayKey excludeNode);
 	void scheduleLinkFailureNotification();
 
 	/// adds contact and not via link for rediscovery queue (or send it immediately)
@@ -572,6 +573,8 @@ public:
 	static constexpr unsigned long GetPNWaitTime = 20000UL; // µs (50 Requests/s)
 	static constexpr unsigned long GetONInitialWaitTime = 20000UL; // µs
 	static constexpr unsigned long GetONWaitTime = 40000UL; // µs (25 Requests/s)
+
+	static NotViaList_t emptyNotViaList;
 };
 
 

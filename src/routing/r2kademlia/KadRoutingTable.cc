@@ -735,7 +735,7 @@ auto copyValidContacts = std::bind( &copySelectedContacts,ph::_1,ph::_2, [](cons
  * the first returned contact is the closest to key.
  * if the notvialist is not empty, it will be considered for validcontactsonly==true
  */
-KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_type n, bool validcontactsonly, const std::list<std::pair<link_t,age_t>>& notvialist) const
+KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_type n, bool validcontactsonly, const NotViaList_t& notvialist) const
 {
 	ASSERT(not key.isUnspecified()); // calling this with unspecified key is considered useless and an error
 	KadContactList result{};

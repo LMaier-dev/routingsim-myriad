@@ -676,16 +676,17 @@ void R2Kademlia::sendRediscovery(OverlayKey failedcontactkey, uint8_t maxFanOut,
 
 void
 R2Kademlia::scheduleLinkFailureNotification() {
+
 	if ( not linkFailureNotificationScheduled ) {
 		addRandomizedTimer(uniform(SimTime(notifyLinkFailureWaitTime/2,SIMTIME_MS),
-					   SimTime(notifyLinkFailureWaitTime*1.5,SIMTIME_MS)), 0, std::bind(&R2Kademlia::sendLinkFailureNotifications, this, notifyPIDs, OverlayKey::UNSPECIFIED_KEY));
+					   SimTime(notifyLinkFailureWaitTime*1.5,SIMTIME_MS)), 0, std::bind(&R2Kademlia::sendLinkFailureNotifications, this, R2Kademlia::emptyNotViaList, notifyPIDs, OverlayKey::UNSPECIFIED_KEY));
 		linkFailureNotificationScheduled= true;
 	}
 }
 
 
 void
-R2Kademlia::sendLinkFailureNotifications(std::unordered_set<PathID>& notifyPIDList, OverlayKey excludeNode)
+R2Kademlia::sendLinkFailureNotifications(const NotViaList_t& notvialist, std::unordered_set<PathID>& notifyPIDList, OverlayKey excludeNode)
 {
 	EV_TRACE << "sendLinkFailureNotifications, notifyPIDList " << notifyPIDList.size() << " entries, { ";
 	for (auto pid : notifyPIDList)
@@ -713,11 +714,17 @@ R2Kademlia::sendLinkFailureNotifications(std::unordered_set<PathID>& notifyPIDLi
 		}
 
 		packet->setNotVia(true);
-		packet->setFailedLinkArraySize(failedPNList.size());
-		packet->setFailedLinkAgeArraySize(failedPNList.size());
+		packet->setFailedLinkArraySize(notvialist.size() + failedPNList.size());
+		packet->setFailedLinkAgeArraySize(notvialist.size() + failedPNList.size());
 		unsigned long i= 0UL;
+		for ( auto& notvialinkinfo : notvialist ) {
+			// add the failed links
+			packet->setFailedLink(i,notvialinkinfo.first);
+			packet->setFailedLinkAge(i,notvialinkinfo.second);
+			i++;
+		}
+		// add the failed local links
 		for ( auto& failedPN : failedPNList ) {
-			// add the failed local links
 			packet->setFailedLink(i,{myOverlayKey,failedPN});
 			if (auto pncontact= routingTable.getContact(failedPN); pncontact != nullptr) {
 				packet->setFailedLinkAge(i,pncontact->getAge());

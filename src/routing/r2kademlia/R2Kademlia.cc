@@ -29,7 +29,7 @@ using cbfunc_t = std::function<void(short timerId)>;
 
 Define_Module(R2Kademlia);
 
-
+NotViaList_t R2Kademlia::emptyNotViaList={};
 
 R2Kademlia::~R2Kademlia()
 {
@@ -556,7 +556,7 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt, simtime_t 
 
 void R2Kademlia::reroutePacket(const OverlayKey& finaldest, KadPacket_p packet, NodePkt_p nodePkt, simtime_t delay)
 {
-	std::list<std::pair<link_t,age_t>> notvialist;
+	NotViaList_t notvialist;
 	if (packet->getNotVia())
 	{
 		for (uint i= 0; i < packet->getFailedLinkArraySize(); i++) {
@@ -656,7 +656,7 @@ void R2Kademlia::reroutePacket(const OverlayKey& finaldest, KadPacket_p packet, 
 void R2Kademlia::forwardCloser(KadPacket_p packet, const OverlayKey& destContactKey)
 {
 	size_t contactsLen = std::max((size_t)findNodeNumber, routingTable.getSplitSize());
-	std::list<std::pair<link_t,age_t>> notvialist;
+	NotViaList_t notvialist;
 	if (packet->getNotVia())
 	{
 		for (uint i= 0; i < packet->getFailedLinkArraySize(); i++) {
@@ -846,7 +846,8 @@ void R2Kademlia::sendPathProbe(const OverlayKey& destinationNodeID) {
 
 	EV_TRACE << "sending ProbeReq from " << myOverlayKey.shortStr() << " to " << destinationNodeID.shortStr() << endl;
 	auto probereq= makePacket<KadProbeReq>(contact, "KadProbeReq");
-	if (contact->getPathLength()>2*nodeVicinityGraph::vicinityDiscoveryRadius)
+	// need to set the PathCheck flag for paths starting from 4 hops
+	if (contact->getPathLength()>nodeVicinityGraph::vicinityDiscoveryRadius)
 		probereq->setPathCheck(true);
 
 	sendRpcCall(std::move(probereq),
@@ -978,7 +979,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 
 	size_t contactsLen = std::max((size_t)findNodeNumber, routingTable.getSplitSize());
 	// construct notvia list for filtering contacts
-	std::list<std::pair<link_t,age_t>> notvialist;
+	NotViaList_t notvialist;
 	if (packet->getNotVia())
 	{
 		for (uint i= 0; i < packet->getFailedLinkArraySize(); i++) {
@@ -1525,8 +1526,17 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadRevPathFlood> packet) {
 		for (const auto& pid : upstreamPIDs)
 			EV_TRACE << pid << ' ';
 		EV_TRACE << '}' << endl;
+
+		NotViaList_t notvialist;
+		if (packet->getNotVia())
+		{
+			for (uint i= 0; i < packet->getFailedLinkArraySize(); i++) {
+				notvialist.push_back(std::make_pair(packet->getFailedLink(i), packet->getFailedLinkAge(i)));
+			}
+		}
+
 		// exclude the packet source for further flood messages
-		sendLinkFailureNotifications(upstreamPIDs, packet->getSource());
+		sendLinkFailureNotifications(std::move(notvialist), upstreamPIDs, packet->getSource());
 	}
 	else {
 		EV_TRACE << "not distributing linkFailureNotification any further" << endl;
@@ -1538,7 +1548,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadRevPathFlood> packet) {
 		    it != notifyFirstSegmentSources.cend()) {
 			EV_TRACE << "check for notifyFirstSegmentSources: PID " << it->first << " #sources=" << it->second.size() << endl;
 			size_t contactsLen = std::max((size_t)findNodeNumber, routingTable.getSplitSize());
-			std::list<std::pair<link_t,age_t>> notvialist;
+			NotViaList_t notvialist;
 			if (packet->getNotVia())
 			{
 				for (uint i= 0; i < packet->getFailedLinkArraySize(); i++) {
@@ -1589,7 +1599,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadLinkFailureNotify> packet) {
 	// forward via overlay routing
 	size_t contactsLen = std::max((size_t)findNodeNumber, routingTable.getSplitSize());
 	// construct notvia list for filtering contacts
-	std::list<std::pair<link_t,age_t>> notvialist;
+	NotViaList_t notvialist;
 	if (packet->getNotVia())
 	{
 		for (uint i= 0; i < packet->getFailedLinkArraySize(); i++) {
