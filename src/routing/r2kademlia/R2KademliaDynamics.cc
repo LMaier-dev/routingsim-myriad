@@ -739,6 +739,8 @@ R2Kademlia::sendLinkFailureNotifications(const NotViaList_t& notvialist, std::un
 		sendPacket(std::move(packet));
 	}
 
+	doNotifyFirstSegmentSources(notifyPIDList, notvialist);
+
 	linkFailureNotificationScheduled= false;
 	notifyPIDList.clear();
 }

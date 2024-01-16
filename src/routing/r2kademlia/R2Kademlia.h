@@ -374,6 +374,7 @@ private:
 	void notifyAffectedPathUsers(const OverlayKey &key);
 	void sendLinkFailureNotifications(const NotViaList_t& notvialist, std::unordered_set<PathID>& notifyPIDList, OverlayKey excludeNode);
 	void scheduleLinkFailureNotification();
+	void doNotifyFirstSegmentSources(const std::unordered_set<PathID>& upstreamPIDs, const NotViaList_t& notvialist);
 
 	/// adds contact and not via link for rediscovery queue (or send it immediately)
 	void scheduleRediscovery(const OverlayKey& contactkey, rediscoverQueueClass& rediscoveryQueue, simtime_t rediscoveryWaitTime);
