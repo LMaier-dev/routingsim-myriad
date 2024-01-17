@@ -62,10 +62,17 @@ simple NetworkManager {
         string shortestPathCalculationMode @enum(fullDistanceMatrix, onDemand) = default("fullDistanceMatrix");
         
         /// when dynamics gate is not connected, create a dynamics model by name
-	string dynamicsModel @enum("None", "CatastrophicFailure", "LifetimeChurn",
+		string dynamicsModel @enum("None", "CatastrophicFailure", "LifetimeChurn",
 	       		     	   "LinkFailure", "IncrementalFailure") = default("LinkFailure");
         	
         string topologyStatistics @enum(None, Light, Heavy) = default("Light");
+
+        /// limits bandwidth of the links in network
+        bool limitBandwidthLinks = default(true);
+
+        /// bandwidth of the links in network measured in bits per second (only active if limitBandwidthLinks is true)
+        double bandwidthLinksBps = default(1e12);
+        
     gates:
         /// input gate for topoplogy dynamics
         input dynamics @loose;
