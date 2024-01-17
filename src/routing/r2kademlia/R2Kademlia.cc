@@ -1552,39 +1552,45 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadRevPathFlood> packet) {
 void
 R2Kademlia::doNotifyFirstSegmentSources(const std::unordered_set<PathID>& upstreamPIDs, const NotViaList_t& notvialist)
 {
+	// structure to collect all nodes to be notified (there may be many duplicates)
+	std::unordered_set<OverlayKey> nodestonotify;
 	// now check for nodes (sources of the first segment) to be notified
 	for (const auto& incomingPID : upstreamPIDs) {
 		if (const auto it= notifyFirstSegmentSources.find(incomingPID);
 		    it != notifyFirstSegmentSources.cend()) {
 			EV_TRACE << "check for notifyFirstSegmentSources: PID " << it->first << " #sources=" << it->second.size() << endl;
-			size_t contactsLen = std::max((size_t)findNodeNumber, routingTable.getSplitSize());
 
 			// entry for PID found, so notify all first segment sources with an update
 			for (const auto &notify_target : it->second) {
-				KadContactList closeContacts(routingTable.getClosestContacts(notify_target, contactsLen, true, notvialist));
-				if (not closeContacts.empty()) {
-					const KadContact& next_contact = chooseNextHop(closeContacts, notify_target);
-					// check whether that contact is closer to the target than we are (but do not send back to source)
-					if ( next_contact.isValid() and (next_contact.getKey() ^ myOverlayKey) > (next_contact.getKey() ^ notify_target) )
-					{
-						auto notify_packet = makePacket<KadLinkFailureNotify>(next_contact, "LinkFailureNotifyDirect");
-						notify_packet->setDstNodeID(notify_target);
-						// copy notvia list
-						notify_packet->setFailedLinkArraySize(notvialist.size());
-						notify_packet->setFailedLinkAgeArraySize(notvialist.size());
-						auto it(notvialist.cbegin());
-						for (uint i= 0; i < notvialist.size(); i++) {
-							notify_packet->setFailedLink(i,it->first);
-							notify_packet->setFailedLinkAge(i, it->second);
-							it++;
-						}
-						EV_TRACE << "Sending LinkFailureNotify to " << notify_target.shortStr() << endl;
-						sendPacket(std::move(notify_packet));
-					}
-				}
+				nodestonotify.insert(notify_target);
 			} // end for all sources to notify
 		} // end if there is an entry for this PID
 	} // end for all PIDs to check
+
+	for (const auto &notify_target : nodestonotify) {
+		size_t contactsLen = std::max((size_t)findNodeNumber, routingTable.getSplitSize());
+		KadContactList closeContacts(routingTable.getClosestContacts(notify_target, contactsLen, true, notvialist));
+		if (not closeContacts.empty()) {
+			const KadContact& next_contact = chooseNextHop(closeContacts, notify_target);
+			// check whether that contact is closer to the target than we are (but do not send back to source)
+			if ( next_contact.isValid() and (next_contact.getKey() ^ myOverlayKey) > (next_contact.getKey() ^ notify_target) )
+			{
+				auto notify_packet = makePacket<KadLinkFailureNotify>(next_contact, "LinkFailureNotifyDirect");
+				notify_packet->setDstNodeID(notify_target);
+				// copy notvia list
+				notify_packet->setFailedLinkArraySize(notvialist.size());
+				notify_packet->setFailedLinkAgeArraySize(notvialist.size());
+				auto it(notvialist.cbegin());
+				for (uint i= 0; i < notvialist.size(); i++) {
+					notify_packet->setFailedLink(i,it->first);
+					notify_packet->setFailedLinkAge(i, it->second);
+					it++;
+				}
+				EV_TRACE << "Sending LinkFailureNotify to " << notify_target.shortStr() << endl;
+				sendPacket(std::move(notify_packet));
+			}
+		}
+	} // end for all nodes to be notified
 }
 
 

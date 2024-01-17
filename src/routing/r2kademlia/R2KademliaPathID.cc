@@ -37,13 +37,15 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 		EV_TRACE << "checkForPathIDInstallation: path to " << packet.getTarget().shortStr() << ": " << pathtoadd;
  		if (auto [added,incomingPID]= fwdTablePathID.addForeignEntry(pathtoadd); added == true) {
 			EV_TRACE << " added " << incomingPID << endl;
-			if (auto it= notifyFirstSegmentSources.find(incomingPID); it != notifyFirstSegmentSources.end()) {
-				it->second.insert(packet.getSource());
-				EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources" << endl;
-			}
-			else {
-				notifyFirstSegmentSources.insert({incomingPID,{packet.getSource()}});
-				EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources" << endl;
+			if (packet.getProgress() > 1) { // do not add any underlay neighbors to notifyFirstSegmentSources
+				if (auto it= notifyFirstSegmentSources.find(incomingPID); it != notifyFirstSegmentSources.end()) {
+					it->second.insert(packet.getSource());
+					EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources" << endl;
+				}
+				else {
+					notifyFirstSegmentSources.insert({incomingPID,{packet.getSource()}});
+					EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources" << endl;
+				}
 			}
 			return true;
 		}
@@ -53,14 +55,16 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 			fwdtableentry.unsetObsolete();
 			fwdtableentry.setForeign();
  			EV_TRACE << " already present/ignored. " << fwdtableentry.str() << endl;
-			// PID may be known, but probably not the source
-			if (auto it= notifyFirstSegmentSources.find(incomingPID); it != notifyFirstSegmentSources.end()) {
-				it->second.insert(packet.getSource());
-				EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources" << endl;
-			}
-			else {
-				notifyFirstSegmentSources.insert({incomingPID,{packet.getSource()}});
-				EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources" << endl;
+			// PID may be known, but probably not the source of the first segment
+			if (packet.getProgress() > 1) { // do not add any underlay neighbors to notifyFirstSegmentSources
+				if (auto it= notifyFirstSegmentSources.find(incomingPID); it != notifyFirstSegmentSources.end()) {
+					it->second.insert(packet.getSource());
+					EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources" << endl;
+				}
+				else {
+					notifyFirstSegmentSources.insert({incomingPID,{packet.getSource()}});
+					EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources" << endl;
+				}
 			}
 
 			return false;
@@ -70,15 +74,17 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 		if (packet.hopsLeft() < 2*(nodeVicinityGraph::vicinityDiscoveryRadius+1)) {
 			// need to check for storing the SegmentSource for last segment of two hops
 			if (packet.hopsLeft() == nodeVicinityGraph::vicinityDiscoveryRadius) {
-				const auto pathtoadd(packet.getSrcPath(packet.getProgress()+1, packet.getRouteArraySize()));
-				PathID incomingPID(getPathID(myOverlayKey, pathtoadd));
-				if (auto it= notifyFirstSegmentSources.find(incomingPID); it != notifyFirstSegmentSources.end()) {
-					it->second.insert(packet.getSource());
-					EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources" << endl;
-				}
-				else {
-					notifyFirstSegmentSources.insert({incomingPID,{packet.getSource()}});
-					EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources" << endl;
+				if (packet.getProgress() > 1) { // do not add any underlay neighbors to notifyFirstSegmentSources
+					const auto pathtoadd(packet.getSrcPath(packet.getProgress()+1, packet.getRouteArraySize()));
+					PathID incomingPID(getPathID(myOverlayKey, pathtoadd));
+					if (auto it= notifyFirstSegmentSources.find(incomingPID); it != notifyFirstSegmentSources.end()) {
+						it->second.insert(packet.getSource());
+						EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources" << endl;
+					}
+					else {
+						notifyFirstSegmentSources.insert({incomingPID,{packet.getSource()}});
+						EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources" << endl;
+					}
 				}
 			}
 
