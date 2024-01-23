@@ -185,6 +185,12 @@ void Node::sendToNode( nodeid_t nid, NodePkt* np ) {
 	if (simTime()+delay < n.lastsent)
 		delay= n.lastsent-simTime();
 
+	// schedule not before transmission of other message on channel
+	cChannel *txChannel = n.out->getTransmissionChannel();
+	simtime_t txFinishTime = txChannel->getTransmissionFinishTime();
+	if (txFinishTime > simTime()+delay)
+        delay = txFinishTime-simTime();
+
 	n.lastsent= simTime()+delay;
 
 	linkusage_map[nid]++;
