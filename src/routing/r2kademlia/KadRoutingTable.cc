@@ -234,7 +234,6 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 		}
 	}
 
-
 	// sanity check: do not use paths that lead via an invalid neighbor as first hop
 	if (path.size() > 0 and not neighbortable.isNeighbor(path[0]))
 	{ // first hop must be found in neighbortable
@@ -1198,6 +1197,9 @@ KadRoutingTable::invalidateContactsPN(const OverlayKey& failedNodeKey)
 				if (path[0] == failedNodeKey) // failed node is first hop
 				{
 					if (contact->isValid()) {
+						// contact state is updated
+						contact->updateLastSeen();
+
 						policy->onContactInvalidation(contact.get());
 
 						contact->setInvalid({failedNodeKey, myKey},0);
@@ -1212,6 +1214,8 @@ KadRoutingTable::invalidateContactsPN(const OverlayKey& failedNodeKey)
 					}
 					else
 					if (contact->isInvalid()) { // contact already invalid or rediscovering
+						// contact state is updated
+						contact->updateLastSeen();
 						// add potentially further failed link
 						contact->setInvalid({failedNodeKey, myKey},0);
 						if (counter < std::numeric_limits<decltype(counter)>::max())
@@ -1233,6 +1237,9 @@ KadRoutingTable::invalidateContactsPN(const OverlayKey& failedNodeKey)
 				{
 
 					if (contact->isValid()) {
+						// contact state is updated
+						contact->updateLastSeen();
+
 						contact->setInvalid({failedNodeKey, myKey},0);
 
 						policy->onContactInvalidation(contact.get());
@@ -1248,6 +1255,8 @@ KadRoutingTable::invalidateContactsPN(const OverlayKey& failedNodeKey)
 					}
 					else
 					if (contact->isInvalid()) { // contact already invalid or rediscovering
+						// contact state is updated
+						contact->updateLastSeen();
 						// add potentially further failed link
 						contact->setInvalid({failedNodeKey, myKey}, 0);
 						if (counter < std::numeric_limits<decltype(counter)>::max())
