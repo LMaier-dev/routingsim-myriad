@@ -735,6 +735,11 @@ void R2Kademlia::sendPacket(KadPacket_p packet, simtime_t delay) {
 **/
 KadContactList::const_iterator
 R2Kademlia::chooseNextHop(const KadContactList& contacts, const OverlayKey& target, KadContactList::const_iterator startit) {
+	// if target falls into deepest bucket, use XOR metric instead of proximity routing
+        // since the contact list is sorted by XOR, the ID-wise closest contact should be the first one
+	if (routingTable.isInLastBucket(target)) {
+		return startit;
+	}
 
 	if (proximityRouting and contacts.size() > 1) {
 		// dprefix is the number of non-matching bits with target: smaller dprefix is closer to target
@@ -758,11 +763,6 @@ R2Kademlia::chooseNextHop(const KadContactList& contacts, const OverlayKey& targ
 				//EV_TRACE << "chooseNextHop(): contact " << contact->getKey().shortStr()
 				//	 << " dprefix=" << dprefix << " dproxMin=" << dproxMin << endl;
 
-				if ((myOverlayKey ^ target).log_2() == dprefix) {
-					// if we have no prefix progress,
-					// we take the closest contact by XOR, which is this one (assumption of XOR-sorted contacts)
-					return bestchoice_it;
-				}
 				// stop here as we have found a usable contact to start with
 				break;
 			}
@@ -780,11 +780,11 @@ R2Kademlia::chooseNextHop(const KadContactList& contacts, const OverlayKey& targ
 				//EV_TRACE << "chooseNextHop(): check contact " << (*it)->getKey().shortStr()
 				//	 << " dprefix=" << ((*it)->getKey() ^ target).log_2() << " pathlen=" << (*it)->getPathLength() << endl;
 
-				// stop at contact that is further away
+				// stop at contact that is prefix-wise further away from target
 				if (((*it)->getKey() ^ target).log_2() > dprefix)
 					break;
 
-				// contact is XOR-wise at the same distance (dprefix)
+				// contact is prefix-wise at the same distance (dprefix)
 				// if contact has shorter path it is our best choice now
 				if ((*it)->getPathLength() < dproxMin) {
 					dproxMin = (*it)->getPathLength();
@@ -800,7 +800,7 @@ R2Kademlia::chooseNextHop(const KadContactList& contacts, const OverlayKey& targ
 	else {
 		// no proximity routing or only single contact
 
-		if (not contacts.empty() and startit != contacts.end() and *startit != nullptr) {
+		if (not contacts.empty() and startit != contacts.cend() and *startit != nullptr) {
 			if ((*startit)->getKey() == target)
 			{
 				EV_WARN << "Next hop is the target, number of contacts: " << contacts.size()
