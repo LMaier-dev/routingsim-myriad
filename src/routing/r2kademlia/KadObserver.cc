@@ -124,6 +124,16 @@ void KadObserver::initialize() {
 	addOutVectors[deliveredDataPacketsV] = std::make_unique<cOutVector>("deliveredDataPackets");
 	addOutVectors[droppedDataPacketsV] = std::make_unique<cOutVector>("droppedDataPackets");
 	addOutVectors[roamingDataPacketsV] = std::make_unique<cOutVector>("roamingDataPackets");
+
+#define DEBUG_LINKFAILURENOTIFICATIONS 1
+#ifdef DEBUG_LINKFAILURENOTIFICATIONS
+	auto msg = new cMessage("TimerMsg", -1);
+	std::function<void()> callback(std::bind(&KadObserver::getFailedContacts,this));
+	msg->setContextPointer( reinterpret_cast<void *>( new auto(callback) ) );
+	// callback will be carried out after delay
+	scheduleAt(SimTime(21,SIMTIME_S) , msg);
+#endif
+
 }
 
 void KadObserver::finish() {
@@ -154,6 +164,10 @@ void KadObserver::finish() {
 
 
 void KadObserver::handleMessage(cMessage *msg) {
+	if (msg->getKind() == -1) {
+		std::function<void()>* cbfuncp(static_cast< std::function<void()>* >(msg->getContextPointer()));
+		(*cbfuncp)();
+	}
 	delete msg;
 }
 
@@ -560,6 +574,20 @@ void KadObserver::sampleStatistics (Statistics &stats) {
 }
 
 
+void KadObserver::getFailedContacts() {
+	// iterate over all nodes
+	for (auto i = nodes.right.begin(); i != nodes.right.end(); i++) {
+		nodeid_t id = i->first;
+		
+		auto& rt = getR2Kademlia(id).getRoutingTable();
+		for (const auto& failedlink : failedLinkSet) {
+			// now check every path for containing failed links and print them
+			rt.getBrokenPaths(failedlink);
+		}
+	}
+}
+
+
 KadObserver& getKadObserver() {
 	if (observer == NULL) {
 		cModuleType* type = cModuleType::get(
@@ -569,4 +597,7 @@ KadObserver& getKadObserver() {
 	}
 	return *observer;
 }
+
+
+
 } // namespace

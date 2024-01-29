@@ -221,6 +221,11 @@ public:
 	/// returns a pointer random valid contact
 	KadContact_p getRandomContact() const;
 
+	/// returns path if failedLink is contained in path to contact (for debugging)
+	kad_path checkPathValidityToContact(KadContact& contact, const link_t& failedLink) const;
+	/// diagnostic output of paths with failedlink
+	void getBrokenPaths(const link_t& failedlink) const;
+
 	/// if failed link is in contact's path send a ProbeReq to check for path validity
 	void checkPathToContact(KadContact& contact, const link_t& failed_link);
 	/// do not invalidate valid contacts, but test path validity

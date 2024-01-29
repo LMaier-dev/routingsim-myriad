@@ -242,6 +242,9 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 					fwdTablePathID.setNIDtoPIDmapping(contact->getKey(), incomingPID, secondSegmentPID);
 					if (contact->getPathLength() < nodeVicinityGraph::vicinityDiscoveryRadius)
 						vicinityPathIDCompletion(*contact);
+					// mainly for testing purposes: in case we use linkFailureNotifications, send a path probe to install state
+					if (linkFailureNotifications)
+						addOneShotTimer(SimTime(1,SIMTIME_S),std::bind(&R2Kademlia::sendPathProbe,this,contact->getKey()));
 				}
 			}
 			else {

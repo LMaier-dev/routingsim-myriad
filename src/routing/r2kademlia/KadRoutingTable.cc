@@ -1175,6 +1175,52 @@ void KadRoutingTable::checkContacts(const link_t& failedlink)
 }
 
 
+// check for outdated path information
+kad_path KadRoutingTable::checkPathValidityToContact(KadContact& contact, const link_t& failedLink) const
+{
+	// if we find a failed link in the path, send a ProbeReq to check for path validity
+	// if the path has actually failed, we'll get back a segment failure and rediscovery will start
+	const auto& path= contact.getPath();
+	if (path.size() > 0)
+	{
+		if (contact.isContainedinPath(myKey, failedLink))
+		{ // link somewhere in the path
+			if (contact.isValid()) {
+				return path;
+			}
+		}
+	}
+	return {};
+}
+
+
+/** check all contacts with paths that contain a failed link **/
+void KadRoutingTable::getBrokenPaths(const link_t& failedlink) const
+{
+	// iterate over all buckets and contacts (even PNcontacts, because they may use redirected paths)
+	for (const KadBucket& b : buckets) {
+		for (auto& contact : b.getContacts()) {
+			if (contact->isValid()) {
+				if (auto path= checkPathValidityToContact(*contact, failedlink);
+				    not path.empty()) {
+					EV_TRACE << myKey.shortStr() << ' ' << path << ' ' << contact->getKey().shortStr() << " / " << failedlink << endl;
+				}
+				
+			}
+		} // end for inner loop over all contacts
+
+		for (const auto& contact : b.getPNContacts()) {
+			if (contact->isValid()) {
+				if (auto path= checkPathValidityToContact(*contact, failedlink);
+				    not path.empty()) {
+					EV_TRACE << myKey.shortStr() << ' ' << path << ' ' << contact->getKey().shortStr() << " / " << failedlink << endl;
+				}
+			}
+		} // end for inner loop over all PN contacts
+	} // end for over all buckets
+}
+
+
 /** invalidate all contacts with paths that contain a failed link otherNodeKey <-> failedNodeKey */
 void KadRoutingTable::invalidateContacts(const link_t& failedLink, age_t failedLinkAge)
 {

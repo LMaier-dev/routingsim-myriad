@@ -157,6 +157,9 @@ void R2Kademlia::onInitialize() {
 
 // link comes up (treat like a link layer indication "link established"), immediately send a PNHello message
 void R2Kademlia::onConnect( nodeid_t nid ) {
+	// for debugging only
+	OverlayKey key = getKadObserver().getNodeKey(nid);	
+	getKadObserver().removeFailedLink({myOverlayKey,key});
 
 	// send a hello packet to new neighbor after some very small random delay
 	addOneShotTimer(SimTime(uniform(1000,3000),SIMTIME_US), [this,nid]() {
@@ -183,6 +186,7 @@ void R2Kademlia::onDisconnect( nodeid_t nid ) {
 	ASSERT(not key.isUnspecified());
 	ASSERT(neighborTable.getNodeId(key) == nid );
 
+	getKadObserver().addFailedLink({myOverlayKey,key});
 	// change in physical neighborhood increases the Sequence Number
 	incLSSeqNo();
 	neighborTable.removeNeighbor(key);

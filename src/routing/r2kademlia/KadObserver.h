@@ -23,6 +23,26 @@
 #include "R2Kademlia.h"
 #include "foundation/NetworkManager.h"
 
+namespace std {
+
+using link_t = std::pair<OverlayKey,OverlayKey> ;
+
+template<> class hash<link_t>
+{
+public:
+	size_t operator()(const link_t& link) const;
+};
+
+
+inline
+std::size_t std::hash<link_t>::operator()(const link_t& link) const {
+	using std::size_t;
+
+	return link.first.hash() ^ link.second.hash();
+};
+
+}
+
 namespace routingsim {
 using cHistogramPtr = std::unique_ptr<cHistogram>;
 
@@ -48,10 +68,13 @@ struct MessageDroppedInfo {
 };
 
 
+
+
 /**
  * The R2/Kademlia Global Observer
  */
 class KadObserver: public cSimpleModule, public StatisticSample {
+
 protected:
 	virtual void initialize() override;
 	virtual void finish() override;
@@ -62,6 +85,8 @@ protected:
 private:
 	boost::bimap<OverlayKey, nodeid_t> nodes;
 
+	// this is for debugging purposes
+	std::unordered_set<link_t> failedLinkSet;
 	//
 	unsigned int deliveredPackets = 0;
 	unsigned int droppedPackets = 0;
@@ -170,6 +195,11 @@ public:
 	void sampleLaterPath(const OverlayKey& originKey, const kad_path& path);
 
 	virtual void sampleStatistics (Statistics &stats) override;
+
+	// this is for debuging purposes
+	void addFailedLink(link_t failedlink) { failedLinkSet.insert(failedlink); } ;
+	void removeFailedLink(const link_t& failedlink) { failedLinkSet.erase(failedlink); }
+	void getFailedContacts();
 };
 
 KadObserver& getKadObserver();
