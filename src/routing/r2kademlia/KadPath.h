@@ -18,6 +18,9 @@ bool containsUndirectedLink(const kad_path& path, const OverlayKey& firstNodeKey
 
 inline
 bool are_equal_r(const kad_path& first_path, const kad_path& second_path) {
+	if (first_path.size() != second_path.size())
+		return false;
+	// precondition: paths have equal length (therefore no need to check for end of it_second)
 	auto it_second= second_path.crbegin();
 	for (auto it_first= first_path.crbegin(); it_first != first_path.crend(); it_first++) {
 		if ( *it_first != *it_second )

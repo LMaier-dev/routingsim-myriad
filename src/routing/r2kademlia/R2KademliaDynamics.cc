@@ -127,6 +127,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadUpdateRouteReq> packet) {
 }
 
 
+// schedule an UpdateRouteReq to Neighbors about affectedContact (Announce, Withdraw, Changed, Unreachable)
 void R2Kademlia::scheduleUpdate(const KadContact& affectedContact, KadRouteUpdateAction action)
 {
 	// do not schedule updates for myself
@@ -307,7 +308,9 @@ void R2Kademlia::sendUrgentUpdates()
 			{ // affectedcontactentry is std::pair<KadContact, KadRouteUpdateAction>
 				// only queue this if contact still exists and state seq fits
 				if (KadContact_p affcontactnow= routingTable.getContact(affectedcontact_it->first.getKey());
-				    affcontactnow != nullptr and affcontactnow->getStateSeqNo() == affectedcontact_it->first.getStateSeqNo())
+				    affcontactnow != nullptr
+				    and affcontactnow->getStateSeqNo() == affectedcontact_it->first.getStateSeqNo()
+				    and affcontactnow->getLastSeen() == affectedcontact_it->first.getLastSeen() )
 					urgentupdatelist.push_back(*affectedcontact_it);
 				else
 					EV_TRACE << "sendUrgentUpdates() - dismiss obsolete " << affectedcontact_it->first << endl;
@@ -341,10 +344,10 @@ void R2Kademlia::sendUrgentUpdates()
 					packet->setNodeDegree(i, affectedContact.getNodeDegree());
 					packet->setAction(i, action);
 					EV_TRACE << ' ' <<
-						((action == 0) ? 'A' :
-						 ((action == 1) ? 'W' :
-						  ((action == 2) ? 'C' :
-						   ((action == 3) ? 'U' : '?'))))
+						((action == KAD_Announce) ? 'A' :
+						 ((action == KAD_Withdraw) ? 'W' :
+						  ((action == KAD_Change) ? 'C' :
+						   ((action == KAD_Unreachable) ? 'U' : '?'))))
 						 << ' ' << affectedContact << "; ";
 					i++;
 				}
@@ -394,16 +397,19 @@ void R2Kademlia::sendUpdates()
 			{
 				if (KadContact_p affcontactnow= routingTable.getContact(affcontact_it->first.getKey()); affcontactnow != nullptr)
 				{
-					if (affcontactnow->getStateSeqNo() > affcontact_it->first.getStateSeqNo())
+					if ( affcontactnow->getStateSeqNo() > affcontact_it->first.getStateSeqNo() or
+					     affcontactnow->getLastSeen() > affcontact_it->first.getLastSeen() )
 					{ // current state for contact is newer, there should be another update for this
 						EV_TRACE << "(obsolete " << affcontact_it->first
-							 << " #" << affcontactnow->getStateSeqNo()
-							 << " > #" << affcontact_it->first.getStateSeqNo() << ") ";
+							 << ((affcontactnow->getStateSeqNo() > affcontact_it->first.getStateSeqNo()) ? " seq)" : ")")
+							 << ' ';
 
 						affcontact_it= updatelist.erase(affcontact_it);
 					}
-					else
+					else {
+						ASSERT( affcontact_it->second != KAD_Unreachable ? (affcontactnow->isValid()) : true );
 						affcontact_it++;
+					}
 				}
 				else // contact not known anymore, probably replaced already
 				{
@@ -433,10 +439,10 @@ void R2Kademlia::sendUpdates()
 				packet->setNodeDegree(i, affectedContact.getNodeDegree());
 				packet->setAction(i, action);
 				EV_TRACE << ' ' <<
-					((action == 0) ? 'A' :
-					  ((action == 1) ? 'W' :
-					    ((action == 2) ? 'C' :
-					      ((action == 3) ? 'U' : '?'))))
+					((action == KAD_Announce) ? 'A' :
+					 ((action == KAD_Withdraw) ? 'W' :
+					  ((action == KAD_Change) ? 'C' :
+					   ((action == KAD_Unreachable) ? 'U' : '?'))))
 					 << ' ' << affectedContact << "; ";
 				i++;
 			}
