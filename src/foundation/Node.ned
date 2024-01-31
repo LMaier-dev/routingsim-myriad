@@ -30,6 +30,7 @@ parameters:
     int nodeMaxDelay @unit(us) = default(500us);
 
 gates:
+    input directIn @directIn;
     inout toProtocols[];
     inout toNeighbors[];
 }
