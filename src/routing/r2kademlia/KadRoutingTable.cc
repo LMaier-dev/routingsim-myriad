@@ -360,7 +360,9 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 	// only update paths of equal length if HashSum of new path is closer to own ID
 	// this should allow for better path diversity without route flapping
 	bool pathimproved(newer_seqno or contact->isInvalid() or shorter_path);
-	bool identical_path(false);
+	// the are_equal_r comparison operator starts at the end
+	// if paths diverge, they will do this more likely at their end
+	bool identical_path(are_equal_r(path, contact->getPath()));
 	OverlayKey pathHashSum;
 	if (contact->isValid()) {
 		if (path.size() == 0) {
@@ -382,9 +384,6 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 			if (equivalent_path) {
 				// this is the condition where we check for updating with a diverse path
 
-				// the are_equal_r comparison operator starts at the end
-				// if paths diverge, they will do this more likely at their end
-				identical_path= are_equal_r(path, contact->getPath());
 				// path is actually improved in case we
 				// learn a shorter path (not here) or path was invalid before
 
