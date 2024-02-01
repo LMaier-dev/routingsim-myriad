@@ -182,14 +182,17 @@ void Node::sendToNode( nodeid_t nid, NodePkt* np ) {
 	// send packet with delay (use µs precision)
 	simtime_t delay = ((double)intuniform(minDelay,maxDelay))/1000000.0;
 	// schedule not before earlier sent message to avoid message reordering!
-	if (simTime()+delay < n.lastsent)
-		delay= n.lastsent-simTime();
+	if (simTime()+delay < n.lastsent) {
+        delay= n.lastsent-simTime();
+    }
+
 
 	// schedule not before transmission of other message on channel
 	cChannel *txChannel = n.out->getTransmissionChannel();
     simtime_t txFinishTime = txChannel->getTransmissionFinishTime();
-    if (simTime()+delay < txFinishTime)
-    	delay = txFinishTime-simTime();
+    if (simTime()+delay < txFinishTime) {
+        delay = txFinishTime-simTime();
+    }
 
 	linkusage_map[nid]++;
 	//EV_TRACE << "sendToNode() @Node "<<getNodeId()<<": Destination node " << nid << " msg:" << np->getName() << endl;
