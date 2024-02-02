@@ -190,7 +190,6 @@ packet KadQueryRouteRsp extends KadRTableRsp {
 	type = KAD_QueryRouteRsp;
 }
 
-
 // Reverse Flood along PathIDs
 packet KadRevPathFlood extends KadPacket {
         type = KAD_RevPathFlood;
@@ -207,4 +206,8 @@ packet KadLinkFailureNotify extends KadPacket {
 	OverlayKey dstNodeID = OverlayKey::UNSPECIFIED_KEY;
 	// PathID to reach first segment sources if applicable
 	PathID dstPID = PathID::UndefinedPathID;
+}
+packet KadFloodPacket extends KadDataPacket {
+    uint8_t floodingPrefixLength = 0;
+	type = KAD_Flood;
 }

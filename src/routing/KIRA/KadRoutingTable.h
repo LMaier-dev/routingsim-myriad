@@ -16,6 +16,7 @@
 #ifndef __ROUTINGSIM_KadRoutingTable_H_
 #define __ROUTINGSIM_KadRoutingTable_H_
 
+#include <cstdint>
 #include <omnetpp.h>
 #include <memory>
 #include <vector>
@@ -215,6 +216,11 @@ public:
 	void getContactsforPathRefresh(std::list<OverlayKey>& result) const;
 	/// get list of failed PNs
 	std::list<OverlayKey> getFailedPNs() const;
+
+    /// returns a list of contacts to replicate packets to when flooding a packet
+    /// the floodPrefixLength determines from 
+    /// the return value is a vector of KadContacts and their respective floodingPrefixLength
+    std::vector<std::pair<KadContact_p, uint8_t>> getReplicationContacts(const uint8_t floodPrefixLength) const;
 
 	/// returns the number of contacts in buckets
 	size_type getNumContacts() const;

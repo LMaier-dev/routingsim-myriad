@@ -86,6 +86,9 @@ simple R2Kademlia extends routingsim.foundation.Protocol
 		/// add additional randomly selected contacts from various buckets in responses (usually 2 per bucket)
 		bool addGratuitousContacts = default(true);
 
+        /// in which interval a node sends a floodPacket (0s is disabled)
+        double floodInterval = default(0s) @unit(s);
+
 		// statistics foo
 		/// if true records average path lengths and stretch in routing tables (can be costly)
 		bool detailedRoutingTableStats = default(true);

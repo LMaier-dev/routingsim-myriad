@@ -15,41 +15,12 @@
 
 
 #include "KIRA.h"
+#include "KadPacket_m.h"
 #include "KadObserver.h"
 #include "PathIDUtils.h"
 
 namespace routingsim {
 
-template<typename T>
-std::unique_ptr<T> R2Kademlia::makeDataPacket(const OverlayKey& dstNodeID, const KadContact* viacontact, const char *name) {
-	// viacontact is the next overlay hop we neeed to reach
-	auto packet = std::make_unique<T>();
-	packet->setName(name);
-	packet->setType(KAD_Data);
-	packet->setPathSrcNodeID(myOverlayKey);
-	packet->setSrcNodeID(myOverlayKey);
-	packet->setDstNodeID(dstNodeID);
-	packet->setHopLimit(hopLimit);
-
-	// since we only forward to known contacts, we also have a PID for them
-	// this PID may only lead to the Node three hops before the contact
-	if ( auto pidentry= fwdTablePathID.NIDPIDTable.find(viacontact->getKey());
-	     pidentry != fwdTablePathID.NIDPIDTable.cend() )
-	{ // pidentry.second is incomingPathID
-		// this will be used to lookup the outgoing PID in forwardDataPacket()
-		packet->setFirstPathID(pidentry->second);
-		// in case that we have a longer path, a second PID for the last path segment needs to be specified
-		if ( auto secondpidentry= fwdTablePathID.NIDPIDTableLastSeg.find(viacontact->getKey());
-		     secondpidentry != fwdTablePathID.NIDPIDTableLastSeg.cend() ) {
-			packet->setSecondPathID(secondpidentry->second);
-		}
-	}
-	else
-	{
-		EV_ERROR << "makeDataPacket() - no PathID found for via destination " << viacontact->getKey().shortStr() << endl;
-	}
-	return packet;
-}
 
 
 
@@ -390,6 +361,7 @@ void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 		packet->setControlInfo(nodePkt.release());
 
 		countReceived(*packet);
+        handleIfFitting<KadFloodPacket>(packet);
 		return;
 	}
 

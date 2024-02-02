@@ -60,6 +60,7 @@ enum KadPDUType {
 	KAD_PathTeardownRsp = 	0x86;
 
 	KAD_Data = 		0x10;
+	KAD_Flood = 	0x11;
 }
 
 class OverlayKey extends cObject {

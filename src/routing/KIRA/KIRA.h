@@ -22,6 +22,7 @@
 #define _DEBUG_ONLY(X)
 #endif
 
+#include <cstdint>
 #include <omnetpp.h>
 #include <unordered_map>
 #include <queue>
@@ -271,6 +272,10 @@ private:
 	uint forwardedPathSetup = 0;
 	uint forwardedPathTeardown = 0;
 	uint receivedPathTeardown = 0;
+
+	uint floodPacketsReceived = 0;
+    uint floodPacketReplications = 0;
+    uint floodPacketMaxReplications = 0;
 	//@}
 
 	unsigned long laterpaths = 0;
@@ -299,7 +304,7 @@ private:
 	};
 	/// crafts a data packet, sets the DestNodeID to first argument and also PathID according to the given viacontact.
 	template<typename T>
-	std::unique_ptr<T>makeDataPacket(const OverlayKey& dstNodeID, const KadContact* viacontact, const char *name);
+	std::unique_ptr<T> makeDataPacket(const OverlayKey& dstNodeID, const KadContact* viacontact, const char *name);
 	/// crafts a packet of type T, sets the route and nonce according to original
 	template<typename T>
 	std::unique_ptr<T> makeAnswer(const KadPacket& original);
@@ -345,6 +350,8 @@ private:
 	void countDropped(KadPacket& packet, const OverlayKey& target, uint8_t reason);
 	/// does statistics on received data packet
 	void countReceived(KadDataPacket& packet);
+	/// does statistics on received flood packet
+	void countReceived(KadFloodPacket& packet, uint32_t replications);
 	/// does statistics on dropped data packet
 	void countDropped(KadDataPacket& packet, const OverlayKey& target, uint8_t reason);
 	/// try a shortcut route and modify source route of the packet
@@ -376,6 +383,9 @@ private:
 	 */
 	template<typename T>
 	bool handleIfFitting(KadPacket_p& packet);
+
+	template<typename T>
+	bool handleIfFitting(KadDataPacket_p& packet);
 
 	// processes present Not Via information and returns true if own Node ID is already present
 	bool processNotViaInformation(const KadPacket& packet);
@@ -445,6 +455,7 @@ private:
 	virtual void handlePacket(std::unique_ptr<KadLinkFailureNotify> packet);
 	virtual void handlePacket(KadAnswer_p packet);
 	virtual void handleDataPacket(NodePkt_p packet);
+	virtual void handlePacket(std::unique_ptr<KadFloodPacket> packet);
 	//@}
 
 	/** @name sending packets out*/
@@ -459,6 +470,10 @@ private:
 	void forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt);
 	/// forwards a data packet based on PathID present in the packet
 	bool forwardDataPacketToNextHop(KadDataPacket_p& packet, NodePkt_p& nodePkt);
+
+    /// replicate the flood packet in respective id range, returns number of replications sent
+    uint32_t replicateFloodPacket(std::unique_ptr<KadFloodPacket>& packet);
+    bool sendFloodPacket(short timerID); 
 	
 	/// sends a received packet again after the source route was manipulated
 	void resendPacket(KadPacket_p packet);
@@ -741,6 +756,37 @@ std::unique_ptr<T> R2Kademlia::makePacket(const KadContact* contact, const char 
 	return packet;
 }
 
+template<typename T>
+std::unique_ptr<T> R2Kademlia::makeDataPacket(const OverlayKey& dstNodeID, const KadContact* viacontact, const char *name) {
+	// viacontact is the next overlay hop we neeed to reach
+	auto packet = std::make_unique<T>();
+	packet->setName(name);
+	packet->setType(KAD_Data);
+	packet->setPathSrcNodeID(myOverlayKey);
+	packet->setSrcNodeID(myOverlayKey);
+	packet->setDstNodeID(dstNodeID);
+	packet->setHopLimit(hopLimit);
+
+	// since we only forward to known contacts, we also have a PID for them
+	// this PID may only lead to the Node three hops before the contact
+	if ( auto pidentry= fwdTablePathID.NIDPIDTable.find(viacontact->getKey());
+	     pidentry != fwdTablePathID.NIDPIDTable.cend() )
+	{ // pidentry.second is incomingPathID
+		// this will be used to lookup the outgoing PID in forwardDataPacket()
+		packet->setFirstPathID(pidentry->second);
+		// in case that we have a longer path, a second PID for the last path segment needs to be specified
+		if ( auto secondpidentry= fwdTablePathID.NIDPIDTableLastSeg.find(viacontact->getKey());
+		     secondpidentry != fwdTablePathID.NIDPIDTableLastSeg.cend() ) {
+			packet->setSecondPathID(secondpidentry->second);
+		}
+	}
+	else
+	{
+		EV_ERROR << "makeDataPacket() - no PathID found for via destination " << viacontact->getKey().shortStr() << endl;
+	}
+	return packet;
+}
+
 
 template<typename T>
 std::unique_ptr<T> R2Kademlia::makeAnswer(const KadPacket& original) {
@@ -778,6 +824,36 @@ template<typename T> std::unique_ptr<T> safe_packet_cast(KadPacket_p& packet) {
 	return std::unique_ptr<T>(check_and_cast<T*>(packet.release()));
 }
 
-} //namespace
+template<typename T> bool R2Kademlia::handleIfFitting(KadPacket_p& packet) {
+	ASSERT(packet); // no nullptr here!
+	KadPacket *raw_ptr = packet.get();
+	//EV_TRACE << "handleIfFitting raw_ptr " << static_cast<void*>(raw_ptr) << endl;
+	std::unique_ptr<T> tPacket(dynamic_cast<T*>(raw_ptr));
+	// if cast failed we get nullptr -> skip the rest, return false
+	if (not tPacket) return false;
+	// invalidate the original unique_ptr
+	(void) packet.release();
+	//EV_TRACE << "handleIfFitting tPacket " << static_cast<void*>(tPacket.get()) << endl;
+	// delegate responsibility to handlePacket method
+	handlePacket(std::move(tPacket));
+	return true;
+}
 
-#endif // __ROUTINGSIM_KIRA_H_
+template<typename T> bool R2Kademlia::handleIfFitting(KadDataPacket_p& packet) {
+	ASSERT(packet); // no nullptr here!
+	KadDataPacket *raw_ptr = packet.get();
+	//EV_TRACE << "handleIfFitting raw_ptr " << static_cast<void*>(raw_ptr) << endl;
+	std::unique_ptr<T> tPacket(dynamic_cast<T*>(raw_ptr));
+	// if cast failed we get nullptr -> skip the rest, return false
+	if (not tPacket) return false;
+	// invalidate the original unique_ptr
+	(void) packet.release();
+	//EV_TRACE << "handleIfFitting tPacket " << static_cast<void*>(tPacket.get()) << endl;
+	// delegate responsibility to handlePacket method
+	handlePacket(std::move(tPacket));
+	return true;
+}
+
+} //namespace
+  //
+#endif // __ROUTINGSIM_R2Kademlia_H_

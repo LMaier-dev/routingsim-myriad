@@ -19,6 +19,7 @@
  */
 
 #include "KadRoutingTable.h"
+#include "KadContact.h"
 #include "KadObserver.h"
 #include <algorithm>
 #include <cstdint>
@@ -1058,6 +1059,36 @@ KadContactList KadRoutingTable::getValidContactsFromBucket(size_t index) const
         copyValidContacts(bucket.getPNContacts(), result);
     }
     return result;
+}
+
+std::vector<std::pair<KadContact_p, uint8_t>> KadRoutingTable::getReplicationContacts(const uint8_t floodPrefixLength) const 
+{
+    // we are at the end. No need to flood further 
+    std::vector<std::pair<KadContact_p, uint8_t>> contacts;
+    if (floodPrefixLength == 112) {
+       return contacts; 
+    }
+    
+    
+    // TODO make this work with a higher accelerationFactor
+    //auto startingLevel = floodPrefixLength / accelerationFactor;
+    for (auto i = floodPrefixLength; i < getNumBuckets() - 1; i++) {
+        auto bucket_contacts = getValidContactsFromBucket(i);
+        auto cmp_fun = [&](const KadContact_p c1, const KadContact_p c2) -> bool { return c1->getPathLength() > c2->getPathLength(); };
+        auto repl_contact = std::min_element(bucket_contacts.begin(), bucket_contacts.end(), cmp_fun);
+        if (repl_contact == bucket_contacts.end()) { 
+	        EV_WARN << "getReplicationContacts() no valid contact for bucket with index = " << i << endl;
+            continue;
+        }
+        contacts.push_back(std::make_pair(*repl_contact, i+1));
+    }
+    // flood to all in deepest bucket
+    // what to do if contacts are invalid? after all we are responsible to inform them
+    // maybe we can deflect to one of our valid contacts?
+    for (auto contact: getValidContactsFromBucket(getNumBuckets() -1)) {
+            contacts.push_back(std::make_pair(contact, 112));
+    }
+    return contacts;
 }
 
 

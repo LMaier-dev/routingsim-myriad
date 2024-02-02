@@ -126,6 +126,7 @@ void R2Kademlia::onInitialize() {
 	maxHelloInterval = SimTime( par("maxHelloInterval").doubleValue(), SIMTIME_MS);
 	simtime_t probeInterval = (simtime_t) par("probeInterval").doubleValue();
 	simtime_t exploreInterval = (simtime_t) par("exploreInterval").doubleValue();
+	simtime_t floodInterval = (simtime_t) par("floodInterval").doubleValue();
 
 	// doProbeSelf is required for joining (will do exponential backoff)
 	// calculation for first timer is: initialOffset - duration/2 + random([0..duration])
@@ -165,6 +166,9 @@ void R2Kademlia::onInitialize() {
 	  EV << "will send data packets after " << getSimulation()->getWarmupPeriod() << endl;
 	  addRandomizedTimer(getSimulation()->getWarmupPeriod()+probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doDataProbe, this, ph::_1));
 	}
+    if (floodInterval > 0) {
+	    addRandomizedTimer(floodInterval*1.5, floodInterval, std::bind(&R2Kademlia::sendFloodPacket, this, ph::_1));
+    }
 
 	// expose the following variables in GUI for inspection
 	WATCH(myOverlayKey);
@@ -1302,6 +1306,7 @@ void R2Kademlia::sampleStatistics (Statistics &stats) {
 	stats.value("fwdTableUpdates", fwdTablePathID.getNumUpdates());
 	stats.value("floodQueueMaxLength", FloodQueue.getMaxLength());
 	stats.value("notifyQueueMaxLength", NotifyQueue.getMaxLength());
+    stats.value("floodPacketReplications", floodPacketReplications);
 }
 
 
@@ -1351,6 +1356,11 @@ void R2Kademlia::recordScalars() {
 	auto [numPrecalcEntries, numUsedPrecalcEntries]= fwdTablePathID.getNumUsedPrecalcEntries();
 	recordScalar("fwdTablePrecalc", numPrecalcEntries);
 	recordScalar("fwdTableUsedPrecalc", numUsedPrecalcEntries);
+
+	recordScalar("floodPacketsReceived", floodPacketsReceived);
+    recordScalar("floodPacketReplications", floodPacketReplications);
+    recordScalar("floodPacketAvgReplications", floodPacketReplications / (double) floodPacketsReceived);
+    recordScalar("floodPacketMaxReplications", floodPacketMaxReplications);
 
 	// EV_TRACE << (shortenedlaterpaths * 100.0) / (double) laterpaths << "% "
 	// 	 << shortenedlaterpaths << "/" << laterpaths << " of later paths shortened. "
@@ -1563,22 +1573,4 @@ void R2Kademlia::returnToSender(uint8_t errorType, KadPacket_p packet, const Ove
 	else // we sent this packet!
 		handleAnswer(std::move(answer));
 }
-
-
-
-template<typename T> bool R2Kademlia::handleIfFitting(KadPacket_p& packet) {
-	ASSERT(packet); // no nullptr here!
-	KadPacket *raw_ptr = packet.get();
-	//EV_TRACE << "handleIfFitting raw_ptr " << static_cast<void*>(raw_ptr) << endl;
-	std::unique_ptr<T> tPacket(dynamic_cast<T*>(raw_ptr));
-	// if cast failed we get nullptr -> skip the rest, return false
-	if (not tPacket) return false;
-	// invalidate the original unique_ptr
-	(void) packet.release();
-	//EV_TRACE << "handleIfFitting tPacket " << static_cast<void*>(tPacket.get()) << endl;
-	// delegate responsibility to handlePacket method
-	handlePacket(std::move(tPacket));
-	return true;
-}
-
 } // namespace
