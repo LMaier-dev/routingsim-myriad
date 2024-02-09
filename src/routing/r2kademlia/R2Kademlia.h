@@ -372,7 +372,8 @@ private:
 	void incLSSeqNo() { lsseqno++; }
 
 	void notifyAffectedPathUsers(const OverlayKey &key);
-	void sendLinkFailureNotifications(const NotViaList_t& notvialist, std::unordered_set<PathID>& notifyPIDList, OverlayKey excludeNode);
+	void sendLinkFailureNotifications(const NotViaList_t& notvialist, const std::unordered_set<PathID>& notifyPIDList, OverlayKey excludeNode);
+	inline void sendLocalLinkFailureNotifications();
 	void scheduleLinkFailureNotification();
 	void doNotifyFirstSegmentSources(const std::unordered_set<PathID>& upstreamPIDs, const NotViaList_t& notvialist);
 
@@ -630,6 +631,18 @@ bool R2Kademlia::processNotViaInformation(const KadPacket& packet)
 	return ownIDFound;
 }
 
+
+inline
+void R2Kademlia::sendLocalLinkFailureNotifications()
+{
+	//EV_TRACE << "sendLocalLinkFailureNotifications, notifyPIDList " << notifyPIDs.size() << " entries, { ";
+	//for (auto pid : notifyPIDs)
+	//	EV_TRACE << pid << ' ';
+	//EV_TRACE << '}' << endl;
+	sendLinkFailureNotifications(R2Kademlia::emptyNotViaList, notifyPIDs, OverlayKey::UNSPECIFIED_KEY);
+	// delete all local PIDs for notification
+	notifyPIDs.clear();
+}
 
 // template functions
 template<typename T>

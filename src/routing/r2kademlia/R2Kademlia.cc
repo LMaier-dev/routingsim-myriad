@@ -892,8 +892,8 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadProbeReq> packet) {
 
 		}
 		else { // we use a different path
-			if (contact_p->getStateSeqNo() <= packet->getStateSeqNo()) {
-				// contact has newer state sequence number, better check our path
+			if (contact_p->getStateSeqNo() <= packet->getStateSeqNo() and contact_p->getAge() > R2Kademlia::PathInfoAgeThreshold) {
+				// contact has newer state sequence number, better check our path if it has not been checked recently
 				// TODO this should probably be rate limited
 				EV_TRACE << "contact has newer state sequence number, my path is different from other sides probereq, path probe triggered" << endl;
 				sendPathProbeToContact(*contact_p, false);

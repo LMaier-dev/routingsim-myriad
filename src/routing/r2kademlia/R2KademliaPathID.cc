@@ -40,11 +40,11 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 			if (packet.getProgress() > 1) { // do not add any underlay neighbors to notifyFirstSegmentSources
 				if (auto it= notifyFirstSegmentSources.find(incomingPID); it != notifyFirstSegmentSources.end()) {
 					it->second.insert(packet.getSource());
-					EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources" << endl;
+					EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources PID=" << incomingPID << endl;
 				}
 				else {
 					notifyFirstSegmentSources.insert({incomingPID,{packet.getSource()}});
-					EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources" << endl;
+					EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources PID=" << incomingPID << endl;
 				}
 			}
 			return true;
@@ -59,11 +59,13 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 			if (packet.getProgress() > 1) { // do not add any underlay neighbors to notifyFirstSegmentSources
 				if (auto it= notifyFirstSegmentSources.find(incomingPID); it != notifyFirstSegmentSources.end()) {
 					it->second.insert(packet.getSource());
-					EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources" << endl;
+					EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources PID:"
+						 << incomingPID << endl;
 				}
 				else {
 					notifyFirstSegmentSources.insert({incomingPID,{packet.getSource()}});
-					EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources" << endl;
+					EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources PID:"
+						 << incomingPID << endl;
 				}
 			}
 
@@ -79,11 +81,11 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 					PathID incomingPID(getPathID(myOverlayKey, pathtoadd));
 					if (auto it= notifyFirstSegmentSources.find(incomingPID); it != notifyFirstSegmentSources.end()) {
 						it->second.insert(packet.getSource());
-						EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources" << endl;
+						EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources PID:" << incomingPID << endl;
 					}
 					else {
 						notifyFirstSegmentSources.insert({incomingPID,{packet.getSource()}});
-						EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources" << endl;
+						EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources PID:" << incomingPID << endl;
 					}
 				}
 			}

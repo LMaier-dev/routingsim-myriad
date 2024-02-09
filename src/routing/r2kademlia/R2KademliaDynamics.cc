@@ -689,14 +689,14 @@ R2Kademlia::scheduleLinkFailureNotification() {
 
 	if ( not linkFailureNotificationScheduled ) {
 		addRandomizedTimer(uniform(SimTime(notifyLinkFailureWaitTime/2,SIMTIME_MS),
-					   SimTime(notifyLinkFailureWaitTime*1.5,SIMTIME_MS)), 0, std::bind(&R2Kademlia::sendLinkFailureNotifications, this, R2Kademlia::emptyNotViaList, notifyPIDs, OverlayKey::UNSPECIFIED_KEY));
+					   SimTime(notifyLinkFailureWaitTime*1.5,SIMTIME_MS)), 0, std::bind(&R2Kademlia::sendLocalLinkFailureNotifications, this));
 		linkFailureNotificationScheduled= true;
 	}
 }
 
 
 void
-R2Kademlia::sendLinkFailureNotifications(const NotViaList_t& notvialist, std::unordered_set<PathID>& notifyPIDList, OverlayKey excludeNode)
+R2Kademlia::sendLinkFailureNotifications(const NotViaList_t& notvialist, const std::unordered_set<PathID>& notifyPIDList, OverlayKey excludeNode)
 {
 	EV_TRACE << "sendLinkFailureNotifications, notifyPIDList " << notifyPIDList.size() << " entries, { ";
 	for (auto pid : notifyPIDList)
@@ -752,7 +752,6 @@ R2Kademlia::sendLinkFailureNotifications(const NotViaList_t& notvialist, std::un
 	doNotifyFirstSegmentSources(notifyPIDList, notvialist);
 
 	linkFailureNotificationScheduled= false;
-	notifyPIDList.clear();
 }
 
 
@@ -770,6 +769,10 @@ R2Kademlia::notifyAffectedPathUsers(const OverlayKey& nexthop_key) {
 		}
 	}
 	EV_DEBUG << "found " << notifyPIDs.size() << " affected PathIDs (total)" << endl;
+	EV_TRACE << "notifyPIDs " << notifyPIDs.size() << " entries, { ";
+	for (auto pid : notifyPIDs)
+		EV_TRACE << pid << ' ';
+	EV_TRACE << '}' << endl;
 	// schedule the sending of notifications if not already scheduled
 	scheduleLinkFailureNotification();
 }

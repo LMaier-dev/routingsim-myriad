@@ -353,8 +353,11 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 		// the higher sequence number. Therefore, we simply trigger a path recheck for
 		// the current shorter path. The answer will overwrite the worse choice again
 		if ( contact->isValid() and not shorter_path and not equivalent_path ) {
-		     policy->onPathCheck(*contact, false);
-			//return false; // returning from here would reject the longer route
+			// if our path information is relatively recent, just reject
+			if (contact->getAge() > R2Kademlia::PathInfoAgeThreshold)
+				policy->onPathCheck(*contact, false);
+			else
+				return false; // returning from here would reject the longer route
 		}
 	} // end else newer_seqno
 
@@ -416,7 +419,7 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path path, stateseqno_t
 		} // end else if path.size() > 0
 
 		// we want to be careful by replacing a valid path with an uncertain alternative
-		if (need_to_check) {
+		if (need_to_check and contact->getAge() > R2Kademlia::PathInfoAgeThreshold) {
 			EV_TRACE << "for contact " << key.shortStr() << " seq#" << contact->getStateSeqNo()
 				 << " old path " << contact->getPath() << " new candidate needs to be checked " << path
 				 << " seq#"  << stateseqno << " identical: " << (identical_path ? 'T' : 'F') << endl;
