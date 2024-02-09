@@ -27,10 +27,11 @@ const KadContact KadContact::undefinedContact(OverlayKey::UNSPECIFIED_KEY);
 
 std::ostream& operator<<(std::ostream& os, const KadContact& c) {
 	os << c.getKey().shortStr();
-	// state is next V = valid, I = invalid, U = undefined
+	// state is next V = valid, R = Rediscovering, C = checking, I = invalid, U = undefined
 	os << ":(" << (c.getState() == KadContact::State::valid ? 'V' :
-		       ((c.getState() == KadContact::State::invalid) ? 'I' :
-			((c.getState() == KadContact::State::rediscovering) ? 'R' : 'U')));
+		       ((c.getState() == KadContact::State::checking) ? 'C' :
+			((c.getState() == KadContact::State::invalid) ? 'I' :
+			 ((c.getState() == KadContact::State::rediscovering) ? 'R' : 'U'))));
 
 	if ( c.isPhysicalNeighbor() ) {
 		os << "/P";

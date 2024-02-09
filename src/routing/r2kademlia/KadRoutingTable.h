@@ -127,7 +127,7 @@ public:
 	virtual void scheduleRegularRediscovery(const OverlayKey& contact) = 0;
 	virtual void scheduleSlowRediscovery(const OverlayKey& contact) = 0;
 	/** called when the path of a contact is probably broken and needs to be checked */
-	virtual void onPathCheck(const KadContact& contact) = 0;
+	virtual void onPathCheck(const KadContact& contact, bool pathsetupcheck) = 0;
 };
 
 /**
@@ -155,7 +155,7 @@ public:
 	 * add a potentially new path, adds a contacts or updates an existing one
 	 * @returns true if path was added
 	 */
-	bool addPath(const OverlayKey& key, kad_path path, stateseqno_t pathseqno, age_t pathinfo_age, uint32_t nodeDegree);
+	bool addPath(const OverlayKey& key, kad_path path, stateseqno_t pathseqno, age_t pathinfo_age, uint32_t nodeDegree, bool need_to_check);
 	/**
 	 * add a potentially new path, adds a contact or updates an existing one
 	 * @returns true if path was added

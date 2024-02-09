@@ -288,10 +288,12 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadPNDiscReq> packet) {
 	if (packet->getPhyNeighborArraySize() > 0) {
 		for (uint i = 0; i < packet->getPhyNeighborArraySize(); i++) {
 
+			// TODO unclear whether this addPath can be actually trusted
 			if (not routingTable.addPath(packet->getPhyNeighbor(i), path,
 						     packet->getPhyNeighborSeqNo(i),
 						     packet->getPhyNeighborAge(i),
-						     packet->getPhyNeighborDegree(i))) {
+						     packet->getPhyNeighborDegree(i),
+						     false)) {
 				// if not put into routing table, add PN's neighbor to vicinity nevertheless
 				bool node_added= vicinity.addNode(packet->getSource(),
 								  packet->getPhyNeighbor(i),

@@ -340,10 +340,10 @@ void R2Kademlia::reSyncPN(const KadContact& contact, stateseqno_t expected_seqno
 }
 
 
-void R2Kademlia::onPathCheck(const KadContact& contact) {
+void R2Kademlia::onPathCheck(const KadContact& contact, bool pathsetupcheck) {
 	EV_TRACE << "path check triggered for " << contact.getKey().shortStr() << endl;
 	// check whether the current path is still working properly
-	sendPathProbe(contact.getKey());
+	sendPathProbeToContact(contact, pathsetupcheck);
 }
 
 } // end namespace
