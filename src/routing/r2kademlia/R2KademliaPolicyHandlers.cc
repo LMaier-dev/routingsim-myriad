@@ -243,8 +243,8 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 					if (contact->getPathLength() < nodeVicinityGraph::vicinityDiscoveryRadius)
 						vicinityPathIDCompletion(*contact);
 					// mainly for testing purposes: in case we use linkFailureNotifications, send a path probe to install state
-					//if (linkFailureNotifications)
-					//	addOneShotTimer(SimTime(500,SIMTIME_MS),std::bind(&R2Kademlia::sendPathProbe,this,contact->getKey()));
+					if (linkFailureNotifications)
+						addOneShotTimer(SimTime(500,SIMTIME_MS),std::bind(&R2Kademlia::sendPathProbe,this,contact->getKey()));
 				}
 			}
 			else {
@@ -281,8 +281,8 @@ void R2Kademlia::onImprovement(const KadContact& contact) {
 			schedulePathSetup(contact.getKey());
 		}
 		else {  // 5 hops or less
-			//if (linkFailureNotifications)
-			//	addOneShotTimer(SimTime(500,SIMTIME_MS),std::bind(&R2Kademlia::sendPathProbe,this,contact.getKey()));
+			if (linkFailureNotifications)
+				addOneShotTimer(SimTime(500,SIMTIME_MS),std::bind(&R2Kademlia::sendPathProbe,this,contact.getKey()));
 			
 			// for these paths update the PID entry (max to 3rd hop)
 			fwdTablePathID.modEntry(contact.getKey(), contact.getPath(), false);
@@ -322,8 +322,8 @@ void R2Kademlia::onPathChange(const KadContact& contact) {
 			schedulePathSetup(contact.getKey());
 		}
 		else { // 5 hops or less
-			//if (linkFailureNotifications)
-			//	addOneShotTimer(SimTime(500,SIMTIME_MS),std::bind(&R2Kademlia::sendPathProbe,this,contact.getKey()));
+			if (linkFailureNotifications)
+				addOneShotTimer(SimTime(500,SIMTIME_MS),std::bind(&R2Kademlia::sendPathProbe,this,contact.getKey()));
 
 			// for these paths update the PID entry (max to 3rd hop)
 			fwdTablePathID.modEntry(contact.getKey(), contact.getPath(), false);
