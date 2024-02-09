@@ -439,7 +439,8 @@ private:
 	/// chooses the contact to forward a request to according to the overlay metric.
 	const KadContact& chooseNextHop(const KadContactList&, const OverlayKey& target);
 	/// sends a probe request to the given contact to check for path validity
-	void sendPathProbe(const OverlayKey& destinationNodeID);
+	void sendPathProbeToContact(const KadContact& contact, bool pathsetupcheck);
+	void sendPathProbe(const OverlayKey& contactkey);
 	/// sends a path setup request to the given contact
 	void sendPathSetup(KadContact_p contact);
 	/// sends a path teardown request to the given contact
@@ -526,7 +527,7 @@ public:
 	/** sendGetPhysicalNeighbors to contact **/
 	virtual void recheckPhysicalNeighbors(const KadContact& contact) override;
 	/** called when supposed failed link detected to initiate path probing **/
-	virtual void onPathCheck(const KadContact& contact) override;
+	virtual void onPathCheck(const KadContact& contact, bool pathsetupcheck) override;
 
 	//@}
 
@@ -635,7 +636,7 @@ template<typename T>
 std::unique_ptr<T> R2Kademlia::makePacket(const KadContact* contact, const char *name) {
 	auto packet = std::make_unique<T>();
 	packet->setName(name);
-	// TODO optimization: do this in one go
+	// TODO optimization: do this in one pass
 	packet->setSource(myOverlayKey);
 	packet->setHopLimit(hopLimit);
 	packet->appendRoute(contact);

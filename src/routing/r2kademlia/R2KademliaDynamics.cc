@@ -311,6 +311,7 @@ void R2Kademlia::sendUrgentUpdates()
 				// only queue this if contact still exists and state seq fits
 				if (KadContact_p affcontactnow= routingTable.getContact(affectedcontact_it->first.getKey());
 				    affcontactnow != nullptr
+				    and (affcontactnow->isValid() or (affectedcontact_it->second == KAD_Unreachable))
 				    and affcontactnow->getStateSeqNo() == affectedcontact_it->first.getStateSeqNo()
 				    and affcontactnow->getLastSeen() == affectedcontact_it->first.getLastSeen() )
 					urgentupdatelist.push_back(*affectedcontact_it);
@@ -388,7 +389,7 @@ void R2Kademlia::sendUpdates()
 	{
 		KadContact_p notify_target= routingTable.getContact(notifyContact_it->first);
 		if (notify_target and notify_target->isValid())
-		{ // only notify contacts that we have a path to (i.e., that are valid)
+		{ // only notify contacts that we have a validated path to (i.e., that are valid)
 			// UpdateRouteReqs are not expecting an answer, so no RPC call
 			auto packet = makePacket<KadUpdateRouteReq>(notify_target, "UpdateRouteReq");
 			packet->setDstNodeID(notify_target->getKey());
@@ -399,8 +400,11 @@ void R2Kademlia::sendUpdates()
 			{
 				if (KadContact_p affcontactnow= routingTable.getContact(affcontact_it->first.getKey()); affcontactnow != nullptr)
 				{
-					if ( affcontactnow->getStateSeqNo() > affcontact_it->first.getStateSeqNo() or
-					     affcontactnow->getLastSeen() > affcontact_it->first.getLastSeen() )
+					if ( (affcontactnow->isNotValid() and (affcontact_it->second != KAD_Unreachable))
+					     or
+					     (affcontactnow->getStateSeqNo() > affcontact_it->first.getStateSeqNo()
+					      or
+					      affcontactnow->getLastSeen() > affcontact_it->first.getLastSeen()) )
 					{ // current state for contact is newer, there should be another update for this
 						EV_TRACE << "(obsolete " << affcontact_it->first
 							 << ((affcontactnow->getStateSeqNo() > affcontact_it->first.getStateSeqNo()) ? " seq)" : ")")

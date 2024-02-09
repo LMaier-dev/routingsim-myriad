@@ -14,6 +14,8 @@
 //
 
 #include <BaseTypes.h>
+#include <boost/type_traits/integral_constant.hpp>
+#include <cstddef>
 
 #include "Statistics.h"
 #include "R2Kademlia.h"
@@ -21,6 +23,7 @@
 #include "KadObserver.h"
 
 #include "FwdTable.h"
+#include "routing/r2kademlia/OverlayKey128.h"
 
 namespace routingsim {
 
@@ -327,7 +330,8 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 			checkForResync(packet->getSource(), packet->getStateSeqNo());
 
 		// evaluate return path for routing table (packet came to us this way, so path was recently working)
-		routingTable.addPath(packet->getSource(), packet->reversePath(packet->getIntermediatePath()), packet->getStateSeqNo(), 0, packet->getSrcNodeDegree());
+		// Trusted Path Info (no need to check)
+		routingTable.addPath(packet->getSource(), packet->reversePath(packet->getIntermediatePath()), packet->getStateSeqNo(), 0, packet->getSrcNodeDegree(), false);
 
 		// these types may forward packets, so they count themselves
 		if (handleIfFitting<KadFindNodeReq>(packet)) return;
@@ -579,7 +583,7 @@ void R2Kademlia::reroutePacket(const OverlayKey& finaldest, KadPacket_p packet, 
 		const KadContact& contact= chooseNextHop(ovlyneighbors, finaldest);
 
 		// if chooseNextHop() cannot find useful next hop: break
-		if (contact.isInvalid() or contact.getKey().isUnspecified())
+		if (contact.isNotValid() or contact.getKey().isUnspecified())
 			break;
 
 		if ((contact.getKey() ^ finaldest) < (myOverlayKey ^ finaldest))
@@ -837,21 +841,30 @@ R2Kademlia::chooseNextHop(const KadContactList& contacts, const OverlayKey& targ
 
 // -------------------- RPC methods ---------------------------
 
+// TODO sendPathProbe with notVia info in case we have a new proposed repair path which is untrusted yet
+void R2Kademlia::sendPathProbe(const OverlayKey& contactkey)
+{
+	if (auto contactp(routingTable.getContact(contactkey)); contactp != nullptr)
+		sendPathProbeToContact(*contactp, true);
+	else {
+		EV_TRACE << "not sending ProbeReq from " << myOverlayKey.shortStr() << " to " << contactkey.shortStr() << " because of invalid contact" << endl;
+	}
+}
 
 // Path Probing: sends a ProbeReq to check for validity of an existing path
 // This will also refresh PathIDs that have been installed in intermediate nodes
-void R2Kademlia::sendPathProbe(const OverlayKey& destinationNodeID) {
-	KadContact_p contact(routingTable.getContact(destinationNodeID));
+void R2Kademlia::sendPathProbeToContact(const KadContact& contact, bool pathsetupcheck)
+{
 	// must be a valid contact
-	if ( contact == nullptr or contact->isInvalid() ) {
-		EV_TRACE << "not sending ProbeReq from " << myOverlayKey.shortStr() << " to " << destinationNodeID.shortStr() << " because of invalid contact" << endl;
+	if ( contact.getKey().isUnspecified() or contact.isInvalid() ) {
+		EV_TRACE << "not sending ProbeReq from " << myOverlayKey.shortStr() << " to " << contact.getKey().shortStr() << " because of invalid contact" << endl;
 		return;
 	}
 
-	EV_TRACE << "sending ProbeReq from " << myOverlayKey.shortStr() << " to " << destinationNodeID.shortStr() << endl;
+	EV_TRACE << "sending ProbeReq from " << myOverlayKey.shortStr() << " to " << contact.getKey().shortStr() << endl;
 	auto probereq= makePacket<KadProbeReq>(contact, "KadProbeReq");
 	// need to set the PathCheck flag for paths starting from 4 hops
-	if (contact->getPathLength()>nodeVicinityGraph::vicinityDiscoveryRadius)
+	if (pathsetupcheck and contact.getPathLength()>nodeVicinityGraph::vicinityDiscoveryRadius)
 		probereq->setPathCheck(true);
 
 	sendRpcCall(std::move(probereq),
@@ -863,16 +876,29 @@ void R2Kademlia::sendPathProbe(const OverlayKey& destinationNodeID) {
 
 // sends back an answer for a path probe
 void R2Kademlia::handlePacket(std::unique_ptr<KadProbeReq> packet) {
-	// update StateSeqNo and lastseen of origin contact
+	// update StateSeqNo and lastseen of origin contact if path is the same
+	// since paths may be asymmetric, this ProbeReq may have taken a different path
 	if (KadContact* contact_p= const_cast<KadContact*>(routingTable.getContact(packet->getSource())); contact_p != nullptr) {
-		if (contact_p->getStateSeqNo() <= packet->getStateSeqNo()) {
-			contact_p->setStateSeqNo(packet->getStateSeqNo());
-			contact_p->updateLastSeen();
-			contact_p->setNodeDegree(packet->getSrcNodeDegree());
-		}
-		else
-			EV_WARN << "State sequence number of message smaller (" << packet->getStateSeqNo() << ") than for contact (" << contact_p->getStateSeqNo() << ")" << endl;
+		const auto takenpath(packet->reversePath(packet->getIntermediatePath()));
+		if (takenpath == contact_p->getPath()) { // if it is the same path that we use, update contact
+			if (contact_p->getStateSeqNo() <= packet->getStateSeqNo()) {
+				// update contact data
+				contact_p->setStateSeqNo(packet->getStateSeqNo());
+				contact_p->updateLastSeen();
+				contact_p->setNodeDegree(packet->getSrcNodeDegree());
+			}
+			else
+				EV_WARN << "State sequence number of message smaller (" << packet->getStateSeqNo() << ") than for contact (" << contact_p->getStateSeqNo() << ")" << endl;
 
+		}
+		else { // we use a different path
+			if (contact_p->getStateSeqNo() <= packet->getStateSeqNo()) {
+				// contact has newer state sequence number, better check our path
+				// TODO this should probably be rate limited
+				EV_TRACE << "contact has newer state sequence number, my path is different from other sides probereq, path probe triggered" << endl;
+				sendPathProbeToContact(*contact_p, false);
+			}
+		}
 	}
 
 	sendPacket(makeAnswer<KadProbeRsp>(*packet));
