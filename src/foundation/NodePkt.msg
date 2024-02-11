@@ -29,4 +29,5 @@ enum PayloadTypes {
 packet NodePkt {
     int type enum(PayloadTypes);
     hop_t hop;
+    int destGateId = -1;
 }

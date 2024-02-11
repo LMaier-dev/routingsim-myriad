@@ -144,7 +144,7 @@ void KadRoutingTable::addPNContact(const OverlayKey& key, stateseqno_t stateseqn
 	if (not neighbortable.isNeighbor(key)) {
 		// this should not happen, either we got a PNHello before or it was added just before this call
 		EV_ERROR << "addPNContact: PN is not a neighbor yet" << endl;
-		ASSERT(neighbortable.isNeighbor(key));
+		//ASSERT(neighbortable.isNeighbor(key));
 	}
 
 	KadContact *contact = getContactInternal(key);

@@ -30,7 +30,7 @@ static nodeid_t gnodeid=0;
 Node* Node::getNode(cModule *mod) {
 	if (!mod)
 		return nullptr;
-	
+
 	cModule *submod = mod->getSubmodule("node");
 	if (submod) {
 		// we have a node submodule
@@ -227,6 +227,8 @@ void Node::sendToNeighbors( NodePkt* np ) {
 void Node::sendNotify(NodePkt *packet, cGate *dg) {
 	Enter_Method_Silent("Node::sendNotify");
 	take(packet);
+    EV_WARN << "SendNotify: From gate " << dg->getFullName() << " to fake gate " << dg->getPathEndGate()->getFullName() << endl;
+    packet->setDestGateId(dg->getPathEndGate()->getIndex());
     sendDirect(packet, getOtherNode(dg), "directIn");
 
     //EV_TRACE << "sendToNode() @Node "<<getNodeId()<<": Destination node " << nid << " msg:" << np->getName() << endl;
@@ -265,7 +267,13 @@ void Node::onHello( NodePkt* pkt ) {
 	nr.activity = simTime();
 	nr.lastsent = 0;
 	nr.id  = nid;
-	nr.out = gate("toNeighbors$o", pkt->getArrivalGate()->getIndex() );
+    if (pkt->getDestGateId() == -1) {
+        nr.out = gate("toNeighbors$o", pkt->getArrivalGate()->getIndex() );
+        EV_WARN << "onHello: Node " << id << " received hello from " << nid << " on gate " << pkt->getArrivalGate()->getIndex() << endl;
+    } else {
+        nr.out = gate("toNeighbors$o", pkt->getDestGateId() );
+        EV_WARN << "onHello: Node " << id << " received hello from " << nid << " on fake gate " << pkt->getDestGateId() << endl;
+    }
 
 	// announce at modules
 	sendToModules(pkt);
