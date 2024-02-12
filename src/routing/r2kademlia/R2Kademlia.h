@@ -635,7 +635,8 @@ bool R2Kademlia::processNotViaInformation(const KadPacket& packet)
 inline
 void R2Kademlia::sendLocalLinkFailureNotifications()
 {
-	//EV_TRACE << "sendLocalLinkFailureNotifications, notifyPIDList " << notifyPIDs.size() << " entries, { ";
+	EV_TRACE << "sendLocalLinkFailureNotifications, notifyPIDList " << notifyPIDs.size() << endl;
+	//<< " entries, { ";
 	//for (auto pid : notifyPIDs)
 	//	EV_TRACE << pid << ' ';
 	//EV_TRACE << '}' << endl;

@@ -15,7 +15,7 @@
 
 #include "R2Kademlia.h"
 #include <unordered_set>
-
+#include <utility>
 /**
  * @file R2KademliaDynamics.cc
  * @see R2Kademlia.h for class documentation
@@ -749,7 +749,17 @@ R2Kademlia::sendLinkFailureNotifications(const NotViaList_t& notvialist, const s
 		sendPacket(std::move(packet));
 	}
 
-	doNotifyFirstSegmentSources(notifyPIDList, notvialist);
+	// extend notvialist with locally failed PNs
+	// add the failed local links
+	auto newnotvialist(notvialist);
+	for ( auto& failedPN : failedPNList ) {
+		if (auto pncontact= routingTable.getContact(failedPN); pncontact != nullptr) {
+			newnotvialist.push_back(std::make_pair(std::make_pair(myOverlayKey,failedPN),pncontact->getAge()));
+		}
+	}
+	ASSERT(newnotvialist.size() == notvialist.size()+failedPNList.size());
+
+	doNotifyFirstSegmentSources(notifyPIDList, newnotvialist);
 
 	linkFailureNotificationScheduled= false;
 }

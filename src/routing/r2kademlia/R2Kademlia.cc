@@ -469,6 +469,7 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt, simtime_t 
 		const OverlayKey* finaldestination(nullptr);
 		KadUpdateRouteReq* updatepacket(nullptr);
 		KadFindNodeReq* findnodepacket(nullptr);
+		KadLinkFailureNotify* linkfailurenotifypacket(nullptr);
 		if (packet->getType() == KAD_UpdateRouteReq) {
 			updatepacket= dynamic_cast<KadUpdateRouteReq*>(packet.get());
 			if (updatepacket != nullptr)
@@ -479,6 +480,13 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt, simtime_t 
 			findnodepacket= dynamic_cast<KadFindNodeReq*>(packet.get());
 			if (findnodepacket != nullptr and findnodepacket->getRediscovery() == true) {
 				finaldestination= &findnodepacket->getDstNodeID();
+			}
+		}
+		else
+		if (packet->getType() == KAD_LinkFailureNotify) {
+			linkfailurenotifypacket= dynamic_cast<KadLinkFailureNotify*>(packet.get());
+			if (linkfailurenotifypacket != nullptr) {
+				finaldestination= &linkfailurenotifypacket->getDstNodeID();
 			}
 		}
 
@@ -546,7 +554,7 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt, simtime_t 
 		if (finaldestination) {
 			EV_TRACE << "forwardPacket(): trying to reroute to final destination " << *finaldestination << endl;
 			// add not via information before forwarding
-			if (  updatepacket != nullptr or findnodepacket != nullptr )
+			if (  updatepacket != nullptr or findnodepacket != nullptr or linkfailurenotifypacket != nullptr )
 			{
 				packet->addNotViaLink({nextHop,myOverlayKey}, 0);
 			}
@@ -1616,6 +1624,9 @@ R2Kademlia::doNotifyFirstSegmentSources(const std::unordered_set<PathID>& upstre
 					notify_packet->setFailedLinkAge(i, it->second);
 					it++;
 				}
+				ASSERT(notvialist.size() > 0);
+				notify_packet->setNotVia(notvialist.size() > 0);
+
 				EV_TRACE << "Sending LinkFailureNotify to " << notify_target.shortStr() << endl;
 				sendPacket(std::move(notify_packet));
 			}
@@ -1686,7 +1697,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadLinkFailureNotify> packet) {
 		// => forward request
 		// note: chooseNextHop may choose the next hop with the shortest path (proximity routing)
 		const KadContact& contact = chooseNextHop(contacts, target);
-		EV_TRACE << "KadFindNodeReq received query for: " << packet->getDstNodeID().shortStr() << " next overlay hop is " << contact << endl;
+		EV_TRACE << "KadLinkFailureNotify destined for: " << packet->getDstNodeID().shortStr() << " next overlay hop is " << contact << endl;
 		// note: the log_2 will be smaller for a longer common prefix
 		ASSERT((contact.getKey() ^ target).log_2() <= (myOverlayKey ^ target).log_2());
 		if((contact.getKey() ^ target).log_2() > (myOverlayKey ^ target).log_2()) {
