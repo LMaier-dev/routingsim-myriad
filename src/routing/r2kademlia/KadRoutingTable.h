@@ -151,10 +151,10 @@ public:
 	virtual std::string str() const;
 
 	/**
-	 * add a potentially new path, adds a contacts or updates an existing one
+	 * add a potentially new path, adds a contact or updates an existing one
 	 * @returns true if path was added
 	 */
-	bool addPath(const OverlayKey& key, kad_path path, stateseqno_t pathseqno, age_t pathinfo_age, uint32_t nodeDegree, bool need_to_check);
+	bool addPath(const OverlayKey& key, kad_path path, stateseqno_t pathseqno, age_t pathinfo_age, uint32_t nodeDegree, bool path_verified);
 	/**
 	 * add a potentially new path, adds a contact or updates an existing one
 	 * @returns true if path was added
@@ -268,7 +268,7 @@ public:
 	// update all contact paths that are affected by improved contact path
 	void updatePaths(const KadContact& improvedContact);
 	/// tries to find shortcuts using own routing table entries
-	bool shortenPath(kad_path& path) const;
+	bool shortenPath(kad_path& path, age_t path_info_age) const;
 	/// concatenates the two paths
 	kad_path concatViaPath(const kad_path& viaPath, const kad_path& path) const;
 	/// removes duplicates and loops from a path

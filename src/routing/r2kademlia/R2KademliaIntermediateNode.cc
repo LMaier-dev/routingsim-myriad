@@ -59,7 +59,7 @@ R2Kademlia::intermediateNodeProcessing(const KadPacket& packet) {
 				if (path_of_interest.size() > 0)
 				{
 					// Trusted Path Info: info originates from recently taken source path
-					routingTable.addPath(packet.getSource(), path_of_interest, packet.getStateSeqNo(), 0, packet.getSrcNodeDegree(), false);
+					routingTable.addPath(packet.getSource(), path_of_interest, packet.getStateSeqNo(), 0, packet.getSrcNodeDegree(), true);
 				}
 			}
 			const KadPathSetupReq* setupreq = static_cast<const KadPathSetupReq *>(&packet);
@@ -138,7 +138,7 @@ R2Kademlia::intermediateNodeProcessing(const KadPacket& packet) {
 		if (path_of_interest.size() > 0)
 		{
 			// Trusted Path Info: info originates from recently taken source path
-			routingTable.addPath(packet.getSource(), path_of_interest, packet.getStateSeqNo(), 0, packet.getSrcNodeDegree(), false);
+			routingTable.addPath(packet.getSource(), path_of_interest, packet.getStateSeqNo(), 0, packet.getSrcNodeDegree(), true);
 		}
 
 		// NOTE: the rest of the source routing path should not be used for improvement

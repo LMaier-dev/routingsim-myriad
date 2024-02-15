@@ -331,7 +331,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 
 		// evaluate return path for routing table (packet came to us this way, so path was recently working)
 		// Trusted Path Info (no need to check)
-		routingTable.addPath(packet->getSource(), packet->reversePath(packet->getIntermediatePath()), packet->getStateSeqNo(), 0, packet->getSrcNodeDegree(), false);
+		routingTable.addPath(packet->getSource(), packet->reversePath(packet->getIntermediatePath()), packet->getStateSeqNo(), 0, packet->getSrcNodeDegree(), true);
 
 		// these types may forward packets, so they count themselves
 		if (handleIfFitting<KadFindNodeReq>(packet)) return;
@@ -401,7 +401,7 @@ void R2Kademlia::handlePacket(KadAnswer_p packet) {
 		kad_path returnpath(packet->reversePath(packet->getSrcPath(0,packet->getProgress())));
 		EV_TRACE << "answer packet: path to replier " << returnpath;
 		laterpaths++;
-		if (routingTable.shortenPath(returnpath))
+		if (routingTable.shortenPath(returnpath, 0))
 		{
 			shortenedlaterpaths++;
 			EV_TRACE << " shortened " << returnpath;
@@ -926,6 +926,7 @@ bool R2Kademlia::handleProbeResponse(KadPacket_p answer, RPCState& rpcState) {
 		// usually this should not be necessary as a path update is done before
 		if (contact_p->getStateSeqNo() <= probeRsp->getStateSeqNo()) {
 			contact_p->setStateSeqNo(probeRsp->getStateSeqNo());
+			//contact_p->setValid();
 			contact_p->updateLastSeen();
 			contact_p->updateLastPathRefresh();
 			contact_p->setNodeDegree(probeRsp->getSrcNodeDegree());
@@ -1413,7 +1414,7 @@ void R2Kademlia::readRTableRsp(const KadRTableRsp& packet) {
 	kad_path viaPath = packet.reversePath(packet.getIntermediatePath());
 	viaPath.push_back(packet.getSource());
 	// should shorten path here already so that the in loop condition fits
-	routingTable.shortenPath(viaPath);
+	routingTable.shortenPath(viaPath,0);
 
 	for (size_t i = 0; i < packet.getContactArraySize(); i++) {
 		// TODO optimization: isPathInteresting

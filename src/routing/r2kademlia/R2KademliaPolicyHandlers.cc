@@ -155,7 +155,7 @@ void R2Kademlia::onContactInvalidation(KadContact_p contact)
 }
 
 
-
+// this is called from KadRoutingTable
 void R2Kademlia::onNewContact(KadContact_p contact) {
 
 	EV_TRACE << "onNewContact(" << contact->getKey().shortStr() << ") called, SeqNo #" << contact->getStateSeqNo() << " (" << contact->getNodeDegree() << ')' << endl;

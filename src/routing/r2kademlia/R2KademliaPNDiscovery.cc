@@ -293,7 +293,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadPNDiscReq> packet) {
 						     packet->getPhyNeighborSeqNo(i),
 						     packet->getPhyNeighborAge(i),
 						     packet->getPhyNeighborDegree(i),
-						     false)) {
+						     true)) {
 				// if not put into routing table, add PN's neighbor to vicinity nevertheless
 				bool node_added= vicinity.addNode(packet->getSource(),
 								  packet->getPhyNeighbor(i),
