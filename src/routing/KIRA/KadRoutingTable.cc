@@ -1064,7 +1064,8 @@ KadContactList KadRoutingTable::getValidContactsFromBucket(size_t index) const
     return result;
 }
 
-std::vector<std::pair<KadContact_p, uint8_t>> KadRoutingTable::getReplicationContacts(const uint8_t floodPrefixLength, uint8_t maxSplit) const 
+std::vector<std::pair<KadContact_p, uint8_t>> KadRoutingTable::getReplicationContacts(
+        const uint8_t floodPrefixLength, uint8_t maxSplit, bool completeBucketOpt) const 
 {
     // we are at the end. No need to flood further 
     std::vector<std::pair<KadContact_p, uint8_t>> contacts;
@@ -1078,11 +1079,34 @@ std::vector<std::pair<KadContact_p, uint8_t>> KadRoutingTable::getReplicationCon
         KadContactList::const_iterator firstContact;
         KadContactList::const_iterator nextContact;
     };
-    
+
+    // flood to all in deepest bucket
+    // what to do if contacts are invalid? after all we are responsible to inform them
+    // maybe we can deflect to one of our valid contacts?
+    for (auto contact: getValidContactsFromBucket(getNumBuckets() - 1)) {
+            contacts.push_back(std::make_pair(contact, 112));
+    }
+
+    if (getNumBuckets() < 2) {
+        return contacts;
+    }
+
+    auto i = getNumBuckets() - 2;
+    // flood to all in deepest bucket
+    // what to do if contacts are invalid? after all we are responsible to inform them
+    // maybe we can deflect to one of our valid contacts?
+    if (completeBucketOpt) {
+        for (; i >= floodPrefixLength and buckets[i].size() < getSplitSize(); i--) {
+            for (auto contact: getValidContactsFromBucket(i)) {
+                contacts.push_back(std::make_pair(contact, 112));
+            }
+        }
+    }
+    auto maxPrefix = i;
     
     // TODO make this work with a higher accelerationFactor
     //auto startingLevel = floodPrefixLength / accelerationFactor;
-    for (auto i = floodPrefixLength; i < getNumBuckets() - 1; i++) {
+    for (; i >= floodPrefixLength and i < getNumBuckets(); i--) {
         auto bucket_contacts = getValidContactsFromBucket(i);
         auto key_cmp = [&](const KadContact_p c1, const KadContact_p c2) -> bool { return c1->getKey() < c2->getKey(); };
         std::sort(bucket_contacts.begin(), bucket_contacts.end(), key_cmp);
@@ -1099,7 +1123,7 @@ std::vector<std::pair<KadContact_p, uint8_t>> KadRoutingTable::getReplicationCon
                                           range.nextContact, 
                                           [&](auto& contact) { return contact->getKey() >= middle; });
             if (range.prefixLen - i - 1 < maxSplit  
-                && range.prefixLen < getNumBuckets() - 1
+                && range.prefixLen < maxPrefix
                 && separator != range.firstContact 
                 && separator != range.nextContact) {
                 // split range in two 
@@ -1123,12 +1147,6 @@ std::vector<std::pair<KadContact_p, uint8_t>> KadRoutingTable::getReplicationCon
                 
 
         }
-    }
-    // flood to all in deepest bucket
-    // what to do if contacts are invalid? after all we are responsible to inform them
-    // maybe we can deflect to one of our valid contacts?
-    for (auto contact: getValidContactsFromBucket(getNumBuckets() - 1)) {
-            contacts.push_back(std::make_pair(contact, 112));
     }
     return contacts;
 }

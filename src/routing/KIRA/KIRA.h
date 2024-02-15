@@ -155,6 +155,7 @@ private:
 	uint8_t updateNotifyStrategy;
 	uint8_t updatePropagateStrategy;
 	uint8_t floodStrideFactor;
+	bool floodCompleteBucketOpt;
 	simtime_t PNRediscoveryWaitTime;
 	simtime_t urgentRediscoveryWaitTime;
 	simtime_t regularRediscoveryWaitTime;

@@ -90,6 +90,8 @@ simple R2Kademlia extends routingsim.foundation.Protocol
         double floodInterval = default(0s) @unit(s);
 		/// max stride factor for flooding packets
 		int floodStrideFactor = default(0);
+		/// whether to count trailing non-full buckets as part of the responsibility range
+		bool floodCompleteBucketOpt = default(true);
 
 		// statistics foo
 		/// if true records average path lengths and stretch in routing tables (can be costly)
