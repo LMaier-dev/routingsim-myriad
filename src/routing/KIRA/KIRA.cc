@@ -120,6 +120,7 @@ void R2Kademlia::onInitialize() {
         };
 	failureFocussedProbing = par("failureFocussedProbing").boolValue();
 	addGratuitousContacts = par("addGratuitousContacts").boolValue();
+	floodStrideFactor = par("floodStrideFactor").intValue();
 	// register this module for statistics
 	getStatistics().addSample(this);
 	minHelloInterval = SimTime(par("minHelloInterval").doubleValue(),SIMTIME_MS);

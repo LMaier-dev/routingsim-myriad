@@ -18,6 +18,8 @@
 #include "KadPacket_m.h"
 #include "KadObserver.h"
 #include "PathIDUtils.h"
+#include "clog.h"
+#include "KadPackets_m.h"
 
 namespace routingsim {
 
@@ -88,7 +90,7 @@ void R2Kademlia::handleDataPacket(NodePkt_p pkt) {
 	EV_TRACE << "received data packet from "
 	   << packet->getSrcNodeID().shortStr() << " to "
 	   << packet->getDstNodeID().shortStr() << " overlaysrc: " << packet->getPathSrcNodeID().shortStr()
-	   << " HL:" << packet->getHopLimit() << endl;
+	   << " HL:" << packet->getHopLimit() << " Type " << packet->getType() << endl;
 
 	// we should check whether the link via this message travelled is
 	// still active, otherwise we should drop this message as it was affected
@@ -106,6 +108,12 @@ void R2Kademlia::handleDataPacket(NodePkt_p pkt) {
 		return;
 	}
 
+    // we need to check if this is a flood packet
+    if (packet->getType() == KAD_Flood) {
+		EV_TRACE << "handleDataPacket: got FloodPaket" << endl;
+	    auto tPacket = dynamic_cast<KadFloodPacket*>(packet.get());
+        handleFloodPacketForwarded(*tPacket, taken_hop);
+    } 
 	// this should either forward to next hop or deliver locally
 	forwardDataPacket(std::move(packet), std::move(pkt));
 }
@@ -333,7 +341,7 @@ bool R2Kademlia::forwardDataPacketToNextHop(KadDataPacket_p& packet, NodePkt_p& 
 void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 
 	ASSERT(packet != nullptr);
-	ASSERT(packet->getType() == KAD_Data);
+	//ASSERT(packet->getType() == KAD_Data);
 	ASSERT(packet->getControlInfo() == nullptr);
         //ASSERT(packet->hasRemainingHops());
 	ASSERT(nodePkt != nullptr);
@@ -361,6 +369,7 @@ void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 		packet->setControlInfo(nodePkt.release());
 
 		countReceived(*packet);
+
         handleIfFitting<KadFloodPacket>(packet);
 		return;
 	}
@@ -537,6 +546,11 @@ void R2Kademlia::countReceived(KadDataPacket& packet) {
 // drops packet and counts dropped packet
 // controlInfo needs to be set properly
 void R2Kademlia::countDropped(KadDataPacket& packet, const OverlayKey& target, uint8_t reason) {
+    // check if this is a flood packet
+    if (auto floodPkt= dynamic_cast<const KadFloodPacket*>(&packet);
+        floodPkt != nullptr) {
+       handleFloodPacketDropped(*floodPkt); 
+    }
 	droppedDataPackets++;
 	getKadObserver().registerPacketDropped(packet, myOverlayKey, target, reason);
 	EV_TRACE << "+DROPPED_DATA+ reason:" << (unsigned int) reason << endl;

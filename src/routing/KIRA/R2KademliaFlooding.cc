@@ -1,31 +1,66 @@
 #include "KIRA.h"
 #include "KadPacket_m.h"
+#include "KadContact.h"
+#include "KadFloodObserver.h"
+#include "KadPacket_m.h"
+#include "KadPackets_m.h"
+#include "OverlayKey128.h"
 #include <cstdint>
 
 namespace routingsim {
-uint32_t R2Kademlia::replicateFloodPacket(std::unique_ptr<KadFloodPacket>& packet) {
+uint32_t R2Kademlia::replicateFloodPacket(KadFloodPacket& packet) {
+    const auto floodPrefixLength(packet.getFloodingPrefixLength());
 
-
-    const auto floodPrefixLength(packet->getFloodingPrefixLength());
-
-    const auto replication_contacts = routingTable.getReplicationContacts(floodPrefixLength);
+    const auto replication_contacts = routingTable.getReplicationContacts(floodPrefixLength, floodStrideFactor);
     for (auto& repl_contact: replication_contacts) {
-	    auto floodPacket = makeDataPacket<KadFloodPacket>(std::get<0>(repl_contact)->getKey(),std::get<0>(repl_contact), "KadFloodPacket");
-        floodPacket->setFloodingPrefixLength(std::get<1>(repl_contact));
-        // rewrite the original source 
-	    floodPacket->setSrcNodeID(packet->getSrcNodeID());
-	    floodPacket->setHopLimit(packet->getHopLimit());
+	    auto floodPacket = createReplicationPacket(packet, std::get<0>(repl_contact), std::get<1>(repl_contact));
 		sendPacket(std::move(floodPacket));
     }
     return replication_contacts.size();
 }
 
+std::unique_ptr<KadFloodPacket> R2Kademlia::createReplicationPacket(KadFloodPacket& packet, KadContact_p contact, uint8_t floodPrefixLength) {
+	    auto floodPacket = makeDataPacket<KadFloodPacket>(contact->getKey(), contact, "KadFloodPacket");
+        floodPacket->setFloodingPrefixLength(floodPrefixLength);
+        // rewrite the original source 
+	    floodPacket->setSrcNodeID(packet.getSrcNodeID());
+	    floodPacket->setHopLimit(packet.getHopLimit());
+	    floodPacket->setOverlayHops(packet.getOverlayHops() + 1);
+	    floodPacket->setNonce(packet.getNonce());
+        floodPacket->setType(KAD_Flood);
+
+        return floodPacket;
+}
+
+std::unique_ptr<KadFloodPacket> R2Kademlia::createFloodPacket(KadContact_p contact, uint8_t floodPrefixLength) {
+	    auto floodPacket = makeDataPacket<KadFloodPacket>(contact->getKey(), contact, "KadFloodPacket");
+        floodPacket->setFloodingPrefixLength(floodPrefixLength);
+        floodPacket->setType(KAD_Flood);
+        return floodPacket;
+}
+
 void R2Kademlia::handlePacket(std::unique_ptr<KadFloodPacket> packet) {
     
-    // check if we need to replicate
-    auto replications = replicateFloodPacket(packet);
-    countReceived(*packet, replications);
     EV_TRACE << "Got KadFloodPacket" << std::endl;
+    // check if we need to replicate
+    auto replications = replicateFloodPacket(*packet);
+    countReceived(*packet, replications);
+
+    auto& floodObserver = getKadFloodObserver(); 
+    const auto floodPrefixLength(packet->getFloodingPrefixLength());
+    floodObserver.registerFloodReplication(packet->getNonce(), myOverlayKey, Node::getNode(this)->getNodeId(), floodPrefixLength, replications);
+    floodObserver.registerFloodDelivered(packet->getNonce(), myOverlayKey, Node::getNode(this)->getNodeId(), *packet);
+
+}
+
+void R2Kademlia::handleFloodPacketDropped(const KadFloodPacket& packet) {
+   EV_TRACE << "handleFloodPacketDropped" << std::endl;
+   getKadFloodObserver().registerFloodDropped(packet.getNonce(), myOverlayKey, Node::getNode(this)->getNodeId(), packet);  
+}
+
+void R2Kademlia::handleFloodPacketForwarded(const KadFloodPacket& packet, hop_t taken_hop) {
+   EV_TRACE << "handleFloodPacketForwarded" << std::endl;
+   getKadFloodObserver().registerFloodForwarded(packet.getNonce(), myOverlayKey, Node::getNode(this)->getNodeId(), packet, taken_hop);  
 }
 
 void R2Kademlia::countReceived(KadFloodPacket& packet, uint32_t replications) {
@@ -39,17 +74,20 @@ bool R2Kademlia::sendFloodPacket(short timerID) {
 
     EV_TRACE << "Send KadFloodPacket" << std::endl;
     // create a flood packet and replicate directly
-    const auto floodPrefixLength(0);
+    auto& floodObserver = getKadFloodObserver(); 
+    const auto floodId = floodObserver.registerFlood(myOverlayKey, Node::getNode(this)->getNodeId());
+    const auto replication_contacts = routingTable.getReplicationContacts(0, floodStrideFactor);
+    floodObserver.registerFloodReplication(floodId, myOverlayKey, Node::getNode(this)->getNodeId(), 0, replication_contacts.size());
 
-    const auto replication_contacts = routingTable.getReplicationContacts(floodPrefixLength);
+    EV_TRACE << "sendFloodPacket() floodId:" << floodId << " Replications" << replication_contacts.size() << std::endl;
 
     for (auto& repl_contact: replication_contacts) {
-	    auto floodPacket = makeDataPacket<KadFloodPacket>(std::get<0>(repl_contact)->getKey(),std::get<0>(repl_contact), "KadFloodPacket");
-        floodPacket->setFloodingPrefixLength(std::get<1>(repl_contact));
+	    auto floodPacket = createFloodPacket(std::get<0>(repl_contact),std::get<1>(repl_contact));
+        EV_TRACE << "Send KadFloodPacket" << floodId << " to " << floodPacket->getDstNodeID() << std::endl;
+        floodPacket->setNonce(floodId);
 		sendPacket(std::move(floodPacket));
     }
     return false;
-
 }
 
 } // end namespace

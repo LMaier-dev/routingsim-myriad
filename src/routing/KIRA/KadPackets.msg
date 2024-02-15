@@ -16,6 +16,7 @@ import KadPacket;
 
 cplusplus {{
 #include "KadPacket.h"
+#include "RPC.h"
 #include "stateseqno.h"
 
 namespace routingsim {
@@ -209,5 +210,6 @@ packet KadLinkFailureNotify extends KadPacket {
 }
 packet KadFloodPacket extends KadDataPacket {
     uint8_t floodingPrefixLength = 0;
+    nonce_t nonce = 0;
 	type = KAD_Flood;
 }

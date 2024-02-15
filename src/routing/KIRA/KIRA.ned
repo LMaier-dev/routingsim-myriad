@@ -88,6 +88,8 @@ simple R2Kademlia extends routingsim.foundation.Protocol
 
         /// in which interval a node sends a floodPacket (0s is disabled)
         double floodInterval = default(0s) @unit(s);
+		/// max stride factor for flooding packets
+		int floodStrideFactor = default(0);
 
 		// statistics foo
 		/// if true records average path lengths and stretch in routing tables (can be costly)

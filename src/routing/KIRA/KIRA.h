@@ -27,6 +27,9 @@
 #include <unordered_map>
 #include <queue>
 
+#include "BaseTypes.h"
+#include "foundation.h"
+#include "Protocol.h"
 #include "StatisticSample.h"
 #include "KadPackets_m.h"
 #include "NeighborTable.h"
@@ -151,6 +154,7 @@ private:
 	uint8_t updateMaxNotification;
 	uint8_t updateNotifyStrategy;
 	uint8_t updatePropagateStrategy;
+	uint8_t floodStrideFactor;
 	simtime_t PNRediscoveryWaitTime;
 	simtime_t urgentRediscoveryWaitTime;
 	simtime_t regularRediscoveryWaitTime;
@@ -393,6 +397,10 @@ private:
 	// processes packets while forwarding
 	bool intermediateNodeProcessing(KadPacket& packet);
 
+	// processes data packets while forwarding
+    // currently this is only used for capturing statistics per packet type
+	bool intermediateNodeProcessing(const KadDataPacket& packet);
+
 	kad_path concatViaPath(const kad_path& viaPath, const OverlayKey& viaKey, const kad_path& path);
 
 	/// evaluate Updates while forwarding
@@ -474,6 +482,12 @@ private:
     /// replicate the flood packet in respective id range, returns number of replications sent
     uint32_t replicateFloodPacket(std::unique_ptr<KadFloodPacket>& packet);
     bool sendFloodPacket(short timerID); 
+    uint32_t replicateFloodPacket(KadFloodPacket& packet);
+    std::unique_ptr<KadFloodPacket> createReplicationPacket(KadFloodPacket& packet, KadContact_p contact, uint8_t floodPrefixLength);
+    std::unique_ptr<KadFloodPacket> createFloodPacket(KadContact_p contact, uint8_t floodPrefixLength);
+
+	void handleFloodPacketDropped(const KadFloodPacket& packet);
+	void handleFloodPacketForwarded(const KadFloodPacket& packet, hop_t takenHop);
 	
 	/// sends a received packet again after the source route was manipulated
 	void resendPacket(KadPacket_p packet);

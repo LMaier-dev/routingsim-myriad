@@ -220,7 +220,7 @@ public:
     /// returns a list of contacts to replicate packets to when flooding a packet
     /// the floodPrefixLength determines from 
     /// the return value is a vector of KadContacts and their respective floodingPrefixLength
-    std::vector<std::pair<KadContact_p, uint8_t>> getReplicationContacts(const uint8_t floodPrefixLength) const;
+    std::vector<std::pair<KadContact_p, uint8_t>> getReplicationContacts(const uint8_t floodPrefixLength, uint8_t maxSplit = 0) const;
 
 	/// returns the number of contacts in buckets
 	size_type getNumContacts() const;
