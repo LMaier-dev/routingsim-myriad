@@ -24,6 +24,7 @@
 
 #include "FwdTable.h"
 #include "routing/r2kademlia/OverlayKey128.h"
+#include "simtime_t.h"
 
 namespace routingsim {
 
@@ -1555,7 +1556,10 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadRevPathFlood> packet) {
 	for (auto it= fwdTablePathID.PIDFwdTable.cbegin(); it != fwdTablePathID.PIDFwdTable.cend(); it++) {
 		if (it->second.outgoingPathID != PathID::UndefinedPathID) { // only if outgoing PID is used
 			for (unsigned long i= 0; i < numPIDs; i++) {
-				if (it->second.outgoingPathID == packet->getPIDList(i)) {
+				// only consider actually used PathIDs: they need periodic refreshes
+				if (it->second.outgoingPathID == packet->getPIDList(i)
+				    and it->second.isUsed()) { // for debugging only
+					// TODO should be replaced by .getAge() < 2*PathRefreshThreshold
 					upstreamPIDs.insert(it->first);
 				}
 			} // end for inner loop
@@ -1643,7 +1647,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadLinkFailureNotify> packet) {
 	// when this method is called either we are an overlay hop or the final recipient
 	OverlayKey& target = packet->getDstNodeID(); // get the destination ID
 
-	EV_TRACE << "KadLinkFailureNotify (id=" << packet->getId() << ")" << endl;
+	EV_TRACE << "KadLinkFailureNotify to " << target.shortStr() << " (id=" << packet->getId() << ")" << endl;
 	if (target == myOverlayKey) { // notification is for this node and ends here
 		EV_TRACE << "KadLinkFailureNotify reached final destination " << myOverlayKey.shortStr() << endl;
 		// nothing to do, just drop the packet

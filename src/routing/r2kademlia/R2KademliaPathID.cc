@@ -54,6 +54,7 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 			auto& fwdtableentry= fwdTablePathID.PIDFwdTable.at(incomingPID);
 			fwdtableentry.unsetObsolete();
 			fwdtableentry.setForeign();
+			fwdtableentry.setUsed();
  			EV_TRACE << " already present/ignored. " << fwdtableentry.str() << endl;
 			// PID may be known, but probably not the source of the first segment
 			if (packet.getProgress() > 1) { // do not add any underlay neighbors to notifyFirstSegmentSources
@@ -107,6 +108,7 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 				auto& fwdtableentry= fwdTablePathID.PIDFwdTable.at(incomingPID);
 				fwdtableentry.unsetObsolete();
 				fwdtableentry.setForeign();
+				fwdtableentry.setUsed();
 				EV_TRACE << " already present/ignored" << endl;
 				return false;
 			}

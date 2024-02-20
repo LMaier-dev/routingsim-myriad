@@ -22,6 +22,7 @@ private:
 	unsigned long usageCount = 0;
 	unsigned long referenceCount = 0;
 	simtime_t last_touched = SIMTIME_ZERO; // age for soft state refresh in ms
+	bool used = false;
 public:
 	PathID outgoingPathID = PathID::UndefinedPathID;
 	OverlayKey nextHopNode = OverlayKey::UNSPECIFIED_KEY;
@@ -60,15 +61,15 @@ public:
 	bool isValid() const { return fwdState & State::valid; }
 
 	void unsetForeign() { fwdState &= ~State::foreign; refresh(); };
-	void setForeign() { if (not isPrecalc()) fwdState = fwdState | State::foreign; refresh(); };
+	void setForeign() { if (not isPrecalc()) fwdState |= State::foreign; refresh(); };
 	bool isForeign() const { return fwdState & State::foreign; };
 
 	void unsetLocal() { fwdState &= ~State::local; refresh(); };
 	void setLocal() { fwdState |= State::local; refresh(); };
 	bool isLocal() const { return fwdState & State::local; };
 
-	void unsetPrecalc() { fwdState &= ~State::precalc; refresh(); };
-	void setPrecalc() { fwdState |= State::precalc; unsetForeign(); refresh(); };
+	// void unsetPrecalc() { fwdState &= ~State::precalc; refresh(); }; // unset is never used
+	void setPrecalc() { fwdState |= State::precalc; fwdState &= ~State::foreign; refresh(); };
 	bool isPrecalc() const { return fwdState & State::precalc; };
 
 	void unsetDeleted() { fwdState &= ~State::deleted; refresh(); };
@@ -100,6 +101,9 @@ public:
 			return referenceCount;}
 	}
 	unsigned long getReferenceCount() const { return referenceCount; }
+
+	bool isUsed() const { return used; }
+	void setUsed() { used= true; }
 
 	std::string str() const;
 };

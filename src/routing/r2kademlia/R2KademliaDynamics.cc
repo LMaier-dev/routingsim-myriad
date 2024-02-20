@@ -774,7 +774,9 @@ R2Kademlia::notifyAffectedPathUsers(const OverlayKey& nexthop_key) {
 	EV_TRACE << "notifyAffectedPathUsers()" << endl;
 	// traverse the complete PIDFwdTable and check for incoming PIDs that use the outgoing link
 	for (auto it= fwdTablePathID.PIDFwdTable.cbegin(); it != fwdTablePathID.PIDFwdTable.cend(); it++) {
-		if (it->second.nextHopNode == nexthop_key) {
+		if (it->second.nextHopNode == nexthop_key and
+			it->second.isUsed() > 0) { // for debugging only
+			// TODO should be replaced by .getAge() < 2*PathRefreshThreshold)
 			notifyPIDs.insert(it->first);
 		}
 	}

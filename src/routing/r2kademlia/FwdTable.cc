@@ -175,6 +175,7 @@ FwdTablePathID::addEntry(const kad_path& path_to_add, bool isForeignPID, bool pr
 		// if it was marked for deletion before, reset the flag as it is used now
 		pidentry->second.unsetDeleted();
 		pidentry->second.setValid();
+		pidentry->second.setUsed();
 
 		// set foreign or local flag
 		if (isForeignPID)
