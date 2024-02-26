@@ -139,7 +139,8 @@ private:
 	// to notify neighbors about affected PathIDs after a failure
 	std::unordered_set<PathID> notifyPIDs;
 	std::unordered_map<PathID, std::unordered_set<OverlayKey>> notifyFirstSegmentSources;
-
+	std::unordered_map<OverlayKey, std::unordered_set<PathID>> incomingIFtoPIDmap;
+	inline void addIncomingIFtoPIDEntry(const OverlayKey& incomingULN, PathID pidentry);
 	// a list that is used to send rediscover messages
 	// UpdateList_t is std::list< std::pair<KadContact, KadRouteUpdateAction> >
 	std::unordered_map< OverlayKey, UpdateList_t > updateQueue;
@@ -298,7 +299,7 @@ private:
 
 	/// timer callbacks
 	void doSendHello(short timerId);
-	void doProbe(short timerId);
+	void doProbeRandomly(short timerId);
 	void doProbeSelf(short timerId);
 	void doProbeNeighbors(short timerId);
 	void doProbeContacts(short timerId);
@@ -640,10 +641,34 @@ void R2Kademlia::sendLocalLinkFailureNotifications()
 	//for (auto pid : notifyPIDs)
 	//	EV_TRACE << pid << ' ';
 	//EV_TRACE << '}' << endl;
-	sendLinkFailureNotifications(R2Kademlia::emptyNotViaList, notifyPIDs, OverlayKey::UNSPECIFIED_KEY);
+	auto failedPNList(routingTable.getFailedPNs());
+	EV_TRACE << "sendLinkFailureNotifications failedPNs " << failedPNList.size() << endl;
+	// fill notvialist with locally failed PNs
+	NotViaList_t notvialist;
+	for ( auto& failedPN : failedPNList ) {
+		if (auto pncontact= routingTable.getContact(failedPN); pncontact != nullptr) {
+			notvialist.push_back(std::make_pair(std::make_pair(myOverlayKey,failedPN),pncontact->getAge()));
+		}
+	}
+
+	sendLinkFailureNotifications(notvialist, notifyPIDs, OverlayKey::UNSPECIFIED_KEY);
 	// delete all local PIDs for notification
 	notifyPIDs.clear();
 }
+
+
+inline
+void
+R2Kademlia::addIncomingIFtoPIDEntry(const OverlayKey& incomingULN, PathID incomingPID)
+{
+	if (auto it= incomingIFtoPIDmap.find(incomingULN); it != incomingIFtoPIDmap.end()) {
+		it->second.insert(incomingPID);
+	}
+	else {
+		incomingIFtoPIDmap.insert({incomingULN, {incomingPID}});
+	}
+}
+
 
 // template functions
 template<typename T>

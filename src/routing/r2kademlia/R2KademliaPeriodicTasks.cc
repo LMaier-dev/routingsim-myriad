@@ -349,7 +349,7 @@ void R2Kademlia::doSendExplorePathPacket(short timerId)
 }
 
 
-void R2Kademlia::doProbe(short timerId)
+void R2Kademlia::doProbeRandomly(short timerId)
 {
 	ASSERT(timerId >= 0);
 	if (neighborTable.size() == 0) return; // we are isolated

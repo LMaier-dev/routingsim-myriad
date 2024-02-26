@@ -126,7 +126,7 @@ void R2Kademlia::onContactRemoval(KadContact_p contact)
 		return;
 
 	// delete from Forwarding table PID (not for vicinity nodes)
-	// TODO: this can be scheduled for happpening later
+	// TODO: this can be scheduled for happening later
 	if (usePathIDs and contact->getPathLength() > 2*nodeVicinityGraph::vicinityDiscoveryRadius)
 	{ // this condition must be aligned with the sendPathSetup
 		// check for pending/scheduled PathSetup first
