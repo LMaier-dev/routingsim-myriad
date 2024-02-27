@@ -756,7 +756,9 @@ R2Kademlia::sendLinkFailureNotifications(const NotViaList_t& notvialist, const s
 		sendPacket(std::move(packet));
 	} // end for every underlay neighbor
 
-	doNotifyFirstSegmentSources(notifyPIDList, notvialist);
+	// wait for PN discovery to complete before sending these out
+	addOneShotTimer(uniform(3*PNRediscoveryWaitTime/2,9*PNRediscoveryWaitTime/2),
+			std::bind(&R2Kademlia::doNotifyFirstSegmentSources, this, notifyPIDList, notvialist));
 
 	linkFailureNotificationScheduled= false;
 }
@@ -838,7 +840,8 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadRevPathFlood> packet) {
 	}
 
 	// now check for nodes (sources of the first segment) to be notified
-	doNotifyFirstSegmentSources(upstreamPIDs, notvialist);
+	addOneShotTimer(uniform(3*PNRediscoveryWaitTime/2,9*PNRediscoveryWaitTime/2),
+			std::bind(&R2Kademlia::doNotifyFirstSegmentSources, this, upstreamPIDs, notvialist));
 }
 
 
