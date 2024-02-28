@@ -1055,7 +1055,7 @@ void KadRoutingTable::updatePaths(const KadContact& improvedContact)
 			// (either shorter or more current)
 			if (auto& path= contact->getPath(); path.size() > 0 and contact->getAge() > improvedContact.getAge()) {
 				bool found(false);
-				for (auto revpathit= path.rbegin(); revpathit!= path.rend() and !found; revpathit++) {
+				for (auto revpathit= path.rbegin(); revpathit!= path.rend() and not found; revpathit++) {
 					if (*revpathit == improvedContact.getKey()) {
 						// special case when found contact is the neighbor and nothing changed
 						if (path.size() == 1 and improvedContact.getPath().empty()) {
@@ -1090,12 +1090,22 @@ void KadRoutingTable::updatePaths(const KadContact& improvedContact)
 							simplifyPath(newpath, &contact->getKey());
 						}
 						// path is only repaired in case no (known) failed links remain
-						if (pathrepaired)
+						if (pathrepaired) {
 							EV_TRACE << "updatePaths: broken path " << contact->getPath() << " repaired by new " << newpath << endl;
+						}
 
-						// set new path (must be more current than old one)
-						// note: this will set the contact to checking!
-						if (contact->isValid() or (contact->isInvalid() and pathrepaired)) {
+						if (contact->isValid()) {
+							// this may be an improval, so just check the new alternative without actually changing the path yet
+							auto tmpcontact(*contact);
+							tmpcontact.updatePath(myKey,newpath);
+							policy->onPathCheck(tmpcontact, false);
+							found=true; // break the loop
+							continue;
+						}
+						else
+						if (contact->isInvalid() and pathrepaired) {
+							// set new path (must be more current than old one)
+							// note: this will set the contact to checking!
 							contact->updatePath( myKey, newpath );
 							contact->setChecking();
 							policy->onPathCheck(*contact, false);

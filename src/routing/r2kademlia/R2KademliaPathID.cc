@@ -85,15 +85,13 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 			PathID incomingPID(getPathID(myOverlayKey, pathtoadd));
 			// need to check for storing the SegmentSource for last segment of two hops
 			if (packet.hopsLeft() == nodeVicinityGraph::vicinityDiscoveryRadius) {
-				if (packet.getProgress() > 1) { // do not add any underlay neighbors to notifyFirstSegmentSources
-					if (auto it= notifyFirstSegmentSources.find(incomingPID); it != notifyFirstSegmentSources.end()) {
-						it->second.insert(packet.getSource());
-						EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources PID:" << incomingPID << endl;
-					}
-					else {
-						notifyFirstSegmentSources.insert({incomingPID,{packet.getSource()}});
-						EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources PID:" << incomingPID << endl;
-					}
+				if (auto it= notifyFirstSegmentSources.find(incomingPID); it != notifyFirstSegmentSources.end()) {
+					it->second.insert(packet.getSource());
+					EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources PID:" << incomingPID << endl;
+				}
+				else {
+					notifyFirstSegmentSources.insert({incomingPID,{packet.getSource()}});
+					EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources PID:" << incomingPID << endl;
 				}
 			}
 			// remember the incoming interface/underlay neighbor where the PID came from
