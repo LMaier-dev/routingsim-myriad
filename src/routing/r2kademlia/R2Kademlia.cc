@@ -1294,6 +1294,10 @@ void R2Kademlia::sampleStatistics (Statistics &stats) {
 		stats.value("routingTablePathLength", routingTable.getAveragePathLength());
 		stats.value("routingTablePathStretch", routingTable.getAveragePathStretch());
 	}
+	unsigned long notifyFirstSegmentSourcesSize(0UL);
+	std::for_each(notifyFirstSegmentSources.cbegin(), notifyFirstSegmentSources.cend(), [&](auto& entry){notifyFirstSegmentSourcesSize+= entry.second.size();});
+	notifyFirstSegmentSourcesSize+= notifyFirstSegmentSources.size();
+	stats.value("notifyFirstSegmentSources",notifyFirstSegmentSourcesSize);
 	//stats.value("routingTableFoundEquivalentPaths", routingTable.getNumFoundEquivPaths());
 	stats.value("fwdTableSize", fwdTablePathID.getNumEntries());
 	stats.value("fwdTableValid", fwdTablePathID.getNumValidEntries());
@@ -1337,6 +1341,10 @@ void R2Kademlia::recordScalars() {
 	recordScalar("nodeId", nid);
 	recordScalar("degree", getNetworkManager()->getTopology().getNodeDegree(nid));
 	recordScalar("popularity", getKadObserver().getPopularity(myOverlayKey));
+	unsigned long notifyFirstSegmentSourcesSize(0UL);
+	std::for_each(notifyFirstSegmentSources.cbegin(), notifyFirstSegmentSources.cend(), [&](auto& entry){notifyFirstSegmentSourcesSize+= entry.second.size();});
+	notifyFirstSegmentSourcesSize+= notifyFirstSegmentSources.size();
+	recordScalar("notifyFirstSegmentSources",notifyFirstSegmentSourcesSize);
 	recordScalar("fwdTableSize", fwdTablePathID.getNumEntries());
 	recordScalar("fwdTableValid", fwdTablePathID.getNumValidEntries());
 	recordScalar("fwdTableForeign", fwdTablePathID.getNumForeignEntries());
