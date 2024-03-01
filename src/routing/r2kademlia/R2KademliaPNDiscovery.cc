@@ -19,7 +19,6 @@ NodePkt_p R2Kademlia::makeHelloPacket()
 	hello->setSrcNodeDegree(neighborTable.size());
 	hello->setNonce(0);
 	hello->setStateSeqNo(getLSSeqNo());
-	hello->addByteLength(OverlayKey::getLength()+8+32);
 	NodePkt_p nodePkt = std::make_unique<NodePkt>(hello->getName());
 	nodePkt->setType(KAD_CTRL_PACKET_TYPE);
 	nodePkt->encapsulate(hello.release());
@@ -226,6 +225,7 @@ simtime_t R2Kademlia::sendDiscoveryReq(KadContact_p contact, bool _unused_arg)
 		req->setPhyNeighborSeqNoArraySize(effective_size);
 		req->setPhyNeighborAgeArraySize(effective_size);
 		req->setPhyNeighborDegreeArraySize(effective_size);
+		req->addBitLength(effective_size*(OverlayKey::getLength()+16+32+16));
 	}
 	//req->setHopLimit(1);
 	// we rate limit the requests
@@ -353,6 +353,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadPNDiscReq> packet) {
 	response->setSeqNoArraySize(effective_size);
 	response->setPathInfoAgeArraySize(effective_size);
 	response->setNodeDegreeArraySize(effective_size);
+	response->addBitLength(effective_size*(OverlayKey::getLength()+16+32+16));
 
 	sendPacket(std::move(response));
 }

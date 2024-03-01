@@ -713,9 +713,15 @@ R2Kademlia::sendLinkFailureNotifications(const NotViaList_t& notvialist, const s
 
 	// iterate over all active/intact direct underlay neighbors
 	for (auto ntcit= neighborTable.getTable().cbegin(); ntcit!=neighborTable.getTable().cend(); ntcit++) {
-
 		if (ntcit->first == excludeNode) // exclude this neighbor (usually the source of a previous flooding message)
 			continue;
+
+		auto contactp(routingTable.getContact(ntcit->first));
+		if (contactp == nullptr) {
+			// this should normally not happen, but may be the case
+			// direct after startup, when the PNDiscovery handshake was not finished yet (PNDiscReq still scheduled)
+			continue;
+		}
 
 		const auto ifitmapcit(incomingIFtoPIDmap.find(ntcit->first));
 		if ( ifitmapcit == incomingIFtoPIDmap.cend() )
@@ -733,7 +739,7 @@ R2Kademlia::sendLinkFailureNotifications(const NotViaList_t& notvialist, const s
 			continue;
 		}
 
-		auto packet = makePacket<KadRevPathFlood>(routingTable.getContact(ntcit->first), "LinkFailureNotificationFlood");
+		auto packet = makePacket<KadRevPathFlood>(contactp, "LinkFailureNotificationFlood");
 		packet->setPIDListArraySize(filteredPIDList.size());
 
 		auto pidcit(filteredPIDList.cbegin());

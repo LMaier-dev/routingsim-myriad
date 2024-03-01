@@ -30,6 +30,7 @@ public:
 	//@{
 	KadPacket(const char *name=nullptr, short kind=0) : KadPacket_Base(name, kind) {
 		setByteLength(3+4+2); // type (8), hop limit (8), src route index (8), state seq (32), node degree (16)
+		// note: state sequence number in the simulation is only 16 bit, but in a real implementation it would be 32 bit
 	}
 	KadPacket(const KadPacket& other) : KadPacket_Base(other), overlayHops(other.overlayHops),
 					    tracked(other.tracked) {}
