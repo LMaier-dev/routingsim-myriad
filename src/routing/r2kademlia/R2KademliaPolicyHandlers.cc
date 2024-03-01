@@ -243,7 +243,7 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 					if (contact->getPathLength() < nodeVicinityGraph::vicinityDiscoveryRadius)
 						vicinityPathIDCompletion(*contact);
 					// mainly for testing purposes: in case we use linkFailureNotifications, send a path probe to install state
-					if (linkFailureNotifications)
+					if (linkFailureNotifications and contact->getPathLength() > 1)
 						addOneShotTimer(SimTime(500,SIMTIME_MS),std::bind(&R2Kademlia::sendPathProbe,this,contact->getKey()));
 				}
 			}
@@ -281,7 +281,8 @@ void R2Kademlia::onImprovement(const KadContact& contact) {
 			schedulePathSetup(contact.getKey());
 		}
 		else {  // 5 hops or less
-			if (linkFailureNotifications)
+			// only required to install state for notifyFirstSegment, that is relevant for distances of at least 3 hops
+			if (linkFailureNotifications and contact.getPathLength() > 1)
 				addOneShotTimer(SimTime(500,SIMTIME_MS),std::bind(&R2Kademlia::sendPathProbe,this,contact.getKey()));
 			
 			// for these paths update the PID entry (max to 3rd hop)
@@ -322,7 +323,8 @@ void R2Kademlia::onPathChange(const KadContact& contact) {
 			schedulePathSetup(contact.getKey());
 		}
 		else { // 5 hops or less
-			if (linkFailureNotifications)
+			// only required to install state for notifyFirstSegment, that is relevant for distances of at least 3 hops
+			if (linkFailureNotifications and contact.getPathLength() > 1)
 				addOneShotTimer(SimTime(500,SIMTIME_MS),std::bind(&R2Kademlia::sendPathProbe,this,contact.getKey()));
 
 			// for these paths update the PID entry (max to 3rd hop)
