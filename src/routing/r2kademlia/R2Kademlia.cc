@@ -1301,6 +1301,7 @@ void R2Kademlia::sampleStatistics (Statistics &stats) {
 	//stats.value("routingTableFoundEquivalentPaths", routingTable.getNumFoundEquivPaths());
 	stats.value("fwdTableSize", fwdTablePathID.getNumEntries());
 	stats.value("fwdTableValid", fwdTablePathID.getNumValidEntries());
+	stats.value("fwdTableValidLocal", fwdTablePathID.getNumValidLocalEntries());
 	stats.value("fwdTableForeign", fwdTablePathID.getNumForeignEntries());
 	auto [numPrecalcEntries, numUsedPrecalcEntries]= fwdTablePathID.getNumUsedPrecalcEntries();
 	stats.value("fwdTablePrecalc", numPrecalcEntries);

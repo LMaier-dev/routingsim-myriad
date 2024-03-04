@@ -9,6 +9,7 @@
 #include <BaseTypes.h>
 #include <unordered_map>
 #include <tuple>
+#include <functional>
 
 #include "KadContact.h"
 #include "PathID.h"
@@ -142,7 +143,9 @@ public:
 
 	// for gathering statistics
 	size_type getNumEntries() const { return PIDFwdTable.size(); };
+	inline size_type getNumSelectedEntries(std::function<bool(const FwdTableEntry& fwdentry)> selectorFn) const;
 	size_type getNumValidEntries() const;
+	size_type getNumValidLocalEntries() const;
 	size_type getNumForeignEntries() const;
 	std::tuple<size_type, size_type> getNumUsedPrecalcEntries() const;
 
@@ -177,6 +180,41 @@ FwdTablePathID::eraseNIDtoPIDmapping(const OverlayKey& nid) {
 	NIDPIDTable.erase(nid);
 	NIDPIDTableLastSeg.erase(nid);
 }
+
+
+inline size_type FwdTablePathID::getNumSelectedEntries(std::function<bool(const FwdTableEntry& fwdentry)> selectorFn) const
+{
+	unsigned long sum= 0;
+	for (auto& pidfwdtableentry : PIDFwdTable)
+	{
+		if ( selectorFn(pidfwdtableentry.second) == true )
+			sum++;
+	}
+	return sum;
+}
+
+
+inline
+size_type FwdTablePathID::getNumValidEntries() const
+{
+	// this counts only valid and active entries (=non obsolete)
+	return getNumSelectedEntries([](const FwdTableEntry& fwdentry)->bool{ return fwdentry.isValid() and not(fwdentry.isObsolete()); });
+};
+
+
+inline
+size_type FwdTablePathID::getNumValidLocalEntries() const
+{
+	return getNumSelectedEntries([](const FwdTableEntry& fwdentry)->bool{ return fwdentry.isValid() and not(fwdentry.isObsolete()) and fwdentry.isLocal(); });
+};
+
+
+inline
+size_type FwdTablePathID::getNumForeignEntries() const {
+	// this counts only foreign valid and active entries (=non obsolete)
+	// it may be the case that foreign entries are also precalculated or locally required, we do not count them as foreign then
+	return getNumSelectedEntries([](const FwdTableEntry& fwdentry)->bool{ return fwdentry.isForeign() and fwdentry.isValid() and  not(fwdentry.isPrecalc() or fwdentry.isLocal() or fwdentry.isObsolete()); });
+};
 
 } // end namespace
 

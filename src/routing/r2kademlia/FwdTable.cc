@@ -41,36 +41,6 @@ std::string FwdTableEntry::str() const {
 }
 
 
-// this counts only valid and active entries (=non obsolete)
-size_type FwdTablePathID::getNumValidEntries() const
-{
-	unsigned long sum= 0;
-	for (auto& pidfwdtableentry : PIDFwdTable)
-	{
-		const FwdTableEntry& fwdentry= pidfwdtableentry.second;
-
-		if (fwdentry.isValid() and not(fwdentry.isObsolete()))
-			sum++;
-	}
-	return sum;
-
-}
-
-
-// this counts only foreign valid and active entries (=non obsolete)
-size_type FwdTablePathID::getNumForeignEntries() const
-{
-	unsigned long sum= 0;
-	for (auto& pidfwdtableentry : PIDFwdTable)
-	{
-		const FwdTableEntry& fwdentry= pidfwdtableentry.second;
-		// it may be the case that foreign entries are also precalculated or locally required, we do not count them as foreign then
-		if (fwdentry.isForeign() and fwdentry.isValid() and  not(fwdentry.isPrecalc() or fwdentry.isLocal() or fwdentry.isObsolete()))
-			sum++;
-	}
-	return sum;
-}
-
 
 // this counts how many of the precalculated entries exist (first return value) and have been used (2nd return value)
 std::tuple<size_type, size_type> FwdTablePathID::getNumUsedPrecalcEntries() const
