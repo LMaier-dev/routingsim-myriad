@@ -183,6 +183,9 @@ private:
 	// a list that is used to periodically probe contacts
 	std::list<OverlayKey> probeContactQueue;
 
+	// a list that is used to probe paths on demand
+	std::list<OverlayKey> probeProposedPathQueue;
+
 	// a queue that is used to send PN/ON discover request messages
 	typedef std::vector<KadContact> RequestQueueType;
 	class RequestQueue : public RequestQueueType {

@@ -80,6 +80,82 @@ bool containsUndirectedLink(const kad_path& path, const OverlayKey& firstNodeKey
 	}
 }
 
+
+/// Counts the number of common links between this path and the
+/// passed otherPath.
+/// Example:
+/// <A, B, C, D> and <A, C, D, E, F> returns 2, as the link to A
+/// and the link C->D are in both paths.
+uint KadPath::commonLinks(const KadPath& otherPath) const
+{
+    if (length() == 0 or otherPath.length() == 0) return 0;
+
+    uint cl = 0;
+    // for each node in path A
+    for (unsigned int i = 0; i < length() - 1; i++)
+    {
+        // for each node in path B
+        for (unsigned int j = 0; j < otherPath.length() - 1; j++)
+        {
+            // see if it and the next nodes in both paths are identical
+            // -> same link
+            if ( path[i] == otherPath[j] ) {
+                if (path[i+1] == otherPath[j+1])
+                    ++cl;
+            }
+            else
+            if ( path[i+1] == otherPath[j] ) {
+                // or if they match crossed over
+                if (path[i] == otherPath[j+1] )
+                    ++cl;
+            }
+        }
+    }
+
+    // check if both paths use the same link to our PN
+    if (length() > 0 and otherPath.length() > 0) {
+        if (path[0] == otherPath[0]) {
+            ++cl;
+        }
+    }
+
+    // check if both paths use the same last hop to the contact
+    if (length() > 1 or otherPath.length() > 1) {
+        uint pos = length() > 1 ? length()-1 : 0;
+        uint posOther = otherPath.length() > 1 ? otherPath.length()-1 : 0;
+        if (path[pos] == otherPath[posOther]) {
+            ++cl;
+        }
+    }
+
+    return cl;
+}
+
+
+/// Returns number of common links AND common nodes
+/// between this and the other path.
+/// Example:
+/// <A, B, C, D> and <A, C, D, E, F> returns 5, as the link to A
+/// and the link C->D are in both paths and both paths contain nodes
+/// A, C and D.
+uint KadPath::commonLinksAndNodes(const KadPath& otherPath) const
+{
+    uint cl = commonLinks(otherPath);
+    uint cn = 0;
+    for (unsigned int i = 0; i < length(); i++)
+    {
+        for (unsigned int j = 0; j < otherPath.length(); j++)
+        {
+            if (path[i] == otherPath[j]) {
+                ++cn;
+            }
+        }
+    }
+
+    return cl + cn;
+}
+
+
 char *tmpHashSumBuf= nullptr;
 unsigned long tmpHashSumBufSize= 0;
 

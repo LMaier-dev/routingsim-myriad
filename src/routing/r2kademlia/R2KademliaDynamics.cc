@@ -188,7 +188,7 @@ void R2Kademlia::scheduleUpdate(const KadContact& affectedContact, KadRouteUpdat
 				// need to create new entry
 				// in case of KAD_Unreachable we want to report also the failed link
 				updateQueue[notifyContact->getKey()]= { { (action == KAD_Unreachable) ?
-						KadContact(myOverlayKey, affectedContact.getKey(), { myOverlayKey }, affectedContact.getStateSeqNo()) :
+						KadContact(myOverlayKey, affectedContact.getKey(),{{ myOverlayKey }}, affectedContact.getStateSeqNo()) :
 									  affectedContact, action } };
 			}
 			else
@@ -196,7 +196,7 @@ void R2Kademlia::scheduleUpdate(const KadContact& affectedContact, KadRouteUpdat
 				// in case of KAD_Unreachable we want to report also the failed link
 				std::pair<KadContact, KadRouteUpdateAction> newelem=
 					{ (action == KAD_Unreachable) ?
-					  KadContact(myOverlayKey, affectedContact.getKey(), { myOverlayKey }, affectedContact.getStateSeqNo()) :
+					  KadContact(myOverlayKey, affectedContact.getKey(), { { myOverlayKey } }, affectedContact.getStateSeqNo()) :
 					  affectedContact,
 					  action };
 				// entry exists, so we need to append this update to the list (or replace an existing action)

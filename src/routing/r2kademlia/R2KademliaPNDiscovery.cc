@@ -299,7 +299,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadPNDiscReq> packet) {
 								  packet->getPhyNeighbor(i),
 								  packet->getPhyNeighborSeqNo(i), 2);
 				if (usePathIDs and node_added) {
-					KadContact nncontact(myOverlayKey, packet->getPhyNeighbor(i), {packet->getSource()});
+					KadContact nncontact(myOverlayKey, packet->getPhyNeighbor(i), { {packet->getSource()} });
 					auto newpath(path);
 					newpath.push_back(nncontact.getKey());
 					fwdTablePathID.addPrecalcEntry(newpath);

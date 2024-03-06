@@ -109,7 +109,7 @@ public:
 	std::string str() const;
 };
 
-	
+
 class FwdTablePathID : public cObject {
 public:
 	// This stores incoming PathID -> PathID/NextHop mappings plus state and action
