@@ -10,6 +10,24 @@ using kad_path = std::vector<OverlayKey>;
 using link_t = std::pair<OverlayKey,OverlayKey> ;
 using age_t = uint32_t;
 
+// this function compares the paths from back to front, as paths tend
+// to be different at the end (starting with the destination)
+inline
+bool are_equal_r(const kad_path& first_path, const kad_path& second_path) {
+	if (first_path.size() != second_path.size())
+		return false;
+	if (first_path.empty() and second_path.empty())
+		return true;
+	// precondition: paths have equal length (therefore no need to check for end of it_second)
+	auto it_second= second_path.crbegin();
+	for (auto it_first= first_path.crbegin(); it_first != first_path.crend(); it_first++) {
+		if ( *it_first != *it_second )
+			return false;
+		it_second++;
+	}
+	return true;
+};
+
 
 class KadPath {
 public:
@@ -110,22 +128,7 @@ public:
 
 	// comparison operators
 	bool operator==(const KadPath& other) const {
-		if (other.length() != length()) {
-			return false;
-		}
-		if (other.length() == 0 and length() == 0) {
-			return true;
-		}
-
-		// this compares the paths from back to front, as paths tend
-		// to be different at the end (starting with the destination)
-		auto it_second= other.crbegin();
-		for (auto it_first= crbegin(); it_first != crend(); it_first++) {
-			if ( *it_first != *it_second )
-				return false;
-			it_second++;
-		}
-		return true;
+		return are_equal_r(path,other.path);
 	}
 
 	bool operator!=(const KadPath& other) const { return !(*this == other); }
@@ -139,8 +142,9 @@ private:
 };
 
 
+// copy assignment
 inline
-KadPath&  KadPath::operator=(const KadPath& other) {
+KadPath& KadPath::operator=(const KadPath& other) {
 		path= other.path;
 		lastseen= other.lastseen;
 		lastPathRefresh= other.lastPathRefresh;
@@ -150,8 +154,9 @@ KadPath&  KadPath::operator=(const KadPath& other) {
 }
 
 
+// move assignment
 inline
-KadPath&  KadPath::operator=(KadPath&& other) {
+KadPath& KadPath::operator=(KadPath&& other) {
 		path= other.path;
 		lastseen= other.lastseen;
 		lastPathRefresh= other.lastPathRefresh;
@@ -171,19 +176,6 @@ bool containsUndirectedLink(const OverlayKey& source, const OverlayKey& target, 
 
 bool containsUndirectedLink(const kad_path& path, const OverlayKey& firstNodeKey, const OverlayKey& secondNodeKey);
 
-inline
-bool are_equal_r(const kad_path& first_path, const kad_path& second_path) {
-	if (first_path.size() != second_path.size())
-		return false;
-	// precondition: paths have equal length (therefore no need to check for end of it_second)
-	auto it_second= second_path.crbegin();
-	for (auto it_first= first_path.crbegin(); it_first != first_path.crend(); it_first++) {
-		if ( *it_first != *it_second )
-			return false;
-		it_second++;
-	}
-	return true;
-};
 
 // calculates an XXH3 hash of path and destkey, seed is usually the node's own key
 OverlayKey HashSum(const OverlayKey& seed, const kad_path& path, const OverlayKey& destkey);

@@ -215,18 +215,21 @@ struct KadContactCompare {
 
 /********************* inline methods *********************/
 
-
+// copy assignment
 inline KadContact& KadContact::operator=(const KadContact& other)
 {
 	if (this != &other) {
 		key= other.key;
-		lastseen = other.lastseen;
+		lastseen= other.lastseen;
 		active_path= other.active_path;
 		proposed_path= other.proposed_path;
 		seqno= other.seqno;
 		state= other.state;
 		physicalNeighbor= other.physicalNeighbor;
-		nodeDegree = other.nodeDegree;
+		nodeDegree= other.nodeDegree;
+		rds_p.reset();
+		if (other.rds_p != nullptr)
+			rds_p= std::make_unique<RediscoveryState>(*other.rds_p);
 	}
 	return *this;
 }
@@ -242,13 +245,17 @@ inline KadContact& KadContact::operator=(KadContact&& other)
 		proposed_path= other.proposed_path;
 		state= other.state;
 		seqno= other.seqno;
-		nodeDegree = other.nodeDegree;
 		physicalNeighbor= other.physicalNeighbor;
-		other.active_path.clear();
-		other.proposed_path.clear();
-		other.seqno= stateseqno_t::invalidSeqNo;
-		other.state= State::undefined;
-		other.nodeDegree= 0;
+		nodeDegree = other.nodeDegree;
+		rds_p.reset();
+		if (other.rds_p)
+			rds_p= std::move(other.rds_p);
+		//other.active_path.clear();
+		//other.proposed_path.clear();
+		//other.seqno= stateseqno_t::invalidSeqNo;
+		//other.state= State::undefined;
+		//other.nodeDegree= 0;
+		other.rds_p.reset();
 	}
 	return *this;
 }
