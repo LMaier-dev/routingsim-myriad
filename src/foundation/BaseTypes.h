@@ -4,6 +4,7 @@
 #include<vector>
 #include<iostream>
 #include<omnetpp.h>
+#include <cmath>
 
 namespace routingsim {
 
@@ -140,6 +141,32 @@ public:
 	simtime_t lastsent;
 
 	cGate * out;
+};
+
+class Coord2D {
+public:
+    double x;
+    double y;
+    Coord2D(): x(0), y(0) {};
+    Coord2D(double x, double y) {
+        this->x = x;
+        this->y = y;
+    };
+};
+
+class Rad2D {
+private:
+    double radius;
+public:
+    void setRadius(double r) {
+        radius = fmod(r,360);
+    }
+    [[nodiscard]] double getRadius() const {
+        return radius;
+    }
+    void add_deg(double d) {
+        setRadius(radius + d);
+    }
 };
 
 }
