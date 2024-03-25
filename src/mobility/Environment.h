@@ -17,8 +17,6 @@ namespace routingsim {
         Coord2D borderMax;
     public:
         bool isOutside(Coord2D) const;
-        Coord2D getBorderMin();
-        Coord2D getBorderMax();
 
         Coord2D getRandomPosition();
     };

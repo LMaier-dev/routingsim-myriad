@@ -21,12 +21,4 @@ namespace routingsim {
         return position.x < borderMin.x || position.x > borderMax.x
                || position.y < borderMin.y || position.y > borderMax.y;
     }
-
-    Coord2D Environment::getBorderMin() {
-        return borderMin;
-    }
-
-    Coord2D Environment::getBorderMax() {
-        return borderMax;
-    }
 } // routingsim

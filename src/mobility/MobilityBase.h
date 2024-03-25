@@ -11,24 +11,22 @@
 #include "Environment.h"
 
 namespace routingsim {
-    class MobilityBase : public cSimpleModule {
+    class MobilityBase : public Environment {
     private:
         static int reflect(double, double, double &, double &);
 
     protected:
         double updateInterval;
         Rad2D heading;
-        Coord2D position;
-        Coord2D velocity;
-        Environment *environment;
+        Coord2D targetPosition;
+        Coord2D lastPosition;
+        Coord2D velocity = Coord2D::ZERO;
 
-        void initialize() override;
+        void initialize(int) override;
 
         void initializePosition();
 
         void initializeHeading();
-
-        void initializeVelocity();
 
         void handleMessage(cMessage *msg) override;
 
@@ -36,7 +34,7 @@ namespace routingsim {
 
         void updatePosition();
 
-        virtual Coord2D calculateNewPosition() = 0;
+        virtual void move() = 0;
 
         void handleIfOutside();
 
