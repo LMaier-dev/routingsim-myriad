@@ -1,5 +1,7 @@
 //
-// Created by s_schaut on 22.03.24.
+// This class implements the Random Waypoint mobility model.
+// The node moves with a random speed and direction until it reaches a random target position in the environment.
+// After reaching the target position, the node waits for a random waitTime before moving to the next target position.
 //
 
 #ifndef ROUTINGSIM_RANDOMWALK_H
@@ -23,11 +25,24 @@ namespace routingsim {
         void setTargetPosition();
         void setTargetNextPeriod();
     protected:
+        // The minimum speed of the node in m/s.
         const double minSpeed = par("minSpeed");
+
+        // The maximum speed of the node in m/s.
         const double maxSpeed = par("maxSpeed");
+
+        // The constant wait time of the node in seconds.
         const double waitTime = par("waitTime");
+
+        // Initialize the mobility model.
         void initialize(int stage) override;
+
+        // Set the next target position and velocity of the node.
+        // The velocity is calculated based on the new speed of the node.
+        // The speed is generated using the uniform distribution between minSpeed and maxSpeed.
         void setNextTarget();
+
+        // Move the node to the targetPosition and update the lastPosition of the node.
         void move() override;
     };
 }
