@@ -30,9 +30,6 @@
 #include <boost/iostreams/copy.hpp>
 #include <boost/iostreams/filter/gzip.hpp>
 
-#include "../mobility/Environment.cpp"
-#include "../mobility/RandomWaypointMobility.cpp"
-
 
 namespace routingsim {
 

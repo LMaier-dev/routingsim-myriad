@@ -37,9 +37,6 @@
 #include <boost/graph/johnson_all_pairs_shortest.hpp>
 
 #include <Node.h>
-#include "../mobility/Environment.h"
-#include "../mobility/MobilityBase.h"
-#include "../mobility/RandomWaypointMobility.h"
 
 namespace routingsim {
 
