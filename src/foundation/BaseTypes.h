@@ -228,6 +228,11 @@ namespace routingsim {
         void add_deg(double d) {
             setRadius(radius + d);
         }
+
+        Rad2D operator=(double d) {
+          setRadius(d);
+          return *this;
+        }
     };
 
 }

@@ -71,6 +71,7 @@ namespace routingsim {
 
     public:
         double getUpdateInterval() const;
+        static simsignal_t mobilityStateChangedSignal;
     };
 
 };

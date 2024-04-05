@@ -6,10 +6,13 @@
 #include <cmath>
 #include "MobilityBase.h"
 #include "Environment.cpp"
+#include "AntennaBase.cpp"
 
 namespace routingsim {
 
 Register_Abstract_Class(MobilityBase);
+
+    simsignal_t MobilityBase::mobilityStateChangedSignal = cComponent::registerSignal("mobilityStateChanged");
 
     void MobilityBase::initialize(int stage) {
         Environment::initialize(stage);
