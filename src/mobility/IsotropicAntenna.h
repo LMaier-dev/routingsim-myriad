@@ -9,7 +9,7 @@
 
 namespace routingsim {
 
-class IsotropicAntenna : public AntennaBase {
+class IsotropicAntenna: public AntennaBase {
 public:
   double pathloss(double distance) override;
 };

@@ -34,9 +34,6 @@ namespace routingsim {
         // The constant wait time of the node in seconds.
         const double waitTime = par("waitTime");
 
-        // Initialize the mobility model.
-        void initialize(int stage) override;
-
         // Set the next target position and velocity of the node.
         // The velocity is calculated based on the new speed of the node.
         // The speed is generated using the uniform distribution between minSpeed and maxSpeed.
@@ -44,6 +41,9 @@ namespace routingsim {
 
         // Move the node to the targetPosition and update the lastPosition of the node.
         void move() override;
+      public:
+        // Initialize the mobility model.
+        void initialize(int stage) override;
     };
 }
 

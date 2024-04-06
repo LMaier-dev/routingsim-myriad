@@ -9,15 +9,15 @@
 
 namespace routingsim {
 
-class AntennaBase {
+class AntennaBase: public cSimpleModule {
 private:
-  Rad2D radius;
+  double radius;
   double maxBandwidth;
 
 public:
   AntennaBase();
-  Rad2D getRadius() { return radius; }
-  double getMaxBandwidth() { return maxBandwidth; }
+  double getRadius() { return radius; }
+  double getMaxBandwidth() const { return maxBandwidth; }
 
   // Calculate the bandwidth of the antenna at a given distance
   virtual double pathloss(double distance) = 0;

@@ -142,6 +142,7 @@ namespace routingsim {
                 EV << "creating mobility manager" << std::endl;
                 const int mobilityRNG = par("mobilityRNG").intValue();
                 mobilityTopology = new MobilityTopology(getRNG(mobilityRNG));
+                mobilityDynamics = new MobilityDynamics(mobilityTopology);
                 scheduleAt(simTime(), new cMessage{"init mobility", INIT_MOBILITY});
             }
         }
@@ -193,7 +194,8 @@ namespace routingsim {
         } else if (msg->isSelfMessage()) {
             switch (msg->getKind()) {
                 case INIT_MOBILITY:
-                    mobilityTopology->initialize();
+                    mobilityTopology->initialize(0);
+                    mobilityDynamics->initialize(0);
                     break;
                 default:
                     throw new cRuntimeError("unknown self-message kind %hd", msg->getKind());

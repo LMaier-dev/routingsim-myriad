@@ -2,6 +2,7 @@
 // Created by s_schaut on 05.04.24.
 //
 
+#include <omnetpp.h>
 #include "AntennaBase.h"
 
 namespace routingsim {
@@ -9,7 +10,7 @@ namespace routingsim {
 Register_Abstract_Class(AntennaBase);
 
 AntennaBase::AntennaBase() {
-  this->radius.setRadius(uniform(par("minR"), par("maxR")));
+  this->radius = uniform(par("minR").doubleValue(), par("maxR").doubleValue());
   this->maxBandwidth = par("bandwidthMobilityMbps");
 }
 } // namespace routingsim

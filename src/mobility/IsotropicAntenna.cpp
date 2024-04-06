@@ -3,17 +3,18 @@
 //
 
 #include "IsotropicAntenna.h"
-#include <math.h>
+#include <cmath>
 
 namespace routingsim {
 
-Define_Simple_Module(IsotropicAntenna);
+Define_Module(IsotropicAntenna);
 
-double AntennaBase::pathloss(double distance) {
+double IsotropicAntenna::pathloss(double distance) {
+  const double maxBandwidth = this->getMaxBandwidth();
   if (distance <= 1) {
     return maxBandwidth;
   } else {
-    return maxBandwidth  / pow(distance, 2);
+    return maxBandwidth / pow(distance, 2);
   }
 }
 

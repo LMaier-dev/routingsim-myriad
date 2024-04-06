@@ -23,6 +23,8 @@ protected:
 public:
   MobilityNode();
   void initialize(int stage) override;
+  MobilityBase *getMobilityModel() { return mobility_model; };
+  AntennaBase *getAntennaModel() { return antenna_model; };
 };
 
 } // namespace routingsim

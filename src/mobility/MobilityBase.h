@@ -38,9 +38,6 @@ namespace routingsim {
         // The velocity of the node.
         Coord2D velocity = Coord2D::ZERO;
 
-        // Sets initial position and heading of the node.
-        void initialize(int) override;
-
         // Initialize the position of the node.
         void initializePosition();
 
@@ -70,6 +67,12 @@ namespace routingsim {
         void reflectIfOutside();
 
     public:
+        // Sets initial position and heading of the node.
+        void initialize(int) override;
+
+        // Returns the position of node
+        Coord2D getPosition() { return lastPosition; }
+
         double getUpdateInterval() const;
         static simsignal_t mobilityStateChangedSignal;
     };

@@ -28,6 +28,7 @@ NetworkManager* getNetworkManager();
 #include "NetworkTopology.h"
 #include "NetworkDynamics.h"
 #include "../mobility/MobilityTopology.h"
+#include "../mobility/MobilityDynamics.h"
 #include "StatisticSample.h"
 
 namespace routingsim {
@@ -46,8 +47,11 @@ public:
 	/// Returns the network dynamics module
 	inline NetworkDynamics& getDynamics() { return *dynamics; }
 
-          /// Returns the mobility manager
-        inline MobilityTopology* getMobility() { return mobilityTopology; }
+        /// Returns the mobility manager
+        inline MobilityTopology* getMobilityTypologie() { return mobilityTopology; }
+
+        /// Returns the mobility dynamics module
+        inline MobilityDynamics* getMobilityDynamics() { return mobilityDynamics; }
 
 	/// Returns a list of currently failed or affected nodes
 	inline const std::unordered_set<nodeid_t>& getFailedNodes() const { return failedNodes; }
@@ -70,6 +74,7 @@ private:
 	NetworkTopology* topology;
 	NetworkDynamics* dynamics;
         MobilityTopology* mobilityTopology;
+        MobilityDynamics* mobilityDynamics;
 
         std::unordered_set<nodeid_t> failedNodes;
 
