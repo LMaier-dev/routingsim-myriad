@@ -10,7 +10,7 @@ public:
   /**
    * @param rng The random number generator to use for mobility.
    */
-  explicit MobilityTopology(omnetpp::cRNG *rng);
+  explicit MobilityTopology(omnetpp::cRNG *rng, int numNodes);
   void initialize(int stage);
   vector<MobilityNode*> *getNodes() { return mobilityNodes; }
   void enableLink(MobilityNode *fromNode, MobilityNode *toNode);
@@ -20,7 +20,7 @@ public:
 private:
   omnetpp::cRNG *rng;
   vector<MobilityNode*> *mobilityNodes;
-  void createTopology();
+  void createTopology(int numNodes);
 };
 } // namespace routingsim
 

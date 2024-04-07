@@ -4,9 +4,9 @@
 
 namespace routingsim {
 
-MobilityTopology::MobilityTopology(cRNG *rng) {
+MobilityTopology::MobilityTopology(cRNG *rng, int numNodes) {
   this->rng = rng;
-  createTopology();
+  createTopology(numNodes);
 }
 
 void MobilityTopology::initialize(int stage) {
@@ -30,8 +30,7 @@ void MobilityTopology::setDatarate(MobilityNode *fromNode, MobilityNode *toNode,
   fromNode->setLinkDatarate(toNode, "toNeighbors$o", datarate);
 }
 
-void MobilityTopology::createTopology() {
-  const int numNodes = par("mobilityNodes").intValue();
+void MobilityTopology::createTopology(int numNodes) {
   this->mobilityNodes = new std::vector<MobilityNode *>();
   for (int i = 0; i < numNodes; i++) {
     MobilityNode node = MobilityNode();
