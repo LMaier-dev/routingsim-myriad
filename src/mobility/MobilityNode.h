@@ -8,16 +8,17 @@
 #include "../foundation/Node.h"
 #include "MobilityBase.h"
 #include "AntennaBase.h"
+#include "MobilityTopology.h"
 
 namespace routingsim {
 
 class MobilityNode : public Node {
-
 private:
   MobilityBase *mobility_model;
   AntennaBase *antenna_model;
 
 protected:
+  friend class MobilityTopology;
   void handleMessage(cMessage *msg) override;
 
 public:

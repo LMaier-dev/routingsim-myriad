@@ -2,11 +2,8 @@
 #ifndef ROUTINGSIM_MOBILITYMANAGER_H
 #define ROUTINGSIM_MOBILITYMANAGER_H
 
-#include "Environment.h"
-#include "MobilityBase.h"
-#include "MobilityNode.h"
-#include "RandomWaypointMobility.h"
 #include <omnetpp.h>
+#include "MobilityNode.h"
 
 namespace routingsim {
 class MobilityTopology {
@@ -16,11 +13,14 @@ public:
    */
   explicit MobilityTopology(omnetpp::cRNG *rng);
   void initialize(int stage);
-  vector<MobilityNode> *getNodes() { return mobilityNodes; }
+  vector<MobilityNode*> *getNodes() { return mobilityNodes; }
+  void enableLink(MobilityNode *fromNode, MobilityNode *toNode);
+  void disableLink(MobilityNode *fromNode, MobilityNode *toNode);
+  void setDatarate(MobilityNode *fromNode, MobilityNode *toNode, double datarate);
 
 private:
   omnetpp::cRNG *rng;
-  vector<MobilityNode> *mobilityNodes;
+  vector<MobilityNode*> *mobilityNodes;
   void createTopology();
 };
 } // namespace routingsim

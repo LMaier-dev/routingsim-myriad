@@ -391,4 +391,37 @@ bool Node::gateIsDisabled(const cGate *g) const {
 	return false; 	// gate not found in disabledLinks
 }
 
+
+bool Node::setLinkDatarate(Node *mod, const char *gatename, double datarate) {
+  cGate *gate = findGate(mod, gatename);
+  if (gate) {
+    cChannel *channel = gate->getTransmissionChannel();
+    if (!channel) {
+      EV_WARN << "Node " << getNodeId() << ": Could not find channel for gate "
+              << gatename << endl;
+      return false;
+    }
+    cDatarateChannel *datarateChannel = dynamic_cast<cDatarateChannel *>(channel);
+    if (!datarateChannel) {
+      EV_WARN << "Node " << getNodeId()
+              << ": Channel is not a datarate channel for gate " << gatename
+              << endl;
+      return false;
+    }
+    datarateChannel->setDatarate(datarate);
+    return true;
+  }
+  return false;
+}
+
+
+cGate *Node::findGate(Node *mod, const char *gatename) {
+  for (int i = 0; i < gateSize(gatename); i++) {
+    if (mod == getOtherNode(gate(gatename, i))) {
+      return gate(gatename, i);
+    }
+    return nullptr;
+  }
+}
+
 } //namespace

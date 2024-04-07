@@ -31,13 +31,13 @@ void MobilityDynamics::handleMessage(cMessage *msg) {
 }
 
 void MobilityDynamics::updateMobility() {
-  for (MobilityNode &node : *mobilityTopology->getNodes()) {
-    updateMobilityNode(&node);
+  for (MobilityNode *node : *mobilityTopology->getNodes()) {
+    updateMobilityNode(node);
   }
 }
 void MobilityDynamics::updateMobilityNode(MobilityNode *node) {
-  for (MobilityNode &to_node : *mobilityTopology->getNodes()) {
-    updateConnection(node, &to_node);
+  for (MobilityNode *to_node : *mobilityTopology->getNodes()) {
+    updateConnection(node, to_node);
   }
 }
 void MobilityDynamics::updateConnection(MobilityNode *fromNode,
@@ -48,10 +48,11 @@ void MobilityDynamics::updateConnection(MobilityNode *fromNode,
   double radiusFromNode = fromNode->getAntennaModel()->getRadius();
   if (distance <= radiusFromNode) {
     double newBandwidth = fromNode->getAntennaModel()->pathloss(distance);
-    // TODO: update connection
+    mobilityTopology->setDatarate(fromNode, toNode, newBandwidth);
+    mobilityTopology->enableLink(fromNode, toNode);
 
   } else {
-    // TODO: remove connection
+    mobilityTopology->disableLink(fromNode, toNode);
   }
 }
 } // namespace routingsim
