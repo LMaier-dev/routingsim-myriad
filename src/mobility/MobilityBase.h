@@ -11,7 +11,6 @@
 #ifndef ROUTINGSIM_MOBILITYBASE_H_
 #define ROUTINGSIM_MOBILITYBASE_H_
 
-#include <omnetpp.h>
 #include <cmath>
 #include "../foundation/BaseTypes.h"
 #include "Environment.h"

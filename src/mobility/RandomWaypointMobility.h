@@ -7,7 +7,6 @@
 #ifndef ROUTINGSIM_RANDOMWALK_H
 #define ROUTINGSIM_RANDOMWALK_H
 
-#include <omnetpp.h>
 #include "MobilityBase.h"
 
 namespace routingsim {

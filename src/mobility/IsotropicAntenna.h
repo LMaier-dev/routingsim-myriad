@@ -1,6 +1,3 @@
-//
-// Created by s_schaut on 05.04.24.
-//
 
 #ifndef ROUTINGSIM_ISOTROPICANTENNA_H
 #define ROUTINGSIM_ISOTROPICANTENNA_H

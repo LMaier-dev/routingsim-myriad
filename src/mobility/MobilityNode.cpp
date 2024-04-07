@@ -1,10 +1,8 @@
-//
-// Created by s_schaut on 26.03.24.
-//
 
 #include "MobilityNode.h"
-#include "IsotropicAntenna.h"
-#include "RandomWaypointMobility.h"
+#include "MobilityBase.cpp"
+#include "IsotropicAntenna.cpp"
+#include "RandomWaypointMobility.cpp"
 
 namespace routingsim {
 

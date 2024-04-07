@@ -1,6 +1,3 @@
-//
-// Created by s_schaut on 06.04.24.
-//
 
 #include "MobilityDynamics.h"
 

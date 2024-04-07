@@ -1,8 +1,4 @@
-//
-// Created by s_schaut on 23.03.24.
-//
 
-#include <omnetpp.h>
 #include "Environment.h"
 
 namespace routingsim {

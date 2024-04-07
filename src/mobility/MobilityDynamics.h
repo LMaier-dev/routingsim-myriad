@@ -1,6 +1,3 @@
-//
-// Created by s_schaut on 06.04.24.
-//
 
 #ifndef ROUTINGSIM_MOBILITYDYNAMICS_H
 #define ROUTINGSIM_MOBILITYDYNAMICS_H

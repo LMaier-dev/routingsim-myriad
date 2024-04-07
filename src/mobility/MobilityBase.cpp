@@ -1,8 +1,4 @@
-//
-// Created by s_schaut on 22.03.24.
-//
 
-#include <omnetpp.h>
 #include <cmath>
 #include "MobilityBase.h"
 #include "Environment.cpp"

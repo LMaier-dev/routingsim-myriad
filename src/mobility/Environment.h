@@ -8,7 +8,6 @@
 #ifndef ROUTINGSIM_EVIROMENT_H
 #define ROUTINGSIM_EVIROMENT_H
 
-#include <omnetpp.h>
 #include "../foundation/BaseTypes.h"
 
 namespace routingsim {

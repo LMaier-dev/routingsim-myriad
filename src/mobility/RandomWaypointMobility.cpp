@@ -1,13 +1,7 @@
-//
-// Created by s_schaut on 22.03.24.
-//
 
 #include "RandomWaypointMobility.h"
-#include "MobilityBase.cpp"
 
 namespace routingsim {
-
-    Define_Module(RandomWaypointMobility);
 
     void RandomWaypointMobility::initialize(int stage) {
         setNextTarget();

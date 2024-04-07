@@ -1,6 +1,6 @@
 
 #include "MobilityTopology.h"
-#include <omnetpp.h>
+#include "MobilityNode.cpp"
 
 namespace routingsim {
 

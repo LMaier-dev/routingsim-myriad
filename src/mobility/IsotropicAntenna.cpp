@@ -1,6 +1,3 @@
-//
-// Created by s_schaut on 05.04.24.
-//
 
 #include "IsotropicAntenna.h"
 #include <cmath>

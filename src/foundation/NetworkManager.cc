@@ -15,6 +15,8 @@
 
 #include "NetworkManager.h"
 #include "NetworkDynamics.h"
+#include "../mobility/MobilityTopology.cpp"
+#include "../mobility/MobilityDynamics.cpp"
 
 namespace routingsim {
 

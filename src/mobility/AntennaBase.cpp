@@ -1,8 +1,4 @@
-//
-// Created by s_schaut on 05.04.24.
-//
 
-#include <omnetpp.h>
 #include "AntennaBase.h"
 
 namespace routingsim {

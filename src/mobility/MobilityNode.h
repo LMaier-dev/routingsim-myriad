@@ -1,6 +1,3 @@
-//
-// Created by s_schaut on 26.03.24.
-//
 
 #ifndef ROUTINGSIM_MOBILITYNODE_H
 #define ROUTINGSIM_MOBILITYNODE_H

@@ -1,6 +1,3 @@
-//
-// Created by s_schaut on 05.04.24.
-//
 
 #ifndef ROUTINGSIM_ANTENNABASE_H
 #define ROUTINGSIM_ANTENNABASE_H

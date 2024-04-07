@@ -2,7 +2,6 @@
 #ifndef ROUTINGSIM_MOBILITYMANAGER_H
 #define ROUTINGSIM_MOBILITYMANAGER_H
 
-#include <omnetpp.h>
 #include "MobilityNode.h"
 
 namespace routingsim {
