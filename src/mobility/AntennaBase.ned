@@ -1,4 +1,6 @@
 
+package routingsim.mobility;
+
 simple AntennaBase {
     parameters:
         double minR @unit(m) = default(1m);

@@ -1,4 +1,6 @@
 
+package routingsim.mobility;
+
 simple RandomWaypointMobility extends MobilityBase {
     parameters:
         volatile double minSpeed @unit(mps) = default(1mps);

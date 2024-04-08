@@ -1,4 +1,6 @@
 
+package routingsim.mobility;
+
 simple NodeMobility {
 parameters:
     @display("i=block/join");
