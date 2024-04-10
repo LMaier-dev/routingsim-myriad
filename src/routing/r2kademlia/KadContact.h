@@ -159,8 +159,16 @@ public:
 	void updatePath(const OverlayKey& myOverlayKey, kad_path newpath) { setPath(newpath, HashSum(myOverlayKey,newpath,key)); }
 	/// sets the path to reach this contact
 	void setPath(kad_path path, OverlayKey&& HashSum) { active_path.setPath(std::move(path), HashSum); }
-	const kad_path& getPath() const { return active_path.getRawPath(); }
+	void setProposedPath(kad_path path, OverlayKey&& HashSum) { proposed_path.setPath(std::move(path), HashSum); }
+	void clearProposedPath() { proposed_path.clear(); }
+	const kad_path& getPath() const { return getRawActivePath(); }
+	const kad_path& getRawActivePath() const { return active_path.getRawPath(); }
+	const kad_path& getRawProposedPath() const { return proposed_path.getRawPath(); }
+	const KadPath& getActivePath() const { return active_path; }
+	const KadPath& getProposedPath() const { return proposed_path; }
 	const OverlayKey& getPathHashSum() const { return active_path.getPathHashSum(); }
+	bool proposedPathDefined() const { return proposed_path.isDefined(); }
+
 	stateseqno_t getStateSeqNo() const { return seqno; }
 	void setStateSeqNo(stateseqno_t newseqno) {
 		if (not (seqno.isInvalid() or (not seqno.isInvalid() and newseqno >= seqno)))

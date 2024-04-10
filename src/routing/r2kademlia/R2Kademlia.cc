@@ -850,116 +850,6 @@ R2Kademlia::chooseNextHop(const KadContactList& contacts, const OverlayKey& targ
 
 // -------------------- RPC methods ---------------------------
 
-// sendPathProbe along full source routing path
-// called by periodic refresh function doProbeNeighbors() and doProbeContacts()
-void R2Kademlia::sendPathProbe(const OverlayKey& contactkey)
-{
-	if (auto contactp(routingTable.getContact(contactkey)); contactp != nullptr)
-		sendPathProbeToContact(*contactp, true);
-	else {
-		EV_TRACE << "not sending ProbeReq from " << myOverlayKey.shortStr() << " to " << contactkey.shortStr() << " because of invalid contact" << endl;
-	}
-}
-
-// Path Probing: sends a ProbeReq to check for validity of an existing path
-// the ProbeReq will travel the full path to its final destination if the path is intact
-//  if pathsetupcheck is true it will also refresh PathIDs that have been installed in intermediate nodes
-void R2Kademlia::sendPathProbeToContact(const KadContact& contact, bool pathsetupcheck)
-{
-	// must be a valid contact
-	if ( contact.getKey().isUnspecified() or contact.isInvalid() ) {
-		EV_TRACE << "not sending ProbeReq from " << myOverlayKey.shortStr() << " to " << contact.getKey().shortStr() << " because of invalid contact" << endl;
-		return;
-	}
-
-	EV_TRACE << "sending ProbeReq from " << myOverlayKey.shortStr() << " to " << contact.getKey().shortStr() << endl;
-	auto probereq= makePacket<KadProbeReq>(contact, "KadProbeReq");
-	// need to set the PathCheck flag?
-	if (pathsetupcheck)
-		probereq->setPathCheck(true);
-
-	// adding failed local links to NotVia list
-	auto failedPNList(routingTable.getFailedPNs());
-	probereq->setNotVia(true);
-	probereq->setFailedLinkArraySize(failedPNList.size());
-	probereq->setFailedLinkAgeArraySize(failedPNList.size());
-	unsigned long i= 0UL;
-	for ( auto& failedPN : failedPNList ) {
-		probereq->setFailedLink(i,{myOverlayKey,failedPN});
-		if (auto pncontact= routingTable.getContact(failedPN); pncontact != nullptr) {
-			probereq->setFailedLinkAge(i,pncontact->getAge());
-		}
-		else { // this should not happen
-			ASSERT(false);
-			// use timer min value for estimation
-			probereq->setFailedLinkAge(i,notifyLinkFailureWaitTime/2);
-		}
-		i++;
-	}
-
-	sendRpcCall(std::move(probereq),
-		std::bind(&R2Kademlia::handleProbeResponse, this, ph::_1, ph::_2),
-		std::bind(&R2Kademlia::handleProbeResponse, this, ph::_1, ph::_2),
-		std::bind(&R2Kademlia::handleRPCTimeOut, this, ph::_1, ph::_2));
-}
-
-
-// sends back an answer for a path probe
-void R2Kademlia::handlePacket(std::unique_ptr<KadProbeReq> packet) {
-	// update StateSeqNo and lastseen of origin contact if path is the same
-	// since paths may be asymmetric, this ProbeReq may have taken a different path
-	if (KadContact* contact_p= const_cast<KadContact*>(routingTable.getContact(packet->getSource())); contact_p != nullptr) {
-		const auto takenpath(packet->reversePath(packet->getIntermediatePath()));
-		if (takenpath == contact_p->getPath()) { // if it is the same path that we use, update contact
-			if (contact_p->getStateSeqNo() <= packet->getStateSeqNo()) {
-				// update contact data
-				contact_p->setStateSeqNo(packet->getStateSeqNo());
-				contact_p->updateLastSeen();
-				contact_p->setNodeDegree(packet->getSrcNodeDegree());
-			}
-			else
-				EV_WARN << "State sequence number of message smaller (" << packet->getStateSeqNo() << ") than for contact (" << contact_p->getStateSeqNo() << ")" << endl;
-
-		}
-		else { // we use a different path
-			if (contact_p->getStateSeqNo() <= packet->getStateSeqNo() and contact_p->getAge() > R2Kademlia::PathInfoAgeThreshold) {
-				// contact has newer state sequence number, better check our path if it has not been checked recently
-				// TODO this should probably be rate limited
-				EV_TRACE << "contact has newer state sequence number, my path is different from other sides probereq, path probe triggered" << endl;
-				sendPathProbeToContact(*contact_p, false);
-			}
-		}
-	}
-
-	sendPacket(makeAnswer<KadProbeRsp>(*packet));
-}
-
-
-bool R2Kademlia::handleProbeResponse(KadPacket_p answer, RPCState& rpcState) {
-	// callback will be invoked by RPCProtocol::handleAnswer()
-	// in case the response contained an error it will be handled by onErrorPacket first
-	// in case of failure we need to return true since this RPC is finished then
-	if (rpcState.status != RPC_SUCCESS) return true;
-	ASSERT(answer->getSource() == rpcState.original_packet->getTarget());
-	std::unique_ptr<KadProbeRsp> probeRsp = safe_packet_cast<KadProbeRsp>(answer);
-
-	// update StateSeqNo and lastseen of origin contact
-	if (KadContact* contact_p= const_cast<KadContact*>(routingTable.getContact(probeRsp->getSource())); contact_p != nullptr) {
-		// usually this should not be necessary as a path update is done before
-		if (contact_p->getStateSeqNo() <= probeRsp->getStateSeqNo()) {
-			contact_p->setStateSeqNo(probeRsp->getStateSeqNo());
-			//contact_p->setValid();
-			contact_p->updateLastSeen();
-			contact_p->updateLastPathRefresh();
-			contact_p->setNodeDegree(probeRsp->getSrcNodeDegree());
-		}
-		else
-			EV_WARN << "State sequence number of message smaller (" << probeRsp->getStateSeqNo() << ") than for contact (" << contact_p->getStateSeqNo() << ")" << endl;
-	}
-
-	return true;
-}
-
 
 // FIND NODE
 void R2Kademlia::sendFindNode(const OverlayKey& destkey, bool exact, bool track) {
@@ -1348,6 +1238,7 @@ void R2Kademlia::recordScalars() {
 	recordScalar("notifyFirstSegmentSources",notifyFirstSegmentSourcesSize);
 	recordScalar("fwdTableSize", fwdTablePathID.getNumEntries());
 	recordScalar("fwdTableValid", fwdTablePathID.getNumValidEntries());
+	recordScalar("fwdTableValidLocal", fwdTablePathID.getNumValidLocalEntries());
 	recordScalar("fwdTableForeign", fwdTablePathID.getNumForeignEntries());
 	auto [numPrecalcEntries, numUsedPrecalcEntries]= fwdTablePathID.getNumUsedPrecalcEntries();
 	recordScalar("fwdTablePrecalc", numPrecalcEntries);
@@ -1584,4 +1475,4 @@ template<typename T> bool R2Kademlia::handleIfFitting(KadPacket_p& packet) {
 	return true;
 }
 
-} //namespace
+} // namespace

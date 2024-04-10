@@ -98,15 +98,15 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 
 // Request Physical Neighbors from contact
 // @returns a delay value for the next call of this method
-simtime_t R2Kademlia::sendGetPhysicalNeighbors(KadContact_p contact, bool OverlayNeighborsSource)
+simtime_t R2Kademlia::sendGetPhysicalNeighbors(const KadContact& contact, RequestQueueElementActionType action)
 {
-	EV_TRACE << "sending query route request (PN" << (OverlayNeighborsSource ? "+ON)" : ")") << " to " << *contact << endl;
+	EV_TRACE << "sending query route request (PN" << ((action & RequestQueueElementActions::get_OverlayNeighborsSource) ? "+ON)" : ")") << " to " << contact << endl;
 	auto req = makePacket<KadQueryRouteReq>(contact, "KadQueryRouteReq");
 	req->setNeighborhood(1); // get only physical neighbors (1 hop away)
 	req->setContactsOnly(false);
 	req->setOverlayNeighbors(false);
 	// if true, return also the Overlay Neighbors
-	req->setOverlayNeighborsSource(OverlayNeighborsSource);
+	req->setOverlayNeighborsSource( (action & RequestQueueElementActions::get_OverlayNeighborsSource) != 0 );
 
 	simtime_t delay(0);
 
@@ -132,15 +132,15 @@ simtime_t R2Kademlia::sendGetPhysicalNeighbors(KadContact_p contact, bool Overla
 	LastPNQueryRouteReq= simTime()+delay;
 
 	// update vicinity to avoid future redundant requests
-	bool nodeOrLinkAdded= vicinity.addNode(contact->getPath().empty() ? myOverlayKey : contact->getPath().back(), // parent
-					       contact->getKey(), // new child
-					       contact->getStateSeqNo(),
-					       contact->getPathLength()+1);
+	bool nodeOrLinkAdded= vicinity.addNode(contact.getPath().empty() ? myOverlayKey : contact.getPath().back(), // parent
+					       contact.getKey(), // new child
+					       contact.getStateSeqNo(),
+					       contact.getPathLength()+1);
 	if (usePathIDs and nodeOrLinkAdded) {
-		auto newpath(contact->getPath());
-		newpath.push_back(contact->getKey());
+		auto newpath(contact.getPath());
+		newpath.push_back(contact.getKey());
 		fwdTablePathID.addPrecalcEntry(newpath);
-		vicinityPathIDCompletion(*contact);
+		vicinityPathIDCompletion(contact);
 	}
 	// return delay for next call
 	return delay;
@@ -151,12 +151,12 @@ simtime_t R2Kademlia::sendGetPhysicalNeighbors(KadContact_p contact, bool Overla
 // Request k nearest Overlay Neighbors from contact
 // the 2nd parameter is currently ignored (only required by unified interface)
 // @returns a delay value for the next call of this method
-simtime_t R2Kademlia::sendGetOverlayNeighbors(KadContact_p contact, bool OverlayNeighborsSource)
+simtime_t R2Kademlia::sendGetOverlayNeighbors(const KadContact& contact, RequestQueueElementActionType action)
 {
-	EV_TRACE << "sending query route request (ON) to " << *contact << endl;
+	EV_TRACE << "sending query route request (ON) to " << contact << endl;
 	auto req = makePacket<KadQueryRouteReq>(contact, "KadQueryRouteReq");
 	req->setNeighborhood(0); // no physical neighbors
-	req->setOverlayNeighborsSource(true); // get known overlay neighbors for my ID
+	req->setOverlayNeighborsSource( (action & RequestQueueElementActions::get_OverlayNeighborsSource) != 0 ); // get known overlay neighbors for my ID
 	req->setContactsOnly(false); // get also the routes
 
 	// we rate limit the requests
@@ -191,13 +191,12 @@ simtime_t R2Kademlia::sendGetOverlayNeighbors(KadContact_p contact, bool Overlay
 // Send PNDiscReq
 // the 2nd parameter is currently ignored (only required by unified interface)
 // @returns a delay value for the next call of this method
-simtime_t R2Kademlia::sendDiscoveryReq(KadContact_p contact, bool _unused_arg)
+simtime_t R2Kademlia::sendDiscoveryReq(const KadContact& contact, RequestQueueElementActionType _unused_arg)
 {
-	ASSERT(contact != nullptr);
-	EV_TRACE << "sending PNDiscReq to " << *contact << " mySSeq#: " << getLSSeqNo();
+	EV_TRACE << "sending PNDiscReq to " << contact << " mySSeq#: " << getLSSeqNo();
 
 	// need to brute force the path as the contact may be known via a detour before
-	KadContact pncontact(myOverlayKey, contact->getKey(),kad_path());
+	KadContact pncontact(myOverlayKey, contact.getKey(),kad_path());
 	auto req = makePacket<KadPNDiscReq>(&pncontact, "KadPNDiscReq");
 	req->setSourceId(node().getNodeId());
 	req->setNeighborhood(1); // get only physical neighbors (1 hop away)
@@ -502,7 +501,7 @@ bool R2Kademlia::handleQueryRouteResponse(KadPacket_p answer, RPCState& rpcState
 /// also record expected new seqno, so if state had been updated meanwhile we can avoid resync
 /// this will avoid triggering frequent resynchronizations
 /// note that the given contact is a temporary contact that does not need to actually exist in the routing table
-void R2Kademlia::scheduleRequest(class RequestQueue& q, const KadContact& tmpcontact)
+void R2Kademlia::scheduleRequest(ContactRequestQueue& q, const KadContact& tmpcontact)
 {
 	auto it= std::lower_bound(q.begin(), q.end(), tmpcontact, [&](const auto& lhs, const auto& rhs) -> bool { return lhs.getKey() < rhs.getKey(); });
 	if (it != q.end() and it->getKey() == tmpcontact.getKey()) {
@@ -555,7 +554,7 @@ R2Kademlia::scheduleGetONReq(const KadContact& tmpcontact) {
 
 
 void
-R2Kademlia::sendScheduledRequests(class RequestQueue& q) {
+R2Kademlia::sendScheduledRequests(ContactRequestQueue& q) {
 	simtime_t delay_next_call(0);
 	EV_TRACE << "sendScheduledRequests(" << q.getDescription() << ") called, queued requests:" << q.size() << endl;
 	while (not q.empty())
@@ -596,7 +595,7 @@ R2Kademlia::sendScheduledRequests(class RequestQueue& q) {
 			else {
 				// send the request (PNDiscReq, QueryRouteReq(PN), QueryRouteReq(ON))
 				// e.g., see R2Kademlia::sendDiscoveryReq(KadContact_p contact)
-				delay_next_call= q.sendrequestcall(rt_contact, getOverlayNeighborsSource);
+				delay_next_call= q.sendrequestcall(*rt_contact, getOverlayNeighborsSource ? get_OverlayNeighborsSource : unset);
 			}
 		}
 		else {

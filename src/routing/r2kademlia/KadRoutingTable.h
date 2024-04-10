@@ -25,6 +25,7 @@
 //#include <unordered_set> // only required for pathSet
 
 #include "KadContact.h"
+#include "RequestQueue.h"
 /**
  * @file KadRoutingTable.h
  * @author Jakob Thomas
@@ -126,7 +127,7 @@ public:
 	virtual void scheduleRegularRediscovery(const OverlayKey& contact) = 0;
 	virtual void scheduleSlowRediscovery(const OverlayKey& contact) = 0;
 	/** called when the path of a contact is probably broken and needs to be checked */
-	virtual void onPathCheck(const KadContact& contact, bool pathsetupcheck) = 0;
+	virtual void onPathCheck(const KadContact& contact, RequestQueueElementActionType action) = 0;
 };
 
 /**
