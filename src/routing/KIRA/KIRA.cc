@@ -122,6 +122,7 @@ void R2Kademlia::onInitialize() {
 	addGratuitousContacts = par("addGratuitousContacts").boolValue();
 	floodStrideFactor = par("floodStrideFactor").intValue();
 	floodCompleteBucketOpt = par("floodCompleteBucketOpt").boolValue();
+	floodOnFailure = par("floodOnFailure").boolValue();
 
 	// register this module for statistics
 	getStatistics().addSample(this);
@@ -275,6 +276,10 @@ void R2Kademlia::nodeDisconnect(nodeid_t nid) {
 	// send UpdateRouteReq w/ failed link to ID-wise closest Nodes
 	// we can rely on routingTable.getContact(key) != nullptr, because of earlier setContactInvalid() call
 	scheduleUpdate(*(routingTable.getContact(key)), KAD_Unreachable);
+
+    if (floodOnFailure) {
+        sendFloodPacket();
+    }
 }
 
 

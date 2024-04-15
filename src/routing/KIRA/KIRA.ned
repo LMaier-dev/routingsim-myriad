@@ -93,6 +93,9 @@ simple R2Kademlia extends routingsim.foundation.Protocol
 		/// whether to count trailing non-full buckets as part of the responsibility range
 		bool floodCompleteBucketOpt = default(true);
 
+		/// send flood packet on link failure
+		bool floodOnFailure = default(false);
+
 		// statistics foo
 		/// if true records average path lengths and stretch in routing tables (can be costly)
 		bool detailedRoutingTableStats = default(true);
