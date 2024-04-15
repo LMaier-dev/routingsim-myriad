@@ -24,6 +24,7 @@
 
 #include <cstdint>
 #include <omnetpp.h>
+#include <optional>
 #include <unordered_map>
 #include <queue>
 
@@ -483,7 +484,7 @@ private:
 
     /// replicate the flood packet in respective id range, returns number of replications sent
     uint32_t replicateFloodPacket(std::unique_ptr<KadFloodPacket>& packet);
-    bool sendFloodPacket(short timerID); 
+    bool sendFloodPacket(std::optional<hop_t> event = std::nullopt); 
     uint32_t replicateFloodPacket(KadFloodPacket& packet);
     std::unique_ptr<KadFloodPacket> createReplicationPacket(KadFloodPacket& packet, KadContact_p contact, uint8_t floodPrefixLength);
     std::unique_ptr<KadFloodPacket> createFloodPacket(KadContact_p contact, uint8_t floodPrefixLength);

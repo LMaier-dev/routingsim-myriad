@@ -5,11 +5,12 @@
 #include "cmodule.h"
 #include "csimulation.h"
 #include "KadPackets_m.h"
+#include <boost/optional/optional.hpp>
 #include <cmath>
 #include <cstdint>
 #include <memory>
-
-
+#include <optional>
+#include <utility>
 
 namespace routingsim {
 Define_Module(KadFloodObserver);
@@ -35,7 +36,7 @@ void KadFloodObserver::handleMessage(cMessage *msg) {
 	delete msg;
 }
 
-uint32_t KadFloodObserver::registerFlood(const OverlayKey& source, nodeid_t nid) {
+uint32_t KadFloodObserver::registerFlood(const OverlayKey& source, nodeid_t nid, std::optional<hop_t> event_id) {
     auto floodId = floodStates.size();
     FloodState state = {};
     state.hops = cHistogramPtr(getIntegerHistogram(("hops" + std::to_string(floodId)).c_str()));
@@ -43,6 +44,19 @@ uint32_t KadFloodObserver::registerFlood(const OverlayKey& source, nodeid_t nid)
     state.replications = cHistogramPtr(getIntegerHistogram(("replications" + std::to_string(floodId)).c_str()));
     state.stretch = cHistogramPtr(getDoubleHistogram(("stretch" + std::to_string(floodId)).c_str()));
     state.latency = cHistogramPtr(getDoubleHistogram(("latency" + std::to_string(floodId)).c_str()));
+    
+    // init delivery map for event_id if not none
+    if (event_id) {
+        auto hop = event_id.value();
+        auto linkId = (((uint64_t) hop.from) << (uint64_t) 32) | (uint64_t) hop.to; 
+        state.linkMapBD[linkId]++;
+        if (hop.from > hop.to) {
+            linkId = (((uint64_t) hop.to) << (uint64_t)  32) | (uint64_t) hop.from;
+        }
+
+        state.event_id.emplace(linkId);
+        eventDeliveryMap[linkId].insert(nid);
+    }
 
     state.source = nid;
     state.originTime = simTime();
@@ -68,6 +82,9 @@ void KadFloodObserver::registerFloodDelivered(uint32_t floodId, const OverlayKey
     state.overlayHops->collect(packet.getOverlayHops());
     state.stretch->collect(hopCount / (double) getNetworkManager()->getTopology().getDistance(state.source, nid));
     state.latency->collect(simTime() - state.originTime);
+    if (state.event_id) {
+        eventDeliveryMap[*state.event_id].insert(nid);
+    }
 }
 
 void KadFloodObserver::registerFloodDropped(uint32_t floodId, const OverlayKey& hop, nodeid_t nid, const KadFloodPacket& packet) {
@@ -111,6 +128,12 @@ void KadFloodObserver::recordFloodStatistics() {
             linkUsageUD->collect(k.second);
         }
         mod->recordStatistic(linkUsageUD.get());
+        i++;
+    }
+    i = 0;
+    for (auto& event: eventDeliveryMap) {
+		cModule* mod = modType->create(("Event" + std::to_string(i)).c_str(), this);
+        mod->recordScalar("deliveryCount", std::get<1>(event).size());
         i++;
     }
 }

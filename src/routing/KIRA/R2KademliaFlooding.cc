@@ -6,6 +6,7 @@
 #include "KadPackets_m.h"
 #include "OverlayKey128.h"
 #include <cstdint>
+#include <optional>
 
 namespace routingsim {
 uint32_t R2Kademlia::replicateFloodPacket(KadFloodPacket& packet) {
@@ -70,12 +71,12 @@ void R2Kademlia::countReceived(KadFloodPacket& packet, uint32_t replications) {
 }
 
 
-bool R2Kademlia::sendFloodPacket(short timerID) {
+bool R2Kademlia::sendFloodPacket(std::optional<hop_t> event) {
 
     EV_TRACE << "Send KadFloodPacket" << std::endl;
     // create a flood packet and replicate directly
     auto& floodObserver = getKadFloodObserver(); 
-    const auto floodId = floodObserver.registerFlood(myOverlayKey, Node::getNode(this)->getNodeId());
+    const auto floodId = floodObserver.registerFlood(myOverlayKey, Node::getNode(this)->getNodeId(), event);
     const auto replication_contacts = routingTable.getReplicationContacts(0, floodStrideFactor, floodCompleteBucketOpt);
     floodObserver.registerFloodReplication(floodId, myOverlayKey, Node::getNode(this)->getNodeId(), 0, replication_contacts.size());
 

@@ -3,6 +3,7 @@
 
 #include <boost/bimap.hpp>
 #include <cstdint>
+#include <optional>
 #include <vector>
 #include "BaseTypes.h"
 #include "StatisticSample.h"
@@ -14,6 +15,7 @@
 namespace routingsim {
 using cHistogramPtr = std::unique_ptr<cHistogram>;
 using linkMap_t = std::map<uint64_t, uint32_t>;
+using deliveredMap_t = std::map<uint64_t, std::set<nodeid_t>>;
 
 struct FloodState {
     uint32_t inflightCount = 0;
@@ -22,6 +24,8 @@ struct FloodState {
     uint32_t forwardedCount = 0;
 
     uint32_t packetsForwarded = 0;
+    // if this flood belongs to some specific event this holds the event_id
+    std::optional<uint64_t> event_id = std::nullopt;
 
     nodeid_t source;
     simtime_t originTime;
@@ -50,6 +54,8 @@ struct FloodState {
 };
 
 
+
+
 /**
  * Functionality to collect global Statistics regarding individual Floods
  **/
@@ -65,10 +71,12 @@ public:
     KadFloodObserver(const KadFloodObserver&) = delete; 
 private:
     std::vector<FloodState> floodStates;
+    // for each event (i.e. a failed link) stores the nodes a resulting flood message successfully received
+    deliveredMap_t eventDeliveryMap;
 
 public:
     // Create a new floodInstance
-    uint32_t registerFlood(const OverlayKey& source, nodeid_t nid);
+    uint32_t registerFlood(const OverlayKey& source, nodeid_t nid, std::optional<hop_t> event_id = std::nullopt);
     void registerFloodForwarded(uint32_t floodId, const OverlayKey& source, nodeid_t nid, const KadFloodPacket& packet, hop_t takenHop);
     void registerFloodReplication(uint32_t floodId, const OverlayKey& overlay_hop, nodeid_t nid, uint8_t floodPrefixLength, uint16_t replicationCount);
     void registerFloodDropped(uint32_t floodId, const OverlayKey& hop, nodeid_t nid, const KadFloodPacket& packet);

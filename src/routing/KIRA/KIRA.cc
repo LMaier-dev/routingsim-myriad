@@ -16,6 +16,7 @@
 #include <BaseTypes.h>
 #include <boost/type_traits/integral_constant.hpp>
 #include <cstddef>
+#include <optional>
 
 #include "Statistics.h"
 #include "KIRA.h"
@@ -171,7 +172,7 @@ void R2Kademlia::onInitialize() {
 	  addRandomizedTimer(getSimulation()->getWarmupPeriod()+probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doDataProbe, this, ph::_1));
 	}
     if (floodInterval > 0) {
-	    addRandomizedTimer(floodInterval*1.5, floodInterval, std::bind(&R2Kademlia::sendFloodPacket, this, ph::_1));
+	    addRandomizedTimer(floodInterval*1.5, floodInterval, [this](short i){return sendFloodPacket();});
     }
 
 	// expose the following variables in GUI for inspection
@@ -278,7 +279,10 @@ void R2Kademlia::nodeDisconnect(nodeid_t nid) {
 	scheduleUpdate(*(routingTable.getContact(key)), KAD_Unreachable);
 
     if (floodOnFailure) {
-        sendFloodPacket();
+        // send "LSA" after short delay
+        addOneShotTimer(SimTime(uniform(1000,3000),SIMTIME_US), [this,nid](short i) {
+                return sendFloodPacket(std::make_optional(hop_t(nid,node().getNodeId())));
+            });
     }
 }
 
