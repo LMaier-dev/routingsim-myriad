@@ -21,6 +21,7 @@
 #include "KadRoutingTable.h"
 #include "KadObserver.h"
 #include <algorithm>
+#include <cstdlib>
 #include <limits>
 #include "BaseTypes.h"
 #include "routing/r2kademlia/RequestQueue.h"
@@ -300,7 +301,8 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path newpath, stateseqn
 	//      else
 	//           set proposed_path
 
-	const KadPath& path_to_consider(contact->proposedPathDefined() ? contact->getProposedPath() : contact->getActivePath());
+	bool consider_proposed_path(contact->proposedPathDefined() == true);
+	const KadPath& path_to_consider(consider_proposed_path ? contact->getProposedPath() : contact->getActivePath());
 
 	// update path if:
 	// 1) when sequence number is higher (except when contact is valid and new path is longer, then we recheck current path)
@@ -450,7 +452,8 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path newpath, stateseqn
 		// current path stays valid, we trigger a path check for the alternative path
 		if (not path_verified and path_to_consider.getAge() > R2Kademlia::PathInfoAgeThreshold) {
 			EV_TRACE << "for contact " << key.shortStr() << " seq#" << contact->getStateSeqNo()
-				 << " old path " << contact->getPath() << " new candidate needs to be checked " << newpath
+				 << " old path (" << (consider_proposed_path ? 'P' : 'A') << ") "
+				 << path_to_consider.getRawPath() << " new candidate needs to be checked " << newpath
 				 << " seq#"  << stateseqno << " identical: " << (identical_path ? 'T' : 'F') << endl;
 
 			// either this adds a proposed path if we have only an active one
@@ -464,12 +467,31 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path newpath, stateseqn
 			return false;
 		}
 	} // endif contact is valid
+	else
+	if (contact->isChecking() and not consider_proposed_path and identical_path) {
+		// the new path is the same as the current one we are checking, just dismiss it
+		return false;
+	}
 
+	// from here on the contact will actually update the path if path_verified (otherwise set proposed_path)
+	if (path_verified) {
+		// must re-evaluate identical_path with active path
+		identical_path= (newpath.size() == path_to_consider.length())
+			        and are_equal_r(newpath, contact->getRawActivePath());
 
-	// from here on the contact will actually update the path
-	EV_TRACE << "for contact " << key.shortStr() << " seq#" << contact->getStateSeqNo()
-		 << " updating old path " << contact->getPath() << " with new " << newpath
-		 << " seq#"  << stateseqno << " identical: " << (identical_path ? 'T' : 'F') << endl;
+		EV_TRACE << "for contact " << key.shortStr() << " seq#" << contact->getStateSeqNo()
+			 << " (" << (consider_proposed_path ? 'P' : 'A') << ") "
+			 << " updating old path " << contact->getPath() << " with new " << newpath
+			 << " seq#"  << stateseqno << " identical: " << (identical_path ? 'T' : 'F') << endl;
+	}
+	else {
+		EV_TRACE << "for contact " << key.shortStr() << " seq#" << contact->getStateSeqNo()
+			 << " (" << (consider_proposed_path ? 'P' : 'A') << ") "
+			 << (contact->proposedPathDefined() ? " replacing old proposed path " : " setting new proposed path ")
+			 << contact->getProposedPath().getRawPath() << " with new " << newpath
+			 << " seq#"  << stateseqno << " identical: " << (identical_path ? 'T' : 'F') << endl;
+
+	}
 
 	if (not identical_path) { // avoid to overwrite identical paths
 		// valid and identical paths were checked above already
@@ -479,22 +501,32 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path newpath, stateseqn
 			pathHashSum= HashSum(myKey, newpath, key);
 
 		//TODO before overwriting the old path, need to check for sending a PathTeardown
-		contact->setPath(std::move(newpath), std::move(pathHashSum));
-		contact->setValid();
+		if (path_verified) {
+			contact->setPath(std::move(newpath), std::move(pathHashSum));
+			contact->setValid();
+			contact->clearProposedPath();
+		}
+		else {
+			contact->setProposedPath(std::move(newpath), std::move(pathHashSum));
+		}
 	}
 	else { // new path is identical with old path
 		// need to set this to valid state again
-		contact->setValid();
+		if (path_verified) {
+			contact->setValid();
+			contact->clearProposedPath();
+		}
 	}
 
-	// update sequence number
-	contact->setStateSeqNo(stateseqno);
-	contact->setNodeDegree(nodeDegree);
 	// update lastseen to that of the originator, but only if we are sure to have validated the full path
-	if (path_verified)
-		contact->updateLastSeenTo(simTime()-SimTime(pathinfo_age,SIMTIME_MS));
+	if (path_verified) {
+		// update sequence number
+		contact->setStateSeqNo(stateseqno);
+		contact->setNodeDegree(nodeDegree);
 
-	updateCount++;
+		contact->updateLastSeenTo(simTime()-SimTime(pathinfo_age,SIMTIME_MS));
+		updateCount++;
+	}
 
 	// recheck neighbors of that contact because something has changed
 	if (recheckPhysicalNeighbors)
@@ -502,19 +534,19 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path newpath, stateseqn
 
 	// do something on improved path according to policy
 	// (only if path has been improved actually)
-	if (pathimproved) {
+	if (pathimproved and path_verified) {
+		ASSERT(contact->proposedPathDefined() == false);
 		policy->onImprovement(*contact);
 
 		// try to improve other paths with newly improved contact path
 		updatePaths(*contact);
 	}
 	else {
-		if (not identical_path)
+		if (not identical_path and path_verified)
 			policy->onPathChange(*contact);
 	}
 
-	return true;
-
+	return path_verified;
 }
 
 
@@ -1124,9 +1156,8 @@ void KadRoutingTable::updatePaths(const KadContact& improvedContact)
 
 						if (contact->isValid()) {
 							// this may be an improval, so just check the new alternative without actually changing the path yet
-							auto tmpcontact(*contact);
-							tmpcontact.updatePath(myKey,newpath);
-							policy->onPathCheck(tmpcontact, unset);
+							contact->setProposedPath(newpath, HashSum(myKey,newpath,contact->getKey()));
+							policy->onPathCheck(*contact, probeProposedPath);
 							found=true; // break the loop
 							continue;
 						}
@@ -1136,6 +1167,7 @@ void KadRoutingTable::updatePaths(const KadContact& improvedContact)
 							// note: this will set the contact to checking!
 							contact->updatePath( myKey, newpath );
 							contact->setChecking();
+							contact->clearProposedPath();
 							policy->onPathCheck(*contact, unset);
 						}
 
@@ -1220,7 +1252,7 @@ void KadRoutingTable::checkPathToContact(KadContact& contact, const link_t& fail
 
 			if (contact.isValid()) {
 				EV_TRACE << "Will probe path to " << contact << " due to potentially failed link " << failedLink << ":" << endl;
-				policy->onPathCheck(contact, true);
+				policy->onPathCheck(contact, unset);
 			}
 		}
 	}

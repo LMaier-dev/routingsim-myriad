@@ -447,7 +447,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadQueryRouteReq> packet)
 			effective_size++;
 		}
 	}
-	ASSERT(effective_size > 0);
+
 	response->setContactArraySize(effective_size);
 	response->setPathArraySize(effective_size);
 	response->setSeqNoArraySize(effective_size);
