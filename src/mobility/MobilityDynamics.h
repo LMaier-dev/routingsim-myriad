@@ -2,6 +2,8 @@
 #ifndef ROUTINGSIM_MOBILITYDYNAMICS_H
 #define ROUTINGSIM_MOBILITYDYNAMICS_H
 
+#include "MobilityTopology.h"
+
 namespace routingsim {
 
 class MobilityDynamics : public cSimpleModule {
@@ -15,7 +17,7 @@ private:
 
 public:
   MobilityDynamics(MobilityTopology *mobilityTopology);
-  void initialize(int stage) override;
+  void initialize() override;
   void handleMessage(cMessage *msg) override;
 };
 

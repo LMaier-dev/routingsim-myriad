@@ -15,7 +15,7 @@ namespace routingsim {
     class Environment : public cSimpleModule {
     protected:
         // initialize the environment with the borders
-        void initialize(int stage) override;
+        void initialize() override;
 
         // Environment borders
         Coord2D borderMin;

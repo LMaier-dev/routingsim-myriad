@@ -1,10 +1,9 @@
 
 #include "MobilityNode.h"
-#include "MobilityBase.cpp"
-#include "IsotropicAntenna.cpp"
-#include "RandomWaypointMobility.cpp"
 
 namespace routingsim {
+
+Define_Module(MobilityNode);
 
 MobilityNode::MobilityNode() {
   const std::string mobilityType = par("mobilityModel").stdstringValue();
@@ -19,10 +18,9 @@ MobilityNode::MobilityNode() {
 void routingsim::MobilityNode::handleMessage(cMessage *msg) {
   Node::handleMessage(msg);
 }
-void routingsim::MobilityNode::initialize(int stage) {
+void routingsim::MobilityNode::initialize() {
   Node::initialize();
-  this->mobility_model->initialize(stage);
-  // this->antenna_model->initialize(stage);
+  this->mobility_model->initialize();
 }
 
 } // namespace routingsim

@@ -3,8 +3,8 @@
 
 namespace routingsim {
 
-    void Environment::initialize(int stage) {
-        cComponent::initialize(stage);
+    void Environment::initialize() {
+        cComponent::initialize();
         borderMax = Coord2D(par("borderX"), par("borderY"));
         borderMin = Coord2D(0, 0);
     }

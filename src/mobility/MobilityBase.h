@@ -12,8 +12,8 @@
 #define ROUTINGSIM_MOBILITYBASE_H_
 
 #include <cmath>
-#include "../foundation/BaseTypes.h"
 #include "Environment.h"
+#include "../foundation/BaseTypes.h"
 
 namespace routingsim {
     class MobilityBase : public Environment {
@@ -67,7 +67,7 @@ namespace routingsim {
 
     public:
         // Sets initial position and heading of the node.
-        void initialize(int) override;
+        void initialize() override;
 
         // Returns the position of node
         Coord2D getPosition() { return lastPosition; }

@@ -1,6 +1,6 @@
 
 #include "IsotropicAntenna.h"
-#include <cmath>
+
 
 namespace routingsim {
 

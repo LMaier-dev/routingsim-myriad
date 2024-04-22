@@ -15,6 +15,9 @@ parameters:
     int nodeMinDelay @unit(us) = default(0us);
     int nodeMaxDelay @unit(us) = default(500us);
 
+    /// mobility model to use
+    string mobilityModel @enum(RandomWaypoint) = default("RandomWaypoint");
+
 gates:
     input directIn @directIn;
     inout toProtocols[];

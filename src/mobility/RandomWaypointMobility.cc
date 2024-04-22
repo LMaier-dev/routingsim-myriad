@@ -3,9 +3,9 @@
 
 namespace routingsim {
 
-    void RandomWaypointMobility::initialize(int stage) {
+    void RandomWaypointMobility::initialize() {
         setNextTarget();
-        MobilityBase::initialize(stage);
+        MobilityBase::initialize();
     }
 
     void RandomWaypointMobility::move() {

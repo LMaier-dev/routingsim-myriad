@@ -42,7 +42,7 @@ namespace routingsim {
         void move() override;
       public:
         // Initialize the mobility model.
-        void initialize(int stage) override;
+        void initialize() override;
     };
 }
 

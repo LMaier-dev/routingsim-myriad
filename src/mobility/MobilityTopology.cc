@@ -1,6 +1,5 @@
 
 #include "MobilityTopology.h"
-#include "MobilityNode.cpp"
 
 namespace routingsim {
 
@@ -9,9 +8,9 @@ MobilityTopology::MobilityTopology(cRNG *rng, int numNodes) {
   createTopology(numNodes);
 }
 
-void MobilityTopology::initialize(int stage) {
+void MobilityTopology::initialize() {
   for (MobilityNode *node : *mobilityNodes) {
-    node->initialize(stage);
+    node->initialize();
   }
 }
 

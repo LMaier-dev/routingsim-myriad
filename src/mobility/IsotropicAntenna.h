@@ -2,6 +2,7 @@
 #ifndef ROUTINGSIM_ISOTROPICANTENNA_H
 #define ROUTINGSIM_ISOTROPICANTENNA_H
 
+#include <cmath>
 #include "AntennaBase.h"
 
 namespace routingsim {

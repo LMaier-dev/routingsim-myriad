@@ -2,7 +2,7 @@
 #ifndef ROUTINGSIM_ANTENNABASE_H
 #define ROUTINGSIM_ANTENNABASE_H
 
-#include "BaseTypes.h"
+#include "../foundation/BaseTypes.h"
 
 namespace routingsim {
 

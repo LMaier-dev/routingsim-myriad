@@ -73,9 +73,15 @@ simple NetworkManager {
         /// bandwidth of the links in network measured in bits per second (only active if limitBandwidthLinks is true)
         double bandwidthLinksBps = default(1e12);
 
+        /// add mobility nodes to the network
+        bool mobility = default(false);
+
+        /// number of mobility nodes to add to the network
+        int mobilityNodes = default(100);
+
         /// index of the random number generator to use for mobility
         int mobilityRNG = default(0);
-        
+
     gates:
         /// input gate for topoplogy dynamics
         input dynamics @loose;

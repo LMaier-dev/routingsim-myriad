@@ -11,12 +11,10 @@
 // 
 // You should have received a copy of the GNU Lesser General Public License
 // along with this program.  If not, see http://www.gnu.org/licenses/.
-// 
+//
 
 #include "NetworkManager.h"
 #include "NetworkDynamics.h"
-#include "../mobility/MobilityTopology.cpp"
-#include "../mobility/MobilityDynamics.cpp"
 
 namespace routingsim {
 
@@ -196,8 +194,8 @@ namespace routingsim {
         } else if (msg->isSelfMessage()) {
             switch (msg->getKind()) {
                 case INIT_MOBILITY:
-                    mobilityTopology->initialize(0);
-                    mobilityDynamics->initialize(0);
+                    mobilityTopology->initialize();
+                    mobilityDynamics->initialize();
                     break;
                 default:
                     throw new cRuntimeError("unknown self-message kind %hd", msg->getKind());

@@ -11,8 +11,8 @@ MobilityDynamics::MobilityDynamics(MobilityTopology *mobilityTopology) {
   this->mobilityTopology = mobilityTopology;
 }
 
-void MobilityDynamics::initialize(int stage) {
-  cComponent::initialize(stage);
+void MobilityDynamics::initialize() {
+  cComponent::initialize();
   if (mobilityTopology->getNodes() == nullptr)
     scheduleAt(simTime(), const_cast<cMessage *>(mobilityUpdateMsg));
 }
