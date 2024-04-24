@@ -3,6 +3,8 @@
 
 namespace routingsim {
 
+Define_Module(MobilityDynamics);
+
 enum { MOBILITY_EVENT = 0 };
 
 MobilityDynamics::MobilityDynamics(MobilityTopology *mobilityTopology) {

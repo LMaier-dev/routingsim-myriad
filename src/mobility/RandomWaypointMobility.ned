@@ -1,4 +1,3 @@
-
 package routingsim.mobility;
 
 simple RandomWaypointMobility extends MobilityBase {

@@ -20,7 +20,6 @@ protected:
   void handleMessage(cMessage *msg) override;
 
 public:
-  MobilityNode();
   void initialize() override;
   MobilityBase *getMobilityModel() { return mobility_model; };
   AntennaBase *getAntennaModel() { return antenna_model; };

@@ -16,6 +16,7 @@ private:
   void updateConnection(MobilityNode *fromNode, MobilityNode *toNode);
 
 public:
+  MobilityDynamics() {};
   MobilityDynamics(MobilityTopology *mobilityTopology);
   void initialize() override;
   void handleMessage(cMessage *msg) override;

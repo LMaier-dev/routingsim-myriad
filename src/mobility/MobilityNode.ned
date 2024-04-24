@@ -1,7 +1,9 @@
 
 package routingsim.mobility;
 
-simple NodeMobility {
+import routingsim.foundation.Node;
+
+simple NodeMobility extends Node {
 parameters:
     @display("i=block/join");
 
@@ -16,7 +18,7 @@ parameters:
     int nodeMaxDelay @unit(us) = default(500us);
 
     /// mobility model to use
-    string mobilityModel @enum(RandomWaypoint) = default("RandomWaypoint");
+    string mobilityModel = default("RandomWaypoint");
 
 gates:
     input directIn @directIn;

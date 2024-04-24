@@ -17,6 +17,8 @@ package routingsim.simulations;
 
 import routingsim.foundation.*;
 import routingsim.dynamics.*;
+import routingsim.mobility.*;
+
 
 network DefaultNetwork
 {

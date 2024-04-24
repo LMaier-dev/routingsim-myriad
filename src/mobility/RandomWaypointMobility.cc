@@ -3,6 +3,8 @@
 
 namespace routingsim {
 
+Define_Module(RandomWaypointMobility)
+
     void RandomWaypointMobility::initialize() {
         setNextTarget();
         MobilityBase::initialize();
