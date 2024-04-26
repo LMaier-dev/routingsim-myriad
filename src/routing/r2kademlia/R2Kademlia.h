@@ -578,7 +578,7 @@ public:
 	static constexpr unsigned long GetONInitialWaitTime = 20000UL; // µs
 	static constexpr unsigned long GetONWaitTime = 40000UL; // µs (25 Requests/s)
 	static constexpr unsigned long OnDemandPathProbeReqInitialWaitTime = 50000UL; // µs (50ms)
-	static constexpr unsigned long OnDemandPathProbeReqDiscoverWaitTime = 40000UL; // µs (40ms ~ 25 Requests/s)
+	static constexpr unsigned long OnDemandPathProbeReqDiscoverWaitTime = 20000UL; // µs (20ms ~ 50 Requests/s)
 
 	static NotViaList_t emptyNotViaList;
 };

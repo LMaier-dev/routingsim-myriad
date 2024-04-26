@@ -103,9 +103,11 @@ void R2Kademlia::stopTimer(short timerId)
 }
 
 
+// if duration is omnetpp::SimTime::ZERO, timer is stopped
 void R2Kademlia::resetTimer(short timerId, simtime_t duration)
 {
-	//EV_TRACE << "resetTimer() called: " << timerId << " duration" << duration.str() << endl;
+	EV_TRACE << "resetTimer() called: timerId=" << timerId << " duration " << duration.str() << endl;
+	// periodic timer
 	if (timerId >= 0 and (size_type) timerId < randomTimerMsg.size()) {
 		cMessage* timermsg(randomTimerMsg[timerId]);
 
@@ -124,24 +126,23 @@ void R2Kademlia::resetTimer(short timerId, simtime_t duration)
 			delete timermsg;
 		}
 	}
-	else
-	{
-		if (size_type timerIdx= -2-timerId; timerIdx < fixedTimerMsg.size()) {
-			cMessage* timermsg(fixedTimerMsg[timerIdx]);
+	else  // one shot timer
+	if (size_type timerIdx= -2-timerId; timerIdx < fixedTimerMsg.size()) {
+		cMessage* timermsg(fixedTimerMsg[timerIdx]);
 
-			// cancel potentially scheduled message (nothing happens if it was not)
-			cancelEvent(timermsg);
-			if (timermsg == nullptr)
-				timermsg= new cMessage("TimerMsg", timerId);
-			if (duration > omnetpp::SimTime::ZERO) { // set new duration and reschedule
-				fixedTimerDuration[timerIdx]= duration;
-				scheduleAt(simTime() + duration, timermsg);
-			}
-			else {
-				fixedTimerMsg[timerIdx]= nullptr;
-				fixedTimerDuration[timerIdx]= omnetpp::SimTime::ZERO;
-				delete timermsg;
-			}
+		// cancel potentially scheduled message (nothing happens if it was not)
+		cancelEvent(timermsg);
+		if (timermsg == nullptr)
+			timermsg= new cMessage("TimerMsg", timerId);
+
+		if (duration > omnetpp::SimTime::ZERO) { // set new duration and reschedule
+			fixedTimerDuration[timerIdx]= duration;
+			scheduleAt(simTime() + duration, timermsg);
+		}
+		else {
+			fixedTimerMsg[timerIdx]= nullptr;
+			fixedTimerDuration[timerIdx]= omnetpp::SimTime::ZERO;
+			delete timermsg;
 		}
 	}
 }
@@ -213,7 +214,7 @@ void R2Kademlia::onSelfMessage(cMessage_p msg)
 void R2Kademlia::doSendHello(short timerId)
 {
 	ASSERT(timerId >= 0);
-	if (neighborTable.size() == 0)
+	if (neighborTable.empty())
 		return; // node is isolated
 
 	static const simtime_t maxHelloInterval(SimTime(PNHelloMaxInterval,SIMTIME_MS)); // check every 30 seconds
@@ -245,7 +246,7 @@ void R2Kademlia::doSendHello(short timerId)
 void R2Kademlia::doProbeNeighbors(short timerId)
 {
 	ASSERT(timerId >= 0);
-	if (neighborTable.size() == 0)
+	if (neighborTable.empty())
 		return; // node is isolated
 
 	// if no contacts selected for probing, construct a list first
@@ -281,7 +282,7 @@ void R2Kademlia::doProbeNeighbors(short timerId)
 void R2Kademlia::doProbeContacts(short timerId)
 {
 	ASSERT(timerId >= 0);
-	if (neighborTable.size() == 0)
+	if (neighborTable.empty())
 		return; // node is isolated
 
 	// if no contacts selected for probing, construct a list first
@@ -324,7 +325,7 @@ void R2Kademlia::doProbeContacts(short timerId)
 void R2Kademlia::doSendExplorePathPacket(short timerId)
 {
 	ASSERT(timerId >= 0);
-	if (neighborTable.size() == 0)
+	if (neighborTable.empty())
 		return; // node is isolated
 
 	// check for alternative paths to contacts
@@ -352,7 +353,7 @@ void R2Kademlia::doSendExplorePathPacket(short timerId)
 void R2Kademlia::doProbeRandomly(short timerId)
 {
 	ASSERT(timerId >= 0);
-	if (neighborTable.size() == 0) return; // we are isolated
+	if (neighborTable.empty()) return; // we are isolated
 	OverlayKey probeKey;
 	bool exact = false;
 	uint32_t index = 0;
@@ -403,7 +404,7 @@ void R2Kademlia::doProbeSelf(short timerId)
 		randomTimerDuration[timerId] = std::min(2 * randomTimerDuration[timerId], maxDuration);
 	}
 
-	if (neighborTable.size() == 0) return; // we are isolated
+	if (neighborTable.empty()) return; // we are isolated
 
 	sendFindNode(myOverlayKey, false);
 }
@@ -412,7 +413,7 @@ void R2Kademlia::doProbeSelf(short timerId)
 void R2Kademlia::doReachabilityTest(short timerId)
 {
 	ASSERT(timerId >= 0);
-	if (neighborTable.size() == 0) return; // we are isolated
+	if (neighborTable.empty()) return; // we are isolated
 	const OverlayKey* key(nullptr);
 	unsigned int maxtries= 10;
 	bool nodefound= false;

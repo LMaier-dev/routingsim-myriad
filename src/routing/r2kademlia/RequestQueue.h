@@ -40,7 +40,7 @@ private:
 enum RequestQueueElementActions : uint8_t {
         unset = 0,   // unset == probe active path only
 	probeProposedPath = 1, // if unset probe active path only
-	pathsetupcheck = 2,     // setup PathID during PathProbe
+	pathSetupCheck = 2,     // setup PathID during PathProbe
 	get_OverlayNeighborsSource = 4
 };
 

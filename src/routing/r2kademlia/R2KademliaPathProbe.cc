@@ -19,7 +19,7 @@ void R2Kademlia::scheduleOnDemandPathProbeReq(KeyRequestQueue& q, const KadConta
 		q.insert(it, std::make_pair(tmpcontact.getKey(),action));
 	}
 
-	EV_TRACE << "scheduleRequest(" << q.getDescription() << "): "  << tmpcontact.getKey().shortStr() << " queued, expected  seq#" << tmpcontact.getStateSeqNo() << endl;
+	EV_TRACE << "scheduleRequest(" << q.getDescription() << "): "  << tmpcontact.getKey().shortStr() << " queued, expected  seq#" << tmpcontact.getStateSeqNo() << " action: " << ((action & probeProposedPath) ? "proposed" : "active") << ((action & pathSetupCheck) ? " pathsetup" : "") << endl;
 
 	if (not q.isScheduled())
 	{
@@ -38,7 +38,7 @@ void R2Kademlia::scheduleOnDemandPathProbeReq(KeyRequestQueue& q, const KadConta
 void R2Kademlia::sendPathProbe(const OverlayKey& contactkey)
 {
 	if (auto contactp(routingTable.getContact(contactkey)); contactp != nullptr)
-		sendPathProbeToContact(*contactp, true);
+		sendPathProbeToContact(*contactp, pathSetupCheck);
 	else {
 		EV_TRACE << "not sending ProbeReq from " << myOverlayKey.shortStr() << " to " << contactkey.shortStr() << " because of invalid contact" << endl;
 	}
@@ -71,7 +71,7 @@ simtime_t R2Kademlia::sendOnDemandPathProbe(KeyRequestQueue::value_type keyactio
 		// otherwise no extra delay necessary
 	}
 
-	EV_TRACE << " delay: " << delay << endl;
+	EV_TRACE << "sendOnDemandPathProbe(" << contactkey.shortStr() << ") next delay: " << delay << endl;
 
 	sendPathProbeToContact(*contactp, action);
 
@@ -124,17 +124,28 @@ void R2Kademlia::sendPathProbeToContact(const KadContact& contact, RequestQueueE
 		EV_TRACE << "not sending ProbeReq from " << myOverlayKey.shortStr() << " to " << contact.getKey().shortStr() << " because of invalid contact" << endl;
 		return;
 	}
+	if ( (action & probeProposedPath) and not contact.proposedPathDefined() ) {
+		EV_TRACE << "not sending ProbeReq from " << myOverlayKey.shortStr() << " to " << contact.getKey().shortStr() << " because proposed path not defined anymore" << endl;
+		return;
+	}
 
-	EV_TRACE << "sending ProbeReq from " << myOverlayKey.shortStr() << " to " << contact.getKey().shortStr() << endl;
+	EV_TRACE << "sending ProbeReq from " << myOverlayKey.shortStr() << " to " << contact.getKey().shortStr();
 	auto probereq= makePacket<KadProbeReq>(contact, "KadProbeReq");
 	// if action says so and proposed path is present, we probe for this
-	if ( (action & probeProposedPath) and contact.proposedPathDefined() ) {
+	if ( (action & probeProposedPath) and contact.proposedPathDefined()) {
 		probereq->modRoute(contact.getRawProposedPath());
+		probereq->appendHop(contact.getKey());
+		EV_TRACE << " (Proposed Path) ";
 	}
-	// need to set the PathCheck flag?
-	if (action & pathsetupcheck)
-		probereq->setPathCheck(true);
+	else
+		EV_TRACE << " (Active Path)";
 
+	// need to set the PathCheck flag?
+	if (action & pathSetupCheck) {
+		probereq->setPathCheck(true);
+		EV_TRACE << " (PathSetupCheck)";
+	}
+	EV_TRACE << endl;
 	// adding failed local links to NotVia list
 	auto failedPNList(routingTable.getFailedPNs());
 	probereq->setNotVia(true);

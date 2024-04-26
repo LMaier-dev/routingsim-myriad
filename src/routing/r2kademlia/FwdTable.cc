@@ -8,18 +8,19 @@ std::string FwdTableEntry::str() const {
 
 	std::ostringstream out;
 	out << outgoingPathID << " (";
-		if (isUndefined()) out << 'U';
+		if (isUndefined()) out << '?';
 		if (isValid()) out << 'V';
 		if (isObsolete()) out << 'O';
 		if (isInvalid()) out << 'I';
 		if (isForeign()) out << 'F';
 		if (isLocal()) out << 'L';
 		if (isPrecalc()) out << 'P';
+		if (isUsed()) out << 'U';
 	        out << ':';
 
 		switch (fwdAction) {
 			case FwdTableEntry::Action::undefined:
-				out << 'U';
+				out << '_';
 				break;
 			case FwdTableEntry::Action::fwdNextPathID:
 				out << 'P';

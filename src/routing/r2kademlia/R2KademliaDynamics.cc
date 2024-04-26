@@ -739,6 +739,9 @@ R2Kademlia::sendLinkFailureNotifications(const NotViaList_t& notvialist, const s
 			continue;
 		}
 
+		// normaly we flood only directly to our underlay neighbors
+		ASSERT(contactp->getPathLength() == 0);
+
 		auto packet = makePacket<KadRevPathFlood>(contactp, "LinkFailureNotificationFlood");
 		packet->setPIDListArraySize(filteredPIDList.size());
 

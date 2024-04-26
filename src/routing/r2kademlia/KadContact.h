@@ -158,21 +158,23 @@ public:
 	/// sets new path (originally checked for repair of failed links, too)
 	void updatePath(const OverlayKey& myOverlayKey, kad_path newpath) { setPath(newpath, HashSum(myOverlayKey,newpath,key)); }
 	/// sets the path to reach this contact
-	void setPath(kad_path path, OverlayKey&& HashSum) { active_path.setPath(std::move(path), HashSum); }
-	void setProposedPath(kad_path path, OverlayKey&& HashSum) { proposed_path.setPath(std::move(path), HashSum); }
+	void setPath(kad_path path, OverlayKey&& HashSum) { active_path.setPath(std::move(path), HashSum); active_path.updateLastSeen(); }
+	void setProposedPath(kad_path path, OverlayKey&& HashSum) { proposed_path.setPath(std::move(path), HashSum); proposed_path.updateLastSeen(); }
 	void clearProposedPath() { proposed_path.clear(); }
 	const kad_path& getPath() const { return getRawActivePath(); }
 	const kad_path& getRawActivePath() const { return active_path.getRawPath(); }
 	const kad_path& getRawProposedPath() const { return proposed_path.getRawPath(); }
 	const KadPath& getActivePath() const { return active_path; }
 	const KadPath& getProposedPath() const { return proposed_path; }
+	KadPath& getActivePathMod() { return active_path; }
+	KadPath& getProposedPathMod() { return proposed_path; }
 	const OverlayKey& getPathHashSum() const { return active_path.getPathHashSum(); }
 	bool proposedPathDefined() const { return proposed_path.isDefined(); }
 
 	stateseqno_t getStateSeqNo() const { return seqno; }
 	void setStateSeqNo(stateseqno_t newseqno) {
-		if (not (seqno.isInvalid() or (not seqno.isInvalid() and newseqno >= seqno)))
-			EV_ERROR << "Contact: " << key.shortStr() << " setPathSeqNo: old=" << seqno << " new=" << newseqno << endl;
+		//if (not (seqno.isInvalid() or (not seqno.isInvalid() and newseqno >= seqno)))
+		//	EV_ERROR << "Contact: " << key.shortStr() << " setPathSeqNo: old=" << seqno << " new=" << newseqno << endl;
 		ASSERT(not newseqno.isInvalid()); ASSERT(seqno.isInvalid() or (not seqno.isInvalid() and newseqno >= seqno));
 		seqno= newseqno; }
 	stateseqno_t getSyncPNSeqNo() const { return syncPNSeqno; }
@@ -200,7 +202,7 @@ private:
 	KadPath active_path;  /// the best known source routing path to reach this contact
 	KadPath proposed_path; /// a path that may be "better" than the current active path
 	stateseqno_t seqno= stateseqno_t::invalidSeqNo; /// sequence number for the path state (announced by origin)
-	stateseqno_t syncPNSeqno= stateseqno_t::invalidSeqNo; /// sequence number for syncing with PN
+	stateseqno_t syncPNSeqno= stateseqno_t::invalidSeqNo; /// sequence number for syncing via PNDiscReq/Rsp with PN to update the two hop vicinity, this is somewhat independent of seqno
 	State state= State::undefined; /// the state of the contact
 	bool physicalNeighbor= false; /// true if we have a direct physical link to this neighbor
 	nodedegree_t nodeDegree = 0; /// degree of contact (node attribute), larger degrees are set to 65535

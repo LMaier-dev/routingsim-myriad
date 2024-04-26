@@ -59,7 +59,7 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 	{ // new physical neighbor, first contact: either wait for PNDiscReq or send one
 
                 // connected or reconnected to first neighbor reset join timer
-                if (neighborTable.size() == 0) {
+                if (neighborTable.empty()) {
                     resetTimer(probeTimerId, SimTime(ProbeSelfMinInterval,SIMTIME_MS));
                 }
 
@@ -287,12 +287,12 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadPNDiscReq> packet) {
 	if (packet->getPhyNeighborArraySize() > 0) {
 		for (uint i = 0; i < packet->getPhyNeighborArraySize(); i++) {
 
-			// TODO unclear whether this addPath can be actually trusted
+			// this addPath cannot be trusted, because the PN's neighbor may have not been contacted recently
 			if (not routingTable.addPath(packet->getPhyNeighbor(i), path,
 						     packet->getPhyNeighborSeqNo(i),
 						     packet->getPhyNeighborAge(i),
 						     packet->getPhyNeighborDegree(i),
-						     true)) {
+						     false)) {
 				// if not put into routing table, add PN's neighbor to vicinity nevertheless
 				bool node_added= vicinity.addNode(packet->getSource(),
 								  packet->getPhyNeighbor(i),
@@ -312,6 +312,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadPNDiscReq> packet) {
 
 	// update lastseen of origin contact
 	if (KadContact* contact_p= const_cast<KadContact*>(routingTable.getContact(packet->getSource())); contact_p != nullptr) {
+		contact_p->setStateSeqNo(packet->getStateSeqNo());
 		contact_p->updateLastSeen();
 		// if we got a list of PNs, set PNsyncSeqNO to avoid too frequent resync
 		if (packet->getPhyNeighborArraySize() > 0) {

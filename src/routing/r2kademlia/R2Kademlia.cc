@@ -182,7 +182,7 @@ void R2Kademlia::onConnect( nodeid_t nid ) {
 void R2Kademlia::onDisconnect( nodeid_t nid ) {
 	//EV_TRACE << "onDisconnect " << nid << endl;
 	// if this node is taken down, the packets arrive after the reset
-	if (neighborTable.size() == 0)
+	if (neighborTable.empty())
 		return;
 
 
@@ -196,15 +196,14 @@ void R2Kademlia::onDisconnect( nodeid_t nid ) {
 	neighborTable.removeNeighbor(key);
 	ASSERT(neighborTable.getNodeId(key) == undefined_node);
 	// set contact invalid (was routingTable.removeContact(key))
+	// since the state gets updated, contact lastSeen is updated in setContactInvalid()
 	if (not routingTable.setContactInvalid(key)) {
 		// this should only happen for nodes with very large degree
 		EV_ERROR << "missing contact " << nid << " " << key << " on node " << node().getNodeId() << endl;
 		return;
 	}
 	else {  // due to the if condition we know that routingTable.getContact(key) will not return nullptr
-		// since the state was updated, contact lastSeen must be updated
 		auto contactp= routingTable.getContactMutable(key);
-		contactp->updateLastSeen();
 		// call policy function
 		onContactInvalidation(contactp);
 	}
@@ -213,6 +212,11 @@ void R2Kademlia::onDisconnect( nodeid_t nid ) {
 	auto counter= routingTable.invalidateContactsPN(key);
 	if (counter > 0)
 		EV_TRACE << "invalidated " << counter << " contacts" << endl;
+
+	// since an Underlay Neighbor has been changed, we notify our other neighbors if any left
+	if (not neighborTable.empty() and randomTimerDuration[PNHelloTimerId] > SimTime(PNHelloMinInterval,SIMTIME_MS)) {
+		resetTimer(PNHelloTimerId, SimTime(PNHelloMinInterval/2,SIMTIME_MS));
+	}
 
 	// if this option is enabled, we flood a notification in reverse path directions
 	if (linkFailureNotifications)

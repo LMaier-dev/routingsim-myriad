@@ -83,6 +83,12 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 		if (packet.hopsLeft() < 2*(nodeVicinityGraph::vicinityDiscoveryRadius+1)) {
 			const auto pathtoadd(packet.getSrcPath(packet.getProgress()+1, packet.getRouteArraySize()));
 			PathID incomingPID(getPathID(myOverlayKey, pathtoadd));
+
+			if (auto fwdtableentry_it= fwdTablePathID.PIDFwdTable.find(incomingPID); fwdtableentry_it!=fwdTablePathID.PIDFwdTable.end()) {
+				fwdtableentry_it->second.unsetObsolete();
+				fwdtableentry_it->second.setUsed();
+			}
+
 			// need to check for storing the SegmentSource for last segment of two hops
 			if (packet.hopsLeft() == nodeVicinityGraph::vicinityDiscoveryRadius) {
 				if (auto it= notifyFirstSegmentSources.find(incomingPID); it != notifyFirstSegmentSources.end()) {

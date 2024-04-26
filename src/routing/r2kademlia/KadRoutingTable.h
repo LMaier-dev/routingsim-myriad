@@ -189,6 +189,7 @@ public:
 		if (auto contactp= getContactInternal(key))
 		{
 			contactp->setInvalid({myKey, contactp->getKey()},0);
+			contactp->updateLastSeen();
 			return true;
 		}
 		else
@@ -282,7 +283,7 @@ public:
 
 protected:
 	/// adds a new contact, called by addPath, returns true if contact was added
-	virtual bool handleNewContact(const OverlayKey& key, kad_path path, stateseqno_t pathseqno, age_t pathinfo_age, uint32_t nodeDegree);
+	virtual bool handleNewContact(const OverlayKey& key, kad_path path, stateseqno_t pathseqno, age_t pathinfo_age, uint32_t nodeDegree, bool path_verified);
 	/** @name bucket access */
 	//@{
 	/** returns the index of the bucket corresponding to the given overlay key. */
