@@ -85,4 +85,7 @@ simple NetworkManager {
     gates:
         /// input gate for topoplogy dynamics
         input dynamics @loose;
+
+        /// input gate for mobility dynamics
+        input mobilityDynamics @loose;
 }

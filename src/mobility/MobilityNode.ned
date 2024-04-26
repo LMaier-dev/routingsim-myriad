@@ -8,7 +8,7 @@ parameters:
     ///@display("i=block/join");
 
     /// node id, -1 = choose own id
-    int id = default(-1);
+    // int id = default(-1);
 
     /// protocols to the node uses
     /// string protocols;

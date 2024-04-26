@@ -6,20 +6,23 @@
 
 namespace routingsim {
 
+enum {
+  MOBILITY_UPDATE,
+};
+
 class MobilityDynamics : public cSimpleModule {
 private:
-  MobilityTopology *mobilityTopology;
-  const cMessage *mobilityUpdateMsg;
-  double updateInterval;
+  const cMessage *mobilityUpdateMsg =
+      new cMessage("MobilityEvent", MOBILITY_UPDATE);
+  double updateInterval = 0.1;
   void updateMobility();
   void updateMobilityNode(cModule *node);
   void updateConnection(cModule *fromNode, cModule *toNode);
 
 public:
-  MobilityDynamics() {};
-  MobilityDynamics(MobilityTopology *mobilityTopology);
-  void initialize() override;
+  void initialize(int stage) override;
   void handleMessage(cMessage *msg) override;
+  MobilityTopology *mobilityTopology = nullptr;
 };
 
 } // namespace routingsim

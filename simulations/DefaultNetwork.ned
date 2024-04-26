@@ -25,6 +25,8 @@ network DefaultNetwork
 	submodules:
 		manager: NetworkManager;
 		dynamics: LinkFailure; // MixedFailure; LinkFailure; LifetimeChurn;
+		mobilityDynamics: MobilityDynamics;
 	connections:
 		dynamics.toManager --> manager.dynamics;
+		mobilityDynamics.toManager --> manager.mobilityDynamics;
 }

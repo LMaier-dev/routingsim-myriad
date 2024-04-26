@@ -1,27 +1,22 @@
 
 #include "MobilityDynamics.h"
+#include "NetworkManager.h"
 
 namespace routingsim {
 
 Define_Module(MobilityDynamics);
 
-enum { MOBILITY_EVENT = 0 };
+void MobilityDynamics::initialize(int stage) {
+  if (stage == 0) {
+    updateInterval = par("updateInterval").doubleValue();
+  } else if (stage == 1) {
+    scheduleAt(simTime() + updateInterval * 1000,
+               const_cast<cMessage *>(mobilityUpdateMsg));
+  }
 
-MobilityDynamics::MobilityDynamics(MobilityTopology *mobilityTopology) {
-  mobilityUpdateMsg = new cMessage("MobilityEvent", MOBILITY_EVENT);
-  this->mobilityTopology = mobilityTopology;
-}
-
-void MobilityDynamics::initialize() {
-  cComponent::initialize();
-  updateInterval = par("updateInterval").doubleValue();
-  if (mobilityTopology->getNodes() == nullptr)
-    scheduleAt(simTime(), const_cast<cMessage *>(mobilityUpdateMsg));
 }
 void MobilityDynamics::handleMessage(cMessage *msg) {
-  cSimpleModule::handleMessage(msg);
-
-  if (msg->getKind() == MOBILITY_EVENT) {
+  if (msg->getKind() == MOBILITY_UPDATE) {
     updateMobility();
   }
 
