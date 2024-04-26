@@ -12,8 +12,8 @@ private:
   const cMessage *mobilityUpdateMsg;
   double updateInterval;
   void updateMobility();
-  void updateMobilityNode(MobilityNode *node);
-  void updateConnection(MobilityNode *fromNode, MobilityNode *toNode);
+  void updateMobilityNode(cModule *node);
+  void updateConnection(cModule *fromNode, cModule *toNode);
 
 public:
   MobilityDynamics() {};

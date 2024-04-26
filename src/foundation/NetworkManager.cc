@@ -141,7 +141,7 @@ namespace routingsim {
             if (useMobility) {
                 EV << "creating mobility manager" << std::endl;
                 const int mobilityRNG = par("mobilityRNG").intValue();
-                mobilityTopology = new MobilityTopology(getRNG(mobilityRNG), par("mobilityNodes").intValue());
+                mobilityTopology = new MobilityTopology(this, getRNG(mobilityRNG), par("mobilityNodes").intValue());
                 mobilityDynamics = new MobilityDynamics(mobilityTopology);
                 scheduleAt(simTime(), new cMessage{"init mobility", INIT_MOBILITY});
             }

@@ -8,13 +8,13 @@ Define_Module(MobilityDynamics);
 enum { MOBILITY_EVENT = 0 };
 
 MobilityDynamics::MobilityDynamics(MobilityTopology *mobilityTopology) {
-  updateInterval = par("updateInterval").doubleValue();
   mobilityUpdateMsg = new cMessage("MobilityEvent", MOBILITY_EVENT);
   this->mobilityTopology = mobilityTopology;
 }
 
 void MobilityDynamics::initialize() {
   cComponent::initialize();
+  updateInterval = par("updateInterval").doubleValue();
   if (mobilityTopology->getNodes() == nullptr)
     scheduleAt(simTime(), const_cast<cMessage *>(mobilityUpdateMsg));
 }
@@ -30,17 +30,19 @@ void MobilityDynamics::handleMessage(cMessage *msg) {
 }
 
 void MobilityDynamics::updateMobility() {
-  for (MobilityNode *node : *mobilityTopology->getNodes()) {
-    updateMobilityNode(node);
+  for (cModule *node_wrapper : *mobilityTopology->getNodes()) {
+    updateMobilityNode(node_wrapper);
   }
 }
-void MobilityDynamics::updateMobilityNode(MobilityNode *node) {
-  for (MobilityNode *to_node : *mobilityTopology->getNodes()) {
-    updateConnection(node, to_node);
+void MobilityDynamics::updateMobilityNode(cModule *node_wrapper) {
+  for (cModule *to_node : *mobilityTopology->getNodes()) {
+    updateConnection(node_wrapper, to_node);
   }
 }
-void MobilityDynamics::updateConnection(MobilityNode *fromNode,
-                                        MobilityNode *toNode) {
+void MobilityDynamics::updateConnection(cModule *fromNodeWrapper,
+                                        cModule *toNodeWrapper) {
+  MobilityNode *fromNode = check_and_cast<MobilityNode*>(fromNodeWrapper->getModuleByPath("node"));
+  MobilityNode *toNode = check_and_cast<MobilityNode*>(toNodeWrapper->getModuleByPath("node"));
   if (fromNode->getId() == toNode->getId()) return;
 
   double distance = fromNode->getMobilityModel()->getPosition().distance(toNode->getMobilityModel()->getPosition());

@@ -3,16 +3,15 @@
 
 namespace routingsim {
 
-MobilityTopology::MobilityTopology(cRNG *rng, int numNodes) {
+MobilityTopology::MobilityTopology(cModule *networkManager, cRNG *rng,
+                                   int numNodes) {
+  this->networkManager = networkManager;
+  this->numNodes = numNodes;
   this->rng = rng;
-  createTopology(numNodes);
+  EV_DEBUG << "MobilityTopology created" << endl;
 }
 
-void MobilityTopology::initialize() {
-  for (MobilityNode *node : *mobilityNodes) {
-    node->initialize();
-  }
-}
+void MobilityTopology::initialize() { createTopology(); }
 
 void MobilityTopology::enableLink(MobilityNode *fromNode,
                                   MobilityNode *toNode) {
@@ -29,30 +28,43 @@ void MobilityTopology::setDatarate(MobilityNode *fromNode, MobilityNode *toNode,
   fromNode->setLinkDatarate(toNode, "toNeighbors$o", datarate);
 }
 
-void MobilityTopology::createTopology(int numNodes) {
-  this->mobilityNodes = new std::vector<MobilityNode *>();
+void MobilityTopology::createTopology() {
+  this->mobilityNodes = new std::vector<cModule *>();
+  cModuleType *node_wrapper_type = cModuleType::get("routingsim.mobility.MobilityNodeWrapper");
   for (int i = 0; i < numNodes; i++) {
-    MobilityNode node = MobilityNode();
-    this->mobilityNodes->push_back(&node);
+    std::string node_name = "mobilityNode_" + std::to_string(i);
+    cModule *node_wrapper =
+        node_wrapper_type->create(node_name.c_str(), networkManager);
+    node_wrapper->par("nodeId") = i;
+    this->mobilityNodes->push_back(node_wrapper);
   }
 
   cGate *fromOut, *toIn;
+  cModule *fromNode, *toNode;
   cDatarateChannel *datarateChannel;
   for (int i = 0; i < numNodes; ++i) {
-    fromOut = this->mobilityNodes->at(i)->getOrCreateFirstUnconnectedGate(
-        "toNeighbors", 'o', false, true);
-    for (int j = 0; j < numNodes; ++j) {
+    for (int j = (i + 1); j < numNodes; ++j) {
       if (i == j)
         continue;
       else {
-        toIn = this->mobilityNodes->at(j)->getOrCreateFirstUnconnectedGate(
-            "toNeighbors", 'i', false, true);
-        datarateChannel = cDatarateChannel::create("channel");
+        fromNode = this->mobilityNodes->at(i);
+        fromOut = fromNode->getOrCreateFirstUnconnectedGate("toNeighbors", 'o',
+                                                            false, true);
+        toNode = this->mobilityNodes->at(j);
+        toIn = toNode->getOrCreateFirstUnconnectedGate("toNeighbors", 'i',
+                                                       false, true);
+        std::string channel_name = "mobilityChannel_" + std::to_string(i) + "-" + std::to_string(j);
+        datarateChannel = cDatarateChannel::create(channel_name.c_str());
         datarateChannel->setDatarate(0.0);
         fromOut->connectTo(toIn, datarateChannel);
-        datarateChannel->callInitialize();
       }
     }
+  }
+
+  for (cModule *node : *mobilityNodes) {
+    node->finalizeParameters();
+    node->buildInside();
+    node->scheduleStart(simTime());
   }
 }
 

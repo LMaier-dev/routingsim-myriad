@@ -11,17 +11,19 @@ public:
   /**
    * @param rng The random number generator to use for mobility.
    */
-  explicit MobilityTopology(omnetpp::cRNG *rng, int numNodes);
+  explicit MobilityTopology(cModule *networkManager, cRNG *rng, int numNodes);
   void initialize();
-  std::vector<MobilityNode*> *getNodes() { return mobilityNodes; }
+  std::vector<cModule*> *getNodes() { return mobilityNodes; }
   void enableLink(MobilityNode *fromNode, MobilityNode *toNode);
   void disableLink(MobilityNode *fromNode, MobilityNode *toNode);
   void setDatarate(MobilityNode *fromNode, MobilityNode *toNode, double datarate);
 
 private:
-  omnetpp::cRNG *rng;
-  std::vector<MobilityNode*> *mobilityNodes{};
-  void createTopology(int numNodes);
+  cRNG *rng;
+  cModule *networkManager = nullptr;
+  int numNodes = 0;
+  std::vector<cModule*> *mobilityNodes{};
+  void createTopology();
 };
 } // namespace routingsim
 
