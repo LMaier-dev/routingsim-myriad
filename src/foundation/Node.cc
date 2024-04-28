@@ -54,7 +54,6 @@ void Node::initialize() {
 	// read from RoutingSim-unaware ned files
 	// make sure that the network manager instance is generated at first node initialization
 	getNetworkManager();
-
 	WATCH( id );
 	WATCH_VECTOR( neighbor_set );
 

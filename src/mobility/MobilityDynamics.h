@@ -12,8 +12,7 @@ enum {
 
 class MobilityDynamics : public cSimpleModule {
 private:
-  const cMessage *mobilityUpdateMsg =
-      new cMessage("MobilityEvent", MOBILITY_UPDATE);
+  const cMessage *mobilityUpdateMsg = new cMessage("MobilityEvent", MOBILITY_UPDATE);
   double updateInterval = 0.1;
   void updateMobility();
   void updateMobilityNode(cModule *node);

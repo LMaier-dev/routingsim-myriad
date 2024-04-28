@@ -25,13 +25,13 @@ namespace routingsim {
         void setTargetNextPeriod();
     protected:
         // The minimum speed of the node in m/s.
-        const double minSpeed = par("minSpeed");
+        double minSpeed = 0.0;
 
         // The maximum speed of the node in m/s.
-        const double maxSpeed = par("maxSpeed");
+        double maxSpeed = 0.0;
 
         // The constant wait time of the node in seconds.
-        const double waitTime = par("waitTime");
+        double waitTime = 0.0;
 
         // Set the next target position and velocity of the node.
         // The velocity is calculated based on the new speed of the node.

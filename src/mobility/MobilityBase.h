@@ -13,11 +13,14 @@
 
 #include <cmath>
 #include "Environment.h"
-#include "../foundation/BaseTypes.h"
+
+
+enum { MOBILITY_UPDATE };
 
 namespace routingsim {
     class MobilityBase : public Environment {
     private:
+        cMessage *updatePositionMessage = new cMessage("mobility_update", MOBILITY_UPDATE);
         static int reflect(double, double, double &, double &);
 
     protected:

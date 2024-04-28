@@ -5,8 +5,8 @@ namespace routingsim {
 
 Register_Abstract_Class(AntennaBase);
 
-AntennaBase::AntennaBase() {
-  this->radius = uniform(par("minR").doubleValue(), par("maxR").doubleValue());
-  this->maxBandwidth = par("bandwidthMobilityMbps");
+void AntennaBase::initialize() {
+  this->signalPower = uniform(par("minP").doubleValue(), par("maxP").doubleValue());
+  this->bandwidth = uniform(par("minB").doubleValue(), par("maxB").doubleValue());
 }
 } // namespace routingsim

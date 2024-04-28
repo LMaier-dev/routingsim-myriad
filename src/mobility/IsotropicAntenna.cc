@@ -7,12 +7,8 @@ namespace routingsim {
 Define_Module(IsotropicAntenna);
 
 double IsotropicAntenna::pathloss(double distance) {
-  const double maxBandwidth = this->getMaxBandwidth();
-  if (distance <= 1) {
-    return maxBandwidth;
-  } else {
-    return maxBandwidth / pow(distance, 2);
-  }
+  // TODO: Implement pathloss
+  return 5.0;
 }
 
 } // namespace routingsim

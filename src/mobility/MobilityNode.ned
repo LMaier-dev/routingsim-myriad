@@ -17,6 +17,9 @@ parameters:
     /// int nodeMinDelay @unit(us) = default(0us);
     /// int nodeMaxDelay @unit(us) = default(500us);
 
+    // for inheritance
+    @class(MobilityNode);
+
     /// mobility model to use
     string mobilityModel = default("RandomWaypoint");
 

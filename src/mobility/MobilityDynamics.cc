@@ -16,6 +16,8 @@ void MobilityDynamics::initialize(int stage) {
 
 }
 void MobilityDynamics::handleMessage(cMessage *msg) {
+  std::cout << "-------dynamics update";
+
   if (msg->getKind() == MOBILITY_UPDATE) {
     updateMobility();
   }
@@ -36,12 +38,12 @@ void MobilityDynamics::updateMobilityNode(cModule *node_wrapper) {
 }
 void MobilityDynamics::updateConnection(cModule *fromNodeWrapper,
                                         cModule *toNodeWrapper) {
-  MobilityNode *fromNode = check_and_cast<MobilityNode*>(fromNodeWrapper->getModuleByPath("node"));
-  MobilityNode *toNode = check_and_cast<MobilityNode*>(toNodeWrapper->getModuleByPath("node"));
+  MobilityNode *fromNode = check_and_cast<MobilityNode*>(fromNodeWrapper->getSubmodule("node"));
+  MobilityNode *toNode = check_and_cast<MobilityNode*>(toNodeWrapper->getSubmodule("node"));
   if (fromNode->getId() == toNode->getId()) return;
 
   double distance = fromNode->getMobilityModel()->getPosition().distance(toNode->getMobilityModel()->getPosition());
-  double radiusFromNode = fromNode->getAntennaModel()->getRadius();
+  double radiusFromNode = fromNode->getAntennaModel()->getSignalPower();
   if (distance <= radiusFromNode) {
     double newBandwidth = fromNode->getAntennaModel()->pathloss(distance);
     mobilityTopology->setDatarate(fromNode, toNode, newBandwidth);

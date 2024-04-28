@@ -197,7 +197,7 @@ namespace routingsim {
                 case INIT_MOBILITY:
                     mobilityTopology->initialize();
                     mobilityDynamics->mobilityTopology = mobilityTopology;
-                    mobilityDynamics->initialize(1);
+                    // mobilityDynamics->initialize(1);
                     break;
                 default:
                     throw new cRuntimeError("unknown self-message kind %hd", msg->getKind());
