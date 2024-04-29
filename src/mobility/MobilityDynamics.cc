@@ -16,8 +16,6 @@ void MobilityDynamics::initialize(int stage) {
 
 }
 void MobilityDynamics::handleMessage(cMessage *msg) {
-  std::cout << "-------dynamics update";
-
   if (msg->getKind() == MOBILITY_UPDATE) {
     updateMobility();
   }
@@ -27,12 +25,12 @@ void MobilityDynamics::handleMessage(cMessage *msg) {
 }
 
 void MobilityDynamics::updateMobility() {
-  for (cModule *node_wrapper : *mobilityTopology->getNodes()) {
+  for (cModule *node_wrapper : *mobilityTopology->getNodeMods()) {
     updateMobilityNode(node_wrapper);
   }
 }
 void MobilityDynamics::updateMobilityNode(cModule *node_wrapper) {
-  for (cModule *to_node : *mobilityTopology->getNodes()) {
+  for (cModule *to_node : *mobilityTopology->getNodeMods()) {
     updateConnection(node_wrapper, to_node);
   }
 }

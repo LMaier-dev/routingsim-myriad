@@ -63,7 +63,6 @@ void RandomWaypointMobility::setTargetSpeed() {
 }
 
 void RandomWaypointMobility::setTargetNextPeriod() {
-  std::cout << timeToNextPeriod << endl;
   nextChange = simTime() + timeToNextPeriod;
 }
 

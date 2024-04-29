@@ -3,15 +3,15 @@
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
-// 
+//
 // This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU Lesser General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU Lesser General Public License
 // along with this program.  If not, see http://www.gnu.org/licenses/.
-// 
+//
 
 #include "NetworkTopology.h"
 
@@ -812,12 +812,11 @@ void NetworkTopology::extractFromNetwork(const cModule *networkManager) {
 	}
 }
 
-void NetworkTopology::createNetwork(cModule *parent) {
-
+void NetworkTopology::createNetwork(cModule *parent, std::string modTypeStr) {
 	networkManager= parent;
 	// create nodes from bgl representation
 	BGLVertexIt vi, ve;
-	cModuleType *moduleType = cModuleType::get("routingsim.foundation.NodeWrapper");
+	cModuleType *moduleType = cModuleType::get(modTypeStr.c_str());
 
 	for ( tie(vi,ve) = vertices(*BGLtopology); vi!=ve; vi++) {
 
@@ -864,11 +863,15 @@ void NetworkTopology::createNetwork(cModule *parent) {
 			toIn = toModule->getOrCreateFirstUnconnectedGate("toNeighbors", 'i', false, true);
 
 			if (networkManager->par("limitBandwidthLinks").boolValue()) {
-				cDatarateChannel *datarateChannel = cDatarateChannel::create("channel");
+				cDatarateChannel *datarateChannel = cDatarateChannel::create("datarate_channel");
 				datarateChannel->setDatarate(networkManager->par("bandwidthLinksBps").doubleValue());
 				fromOut->connectTo(toIn, datarateChannel);
 				datarateChannel->callInitialize();
-			} else {
+			} else if (networkManager->par("mobility").boolValue()) {
+                            cDatarateChannel *datarateChannel = cDatarateChannel::create("datarate_channel");
+                            datarateChannel->setDatarate(0.0);
+                            fromOut->connectTo(toIn, datarateChannel);
+                        } else {
 				fromOut->connectTo(toIn);
 			}
 		}
@@ -916,6 +919,7 @@ void NetworkTopology::createNetwork(cModule *parent) {
 	EV_INFO << "Modules ready to start." << endl;
 
 	for (auto modMapIt = moduleMap.begin(); modMapIt != moduleMap.end(); modMapIt++) {
+                modMapIt->second->callInitialize();
 		modMapIt->second->scheduleStart(simTime());
 	}
 	EV_INFO << "Modules started." << endl;

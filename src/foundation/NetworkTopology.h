@@ -184,7 +184,7 @@ public:
 	 *
 	 * NetworkManager should be passed as the parent module.
 	 */
-	void createNetwork(cModule *networkManager);
+	void createNetwork(cModule *networkManager, std::string modTypeStr = "routingsim.foundation.NodeWrapper");
 
 	/**
 	 * Extract a constructed network topology built from a .ned file
