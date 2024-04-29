@@ -21,7 +21,7 @@ void MobilityBase::initializeHeading() {
   heading.setRadius(getRNG(0)->doubleRand() * 360);
 }
 
-void MobilityBase::handleMessage(omnetpp::cMessage *msg) {
+void MobilityBase::handleMessage(cMessage *msg) {
   if (msg->isSelfMessage()) {
     handleSelfMessage(msg);
   } else {

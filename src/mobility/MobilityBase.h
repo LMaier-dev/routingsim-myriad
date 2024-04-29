@@ -14,7 +14,6 @@
 #include <cmath>
 #include "Environment.h"
 
-
 enum { MOBILITY_UPDATE };
 
 namespace routingsim {

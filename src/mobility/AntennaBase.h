@@ -11,10 +11,8 @@ private:
   double signalPower;
   double bandwidth;
 
-protected:
-  void initialize() override;
-
 public:
+  void initialize() override;
   double getSignalPower() const { return signalPower; }
   double getBandwidth() const { return bandwidth; }
 

@@ -17,10 +17,10 @@ private:
 
 protected:
   friend class MobilityTopology;
-  void handleMessage(cMessage *msg) override;
 
 public:
   void initialize() override;
+  void doBuildInside() override;
   MobilityBase *getMobilityModel() { return mobility_model; };
   AntennaBase *getAntennaModel() { return antenna_model; };
 };
