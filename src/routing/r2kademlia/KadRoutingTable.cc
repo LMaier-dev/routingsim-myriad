@@ -194,6 +194,7 @@ void KadRoutingTable::addPNContact(const OverlayKey& key, stateseqno_t stateseqn
 		// as we heard a direct message from the neighbor NOW
 		contact->setPath(kad_path(),{});
 		contact->setValid();
+		contact->clearProposedPath(); // whatever proposed path was present, forget it
 		contact->updateLastSeen();
 		// the following call is important, because it calls incLSSeqNo()
 		if (improved) {
@@ -292,7 +293,9 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path newpath, stateseqn
 	}
 
 	// for the following we consider either the current proposed path or the active path
-	//
+	// initial proposed path must be "better than" active path
+	// new proposed path must be better than previous proposed path
+
 	// path update logic is as follows:
 	// if proposed_path exists:
 	//   check new path against proposed_path
