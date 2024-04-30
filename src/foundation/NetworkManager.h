@@ -29,7 +29,6 @@ NetworkManager* getNetworkManager();
 #include "NetworkDynamics.h"
 #include "../mobility/MobilityTopology.h"
 #include "../mobility/MobilityDynamics.h"
-#include "../mobility/MobilityNodeWrapper.h"
 #include "StatisticSample.h"
 
 namespace routingsim {

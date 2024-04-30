@@ -11,19 +11,14 @@ void MobilityDynamics::initialize(int stage) {
   if (stage == 0) {
     updateInterval = par("updateInterval").doubleValue();
   } else if (stage == 1) {
-    std::cout << updateInterval << endl;
-    std::cout << mobilityTopology->getNodeMods().at(0) << endl;
     scheduleAt(simTime() + updateInterval * 1000,
                const_cast<cMessage *>(mobilityUpdateMsg));
   }
 
 }
 void MobilityDynamics::handleMessage(cMessage *msg) {
-  std::cout << "md update" << endl;
   if (msg->getKind() == MOBILITY_UPDATE) {
-    std::cout << "md enter update" << endl;
     updateMobility();
-    std::cout << "md leave update" << endl;
   }
 
   scheduleAt(simTime() + updateInterval * 1000,
@@ -32,7 +27,6 @@ void MobilityDynamics::handleMessage(cMessage *msg) {
 
 void MobilityDynamics::updateMobility() {
   for (cModule *node_wrapper : mobilityTopology->getNodeMods()) {
-    std::cout << "md update wrapper " << node_wrapper << endl;
     updateMobilityNode(node_wrapper);
   }
 }
