@@ -146,6 +146,7 @@ void Node::handleMessage(cMessage *msg) {
     break;
   }
 
+
   // send to binding
   if (bindings.count(np->getType()) != 0) {
     int gateIndex = bindings[np->getType()];
@@ -210,18 +211,17 @@ void Node::sendToModules(NodePkt *np) {
     NodePkt *pkt = i == n - 1 ? np : np->dup();
     send(pkt, outGateBaseId + i);
   }
+  if (n == 0) delete np;
 }
 
 void Node::sendToNeighbors(NodePkt *np) {
   size_t n = neighbor_set.size();
-
+  for (size_t i = 0; i < n; i++) {
+    sendToNode(neighbor_set[i], i != n - 1 ? np->dup() : np);
+  }
   // if all neighbors are gone, free packet and return
   if (n == 0) {
     delete np;
-    return;
-  }
-  for (size_t i = 0; i < n; i++) {
-    sendToNode(neighbor_set[i], i != n - 1 ? np->dup() : np);
   }
 }
 
@@ -248,7 +248,6 @@ void Node::initNeighbors() {
   int outGateBaseId = gateBaseId("toNeighbors$o");
   int n = gate(outGateBaseId)->getVectorSize();
   for (int i = 0; i < n; i++) {
-    std::cout << "send package from " << id << " to " << i << endl;
     NodePkt *pkt = i == n - 1 ? np : np->dup();
     send(pkt, outGateBaseId + i);
   }

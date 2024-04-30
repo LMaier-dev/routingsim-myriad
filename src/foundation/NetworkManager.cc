@@ -32,7 +32,7 @@ namespace routingsim {
         delete mobilityTopology;
         mgr = NULL;
         topology = NULL;
-        mobilityTopology = nullptr;
+        mobilityTopology = NULL;
 
         // clean up statistics
         delete activeEdgesCount;
@@ -197,7 +197,6 @@ namespace routingsim {
                 case INIT_MOBILITY:
                     mobilityTopology->initialize();
                     mobilityDynamics->mobilityTopology = mobilityTopology;
-                    std::cout << "md before init " << mobilityTopology << endl;
                     mobilityDynamics->initialize(1);
                     break;
                 default:
@@ -205,17 +204,6 @@ namespace routingsim {
             }
         }
         delete msg;
-    }
-
-    float NetworkManager::getDistance(nodeid_t from, nodeid_t to) {
-        return topology->getDistance(from, to);
-    }
-
-    unsigned int NetworkManager::getNetworkSize() {
-        if (topology == NULL) {
-            throw cRuntimeError("topology has not been created yet!");
-        }
-        return topology->getActiveNumberNodes();
     }
 
     void NetworkManager::finish() {

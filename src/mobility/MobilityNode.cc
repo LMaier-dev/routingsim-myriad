@@ -24,9 +24,4 @@ void MobilityNode::doBuildInside() {
   this->antenna_model = check_and_cast<IsotropicAntenna *>(antennaModelType->create(antennaModelName.c_str(), getParentModule()));
 }
 
-void MobilityNode::initialize() {
-  Node::initialize();
-  std::cout << "inited node " << id << endl;
-}
-
 } // namespace routingsim

@@ -163,7 +163,7 @@ std::set<nodeid_t> KadObserver::sampleNodes(int n) {
 	if (n < 0 or (size_type) n > nodes.size())
 		n = nodes.size();
 	std::set<nodeid_t> sample{};
-	NetworkTopology& topo = getNetworkManager()->getTopology();
+	NetworkTopology& topo = getNetworkManager()->getMobilityTypologie();
 	// use all nodes if n larger than 80% of all nodes (then sampling is not useful anymore)
 	if (n > nodes.size() * 0.8) {
 		for (auto& pair : nodes.right)
@@ -314,7 +314,7 @@ const OverlayKey& KadObserver::getClosestExistingKey(const OverlayKey& key) cons
 uint KadObserver::getPhysicalDistance(const OverlayKey& from, const OverlayKey& to) const {
 	ASSERT(exists(from));
 	ASSERT(exists(to));
-	return (uint) getNetworkManager()->getDistance(getNodeId(from), getNodeId(to));
+	return (uint) getNetworkManager()->getTopology().getDistance(getNodeId(from), getNodeId(to));
 }
 
 

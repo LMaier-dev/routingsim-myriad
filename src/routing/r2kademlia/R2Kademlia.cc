@@ -254,7 +254,6 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		return;
 	}
 
-
 	KadPacket_p packet = \
 		std::unique_ptr<KadPacket>(check_and_cast<KadPacket*>(pkt->decapsulate()));
 	/*

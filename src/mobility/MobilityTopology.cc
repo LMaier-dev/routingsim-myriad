@@ -18,18 +18,7 @@ void MobilityTopology::initialize() {
   setShortestPathCalculationMode("fullDistanceMatrix");
   for (auto modMapIt = moduleMap.begin(); modMapIt != moduleMap.end(); modMapIt++) {
       mobilityNodeMods->push_back(modMapIt->second);
-
   }
-}
-
-void MobilityTopology::enableLink(MobilityNode *fromNode,
-                                  MobilityNode *toNode) {
-  fromNode->enableLink(toNode, "toNeighbors$o");
-}
-
-void MobilityTopology::disableLink(MobilityNode *fromNode,
-                                   MobilityNode *toNode) {
-  fromNode->disableLink(toNode, "toNeighbors$o");
 }
 
 void MobilityTopology::setDatarate(MobilityNode *fromNode, MobilityNode *toNode,

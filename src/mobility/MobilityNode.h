@@ -19,7 +19,6 @@ protected:
   friend class MobilityTopology;
 
 public:
-  void initialize() override;
   void doBuildInside() override;
   MobilityBase *getMobilityModel() { return mobility_model; };
   AntennaBase *getAntennaModel() { return antenna_model; };

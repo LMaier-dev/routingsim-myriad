@@ -110,7 +110,7 @@ void R2Kademlia::doDataProbe(short timerID) {
 void R2Kademlia::handleDataPacket(NodePkt_p pkt) {
 	ASSERT( pkt != nullptr );
 	EV_TRACE << "handleDataPacket() - ";
-	
+
 	KadDataPacket_p packet = std::unique_ptr<KadDataPacket>(check_and_cast<KadDataPacket*>(pkt->decapsulate()));
 	
 	EV_TRACE << "received data packet from "

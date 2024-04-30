@@ -925,6 +925,7 @@ void NetworkTopology::createNetwork(cModule *parent, std::string modTypeStr) {
 		modMapIt->second->scheduleStart(simTime());
 	}
 	EV_INFO << "Modules started." << endl;
+        std::cout << "num_vertices " << num_vertices(*BGLtopology) << endl;
 }
 
 

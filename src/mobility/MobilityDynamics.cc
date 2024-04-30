@@ -7,7 +7,6 @@ namespace routingsim {
 Define_Module(MobilityDynamics);
 
 void MobilityDynamics::initialize(int stage) {
-  std::cout << "md stage " << stage << endl;
   if (stage == 0) {
     updateInterval = par("updateInterval").doubleValue();
   } else if (stage == 1) {
@@ -46,10 +45,10 @@ void MobilityDynamics::updateConnection(cModule *fromNodeWrapper,
   if (distance <= radiusFromNode) {
     double newBandwidth = fromNode->getAntennaModel()->pathloss(distance);
     mobilityTopology->setDatarate(fromNode, toNode, newBandwidth);
-    mobilityTopology->enableLink(fromNode, toNode);
+    mobilityTopology->enableLink(fromNode->getNodeId(), toNode->getNodeId());
 
   } else {
-    mobilityTopology->disableLink(fromNode, toNode);
+    mobilityTopology->disableLink(fromNode->getNodeId(), toNode->getNodeId());
   }
 }
 } // namespace routingsim
