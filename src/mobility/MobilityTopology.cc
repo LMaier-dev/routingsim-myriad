@@ -16,6 +16,10 @@ void MobilityTopology::initialize() {
   NetworkTopology::readTopology("../simulations/topologies/fully_connected_n6.txt", "SELF_DEFINED", true, false, false, false);
   NetworkTopology::createNetwork(networkManager, "routingsim.mobility.MobilityNodeWrapper");
   setShortestPathCalculationMode("fullDistanceMatrix");
+  for (auto modMapIt = moduleMap.begin(); modMapIt != moduleMap.end(); modMapIt++) {
+      mobilityNodeMods->push_back(modMapIt->second);
+
+  }
 }
 
 void MobilityTopology::enableLink(MobilityNode *fromNode,

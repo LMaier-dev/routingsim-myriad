@@ -919,7 +919,9 @@ void NetworkTopology::createNetwork(cModule *parent, std::string modTypeStr) {
 	EV_INFO << "Modules ready to start." << endl;
 
 	for (auto modMapIt = moduleMap.begin(); modMapIt != moduleMap.end(); modMapIt++) {
-                modMapIt->second->callInitialize();
+                if (networkManager->par("mobility").boolValue()) {
+                  modMapIt->second->callInitialize();
+                }
 		modMapIt->second->scheduleStart(simTime());
 	}
 	EV_INFO << "Modules started." << endl;

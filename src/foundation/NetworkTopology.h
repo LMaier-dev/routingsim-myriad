@@ -116,10 +116,7 @@ private:
 	/// our topology as bgl graph
 	topologyGraph* BGLtopology;
 
-	/// link between the graph and the omnet network
-	std::unordered_map<nodeid_t, cModule *> moduleMap;
-
-	cModule *networkManager = nullptr;
+        cModule *networkManager = nullptr;
 	/// Bool to keep track of whether the topology was changed since last
 	/// shortest path calculation; needs to be set to true by topology-
 	/// modifying functions
@@ -135,7 +132,12 @@ private:
 	 *
 	 **/
 	float** allocateSPM(unsigned long numberOfNodes, float **spath);
-public:
+
+      protected:
+        /// link between the graph and the omnet network
+        std::unordered_map<nodeid_t, cModule *> moduleMap;
+
+      public:
 	//bool compareSPM();
 	/**
 	 * Constructs an empty network topology.

@@ -197,6 +197,7 @@ namespace routingsim {
                 case INIT_MOBILITY:
                     mobilityTopology->initialize();
                     mobilityDynamics->mobilityTopology = mobilityTopology;
+                    std::cout << "md before init " << mobilityTopology << endl;
                     mobilityDynamics->initialize(1);
                     break;
                 default:

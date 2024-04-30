@@ -9,21 +9,23 @@ namespace routingsim {
 
 class MobilityTopology: public NetworkTopology {
 public:
+  void initialize();
   /**
    * @param rng The random number generator to use for mobility.
    */
   explicit MobilityTopology(cModule *networkManager, cRNG *rng, int numNodes);
-  void initialize();
-  std::vector<cModule*> *getNodeMods() { return mobilityNodeMods; }
   void enableLink(MobilityNode *fromNode, MobilityNode *toNode);
   void disableLink(MobilityNode *fromNode, MobilityNode *toNode);
   void setDatarate(MobilityNode *fromNode, MobilityNode *toNode, double datarate);
+  std::vector<cModule*> getNodeMods() const { return *mobilityNodeMods; }
+  std::vector<cModule*> *mobilityNodeMods = new std::vector<cModule *>();
 
 private:
   cRNG *rng;
   cModule *networkManager = nullptr;
+
   int numNodes = 0;
-  std::vector<cModule*> *mobilityNodeMods{};
+
   void createTopology();
 };
 } // namespace routingsim

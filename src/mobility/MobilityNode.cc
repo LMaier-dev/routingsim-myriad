@@ -7,7 +7,6 @@ Define_Module(MobilityNode);
 
 void MobilityNode::doBuildInside() {
   Node::doBuildInside();
-  id = par("id").intValue();
   std::string mobilityModelName, antennaModelName;
   cModuleType *mobilityModelType, *antennaModelType;
   const std::string mobilityType = par("mobilityModel").stdstringValue();

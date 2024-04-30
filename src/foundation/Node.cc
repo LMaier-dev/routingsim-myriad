@@ -117,10 +117,10 @@ void Node::handleMessage(cMessage *msg) {
 #else
   NodePkt *np = check_and_cast<NodePkt *>(msg);
 #endif
-
   // packet from Protocol? yes-> delegate!
   if (np->arrivedOn("toProtocols$i")) {
     np->getHop().from = this->id;
+
     if (np->getHop().to == neighbor_cast)
       sendToNeighbors(np);
     else
