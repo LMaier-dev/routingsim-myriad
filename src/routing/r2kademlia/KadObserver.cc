@@ -29,6 +29,7 @@ Define_Module(KadObserver);
 static KadObserver* observer = NULL;
 
 void KadObserver::initialize() {
+  std::cout << "init KADObserver" << endl;
 	ASSERT(observer == NULL || observer == this);
 	if (getEnvir()->getConfig()->getConfigValue("sim-time-limit") != nullptr) {
 		simTimeLimit= SimTime::parse(getEnvir()->getConfig()->getConfigValue("sim-time-limit"));
@@ -402,31 +403,36 @@ void KadObserver::registerPacketDropped(KadDataPacket& packet, const OverlayKey&
 
 }
 
-
+// TODO: fix (segmentation fault after 6)
 void KadObserver::registerPacketDelivered(KadPacket& packet) {
 	if (not packet.isTracked())
 		return;
 	// answer packets are also markedTrack, but the should not
 	// count as first packet stretch
+        std::cout << "------ 2" << endl;
 	if (packet.getType() != KAD_FindNodeReq)
 		return;
 
+        std::cout << "------ 3" << endl;
 	if (simTime() < getSimulation()->getWarmupPeriod()) return;
 	deliveredPackets++;
 	const OverlayKey fromKey = packet.getSource();
 	const OverlayKey toKey = packet.getTarget();
+        std::cout << "------ 4" << endl;
 	if (not exists(fromKey) or not exists(toKey)) {
 		EV_ERROR << "missing keys on packet" << endl;
 		return;
 	}
+        std::cout << "------ 5" << endl;
 	MessageDeliveryInfo info{};
 	info.hops = packet.getProgress();
 	info.distance = getPhysicalDistance(fromKey, toKey);
 	info.prefixDist = fromKey.getLength() - fromKey.sharedPrefixLength(toKey);
 	info.overlayHops = packet.getOverlayHops();
-
+        std::cout << "------ 6" << endl;
 	//EV_TRACE << "packetDelivered: hops=" << info.hops << " distance=" << info.distance << endl;
-
+        std::cout << hopCount << endl;
+        std::cout << distance << endl;
 	ASSERT(info.overlayHops > 0);
 	histograms[hopCount]->collect(info.hops);
 	histograms[distance]->collect(info.distance);
@@ -434,12 +440,14 @@ void KadObserver::registerPacketDelivered(KadPacket& packet) {
 		histograms[stretchMul]->collect(info.hops / (double)info.distance);
 		histograms[stretchAdd]->collect(info.hops - info.distance);
 	}
+        std::cout << "------ 7" << endl;
 	histograms[prefixDist]->collect(info.prefixDist);
 	histograms[overlayHops]->collect(info.overlayHops);
 	if (info.overlayHops > 0)
 		histograms[prefixPerHop]->collect(info.prefixDist / (double)info.overlayHops);
 	if (simTime() > messageSampleTime and messageDeliveryInfos.size() < numMessageDeliveryInfos)
 		messageDeliveryInfos.push_back(info);
+        std::cout << "------ 8" << endl;
 }
 
 

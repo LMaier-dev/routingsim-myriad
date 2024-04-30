@@ -117,6 +117,7 @@ void Node::handleMessage(cMessage *msg) {
 #else
   NodePkt *np = check_and_cast<NodePkt *>(msg);
 #endif
+
   // packet from Protocol? yes-> delegate!
   if (np->arrivedOn("toProtocols$i")) {
     np->getHop().from = this->id;
@@ -151,6 +152,7 @@ void Node::handleMessage(cMessage *msg) {
   if (bindings.count(np->getType()) != 0) {
     int gateIndex = bindings[np->getType()];
     send(np, "toProtocols$o", gateIndex);
+
   } else {
     EV_WARN << "Binding to packet type " << np->getType()
             << " unknown -- did you register your module to this packet type "
@@ -191,10 +193,12 @@ void Node::sendToNode(nodeid_t nid, NodePkt *np) {
   }
 
   // schedule not before transmission of other message on channel
-  cChannel *txChannel = n.out->getTransmissionChannel();
-  simtime_t txFinishTime = txChannel->getTransmissionFinishTime();
-  if (simTime() + delay < txFinishTime) {
-    delay = txFinishTime - simTime();
+  cChannel *txChannel = n.out->findTransmissionChannel();
+  if (txChannel) {
+    simtime_t txFinishTime = txChannel->getTransmissionFinishTime();
+    if (simTime() + delay < txFinishTime) {
+      delay = txFinishTime - simTime();
+    }
   }
 
   linkusage_map[nid]++;

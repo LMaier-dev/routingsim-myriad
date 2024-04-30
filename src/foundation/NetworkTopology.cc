@@ -869,7 +869,7 @@ void NetworkTopology::createNetwork(cModule *parent, std::string modTypeStr) {
 				datarateChannel->callInitialize();
 			} else if (networkManager->par("mobility").boolValue()) {
                             cDatarateChannel *datarateChannel = cDatarateChannel::create("datarate_channel");
-                            datarateChannel->setDatarate(0.0);
+                            datarateChannel->setDatarate(1000.0);
                             fromOut->connectTo(toIn, datarateChannel);
                         } else {
 				fromOut->connectTo(toIn);
@@ -925,7 +925,6 @@ void NetworkTopology::createNetwork(cModule *parent, std::string modTypeStr) {
 		modMapIt->second->scheduleStart(simTime());
 	}
 	EV_INFO << "Modules started." << endl;
-        std::cout << "num_vertices " << num_vertices(*BGLtopology) << endl;
 }
 
 

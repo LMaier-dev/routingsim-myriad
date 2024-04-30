@@ -263,6 +263,8 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		 << " isTracked:" << packet->isTracked() << endl;
 	*/
 
+
+
 	// hello packets do not include my key
 	if (handleIfFitting<KadHello>(packet))
 		return;
@@ -275,7 +277,6 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		countDropped(*packet, packet->getTarget(), erroneousSourceRoute);
 		return;
 	}
-
 	// must process PNDiscReq to set the neighbor table entry first
 	if (handleIfFitting<KadPNDiscReq>(packet))
 		return;
@@ -283,7 +284,6 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	// check for presence of carried "not via" information
 	// and evaluate it (invalidate affected contacts)
 	processNotViaInformation(*packet);
-
 	if (packet->hasRemainingHops()) {
 		// we are not the recipient
 
@@ -297,10 +297,12 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	}
 	else { // no hops left, packet is addressed to me
 
+
 		packet->setControlInfo(pkt.release());
 
 		// learn route from packet
 		//TODO optimization use isPathInteresting
+
 
 
 		// for packets from physical neighbors: check need for resynchronization:
@@ -308,8 +310,10 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		if (packet->getType() != KAD_PNDiscRsp and neighborTable.isNeighbor(packet->getSource()))
 			checkForResync(packet->getSource(), packet->getStateSeqNo());
 
+
 		// evaluate return path for routing table (packet came to us this way, so path was recently working)
 		routingTable.addPath(packet->getSource(), packet->reversePath(packet->getIntermediatePath()), packet->getStateSeqNo(), 0, packet->getSrcNodeDegree());
+
 
 		// these types may forward packets, so they count themselves
 		if (handleIfFitting<KadFindNodeReq>(packet)) return;
@@ -1440,10 +1444,10 @@ void R2Kademlia::countReceived(KadPacket& packet) {
 	// registerPacketDelivered will also count first packet stretch
 	getKadObserver().registerPacketDelivered(packet);
 	ASSERT(packet.getControlInfo() != nullptr);
-	getStatistics().deliveredMessage(
-		check_and_cast<cMessage *>(packet.getControlInfo()),
-		packet.getProgress()
-	);
+        getStatistics().deliveredMessage(
+            check_and_cast<cMessage *>(packet.getControlInfo()),
+            packet.getProgress()
+        );
 }
 
 

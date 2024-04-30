@@ -52,6 +52,18 @@ namespace routingsim {
         // set singleton variable
         mgr = this;
 
+        { // create mobility manager
+          const bool useMobility = par("mobility").boolValue();
+          if (useMobility) {
+            EV << "creating mobility manager" << std::endl;
+            const int mobilityRNG = par("mobilityRNG").intValue();
+            mobilityTopology = new MobilityTopology(this, getRNG(mobilityRNG), par("mobilityNodes").intValue());
+            cModule *dynamicsModule = gate("mobilityDynamics")->getPathStartGate()->getOwnerModule();
+            mobilityDynamics = dynamic_cast<MobilityDynamics *>(dynamicsModule);
+            scheduleAt(simTime(), new cMessage{"init mobility", INIT_MOBILITY});
+          }
+        }
+
         // create network topology
         topology = new NetworkTopology();
         if (par("topologyFile").stdstringValue().size() != 0)
@@ -135,18 +147,6 @@ namespace routingsim {
         activeEdgesCount = new cOutVector("activeEdgesCount");
         partitionCount = new cOutVector("partitionCount");
         addStatisticSample(this);
-
-        { // create mobility manager
-            const bool useMobility = par("mobility").boolValue();
-            if (useMobility) {
-                EV << "creating mobility manager" << std::endl;
-                const int mobilityRNG = par("mobilityRNG").intValue();
-                mobilityTopology = new MobilityTopology(this, getRNG(mobilityRNG), par("mobilityNodes").intValue());
-                cModule *dynamicsModule = gate("mobilityDynamics")->getPathStartGate()->getOwnerModule();
-                mobilityDynamics = dynamic_cast<MobilityDynamics *>(dynamicsModule);
-                scheduleAt(simTime(), new cMessage{"init mobility", INIT_MOBILITY});
-            }
-        }
     }
 
     void NetworkManager::handleMessage(cMessage *msg) {
@@ -217,11 +217,11 @@ namespace routingsim {
 
         if (evaluateStatistics) {
             if (topologyStatistics == string("Light") || topologyStatistics == string("Heavy")) {
-                ann = getNetworkManager()->getTopology().getActiveNumberNodes();
-                anl = getNetworkManager()->getTopology().getActiveNumberLinks();
+                ann = topology->getActiveNumberNodes();
+                anl = topology->getActiveNumberLinks();
             }
             if (topologyStatistics == string("Heavy")) {
-                pc = getNetworkManager()->getTopology().getNumPartitions();
+                pc = topology->getNumPartitions();
             }
             evaluateStatistics = false;
         }
