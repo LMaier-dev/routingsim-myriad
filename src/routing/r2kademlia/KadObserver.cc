@@ -29,7 +29,7 @@ Define_Module(KadObserver);
 static KadObserver* observer = NULL;
 
 void KadObserver::initialize() {
-  std::cout << "init KADObserver" << endl;
+
 	ASSERT(observer == NULL || observer == this);
 	if (getEnvir()->getConfig()->getConfigValue("sim-time-limit") != nullptr) {
 		simTimeLimit= SimTime::parse(getEnvir()->getConfig()->getConfigValue("sim-time-limit"));
@@ -429,12 +429,14 @@ void KadObserver::registerPacketDelivered(KadPacket& packet) {
 	info.distance = getPhysicalDistance(fromKey, toKey);
 	info.prefixDist = fromKey.getLength() - fromKey.sharedPrefixLength(toKey);
 	info.overlayHops = packet.getOverlayHops();
+        EV_TRACE << "test" << endl;
         std::cout << "------ 6" << endl;
 	//EV_TRACE << "packetDelivered: hops=" << info.hops << " distance=" << info.distance << endl;
         std::cout << hopCount << endl;
         std::cout << distance << endl;
 	ASSERT(info.overlayHops > 0);
 	histograms[hopCount]->collect(info.hops);
+        EV_TRACE << "test2" << endl;
 	histograms[distance]->collect(info.distance);
 	if (info.distance > 0) {
 		histograms[stretchMul]->collect(info.hops / (double)info.distance);
@@ -573,7 +575,7 @@ KadObserver& getKadObserver() {
 		cModuleType* type = cModuleType::get(
 				"routingsim.routing.r2kademlia.KadObserver");
 		cModule* mod = getSimulation()->getModuleByPath("<root>");
-		observer = dynamic_cast<KadObserver*>(type->create("KadObserver", mod));
+		observer = dynamic_cast<KadObserver*>(type->createScheduleInit("KadObserver", mod));
 	}
 	return *observer;
 }
