@@ -13,7 +13,7 @@ public:
   /**
    * @param rng The random number generator to use for mobility.
    */
-  explicit MobilityTopology(cModule *networkManager, cRNG *rng, int numNodes);
+  explicit MobilityTopology(cModule *networkManager);
   void setDatarate(MobilityNode *fromNode, MobilityNode *toNode, double datarate);
   std::vector<cModule*> getNodeMods() const { return *mobilityNodeMods; }
   std::vector<cModule*> *mobilityNodeMods = new std::vector<cModule *>();

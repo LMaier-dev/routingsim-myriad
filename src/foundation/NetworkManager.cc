@@ -56,8 +56,7 @@ namespace routingsim {
           const bool useMobility = par("mobility").boolValue();
           if (useMobility) {
             EV << "creating mobility manager" << std::endl;
-            const int mobilityRNG = par("mobilityRNG").intValue();
-            mobilityTopology = new MobilityTopology(this, getRNG(mobilityRNG), par("mobilityNodes").intValue());
+            mobilityTopology = new MobilityTopology(this);
             cModule *dynamicsModule = gate("mobilityDynamics")->getPathStartGate()->getOwnerModule();
             mobilityDynamics = dynamic_cast<MobilityDynamics *>(dynamicsModule);
             scheduleAt(simTime(), new cMessage{"init mobility", INIT_MOBILITY});

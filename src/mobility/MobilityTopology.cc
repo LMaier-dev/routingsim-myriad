@@ -3,11 +3,10 @@
 
 namespace routingsim {
 
-MobilityTopology::MobilityTopology(cModule *networkManager, cRNG *rng,
-                                   int numNodes) {
+MobilityTopology::MobilityTopology(cModule *networkManager) {
   this->networkManager = networkManager;
-  this->numNodes = numNodes;
-  this->rng = rng;
+  this->numNodes = networkManager->par("mobilityNodes").intValue();
+  this->rng = networkManager->getRNG(networkManager->par("mobilityRNG").intValue());
   EV_DEBUG << "MobilityTopology created" << endl;
 }
 
