@@ -4,6 +4,7 @@ package routingsim.mobility;
 module MobilityNodeWrapper {
 parameters:
 	@display("i=block/join");
+
 	/// node id, -1 = choose own id
 	int nodeId = default(-1);
 

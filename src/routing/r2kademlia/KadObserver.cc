@@ -409,47 +409,36 @@ void KadObserver::registerPacketDelivered(KadPacket& packet) {
 		return;
 	// answer packets are also markedTrack, but the should not
 	// count as first packet stretch
-        std::cout << "------ 2" << endl;
 	if (packet.getType() != KAD_FindNodeReq)
 		return;
 
-        std::cout << "------ 3" << endl;
 	if (simTime() < getSimulation()->getWarmupPeriod()) return;
 	deliveredPackets++;
 	const OverlayKey fromKey = packet.getSource();
 	const OverlayKey toKey = packet.getTarget();
-        std::cout << "------ 4" << endl;
 	if (not exists(fromKey) or not exists(toKey)) {
 		EV_ERROR << "missing keys on packet" << endl;
 		return;
 	}
-        std::cout << "------ 5" << endl;
 	MessageDeliveryInfo info{};
 	info.hops = packet.getProgress();
 	info.distance = getPhysicalDistance(fromKey, toKey);
 	info.prefixDist = fromKey.getLength() - fromKey.sharedPrefixLength(toKey);
 	info.overlayHops = packet.getOverlayHops();
-        EV_TRACE << "test" << endl;
-        std::cout << "------ 6" << endl;
 	//EV_TRACE << "packetDelivered: hops=" << info.hops << " distance=" << info.distance << endl;
-        std::cout << hopCount << endl;
-        std::cout << distance << endl;
 	ASSERT(info.overlayHops > 0);
 	histograms[hopCount]->collect(info.hops);
-        EV_TRACE << "test2" << endl;
 	histograms[distance]->collect(info.distance);
 	if (info.distance > 0) {
 		histograms[stretchMul]->collect(info.hops / (double)info.distance);
 		histograms[stretchAdd]->collect(info.hops - info.distance);
 	}
-        std::cout << "------ 7" << endl;
 	histograms[prefixDist]->collect(info.prefixDist);
 	histograms[overlayHops]->collect(info.overlayHops);
 	if (info.overlayHops > 0)
 		histograms[prefixPerHop]->collect(info.prefixDist / (double)info.overlayHops);
 	if (simTime() > messageSampleTime and messageDeliveryInfos.size() < numMessageDeliveryInfos)
 		messageDeliveryInfos.push_back(info);
-        std::cout << "------ 8" << endl;
 }
 
 

@@ -4,26 +4,28 @@
 
 #include "../foundation/Node.h"
 #include "AntennaBase.h"
-#include "MobilityBase.h"
 #include "IsotropicAntenna.h"
+#include "MobilityBase.h"
 #include "RandomWaypointMobility.h"
 
 namespace routingsim {
 
-class MobilityNode : public Node {
-private:
-  MobilityBase *mobility_model;
-  AntennaBase *antenna_model;
+    class MobilityNode : public Node {
+    private:
+        MobilityBase *mobility_model;
+        AntennaBase *antenna_model;
 
-protected:
-  friend class MobilityTopology;
+    protected:
+        friend class MobilityTopology;
 
-public:
-  void doBuildInside() override;
-  MobilityBase *getMobilityModel() { return mobility_model; };
-  AntennaBase *getAntennaModel() { return antenna_model; };
-};
+    public:
+        void initialize() override;
+        void doBuildInside() override;
+        void refreshDisplay() const override;
+        MobilityBase *getMobilityModel() { return mobility_model; };
+        AntennaBase *getAntennaModel() { return antenna_model; };
+    };
 
-} // namespace routingsim
+}// namespace routingsim
 
-#endif // ROUTINGSIM_MOBILITYNODE_H
+#endif// ROUTINGSIM_MOBILITYNODE_H

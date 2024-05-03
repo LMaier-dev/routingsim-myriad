@@ -5,6 +5,10 @@ namespace routingsim {
 
 Define_Module(MobilityNode);
 
+void MobilityNode::initialize() {
+  Node::initialize();
+}
+
 void MobilityNode::doBuildInside() {
   Node::doBuildInside();
   std::string mobilityModelName, antennaModelName;
@@ -22,6 +26,13 @@ void MobilityNode::doBuildInside() {
   antennaModelName = "IsotropicAntenna_" + std::to_string(id);
   antennaModelType = cModuleType::get("routingsim.mobility.IsotropicAntenna");
   this->antenna_model = check_and_cast<IsotropicAntenna *>(antennaModelType->create(antennaModelName.c_str(), getParentModule()));
+}
+
+void MobilityNode::refreshDisplay() const {
+    cDisplayString& ds = getParentModule()->getDisplayString();
+    ds.setTagArg("p", 0, lround(mobility_model->getPosition().x));
+    ds.setTagArg("p", 1, lround(mobility_model->getPosition().y));
+    ds.setTagArg("r", 0, lround(antenna_model->getRange()));
 }
 
 } // namespace routingsim
