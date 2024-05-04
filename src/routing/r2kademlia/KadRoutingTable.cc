@@ -284,9 +284,9 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path newpath, stateseqn
 	}
 
 	if (path_verified) {
-		ASSERT(pathinfo_age<=contact->getAge());
+		ASSERT(pathinfo_age<=contact->getPathAge());
 		// in case the path_info is older, set path_verified to false as fallback: we do not trust older information
-		if (pathinfo_age > contact->getAge()) {
+		if (pathinfo_age > contact->getPathAge()) {
 			EV_TRACE << "path was flagged as being verified, but pathinfo_age is older than the contact's age, setting verified to false" << endl;
 			path_verified= false;
 		}
@@ -333,7 +333,9 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path newpath, stateseqn
 	// if paths diverge, they will do this more likely at their end
 	bool identical_path(not equivalent_path ? false : are_equal_r(newpath, path_to_consider.getRawPath()));
 
-	if ( not (newer_seqno
+	if ( not (shorter_path
+		  or
+		  newer_seqno
 		  or
 		  (same_seqno and (contact->isNotValid() or path_is_eligible or (consider_proposed_path and path_verified and identical_path))))
 	   ) {
@@ -342,12 +344,13 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path newpath, stateseqn
 			 << newpath << " (seq#" << stateseqno << " verified:" << path_verified <<"), not interesting compared to " << (consider_proposed_path ? "proposed" : "active") << " path "
 			 << (consider_proposed_path ? contact->getProposedPath().getRawPath() : contact->getActivePath()).getRawPath()
 			 << endl;
-		// TODO however if path_verified and identical_path one should update the contact and path
+		// TODO however if path_verified and identical_path one should update the contact
+		// (not the path as we need this for probing)
 		if (path_verified and identical_path) {
 			if (consider_proposed_path)
-				contact->getProposedPathMod().updateLastSeenTo(simTime()-SimTime(pathinfo_age,SIMTIME_MS));
+				contact->getProposedPathMod().updateLastValidatedTo(simTime()-SimTime(pathinfo_age,SIMTIME_MS));
 			else
-				contact->getActivePathMod().updateLastSeenTo(simTime()-SimTime(pathinfo_age,SIMTIME_MS));
+				contact->getActivePathMod().updateLastValidatedTo(simTime()-SimTime(pathinfo_age,SIMTIME_MS));
 		}
 
 		return false;
@@ -656,7 +659,7 @@ bool KadRoutingTable::shortenPath(kad_path& path, age_t path_info_age) const
 		if ( (knowncontactp= getContact(*pathit)) != nullptr ) {
 			// caveat: contact must be valid, newer and the resulting path must be actually shorter
 			if ( knowncontactp->isValid()
-			     and knowncontactp->getAge() < path_info_age
+			     and knowncontactp->getPathAge() < path_info_age
 			     and knowncontactp->getPathLength()+1 < currentlength )
 			{
 				// we know a shorter replacement path, use it
@@ -866,7 +869,7 @@ KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_t
 	auto selectorValidNotViaSafeFn = [&](const KadContact& contact) -> bool {
 					     if (contact.isValid()) {
 						     for ( const auto& failedLink : notvialist) {
-							     if (contact.getAge() > failedLink.second and
+							     if (contact.getPathAge() > failedLink.second and
 								 containsUndirectedLink(myKey,contact.getKey(),contact.getPath(),failedLink.first))
 							     {
 								     EV_TRACE << "Contact " << contact << " matches not via " << failedLink.first << endl;
@@ -1056,8 +1059,8 @@ void KadRoutingTable::getContactsforPathRefresh(std::list<OverlayKey>& result) c
 				auto kadcontactp(it->get());
 				if ( kadcontactp!= nullptr
 				     and kadcontactp->isValid()
-				     and kadcontactp->getPathLength() > 2*nodeVicinityGraph::vicinityDiscoveryRadius
-				     and kadcontactp->getPathAge() > R2Kademlia::PathRefreshThreshold ) {
+				     and kadcontactp->getPathLength() >= nodeVicinityGraph::vicinityDiscoveryRadius
+				     and kadcontactp->getLastPathRefreshAge() > R2Kademlia::PathRefreshThreshold ) {
 					result.push_back(kadcontactp->getKey());
 				}
 			}
@@ -1067,6 +1070,7 @@ void KadRoutingTable::getContactsforPathRefresh(std::list<OverlayKey>& result) c
 
 
 // returns the two oldest entries from each bucket, deepest contacts first and oldest before newer (per bucket)
+// the paths to these contacts have not been validated for a while, so they get validated by probe requests
 // only non PN contacts will be returned
 // However, contacts that have recent information <1s will not be selected
 void KadRoutingTable::getOldestValidContacts(std::list<OverlayKey>& result) const
@@ -1081,13 +1085,13 @@ void KadRoutingTable::getOldestValidContacts(std::list<OverlayKey>& result) cons
 		for (auto it = bucket.getContacts().cbegin(); it != bucket.getContacts().cend(); it++) {
 			if (*it != nullptr) {
 				auto kadcontactp(it->get());
-				if ( kadcontactp != nullptr and kadcontactp->getAge() > R2Kademlia::PathInfoAgeThreshold ) {
+				if ( kadcontactp != nullptr and kadcontactp->getPathAge() > R2Kademlia::PathInfoAgeThreshold ) {
 					if (oldest != nullptr) {
 						// older entry? then replace oldest
-						if (oldest->getAge() < kadcontactp->getAge()) {
+						if (oldest->getPathAge() < kadcontactp->getPathAge()) {
 							secondoldest= oldest; oldest= kadcontactp;
 						}
-						else if (secondoldest != nullptr and secondoldest->getAge() < kadcontactp->getAge()) {
+						else if (secondoldest != nullptr and secondoldest->getPathAge() < kadcontactp->getPathAge()) {
 							// replace second oldest
 							secondoldest= kadcontactp;
 						}
@@ -1146,7 +1150,7 @@ void KadRoutingTable::updatePaths(const KadContact& improvedContact)
 		for (auto& contact : b.getContacts()) {
 			// check for existence of improvedContact in path and replace path
 			// (either shorter or more current)
-			if (auto& path= contact->getPath(); path.size() > 0 and contact->getAge() > improvedContact.getAge()) {
+			if (auto& path= contact->getPath(); path.size() > 0 and contact->getPathAge() > improvedContact.getPathAge()) {
 				bool found(false);
 				for (auto revpathit= path.rbegin(); revpathit!= path.rend() and not found; revpathit++) {
 					if (*revpathit == improvedContact.getKey()) {
@@ -1235,7 +1239,7 @@ void KadRoutingTable::invalidateContact(KadContact& contact, const link_t& faile
 	const auto& path= contact.getPath();
 	if (path.size() > 0)
 	{
-		if (contact.getAge() > failedLinkAge and contact.isContainedinPath(myKey, failedLink))
+		if (contact.getPathAge() > failedLinkAge and contact.isContainedinPath(myKey, failedLink))
 		{ // link somewhere in the path
                   //
                         bool lastlinkfailed((failedLink.first == contact.getKey() or failedLink.second == contact.getKey())

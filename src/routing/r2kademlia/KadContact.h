@@ -139,7 +139,8 @@ public:
 	void updateLastSeen() { lastseen= simTime(); }
 	void updateLastSeenTo(const simtime_t &new_time_stamp) { lastseen= new_time_stamp; }
 
-	unsigned long getPathAge() const { return active_path.getAge(); }
+	unsigned long getPathAge() const { return active_path.getAge(); } // Path Age reflects connectivity
+	simtime_t getLastPathRefreshAge() const { return active_path.getLastPathRefreshAge(); }
 	simtime_t getLastPathRefresh() const { return active_path.getLastPathRefresh(); }
 	void updateLastPathRefresh() { active_path.updateLastPathRefresh(); }
 
@@ -158,8 +159,8 @@ public:
 	/// sets new path (originally checked for repair of failed links, too)
 	void updatePath(const OverlayKey& myOverlayKey, kad_path newpath) { setPath(newpath, HashSum(myOverlayKey,newpath,key)); }
 	/// sets the path to reach this contact
-	void setPath(kad_path path, OverlayKey&& HashSum) { active_path.setPath(std::move(path), HashSum); active_path.updateLastSeen(); }
-	void setProposedPath(kad_path path, OverlayKey&& HashSum) { proposed_path.setPath(std::move(path), HashSum); proposed_path.updateLastSeen(); }
+	void setPath(kad_path path, OverlayKey&& HashSum) { active_path.setPath(std::move(path), HashSum); active_path.updateLastValidated(); }
+	void setProposedPath(kad_path path, OverlayKey&& HashSum) { proposed_path.setPath(std::move(path), HashSum); proposed_path.updateLastValidated(); }
 	void clearProposedPath() { proposed_path.clear(); }
 	const kad_path& getPath() const { return getRawActivePath(); }
 	const kad_path& getRawActivePath() const { return active_path.getRawPath(); }

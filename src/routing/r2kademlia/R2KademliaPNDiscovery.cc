@@ -214,7 +214,7 @@ simtime_t R2Kademlia::sendDiscoveryReq(const KadContact& contact, RequestQueueEl
 			if (auto contactp= routingTable.getContact(it->first); contactp != nullptr and contactp->getPathLength()==0) {
 				req->setPhyNeighbor(effective_size, it->first);
 				req->setPhyNeighborSeqNo(effective_size, contactp->getStateSeqNo());
-				req->setPhyNeighborAge(effective_size, contactp->getAge());
+				req->setPhyNeighborAge(effective_size, contactp->getPathAge());
 				req->setPhyNeighborDegree(effective_size, contactp->getNodeDegree());
 				effective_size++;
 			}
@@ -342,7 +342,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadPNDiscReq> packet) {
 		if (auto contactp= routingTable.getContact(it->first); contactp != nullptr and contactp->getPathLength()==0) {
 			response->setContact(effective_size, it->first);
 			response->setSeqNo(effective_size, contactp->getStateSeqNo());
-			response->setPathInfoAge(effective_size, contactp->getAge());
+			response->setPathInfoAge(effective_size, contactp->getPathAge());
 			response->setNodeDegree(effective_size, contactp->getNodeDegree());
 
 			effective_size++;
@@ -401,7 +401,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadQueryRouteReq> packet)
 			{
 				response->setContact(effective_size, it->first);
 				response->setSeqNo(effective_size, contactp->getStateSeqNo());
-				response->setPathInfoAge(effective_size, contactp->getAge());
+				response->setPathInfoAge(effective_size, contactp->getPathAge());
 				response->setNodeDegree(effective_size, contactp->getNodeDegree());
 				effective_size++;
 			}
@@ -421,7 +421,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadQueryRouteReq> packet)
 			response->setContact(effective_size, allcontacts[i]->getKey());
 			response->setPath(effective_size, allcontacts[i]->getPath());
 			response->setSeqNo(effective_size, allcontacts[i]->getStateSeqNo());
-			response->setPathInfoAge(effective_size, allcontacts[i]->getAge());
+			response->setPathInfoAge(effective_size, allcontacts[i]->getPathAge());
 			response->setNodeDegree(effective_size, allcontacts[i]->getNodeDegree());
 			effective_size++;
 		}
@@ -443,7 +443,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadQueryRouteReq> packet)
 			response->setContact(effective_size, ovlyneighbors[i]->getKey());
 			response->setPath(effective_size, ovlyneighbors[i]->getPath());
 			response->setSeqNo(effective_size, ovlyneighbors[i]->getStateSeqNo());
-			response->setPathInfoAge(effective_size, ovlyneighbors[i]->getAge());
+			response->setPathInfoAge(effective_size, ovlyneighbors[i]->getPathAge());
 			response->setNodeDegree(effective_size, ovlyneighbors[i]->getNodeDegree());
 			effective_size++;
 		}

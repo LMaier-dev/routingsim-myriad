@@ -114,7 +114,6 @@ bool R2Kademlia::handlePathSetupResponse(KadPacket_p answer, RPCState& rpcState)
 			// next path setup should have been scheduled then, or PID was precomputed
                     } else {
 			addthispath= true;
-                        contactp->updateLastPathRefresh();
                     }
 		}
 		else {
@@ -126,7 +125,6 @@ bool R2Kademlia::handlePathSetupResponse(KadPacket_p answer, RPCState& rpcState)
 			}
 			else {
 				addthispath= true;
-                                contactp->updateLastPathRefresh();
 			}
 		}
 	}

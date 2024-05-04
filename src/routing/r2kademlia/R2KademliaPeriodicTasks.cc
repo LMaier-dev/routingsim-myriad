@@ -263,7 +263,7 @@ void R2Kademlia::doProbeNeighbors(short timerId)
 		// check for reachability of neighbors
 		// do not probe in case contact not found or too young
 		if (auto contactp= routingTable.getContact(probeNeighborQueue.front());
-		    contactp != nullptr and contactp->getAge() > R2Kademlia::PathInfoAgeThreshold) {
+		    contactp != nullptr and contactp->getPathAge() > R2Kademlia::PathInfoAgeThreshold) {
 			EV_TRACE << "probing for neighbor: " << probeNeighborQueue.front() << endl;
 			//sendFindNode(probeNeighborQueue.front(), true);
 			sendPathProbe(probeNeighborQueue.front());
@@ -286,9 +286,11 @@ void R2Kademlia::doProbeContacts(short timerId)
 		return; // node is isolated
 
 	// if no contacts selected for probing, construct a list first
+	// note that doPathRefresh() also fills contacts into this queue (consecutively at the front) 
 	if ( probeContactQueue.empty() )
 	{
 		// fill queue with current oldest neighbors (2 for each bucket)
+		// where we have no information about the path liveness/validity
 		routingTable.getOldestValidContacts(probeContactQueue);
 	}
 
@@ -303,14 +305,13 @@ void R2Kademlia::doProbeContacts(short timerId)
 		    contactp != nullptr
 		    and
 		    contactp->getPathLength() > 0 // not necessary to probe PNs
-		    and (
-                        contactp->getAge() > R2Kademlia::PathInfoAgeThreshold or
-                        contactp->getPathAge() > R2Kademlia::PathRefreshThreshold-randomoffset)) {
-			EV_TRACE << "probing for contact: " << probeContactQueue.front() << " age:" << contactp->getAge()
-				 << " path refresh age:" << contactp->getPathAge() << endl;
+		    and (contactp->getPathAge() > R2Kademlia::PathInfoAgeThreshold or
+                        contactp->getLastPathRefreshAge() > R2Kademlia::PathRefreshThreshold-randomoffset)) {
+			EV_TRACE << "probing for contact: " << probeContactQueue.front() << " path age:" << contactp->getPathAge()
+				 << " last path refresh age:" << contactp->getLastPathRefreshAge() << endl;
                             sendPathProbe(probeContactQueue.front());
-			    // send multiple probes in case path refreshes are required
-			    if (contactp->getPathAge() < R2Kademlia::PathRefreshThreshold-randomoffset) {
+			    // send multiple probes in case path refreshes are required (they are all at the front)
+			    if (contactp->getLastPathRefreshAge() < R2Kademlia::PathRefreshThreshold-randomoffset) {
 				    probed= true;
 			    }
 		}
@@ -469,20 +470,21 @@ void R2Kademlia::doReachabilityTest(short timerId)
 }
 
 
-void R2Kademlia::doRefreshSetupPaths(short timerId)
+void R2Kademlia::doPathRefresh(short timerId)
 {
 	std::list<OverlayKey> contactlist;
-	// refresh contacts with paths longer than 2*vicinityDiscoveryRadius+1 (>=6 hops in total) by sending a ProbeReq
+	// refresh paths of contacts in the forwarding tier by sending a ProbeReq
 	routingTable.getContactsforPathRefresh(contactlist);
-	EV_TRACE << "doRefreshSetupPaths: number of contacts " << contactlist.size() << endl;
+	EV_TRACE << "doPathRefresh: number of contacts " << contactlist.size() << endl;
 	for (const auto& key: contactlist)
 	{
 		// check if contact already in the list
 		if (std::find(probeContactQueue.cbegin(),probeContactQueue.cend(),key) == probeContactQueue.cend()) {
-			EV_TRACE << "adding contact " << key.shortStr() << " to probeContactQueue for SetupPath refresh" << endl;
+			EV_TRACE << "adding contact " << key.shortStr() << " to probeContactQueue for path refresh" << endl;
 			probeContactQueue.push_front(key);
 		}
 	}
+	// note that the queue will be served by doProbeContacts
 }
 
 

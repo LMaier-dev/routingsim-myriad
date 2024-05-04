@@ -41,18 +41,18 @@ public:
 	};
 
 	// constructors
-	KadPath() : path(), lastseen(SIMTIME_ZERO), lastPathRefresh(SIMTIME_ZERO), pathHashSum(), state(pathState_t::undefined) { };
-	KadPath(kad_path&& initpath) : path(std::move(initpath)), lastseen(SIMTIME_ZERO), lastPathRefresh(SIMTIME_ZERO), pathHashSum(), state(pathState_t::exists) { initpath.clear(); };
-	KadPath(const kad_path& path) : path(path), lastseen(SIMTIME_ZERO), lastPathRefresh(SIMTIME_ZERO), pathHashSum(), state(pathState_t::exists) { };
-	KadPath(const kad_path& path, const OverlayKey& pathHashSum) : path(path), lastseen(SIMTIME_ZERO), lastPathRefresh(SIMTIME_ZERO), pathHashSum(pathHashSum), state(pathState_t::exists) { };
-	KadPath(const kad_path& path, const OverlayKey& pathHashSum, const simtime_t &lastseen) : path(path), lastseen(lastseen), lastPathRefresh(SIMTIME_ZERO), pathHashSum(pathHashSum), state(pathState_t::exists) { };
-	KadPath(const kad_path& path, const OverlayKey& pathHashSum, const age_t &age) : path(path), lastseen(simTime() - SimTime(age, SIMTIME_MS)), lastPathRefresh(SIMTIME_ZERO), pathHashSum(pathHashSum), state(pathState_t::exists) { };
+	KadPath() : path(), lastvalidated(SIMTIME_ZERO), lastPathRefresh(SIMTIME_ZERO), pathHashSum(), state(pathState_t::undefined) { };
+	KadPath(kad_path&& initpath) : path(std::move(initpath)), lastvalidated(SIMTIME_ZERO), lastPathRefresh(SIMTIME_ZERO), pathHashSum(), state(pathState_t::exists) { initpath.clear(); };
+	KadPath(const kad_path& path) : path(path), lastvalidated(SIMTIME_ZERO), lastPathRefresh(SIMTIME_ZERO), pathHashSum(), state(pathState_t::exists) { };
+	KadPath(const kad_path& path, const OverlayKey& pathHashSum) : path(path), lastvalidated(SIMTIME_ZERO), lastPathRefresh(SIMTIME_ZERO), pathHashSum(pathHashSum), state(pathState_t::exists) { };
+	KadPath(const kad_path& path, const OverlayKey& pathHashSum, const simtime_t &lastvalidated) : path(path), lastvalidated(lastvalidated), lastPathRefresh(SIMTIME_ZERO), pathHashSum(pathHashSum), state(pathState_t::exists) { };
+	KadPath(const kad_path& path, const OverlayKey& pathHashSum, const age_t &age) : path(path), lastvalidated(simTime() - SimTime(age, SIMTIME_MS)), lastPathRefresh(SIMTIME_ZERO), pathHashSum(pathHashSum), state(pathState_t::exists) { };
 
 	// copy constructor
-	KadPath(const KadPath& other) : path(other.path), lastseen(other.lastseen), lastPathRefresh(other.lastPathRefresh), pathHashSum(other.pathHashSum), state(other.state) { };
+	KadPath(const KadPath& other) : path(other.path), lastvalidated(other.lastvalidated), lastPathRefresh(other.lastPathRefresh), pathHashSum(other.pathHashSum), state(other.state) { };
 
 	// move constructor
-	KadPath(KadPath&& other) : path(std::move(other.path)), lastseen(std::move(other.lastseen)), lastPathRefresh(std::move(other.lastPathRefresh)), pathHashSum(std::move(other.pathHashSum)), state(other.state) { other.path.clear(); other.lastseen= SIMTIME_ZERO; other.lastPathRefresh= SIMTIME_ZERO; other.state= pathState_t::undefined; };
+	KadPath(KadPath&& other) : path(std::move(other.path)), lastvalidated(std::move(other.lastvalidated)), lastPathRefresh(std::move(other.lastPathRefresh)), pathHashSum(std::move(other.pathHashSum)), state(other.state) { other.path.clear(); other.lastvalidated= SIMTIME_ZERO; other.lastPathRefresh= SIMTIME_ZERO; other.state= pathState_t::undefined; };
 
 	// copy assignment
 	inline KadPath&  operator=(const KadPath& other);
@@ -60,7 +60,7 @@ public:
 	inline KadPath&  operator=(KadPath&& other);
 
 	// set back to initial state
-	void clear() { 	path.clear(); lastseen= SIMTIME_ZERO; lastPathRefresh= SIMTIME_ZERO; pathHashSum={}; state= pathState_t::undefined; };
+	void clear() { 	path.clear(); lastvalidated= SIMTIME_ZERO; lastPathRefresh= SIMTIME_ZERO; pathHashSum={}; state= pathState_t::undefined; };
 	const kad_path& getRawPath() const { return path; }
 	void setPath(const kad_path& newpath, const OverlayKey& newPathHashSum, pathState_t newstate= pathState_t::exists) {
 		path= newpath; pathHashSum= newPathHashSum; state= newstate; };
@@ -102,10 +102,13 @@ public:
 	//	path.erase(start, end);
 	//}
 
-	unsigned long getAge() const { return (simTime() - lastseen).inUnit(SIMTIME_MS); }
-	simtime_t getLastSeen() const { return lastseen; }
-	void updateLastSeen() { lastseen= simTime(); }
-	void updateLastSeenTo(const simtime_t &new_time_stamp) { lastseen= new_time_stamp; }
+	// if path is too old, it needs validation by a connectivity check
+	unsigned long getAge() const { return (simTime() - lastvalidated).inUnit(SIMTIME_MS); }
+	simtime_t getLastValidated() const { return lastvalidated; }
+	void updateLastValidated() { lastvalidated= simTime(); }
+	void updateLastValidatedTo(const simtime_t &new_time_stamp) { lastvalidated= new_time_stamp; }
+	// a path must be refreshed once a while to keep the soft state in the forwarding tier
+	simtime_t getLastPathRefreshAge() const { return (simTime() - lastPathRefresh).inUnit(SIMTIME_MS); }
 	simtime_t getLastPathRefresh() const { return lastPathRefresh; }
 	void updateLastPathRefresh() { lastPathRefresh = simTime(); }
 	const OverlayKey& getPathHashSum() const { return pathHashSum; };
@@ -135,7 +138,7 @@ public:
 
 private:
     kad_path path;
-    simtime_t lastseen;
+    simtime_t lastvalidated; // point in time when the path was validated (known to be working)
     simtime_t lastPathRefresh; /// time of last path refresh (setupRsp / probeRsp)
     OverlayKey pathHashSum; /// the hash sum of the path
     pathState_t state;
@@ -146,7 +149,7 @@ private:
 inline
 KadPath& KadPath::operator=(const KadPath& other) {
 		path= other.path;
-		lastseen= other.lastseen;
+		lastvalidated= other.lastvalidated;
 		lastPathRefresh= other.lastPathRefresh;
 		pathHashSum= other.pathHashSum;
 		state= other.state;
@@ -158,12 +161,12 @@ KadPath& KadPath::operator=(const KadPath& other) {
 inline
 KadPath& KadPath::operator=(KadPath&& other) {
 		path= other.path;
-		lastseen= other.lastseen;
+		lastvalidated= other.lastvalidated;
 		lastPathRefresh= other.lastPathRefresh;
 		pathHashSum= other.pathHashSum;
 		state= other.state;
 		other.path.clear();
-		other.lastseen= SIMTIME_ZERO;
+		other.lastvalidated= SIMTIME_ZERO;
 		other.lastPathRefresh= SIMTIME_ZERO;
 		other.state= pathState_t::undefined;
 		return *this;

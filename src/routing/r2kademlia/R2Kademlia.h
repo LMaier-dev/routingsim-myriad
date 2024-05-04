@@ -300,7 +300,7 @@ private:
 	void doDataProbe(short timerId);
 	void doReachabilityTest(short timerId);
 	void doSendExplorePathPacket(short timerId);
-	void doRefreshSetupPaths(short timerId);
+	void doPathRefresh(short timerId);
 	//@}
 
 	/** @name private helpers */
@@ -650,7 +650,7 @@ void R2Kademlia::sendLocalLinkFailureNotifications()
 	NotViaList_t notvialist;
 	for ( auto& failedPN : failedPNList ) {
 		if (auto pncontact= routingTable.getContact(failedPN); pncontact != nullptr) {
-			notvialist.push_back(std::make_pair(std::make_pair(myOverlayKey,failedPN),pncontact->getAge()));
+			notvialist.push_back(std::make_pair(std::make_pair(myOverlayKey,failedPN),pncontact->getPathAge()));
 		}
 	}
 
@@ -664,6 +664,7 @@ inline
 void
 R2Kademlia::addIncomingIFtoPIDEntry(const OverlayKey& incomingULN, PathID incomingPID)
 {
+	EV_TRACE << "addIncomingIFtoPIDEntry(" << incomingULN.shortStr() << ", " << incomingPID << ")" << endl;
 	if (auto it= incomingIFtoPIDmap.find(incomingULN); it != incomingIFtoPIDmap.end()) {
 		it->second.insert(incomingPID);
 	}

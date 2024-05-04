@@ -118,7 +118,7 @@ void R2Kademlia::onInitialize() {
 
 	// regularly probe for closest (overlay/ID-wise)  neighbors
 	addRandomizedTimer(std::max(probeInterval, SimTime(1000,SIMTIME_MS)), probeInterval*2, std::bind(&R2Kademlia::doProbeNeighbors, this, ph::_1));
-	// regularly probe for non PN contacts to test path liveliness
+	// regularly probe for non PN contacts to test path liveliness and also refresh soft states in the forwarding tier
 	addRandomizedTimer(std::max(probeInterval/2, SimTime(1000,SIMTIME_MS)), probeInterval, std::bind(&R2Kademlia::doProbeContacts, this, ph::_1));
 	// regularly send FindNodeReq to _randomly_ chosen IDs, i.e., key-IDs but not node-IDs
 	// the advantage is to discover new and better contacts and/or paths
@@ -136,7 +136,7 @@ void R2Kademlia::onInitialize() {
 
 	if (usePathIDs) {
 		// if PathRefreshThreshold is 20s, refresh is scheduled between [10s,30s]
-		addRandomizedTimer(SimTime(PathRefreshThreshold/2,SIMTIME_MS), SimTime(PathRefreshThreshold,SIMTIME_MS), std::bind(&R2Kademlia::doRefreshSetupPaths, this, ph::_1));
+		addRandomizedTimer(SimTime(PathRefreshThreshold/2,SIMTIME_MS), SimTime(PathRefreshThreshold,SIMTIME_MS), std::bind(&R2Kademlia::doPathRefresh, this, ph::_1));
 		// garbageCollection would happen after 90s + every 10s
 		addFixedTimer(SimTime(3*PathRefreshThreshold,SIMTIME_MS), SimTime(10000,SIMTIME_MS), std::bind(&R2Kademlia::doGarbageCollectPathIDs, this, ph::_1));
 	}
@@ -957,7 +957,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 		for (auto it= contacts.begin(); it != contacts.end(); it++) {
 			if (*it != nullptr and (*it)->getKey() == packet->getSource()) {
 				contacts.erase(it);
-				EV_TRACE << "removed " << packet->getSource() << " from found contacts" << endl;
+				// EV_TRACE << "removed " << packet->getSource() << " from found contacts" << endl;
 				break;
 			}
 		}
@@ -1322,7 +1322,7 @@ void R2Kademlia::fillRTableRsp(KadRTableRsp& packet, const KadContactList& conta
 			if (includePaths) {
 				packet.setPath(i, contacts[i]->getPath());
 				packet.setSeqNo(i, contacts[i]->getStateSeqNo());
-				packet.setPathInfoAge(i, contacts[i]->getAge());
+				packet.setPathInfoAge(i, contacts[i]->getPathAge());
 				// path + seqno + age
 				packet.addBitLength(contacts[i]->getPathLength()*OverlayKey::getLength()+32+sizeof(age_t)*8);
 			}

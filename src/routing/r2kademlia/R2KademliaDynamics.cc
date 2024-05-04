@@ -441,7 +441,7 @@ void R2Kademlia::sendUpdates()
 				packet->setContact(i, affectedContact.getKey());
 				packet->setPath(i, affectedContact.getPath());
 				packet->setSeqNo(i, affectedContact.getStateSeqNo());
-				packet->setPathInfoAge(i, affectedContact.getAge());
+				packet->setPathInfoAge(i, affectedContact.getPathAge());
 				packet->setNodeDegree(i, affectedContact.getNodeDegree());
 				packet->setAction(i, action);
 				EV_TRACE << ' ' <<
