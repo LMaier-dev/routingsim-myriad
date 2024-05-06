@@ -53,6 +53,7 @@ void RandomWaypointMobility::setTargetVelocity() {
   } else {
     Coord2D direction = targetPosition - lastPosition;
     double distance = direction.distance_squared();
+    EV_DEBUG << "distance " << distance << endl;
     velocity = (direction/distance) * speed;
     timeToNextPeriod = distance / speed;
   }

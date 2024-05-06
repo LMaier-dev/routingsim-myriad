@@ -8,17 +8,28 @@ namespace routingsim {
 
 class AntennaBase: public cSimpleModule {
 private:
+  double calcRange();
+
+protected:
   double signalPower;
   double bandwidth;
+  double range;
+  double systemNoise;
 
 public:
   void initialize() override;
   double getSignalPower() const { return signalPower; }
   double getBandwidth() const { return bandwidth; }
-  double getRange() const { return 300.0; }
+  double getRange() const { return range; }
 
-  // Calculate the bandwidth of the antenna at a given distance
+  // Calculate pathloss of the signal power at a given distance
   virtual double pathloss(double distance) = 0;
+
+  virtual double distance_from_pathloss(double pathloass) = 0;
+
+  // Calculate achievable datarate at a given distance
+  virtual double calcDatarate(double distance) = 0;
+
 };
 
 } // namespace routingsim

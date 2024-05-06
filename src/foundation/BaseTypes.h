@@ -171,11 +171,21 @@ public:
     return {x / d, y / d};
   }
 
+  bool operator==(Coord2D &rhs) const {
+    return this->x == rhs.x && this->y == rhs.y;
+  }
+
+  bool operator!=(Coord2D &rhs) const {
+    return this->x != rhs.x || this->y != rhs.y;
+  }
+
   double distance(Coord2D rhs) const {
     return sqrt(pow(x - rhs.x, 2) + pow(y - rhs.y, 2));
   }
 
   double distance_squared() const { return sqrt(pow(x, 2) + pow(y, 2)); }
+
+  Coord2D get_normalized() const { return *this / this->distance_squared(); }
 
   [[nodiscard]] std::string toString() const {
     std::ostringstream oss;
@@ -189,7 +199,7 @@ private:
   double radius;
 
 public:
-  Rad2D() {setRadius(0);};
+  Rad2D() { setRadius(0); };
   Rad2D(double d) { setRadius(d); };
 
   static const Rad2D ZERO;
@@ -198,6 +208,11 @@ public:
   [[nodiscard]] double getRadius() const { return radius; }
 
   void add_deg(double d) { setRadius(radius + d); }
+
+  void setFromVector(Coord2D vector) {
+    Coord2D vector_normalized = vector.get_normalized();
+    radius = atan2(vector_normalized.y, vector_normalized.x);
+  }
 
   Rad2D operator=(double d) {
     setRadius(d);

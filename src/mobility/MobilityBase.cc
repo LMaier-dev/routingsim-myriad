@@ -5,7 +5,7 @@ namespace routingsim {
 
 Register_Abstract_Class(MobilityBase);
 
-simsignal_t MobilityBase::mobilityStateChangedSignal = cComponent::registerSignal("mobilityStateChanged");
+simsignal_t MobilityBase::mobilityStateChangedSignal = registerSignal("mobilityStateChanged");
 
 void MobilityBase::initialize() {
   Environment::initialize();
@@ -18,7 +18,7 @@ void MobilityBase::initialize() {
 void MobilityBase::initializePosition() { lastPosition = getRandomPosition(); }
 
 void MobilityBase::initializeHeading() {
-  heading.setRadius(getRNG(0)->doubleRand() * 360);
+  heading.setRadius(getRNG(par("mobilityRNG").intValue())->doubleRand() * 360);
 }
 
 void MobilityBase::handleMessage(cMessage *msg) {
@@ -37,7 +37,10 @@ void MobilityBase::handleSelfMessage(cMessage *msg) {
 }
 
 void MobilityBase::updatePosition() {
+  Coord2D lastPositionCache = lastPosition;
   move();
+  if (lastPositionCache != lastPosition) sendUpdatePositionMessage();
+  heading.setFromVector(velocity);
   if (isOutside(lastPosition)) {
     handleIfOutside();
   }
@@ -69,6 +72,11 @@ int MobilityBase::reflect(double min, double max, double &coordinate,
   coordinate = fmod(sign * value, size) + min;
   speed = sign * speed;
   return sign;
+}
+
+
+void MobilityBase::sendUpdatePositionMessage() {
+  emit(mobilityStateChangedSignal, true);
 }
 
 } // namespace routingsim

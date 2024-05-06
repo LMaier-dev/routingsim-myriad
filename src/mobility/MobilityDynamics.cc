@@ -7,14 +7,19 @@ namespace routingsim {
 Define_Module(MobilityDynamics);
 
 void MobilityDynamics::initialize(int stage) {
-  if (stage == 0) {
-    updateInterval = par("updateInterval").doubleValue();
-  } else if (stage == 1) {
-    scheduleAt(simTime() + updateInterval * 1000,
-               const_cast<cMessage *>(mobilityUpdateMsg));
+  if (stage == 1)  {
+    subscribeToMobilityUpdateSignals();
   }
-
 }
+
+void MobilityDynamics::subscribeToMobilityUpdateSignals() {
+  for (cModule *to_node : mobilityTopology->getNodeMods()) {
+    MobilityListener *listener = new MobilityListener(this);
+    to_node->getSubmodule("MobilityModel")->subscribe("mobilityStateChanged", listener);
+    mobilityListeners->push_back(listener);
+  }
+}
+
 void MobilityDynamics::handleMessage(cMessage *msg) {
   if (msg->getKind() == MOBILITY_UPDATE) {
     updateMobility();

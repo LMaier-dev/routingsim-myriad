@@ -19,7 +19,6 @@ namespace routingsim {
         friend class MobilityTopology;
 
     public:
-        void initialize() override;
         void doBuildInside() override;
         void refreshDisplay() const override;
         MobilityBase *getMobilityModel() { return mobility_model; };

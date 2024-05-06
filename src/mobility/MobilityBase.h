@@ -21,6 +21,7 @@ namespace routingsim {
     private:
         cMessage *updatePositionMessage = new cMessage("mobility_update", MOBILITY_UPDATE);
         static int reflect(double, double, double &, double &);
+        void sendUpdatePositionMessage();
 
     protected:
         // The interval to update the position of the node.

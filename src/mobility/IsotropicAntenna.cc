@@ -7,8 +7,15 @@ namespace routingsim {
 Define_Module(IsotropicAntenna);
 
 double IsotropicAntenna::pathloss(double distance) {
-  // TODO: Implement pathloss
-  return 5.0;
+    return 1 / pow(distance, 2);
+}
+
+double IsotropicAntenna::distance_from_pathloss(double pathloass) {
+    return 1 / sqrt(pathloass);
+}
+
+double IsotropicAntenna::calcDatarate(double distance) {
+    return bandwidth * log2(1 + (signalPower - pathloss(distance)) / systemNoise);
 }
 
 } // namespace routingsim

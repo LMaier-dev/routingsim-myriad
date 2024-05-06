@@ -7,10 +7,14 @@
 
 namespace routingsim {
 
-class IsotropicAntenna: public AntennaBase {
-public:
-  double pathloss(double distance) override;
-};
+    class IsotropicAntenna : public AntennaBase {
+    public:
+        double pathloss(double distance) override;
+
+        double distance_from_pathloss(double pathloass) override;
+
+        double calcDatarate(double distance) override;
+    };
 
 } // namespace routingsim
 
