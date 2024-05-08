@@ -276,6 +276,7 @@ inline bool KadContact::setInvalid(const link_t& failed_link, age_t failed_link_
 {
 	if (state == State::valid or state == State::checking) {
 		state= State::invalid;
+		active_path.updateLastValidatedTo(simTime() - SimTime(failed_link_age,SIMTIME_MS));
 		rds_p= std::make_unique<RediscoveryState>(std::make_pair(failed_link, simTime() - SimTime(failed_link_age,SIMTIME_MS)));
 		return true;
 	}

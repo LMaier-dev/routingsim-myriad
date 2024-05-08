@@ -41,19 +41,33 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 		}
 	}
 
+	// determine first segment end in hops
+	auto firstsegment_end(overallPathLengthHops);
+	if (overallPathLengthHops == 2*nodeVicinityGraph::vicinityDiscoveryRadius) { // four hops
+		firstsegment_end= nodeVicinityGraph::vicinityDiscoveryRadius;
+	}
+	else // five hops
+	if (overallPathLengthHops == 2*nodeVicinityGraph::vicinityDiscoveryRadius+1) {
+		firstsegment_end= nodeVicinityGraph::vicinityDiscoveryRadius+1;
+	}
+	else // more than six hops
+	if (overallPathLengthHops >= 2*(nodeVicinityGraph::vicinityDiscoveryRadius+1)) {
+		firstsegment_end-= nodeVicinityGraph::vicinityDiscoveryRadius+1;
+	}
+
+	bool inside_firstsegment(packet.getProgress() < firstsegment_end);
+	const auto pathtoadd(packet.getSrcPath(packet.getProgress()+1, inside_firstsegment ? firstsegment_end+1 : packet.getRouteArraySize()));
+	PathID incomingPID(getPathID(myOverlayKey, pathtoadd));
+
+	// add incoming interface everywhere except at the end of the first segment
+	if (packet.getProgress() != firstsegment_end) {
+		addIncomingIFtoPIDEntry(packet.getHop(packet.getProgress()-1), incomingPID);
+	}
+
 	// paths up to nodeVicinityGraph::vicinityDiscoveryRadius hops have been precalculated
 	// nothing to install here, but maybe we need to add the incoming interface
 	// or store first segment source
 	if (packet.hopsLeft() <= nodeVicinityGraph::vicinityDiscoveryRadius) {
-
-		const auto pathtoadd(packet.getSrcPath(packet.getProgress()+1, packet.getRouteArraySize()));
-		PathID incomingPID(getPathID(myOverlayKey, pathtoadd));
-
-		if (packet.hopsLeft() != nodeVicinityGraph::vicinityDiscoveryRadius
-		    and overallPathLengthHops > nodeVicinityGraph::vicinityDiscoveryRadius+1 and
-		    overallPathLengthHops < 2*(nodeVicinityGraph::vicinityDiscoveryRadius+1)) {
-			addIncomingIFtoPIDEntry(packet.getHop(packet.getProgress()-1), incomingPID);
-		}
 
 		if (packet.hopsLeft() == nodeVicinityGraph::vicinityDiscoveryRadius and
 		    overallPathLengthHops > nodeVicinityGraph::vicinityDiscoveryRadius+1 and
@@ -118,7 +132,7 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 	}
 	else
 	if (packet.hopsLeft() >= 2*(nodeVicinityGraph::vicinityDiscoveryRadius+1)) {
-// at least six hops left to destination: install PID to node three hops before destination
+                // at least six hops left to destination: install PID to node three hops before destination
 		const auto target(packet.getRoute(overallPathLengthHops-nodeVicinityGraph::vicinityDiscoveryRadius-1));
 		const auto pathtoadd(packet.getSrcPath(packet.getProgress()+1, overallPathLengthHops-nodeVicinityGraph::vicinityDiscoveryRadius));
 		// PID must be installed if hops > vicinityDiscoveryRadius
@@ -126,8 +140,6 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 		if (auto [added,incomingPID]= fwdTablePathID.addForeignEntry(pathtoadd); added == true) {
 			// no need to install NodeId to PID mapping as this is probably no local contact
 			EV_TRACE << " added " << incomingPID << endl;
-			// remember the incoming interface/underlay neighbor where the PID came from
-			addIncomingIFtoPIDEntry(packet.getHop(packet.getProgress()-1), incomingPID);
 
 			return true;
 		}
@@ -138,8 +150,6 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 			fwdtableentry.setForeign();
 			fwdtableentry.setUsed();
 			EV_TRACE << " already present/ignored" << endl;
-			// remember the incoming interface/underlay neighbor where the PID came from
-			addIncomingIFtoPIDEntry(packet.getHop(packet.getProgress()-1), incomingPID);
 
 			return false;
 		}
