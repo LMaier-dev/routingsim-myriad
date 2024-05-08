@@ -6,32 +6,31 @@
 
 namespace routingsim {
 
-class AntennaBase: public cSimpleModule {
-private:
-  double calcRange();
+    class AntennaBase : public cSimpleModule {
+    private:
+        double calcRange();
 
-protected:
-  double signalPower;
-  double bandwidth;
-  double range;
-  double systemNoise;
+    protected:
+        DBm signalPower;
+        DBm systemNoise;
+        MHz bandwidth;
+        double range;
 
-public:
-  void initialize() override;
-  double getSignalPower() const { return signalPower; }
-  double getBandwidth() const { return bandwidth; }
-  double getRange() const { return range; }
+    public:
+        void initialize() override;
+        DBm getSignalPower() const { return signalPower; }
+        MHz getBandwidth() const { return bandwidth; }
+        double getRange() const { return range; }
 
-  // Calculate pathloss of the signal power at a given distance
-  virtual double pathloss(double distance) = 0;
+        // Calculate pathloss of the signal power at a given distance
+        virtual DBm pathloss(double distance) = 0;
 
-  virtual double distance_from_pathloss(double pathloass) = 0;
+        virtual double distance_from_pathloss(DBm pathloass) = 0;
 
-  // Calculate achievable datarate at a given distance
-  virtual double calcDatarate(double distance) = 0;
+        // Calculate achievable datarate at a given distance
+        virtual double calcDatarate(double distance) = 0;
+    };
 
-};
+}// namespace routingsim
 
-} // namespace routingsim
-
-#endif // ROUTINGSIM_ANTENNABASE_H
+#endif// ROUTINGSIM_ANTENNABASE_H

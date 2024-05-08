@@ -10,7 +10,7 @@
 # diameter: 1
 # average clustering: 1.0
 # average shortest path length (sampled): 1.0
-6	15
+6	5
 0	1
 1	0
 0	2

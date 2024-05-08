@@ -12,7 +12,7 @@ MobilityTopology::MobilityTopology(cModule *networkManager) {
 
 // TODO: par
 void MobilityTopology::initialize() {
-  NetworkTopology::readTopology("../simulations/topologies/fully_connected_n6.txt", "SELF_DEFINED", true, false, false, false);
+  NetworkTopology::readTopology("../simulations/topologies/nodes_only_n6.txt", "SELF_DEFINED", true, false, false, false);
   NetworkTopology::createNetwork(networkManager, "routingsim.mobility.MobilityNodeWrapper");
   setShortestPathCalculationMode("fullDistanceMatrix");
   for (auto modMapIt = moduleMap.begin(); modMapIt != moduleMap.end(); modMapIt++) {

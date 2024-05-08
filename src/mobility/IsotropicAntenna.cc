@@ -6,11 +6,11 @@ namespace routingsim {
 
 Define_Module(IsotropicAntenna);
 
-double IsotropicAntenna::pathloss(double distance) {
+DBm IsotropicAntenna::pathloss(double distance) {
     return 1 / pow(distance, 2);
 }
 
-double IsotropicAntenna::distance_from_pathloss(double pathloass) {
+double IsotropicAntenna::distance_from_pathloss(DBm pathloass) {
     return 1 / sqrt(pathloass);
 }
 
