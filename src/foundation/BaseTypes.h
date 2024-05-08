@@ -185,7 +185,11 @@ public:
 
   double distance_squared() const { return sqrt(pow(x, 2) + pow(y, 2)); }
 
-  Coord2D get_normalized() const { return *this / this->distance_squared(); }
+  Coord2D get_normalized() const {
+      if (this->distance_squared() == 0)
+          return *this;
+      return *this / this->distance_squared();
+  }
 
   [[nodiscard]] std::string toString() const {
     std::ostringstream oss;
