@@ -47,13 +47,8 @@ void MobilityDynamics::updateConnection(cModule *fromNodeWrapper,
 
   double distance = fromNode->getMobilityModel()->getPosition().distance(toNode->getMobilityModel()->getPosition());
   double rangeFromNode = fromNode->getAntennaModel()->getRange();
-  EV_DEBUG << "Connection update" << endl;
-  EV_DEBUG << "------ from: " << fromNode->getNodeId() << endl;
-  EV_DEBUG << "------ to: " << toNode->getNodeId() << endl;
-  EV_DEBUG << "------ range: " << rangeFromNode << endl;
   if (distance <= rangeFromNode) {
     double newDatarate = fromNode->getAntennaModel()->calcDatarate(distance);
-    EV_DEBUG << "------ new datarate: " << newDatarate << endl;
     mobilityTopology->setDatarate(fromNode, toNode, newDatarate);
     mobilityTopology->enableLink(fromNode->getNodeId(), toNode->getNodeId());
 

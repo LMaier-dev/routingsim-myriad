@@ -16,11 +16,6 @@ void AntennaBase::initialize() {
   this->frequency =
       MHz(uniform(par("minFreq").doubleValue(), par("maxFreq").doubleValue()));
   this->range = calcRange();
-  EV_DEBUG << pathloss(0).getValue() << endl;
-  EV_DEBUG << pathloss(10).getValue() << endl;
-  EV_DEBUG << pathloss(100).getValue() << endl;
-  EV_DEBUG << pathloss(300).getValue() << endl;
-  EV_DEBUG << pathloss(1000).getValue() << endl;
 }
 
 double AntennaBase::calcRange() {
