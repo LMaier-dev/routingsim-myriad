@@ -15,7 +15,7 @@ class MobilityDynamics : public cSimpleModule {
 private:
   const cMessage *mobilityUpdateMsg = new cMessage("MobilityEvent", MOBILITY_UPDATE);
   double updateInterval = 0.1;
-  void updateConnection(cModule *fromNode, cModule *toNode);
+  void updateConnection(cModule *fromNode, cModule *toNode) const;
   void subscribeToMobilityUpdateSignals();
   std::vector<cIListener *> *mobilityListeners = new std::vector<cIListener *>();;
 

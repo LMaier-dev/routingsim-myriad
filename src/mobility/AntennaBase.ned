@@ -3,10 +3,14 @@ package routingsim.mobility;
 
 simple AntennaBase {
     parameters:
-        double minP @unit(dbm) = default(10dbm);
-        double maxP @unit(dbm) = default(12dbm);
-        double minB @unit(MHz) = default(10MHz);
-        double maxB @unit(MHz) = default(12MHz);
-        double systemNoise @unit(dbm) = default(-172dbm);
+        double minSignalPower @unit(db) = default(10db);
+        double maxSignalPower @unit(db) = default(12db);
+        double minSendGain @unit(db) = default(0db);
+        double maxSendGain @unit(db) = default(0db);
+        double minRecvGain @unit(db) = default(0db);
+        double maxRecvGain @unit(db) = default(0db);
+        double minFreq @unit(MHz) = default(2400MHz);
+        double maxFreq @unit(MHz) = default(2400MHz);
+        double systemNoise @unit(db) = default(-172db);
 }
 

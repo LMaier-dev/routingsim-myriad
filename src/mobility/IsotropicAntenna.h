@@ -2,19 +2,19 @@
 #ifndef ROUTINGSIM_ISOTROPICANTENNA_H
 #define ROUTINGSIM_ISOTROPICANTENNA_H
 
-#include <cmath>
 #include "AntennaBase.h"
+#include <cmath>
 
 namespace routingsim {
 
-    class IsotropicAntenna : public AntennaBase {
-    public:
-        DBm pathloss(double distance) override;
+class IsotropicAntenna : public AntennaBase {
+public:
+  DB pathloss(double distance) override;
 
-        double distance_from_pathloss(DBm pathloass) override;
+  double distance_from_pathloss(DB pathloass) override;
 
-        double calcDatarate(double distance) override;
-    };
+  double calcDatarate(double distance) override;
+};
 
 } // namespace routingsim
 

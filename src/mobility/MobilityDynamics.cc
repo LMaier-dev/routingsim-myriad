@@ -40,16 +40,21 @@ void MobilityDynamics::updateMobilityNode(cModule *node_wrapper) {
   }
 }
 void MobilityDynamics::updateConnection(cModule *fromNodeWrapper,
-                                        cModule *toNodeWrapper) {
-  MobilityNode *fromNode = check_and_cast<MobilityNode*>(fromNodeWrapper->getSubmodule("node"));
-  MobilityNode *toNode = check_and_cast<MobilityNode*>(toNodeWrapper->getSubmodule("node"));
+                                        cModule *toNodeWrapper) const {
+  auto *fromNode = check_and_cast<MobilityNode*>(fromNodeWrapper->getSubmodule("node"));
+  auto *toNode = check_and_cast<MobilityNode*>(toNodeWrapper->getSubmodule("node"));
   if (fromNode->getId() == toNode->getId()) return;
 
   double distance = fromNode->getMobilityModel()->getPosition().distance(toNode->getMobilityModel()->getPosition());
-  double radiusFromNode = fromNode->getAntennaModel()->getSignalPower();
-  if (distance <= radiusFromNode) {
-    double newBandwidth = fromNode->getAntennaModel()->pathloss(distance);
-    mobilityTopology->setDatarate(fromNode, toNode, newBandwidth);
+  double rangeFromNode = fromNode->getAntennaModel()->getRange();
+  EV_DEBUG << "Connection update" << endl;
+  EV_DEBUG << "------ from: " << fromNode->getNodeId() << endl;
+  EV_DEBUG << "------ to: " << toNode->getNodeId() << endl;
+  EV_DEBUG << "------ range: " << rangeFromNode << endl;
+  if (distance <= rangeFromNode) {
+    double newDatarate = fromNode->getAntennaModel()->calcDatarate(distance);
+    EV_DEBUG << "------ new datarate: " << newDatarate << endl;
+    mobilityTopology->setDatarate(fromNode, toNode, newDatarate);
     mobilityTopology->enableLink(fromNode->getNodeId(), toNode->getNodeId());
 
   } else {
