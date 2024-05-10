@@ -244,6 +244,7 @@ void Node::sendNotify(NodePkt *packet, cGate *dg) {
 }
 
 void Node::initNeighbors() {
+  if (!hasGate("toNeighbors$o", 0)) return;
   NodePkt *np = new NodePkt();
   np->setType(PAYLOAD_HELLO);
   if (cSimulation::getActiveEnvir()->isGUI())

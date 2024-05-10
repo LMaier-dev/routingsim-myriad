@@ -56,7 +56,7 @@ using std::vector;
  */
 
 class NetworkTopology {
-private:
+protected:
 	typedef boost::unordered_map<string,string> properties_t;
 
 	NetworkTopology &operator=(NetworkTopology const &n);
@@ -94,7 +94,7 @@ private:
 		activeNodes( GraphType &g) : graph(&g) {};
 		template <typename VertexType>
 		bool operator() (const VertexType &v) const { return (*graph)[v].active; }
-	private:
+	protected:
 		GraphType *graph;
 	};
 
@@ -105,7 +105,7 @@ private:
 		activeEdges( GraphType &g) :graph(&g) {};
 		template <typename EdgeType>
 		bool operator() (const EdgeType &e) const { return (*graph)[e].active; }
-	private:
+	protected:
 		GraphType *graph;
 	};
 

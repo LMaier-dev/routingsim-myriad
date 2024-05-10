@@ -15,15 +15,15 @@ public:
    */
   explicit MobilityTopology(cModule *networkManager);
   void setDatarate(MobilityNode *fromNode, MobilityNode *toNode, double datarate);
+  void createLink(MobilityNode *fromNode, MobilityNode *toNode);
+  void deleteLink(MobilityNode *fromNode, MobilityNode *toNode);
   std::vector<cModule*> getNodeMods() const { return *mobilityNodeMods; }
   std::vector<cModule*> *mobilityNodeMods = new std::vector<cModule *>();
 
 private:
   cRNG *rng;
   cModule *networkManager = nullptr;
-
   int numNodes = 0;
-
   void createTopology();
 };
 } // namespace routingsim

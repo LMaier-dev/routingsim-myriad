@@ -48,12 +48,12 @@ void MobilityDynamics::updateConnection(cModule *fromNodeWrapper,
   double distance = fromNode->getMobilityModel()->getPosition().distance(toNode->getMobilityModel()->getPosition());
   double rangeFromNode = fromNode->getAntennaModel()->getRange();
   if (distance <= rangeFromNode) {
+    mobilityTopology->createLink(fromNode, toNode);
     double newDatarate = fromNode->getAntennaModel()->calcDatarate(distance);
     mobilityTopology->setDatarate(fromNode, toNode, newDatarate);
-    mobilityTopology->enableLink(fromNode->getNodeId(), toNode->getNodeId());
 
   } else {
-    mobilityTopology->disableLink(fromNode->getNodeId(), toNode->getNodeId());
+    mobilityTopology->deleteLink(fromNode, toNode);
   }
 }
 } // namespace routingsim
