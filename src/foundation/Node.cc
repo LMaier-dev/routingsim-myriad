@@ -180,7 +180,7 @@ void Node::sendToNode(nodeid_t nid, NodePkt *np) {
   np->setHop(hop_t(id, nid));
 
   // if gate is disabled by networkManager, do not send
-  if (gateIsDisabled(n.out)) {
+  if (gateIsDisabled(n.out) || !n.out->isConnected()) {
     delete np;
     return;
   }

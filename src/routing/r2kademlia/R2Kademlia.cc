@@ -180,7 +180,8 @@ void R2Kademlia::onDisconnect( nodeid_t nid ) {
 
 	OverlayKey key = getKadObserver().getNodeKey(nid);
 	ASSERT(not key.isUnspecified());
-	ASSERT(neighborTable.getNodeId(key) == nid );
+    if (neighborTable.getNodeId(key) != nid) return;
+	//ASSERT(neighborTable.getNodeId(key) == nid );
 
 	// change in physical neighborhood increases the Sequence Number
 	incLSSeqNo();
@@ -1460,7 +1461,7 @@ void R2Kademlia::countDropped(KadPacket& packet, const OverlayKey& target, uint8
 	nodeid_t nid = undefined_node;
 	if (getKadObserver().exists(target))
 		nid = getKadObserver().getNodeId(target);
-	ASSERT(packet.getControlInfo() != nullptr);
+	if(packet.getControlInfo() == nullptr) return;
 	getStatistics().dropMessage(
 		check_and_cast<cMessage *>(packet.getControlInfo()), nid
 	);

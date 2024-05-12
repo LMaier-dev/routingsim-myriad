@@ -29,8 +29,6 @@ void MobilityNode::refreshDisplay() const {
     ds.setTagArg("p", 0, lround(mobility_model->getPosition().x));
     ds.setTagArg("p", 1, lround(mobility_model->getPosition().y));
     ds.setTagArg("r", 0, lround(antenna_model->getRange()));
-    EV_DEBUG << "Display string updated" << endl;
-    EV_DEBUG << "------------ r: " << antenna_model->getRange() << endl;
 }
 
 } // namespace routingsim
