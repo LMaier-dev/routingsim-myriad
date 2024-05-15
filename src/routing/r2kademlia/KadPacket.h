@@ -34,7 +34,7 @@ public:
 	}
 	KadPacket(const KadPacket& other) : KadPacket_Base(other), overlayHops(other.overlayHops),
 					    tracked(other.tracked) {}
-	~KadPacket() { };
+	virtual ~KadPacket() { };
 	KadPacket& operator=(const KadPacket& other)
 		{ KadPacket_Base::operator=(other); overlayHops= other.overlayHops; tracked= other.tracked;
 			return *this; }

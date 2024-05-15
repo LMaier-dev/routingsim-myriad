@@ -18,7 +18,7 @@ namespace routingsim {
 
 // returns true if forwarding should stop here
 bool
-R2Kademlia::intermediateNodeProcessing(const KadPacket& packet) {
+R2Kademlia::intermediateNodeProcessing(KadPacket& packet) {
 
 	// special actions while forwarding packets
 	switch (packet.getType()) {

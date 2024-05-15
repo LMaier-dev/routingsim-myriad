@@ -145,6 +145,7 @@ private:
 	// to notify neighbors about affected PathIDs after a failure
 	std::unordered_set<PathID> notifyPIDs;
 	std::unordered_map<PathID, std::unordered_set<OverlayKey>> notifyFirstSegmentSources;
+	std::unordered_map<OverlayKey, std::pair<OverlayKey, PathID>> notifyFirstSegmentSourcesReversePath; // target, <outgoingIF, PathID to target>
 	std::unordered_map<OverlayKey, std::unordered_set<PathID>> incomingIFtoPIDmap;
 	inline void addIncomingIFtoPIDEntry(const OverlayKey& incomingULN, PathID pidentry);
 	// a list that is used to send rediscover messages
@@ -345,7 +346,7 @@ private:
 	bool processNotViaInformation(const KadPacket& packet);
 
 	// processes packets while forwarding
-	bool intermediateNodeProcessing(const KadPacket& packet);
+	bool intermediateNodeProcessing(KadPacket& packet);
 
 	kad_path concatViaPath(const kad_path& viaPath, const OverlayKey& viaKey, const kad_path& path);
 
@@ -486,6 +487,8 @@ private:
 	void scheduleUpdate(const KadContact& affectedcontact, KadRouteUpdateAction action);
 	/// forwards packet close to destcontactKey using the closest overlay neighbors
 	void forwardCloser(KadPacket_p packet, const OverlayKey& destContactKey);
+	/// for PID-based forwarding of LinkFailureNotify messages
+	void forwardLinkFailureNotify(std::unique_ptr<KadLinkFailureNotify> linkfailurenotifypkt, NodePkt_p pkt);
 	/// send Update closer towards target contacts
 	void propagateUpdateReq(std::unique_ptr<KadUpdateRouteReq> packet);
 	/// sends all queued updates

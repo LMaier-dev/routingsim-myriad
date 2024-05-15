@@ -873,15 +873,21 @@ R2Kademlia::doNotifyFirstSegmentSources(const std::unordered_set<PathID>& upstre
 	} // end for all PIDs to check
 
 	for (const auto &notify_target : nodestonotify) {
-		size_t contactsLen = std::max((size_t)findNodeNumber, routingTable.getSplitSize());
-		KadContactList closeContacts(routingTable.getClosestContacts(notify_target, contactsLen, true, notvialist));
-		if (not closeContacts.empty()) {
-			const KadContact& next_contact = chooseNextHop(closeContacts, notify_target);
-			// check whether that contact is closer to the target than we are (but do not send back to source)
-			if ( next_contact.isValid() and (next_contact.getKey() ^ myOverlayKey) > (next_contact.getKey() ^ notify_target) )
-			{
-				auto notify_packet = makePacket<KadLinkFailureNotify>(next_contact, "LinkFailureNotifyDirect");
+
+		bool sentViaPID(false);
+		if (const auto pid_it= notifyFirstSegmentSourcesReversePath.find(notify_target); pid_it != notifyFirstSegmentSourcesReversePath.cend())
+		{ // use a direct path with PIDs
+			if (neighborTable.isNeighbor(pid_it->second.first)) {
+				auto notify_packet = std::make_unique<KadLinkFailureNotify>();
+				notify_packet->setName("LinkFailureNotifyDirect");
+				notify_packet->setSource(myOverlayKey);
+				notify_packet->setHopLimit(hopLimit);
+				notify_packet->setStateSeqNo(getLSSeqNo());
+				notify_packet->setSrcNodeDegree(neighborTable.size());
+
 				notify_packet->setDstNodeID(notify_target);
+				notify_packet->setDstPID(pid_it->second.second);
+				notify_packet->appendHop(pid_it->second.first);
 				// copy notvia list
 				notify_packet->setFailedLinkArraySize(notvialist.size());
 				notify_packet->setFailedLinkAgeArraySize(notvialist.size());
@@ -893,9 +899,43 @@ R2Kademlia::doNotifyFirstSegmentSources(const std::unordered_set<PathID>& upstre
 				}
 				//ASSERT(notvialist.size() > 0);
 				notify_packet->setNotVia(notvialist.size() > 0);
+				// normally we would use PID encapsulation, but here we use a hop-wise constructed source route
+				EV_TRACE << "Sending LinkFailureNotify to " << notify_target.shortStr() << " next hop: " << pid_it->second.first.shortStr()
+					 << " outgoing PID: " << pid_it->second.second << endl;
 
-				EV_TRACE << "Sending LinkFailureNotify to " << notify_target.shortStr() << endl;
 				sendPacket(std::move(notify_packet));
+				sentViaPID= true;
+			}
+			else
+				EV_TRACE << "Cannot continue with PID-based forwarding of LinkFailureNotify due to next hop failure" << endl;
+		}
+
+		if (not sentViaPID) { // send via overlay
+			size_t contactsLen = std::max((size_t)findNodeNumber, routingTable.getSplitSize());
+			KadContactList closeContacts(routingTable.getClosestContacts(notify_target, contactsLen, true, notvialist));
+			if (not closeContacts.empty()) {
+				const KadContact& next_contact = chooseNextHop(closeContacts, notify_target);
+				// check whether that contact is closer to the target than we are (but do not send back to source)
+				if ( next_contact.isValid() and (next_contact.getKey() ^ myOverlayKey) > (next_contact.getKey() ^ notify_target) )
+				{
+					auto notify_packet = makePacket<KadLinkFailureNotify>(next_contact, "LinkFailureNotifyDirect");
+					notify_packet->setDstNodeID(notify_target);
+					notify_packet->setDstPID(PathID::UndefinedPathID);
+					// copy notvia list
+					notify_packet->setFailedLinkArraySize(notvialist.size());
+					notify_packet->setFailedLinkAgeArraySize(notvialist.size());
+					auto it(notvialist.cbegin());
+					for (uint i= 0; i < notvialist.size(); i++) {
+						notify_packet->setFailedLink(i,it->first);
+						notify_packet->setFailedLinkAge(i, it->second);
+						it++;
+					}
+					//ASSERT(notvialist.size() > 0);
+					notify_packet->setNotVia(notvialist.size() > 0);
+
+					EV_TRACE << "Sending LinkFailureNotify to " << notify_target.shortStr() << endl;
+					sendPacket(std::move(notify_packet));
+				}
 			}
 		}
 	} // end for all nodes to be notified
@@ -985,5 +1025,69 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadLinkFailureNotify> packet) {
 	} // end else
 }
 
+
+void
+R2Kademlia::forwardLinkFailureNotify(std::unique_ptr<KadLinkFailureNotify> linkfailurenotifypkt, NodePkt_p pkt)
+{
+	EV_TRACE << linkfailurenotifypkt->getName()
+		 << " PID: " << linkfailurenotifypkt->getDstPID()
+		 << " Dst: " << linkfailurenotifypkt->getDstNodeID()
+		 << " Path: " << linkfailurenotifypkt->getSrcPath() << endl;
+
+	auto incomingPID= linkfailurenotifypkt->getDstPID();
+	if (incomingPID == PathID::UndefinedPathID) {
+		// this should not happen as this function is only supposed to be called for packets with PIDs
+		ASSERT(incomingPID != PathID::UndefinedPathID);
+		return;
+	}
+
+	// Lookup PID in forwarding table
+	auto fwdentry= fwdTablePathID.PIDFwdTable.find(incomingPID);
+	if (fwdentry != fwdTablePathID.PIDFwdTable.end())
+	{ // entry found
+		FwdTableEntry& nh= fwdentry->second;
+		if (nh.isValid() or nh.isObsolete() or nh.isInvalid())
+		{
+			if (nh.isInvalid()) {
+				EV_ERROR << "invalid PathID entry hit: " << incomingPID << endl;
+			}
+
+			if (nh.isObsolete()) { // obsolete, but maybe still good enough to forward
+				EV_WARN << "obsolete PathID entry hit: " << incomingPID << endl;
+			}
+
+			if (nh.fwdAction == FwdTableEntry::Action::fwdNextPathID)
+			{ // set new outgoing PathID
+				linkfailurenotifypkt->setDstPID(nh.outgoingPathID);
+				EV_TRACE << "Outgoing PathID: " << nh.outgoingPathID << endl;
+				linkfailurenotifypkt->appendHop(nh.nextHopNode);
+				forwardPacket(std::move(linkfailurenotifypkt), std::move(pkt));
+				return;
+			}
+			else
+			if (nh.fwdAction == FwdTableEntry::Action::fwdNextNodeId)
+			{ // next hop will be the next hop where the path ends
+				linkfailurenotifypkt->setDstPID(PathID::UndefinedPathID);
+				EV_TRACE << "Forward to Next NodeID: " << nh.nextHopNode.shortStr() << endl;
+				linkfailurenotifypkt->appendHop(nh.nextHopNode);
+				forwardPacket(std::move(linkfailurenotifypkt), std::move(pkt));
+				return;
+			}
+			else
+			if (nh.fwdAction == FwdTableEntry::Action::fwdlocal)
+			{
+				EV_TRACE << "Forward action: local delivery" << endl;
+				ASSERT(false);
+			}
+		}
+		else
+			EV_ERROR << "hit forwarding table entry with undefined state" << endl;
+	}
+	else {
+		EV_ERROR << "PID " << linkfailurenotifypkt->getDstPID() << " not found " << endl;
+		ASSERT(false);
+		return;
+	}
+}
 
 } // end namespace

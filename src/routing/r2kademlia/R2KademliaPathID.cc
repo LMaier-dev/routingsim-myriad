@@ -81,6 +81,19 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 				notifyFirstSegmentSources.insert({incomingPID,{packet.getSource()}});
 				EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources PID=" << incomingPID << endl;
 			}
+
+			auto pathtosrc(packet.reversePath(packet.getSrcPath(0, packet.getProgress())));
+			// we need to store the outgoing PID as we will probably have no mapping for destinations in 3 hop distance
+			// but we also need to store the next hop as we may have no local mapping
+			PathID PIDtoSrc(getPathID(pathtosrc));
+			if (auto it= notifyFirstSegmentSourcesReversePath.find(packet.getSource()); it != notifyFirstSegmentSourcesReversePath.end()) {
+				notifyFirstSegmentSourcesReversePath[packet.getSource()]= {pathtosrc.at(0),PIDtoSrc};
+				EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources PID=" << PIDtoSrc << endl;
+			}
+			else {
+				notifyFirstSegmentSourcesReversePath.insert({packet.getSource(),{pathtosrc.at(0), PIDtoSrc}});
+				EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources PID=" << PIDtoSrc << endl;
+			}
 		}
 
 		return false;
@@ -97,6 +110,7 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 		EV_TRACE << "checkForPathIDInstallation: path to " << packet.getTarget().shortStr() << ": " << pathtoadd;
  		if (auto [added,incomingPID]= fwdTablePathID.addForeignEntry(pathtoadd); added == true) {
 			EV_TRACE << " added " << incomingPID << endl;
+
 			if (auto it= notifyFirstSegmentSources.find(incomingPID); it != notifyFirstSegmentSources.end()) {
 				it->second.insert(packet.getSource());
 				EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources PID=" << incomingPID << endl;
@@ -104,6 +118,20 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 			else {
 				notifyFirstSegmentSources.insert({incomingPID,{packet.getSource()}});
 				EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources PID=" << incomingPID << endl;
+			}
+
+			if (packet.getProgress() == nodeVicinityGraph::vicinityDiscoveryRadius+1) {
+				auto pathtosrc(packet.reversePath(packet.getSrcPath(0, packet.getProgress())));
+				// we need to store the outgoing PID as we will probably have no mapping for destinations in 3 hop distance
+				PathID PIDtoSrc(getPathID(pathtosrc));
+				if (auto it= notifyFirstSegmentSourcesReversePath.find(packet.getSource()); it != notifyFirstSegmentSourcesReversePath.end()) {
+					notifyFirstSegmentSourcesReversePath[packet.getSource()]= {pathtosrc.at(0),PIDtoSrc};
+					EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources PID=" << PIDtoSrc << endl;
+				}
+				else {
+					notifyFirstSegmentSourcesReversePath.insert({packet.getSource(), {pathtosrc.at(0),PIDtoSrc}});
+					EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources PID=" << PIDtoSrc << endl;
+				}
 			}
 
 			return true;

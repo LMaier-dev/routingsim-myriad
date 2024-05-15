@@ -290,6 +290,19 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	if (handleIfFitting<KadHello>(packet))
 		return;
 
+	// special handling for PID-based forwarding of LinkFailureNotify messages
+	if (packet->getType() == KAD_LinkFailureNotify) {
+
+		if (const auto linkfailurenotifypkt(dynamic_cast<KadLinkFailureNotify*>(packet.get()));
+		    linkfailurenotifypkt != nullptr and linkfailurenotifypkt->getDstPID() != PathID::UndefinedPathID) {
+			packet->advanceProgress();
+			std::unique_ptr<KadLinkFailureNotify> linkfailurenotifypkt_uptr(dynamic_cast<KadLinkFailureNotify*>(packet.release()));
+			forwardLinkFailureNotify(std::move(linkfailurenotifypkt_uptr), std::move(pkt));
+			return;
+		}
+
+	}
+
 	// other packets should include the key in the source route
 	packet->advanceProgress(); // increase hop count
 	if (packet->getCurrentHop() != myOverlayKey) {
@@ -311,13 +324,13 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		return;
 
 	if (packet->hasRemainingHops()) {
-		// we are not the recipient
+		// we are not the recipient (LinkFailureNotify needs special handling)
 
 		// perform (optional) processing while forwarding to its ultimate destination
 		// the processing of the packet may abort early here (PathSetupReq or PathTeardownReq)
 		if (intermediateNodeProcessing(*packet) == true)
 			return;
-
+		// continue forwarding according to source route
 		forwardPacket(std::move(packet), std::move(pkt));
 		return;
 	}
@@ -557,13 +570,15 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt, simtime_t 
 		// only reroute UpdateRouteReq and FindNodeReq for rediscovery (TODO check)
 		// try to find alternative route to final destination
 		if (finaldestination) {
-			EV_TRACE << "forwardPacket(): trying to reroute to final destination " << *finaldestination << endl;
+			EV_TRACE << "forwardPacket(): trying to reroute to final destination " << finaldestination->shortStr() << endl;
 			// add not via information before forwarding
 			if (  updatepacket != nullptr or findnodepacket != nullptr or linkfailurenotifypacket != nullptr )
 			{
 				packet->addNotViaLink({nextHop,myOverlayKey}, 0);
 			}
-
+			// need to delete the PID in case of rerouting via overlay
+			if (linkfailurenotifypacket)
+				linkfailurenotifypacket->setDstPID(PathID::UndefinedPathID);
 			// try to reroute
 			reroutePacket(*finaldestination, std::move(packet), std::move(nodePkt), delay);
 			return;

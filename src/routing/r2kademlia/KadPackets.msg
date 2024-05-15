@@ -211,9 +211,12 @@ packet KadRevPathFlood extends KadPacket {
 	PathID PIDList[];
 }
 
+
 packet KadLinkFailureNotify extends KadPacket {
         type = KAD_LinkFailureNotify;
 
 	// the final destination of the message
 	OverlayKey dstNodeID = OverlayKey::UNSPECIFIED_KEY;
+	// PathID to reach first segment sources if applicable
+	PathID dstPID = PathID::UndefinedPathID;
 }

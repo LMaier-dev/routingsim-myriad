@@ -50,7 +50,7 @@ simple R2Kademlia extends routingsim.foundation.Protocol
 		/// waiting time until PN rediscovery is scheduled
 		double PNRediscoveryWaitTime = default(100ms) @unit(ms);
 		/// waiting time until urgent rediscovery is scheduled
-		double urgentRediscoveryWaitTime = default(500ms) @unit(ms);
+		double urgentRediscoveryWaitTime = default(300ms) @unit(ms);
 		/// waiting time until rediscovery is scheduled
 		double regularRediscoveryWaitTime = default(1000ms) @unit(ms);
 		/// waiting time until rediscovery is scheduled
