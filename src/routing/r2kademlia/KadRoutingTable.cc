@@ -151,7 +151,9 @@ void KadRoutingTable::addPNContact(const OverlayKey& key, stateseqno_t stateseqn
 
 	KadContact *contact = getContactInternal(key);
 	if (contact == nullptr) { // contact is new
-		handleNewContact(key, kad_path(), stateseqno, 0, nodeDegree, true);
+		if (handleNewContact(key, kad_path(), stateseqno, 0, nodeDegree, true)) {
+			updatePaths(*getContactInternal(key));
+		}
 		return;
 	}
 	else { // contact already known, maybe have added it via other contact/neighbor
@@ -665,7 +667,7 @@ bool KadRoutingTable::shortenPath(kad_path& path, age_t path_info_age) const
 		if ( (knowncontactp= getContact(*pathit)) != nullptr ) {
 			// caveat: contact must be valid, newer and the resulting path must be actually shorter
 			if ( knowncontactp->isValid()
-			     and knowncontactp->getPathAge() < path_info_age
+			     //and knowncontactp->getPathAge() < path_info_age
 			     and knowncontactp->getPathLength()+1 < currentlength )
 			{
 				// we know a shorter replacement path, use it
@@ -1198,10 +1200,11 @@ void KadRoutingTable::updatePaths(const KadContact& improvedContact)
 						}
 
 						if (contact->isValid()) {
-							if (not contact->proposedPathDefined() or (contact->proposedPathDefined() and newpath.size() < contact->getProposedPath().length())) {
-									// this may be an improval, so just check the new alternative without actually changing the path yet
-									contact->setProposedPath(newpath, HashSum(myKey,newpath,contact->getKey()));
-									policy->onPathCheck(*contact, probeProposedPath | pathSetupCheck);
+							if ((pathimproved and not contact->proposedPathDefined()) or (contact->proposedPathDefined() and newpath.size() < contact->getProposedPath().length())) {
+								// this may be an improval, so just check the new alternative without actually changing the path yet
+								EV_TRACE << "updatePaths: found improved path for contact " << *contact << " proposed: " << newpath << endl;
+								contact->setProposedPath(newpath, HashSum(myKey,newpath,contact->getKey()));
+								policy->onPathCheck(*contact, probeProposedPath | pathSetupCheck);
 							}
 							found= true; // break the loop
 							continue;

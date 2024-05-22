@@ -186,6 +186,13 @@ OverlayKey HashSum(const OverlayKey& seed, const kad_path& path, const OverlayKe
 std::ostream& operator<<(std::ostream& os, const kad_path& c);
 
 std::ostream& operator<<(std::ostream& os, const link_t& l);
+
+inline
+std::ostream& operator<<(std::ostream& os, const KadPath& c)
+{
+	return os << c.getRawPath();
+}
+
 }
 
 #endif // __ROUTINGSIM_KadPath_H_

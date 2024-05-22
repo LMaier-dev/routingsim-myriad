@@ -467,7 +467,7 @@ private:
 	void scheduleRegularRediscovery(const OverlayKey& contactkey) override { scheduleRediscovery(contactkey, regularRediscoverQueue, regularRediscoveryWaitTime); };
 	void scheduleSlowRediscovery(const OverlayKey& contactkey) override { scheduleRediscovery(contactkey, slowRediscoverQueue, slowRediscoveryWaitTime); };
 
-	void scheduleRequest(ContactRequestQueue& q, const KadContact& tmpcontact);
+	ContactRequestQueue::iterator scheduleRequest(ContactRequestQueue& q, const KadContact& tmpcontact);
 	/// schedule sending PNDiscReq
 	void schedulePNDiscReq(const KadContact& tmpcontact) { scheduleRequest(PNDiscoverQueue, tmpcontact); };
 	void scheduleGetPNReq(const KadContact& tmpcontact) { scheduleRequest(GetPNQueue, tmpcontact); };

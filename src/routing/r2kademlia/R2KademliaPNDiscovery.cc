@@ -277,7 +277,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadPNDiscReq> packet) {
 		vicinityPathIDCompletion(pncontact);
 	}
 
-	// add physical contact to routing table or update sequence number
+	// add physical contact to routing table or update sequence number and update last seen
 	routingTable.addPNContact(packet->getSource(), packet->getStateSeqNo(), packet->getSrcNodeDegree());
 
 	// check for physical neighbors sent with
@@ -308,11 +308,10 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadPNDiscReq> packet) {
 
 	EV_TRACE << "neighbor table: "<< neighborTable << endl;
 
-	// update lastseen of origin contact
+	// Update PNsyncSeqNo if suitable
 	if (KadContact* contact_p= const_cast<KadContact*>(routingTable.getContact(packet->getSource())); contact_p != nullptr) {
-		contact_p->setStateSeqNo(packet->getStateSeqNo());
-		contact_p->updateLastSeen();
-		// if we got a list of PNs, set PNsyncSeqNO to avoid too frequent resync
+
+		// if we got a list of PNs, set PNsyncSeqNo to avoid too frequent resync
 		if (packet->getPhyNeighborArraySize() > 0) {
 			if (packet->getStateSeqNo() > contact_p->getSyncPNSeqNo())
 				contact_p->setSyncPNSeqNo(packet->getStateSeqNo());
@@ -508,7 +507,7 @@ bool R2Kademlia::handleQueryRouteResponse(KadPacket_p answer, RPCState& rpcState
 /// also record expected new seqno, so if state had been updated meanwhile we can avoid resync
 /// this will avoid triggering frequent resynchronizations
 /// note that the given contact is a temporary contact that does not need to actually exist in the routing table
-void R2Kademlia::scheduleRequest(ContactRequestQueue& q, const KadContact& tmpcontact)
+ContactRequestQueue::iterator R2Kademlia::scheduleRequest(ContactRequestQueue& q, const KadContact& tmpcontact)
 {
 	auto it= std::lower_bound(q.begin(), q.end(), tmpcontact, [&](const auto& lhs, const auto& rhs) -> bool { return lhs.getKey() < rhs.getKey(); });
 	if (it != q.end() and it->getKey() == tmpcontact.getKey()) {
@@ -522,12 +521,12 @@ void R2Kademlia::scheduleRequest(ContactRequestQueue& q, const KadContact& tmpco
 				it->setStateSeqNo(expected_seqno);
 		}
 		EV_TRACE << "scheduleRequest(" << q.getDescription() << "): " << tmpcontact.getKey().shortStr() << " already queued, updated expected SSeq#" << expected_seqno << endl;
-		return;
+		return it;
 	}
 	else
 	{ // it == q.end() or it->getKey() != tmpcontact.getKey()
                 // entry does not exist yet, so insert it at the right place
-		q.insert(it, tmpcontact);
+		it= q.insert(it, tmpcontact);
 	}
 
 	EV_TRACE << "scheduleRequest(" << q.getDescription() << "): "  << tmpcontact.getKey().shortStr() << " queued, expected  seq#" << tmpcontact.getStateSeqNo() << endl;
@@ -541,21 +540,34 @@ void R2Kademlia::scheduleRequest(ContactRequestQueue& q, const KadContact& tmpco
 		addOneShotTimer(wait_time, q.sendscheduledcall);
 		q.setScheduled();
 	}
+	return it;
 }
 
 
+// this schedules a request for getting the overlay neighbors
+// if the node is in the GetPNQueue, we simply set an additional flag in the contact copy inside the queue
 void
 R2Kademlia::scheduleGetONReq(const KadContact& tmpcontact) {
 	// check first for same node in GetPNQueue (so node is in vicinity)
 	auto it= std::lower_bound(GetPNQueue.begin(), GetPNQueue.end(), tmpcontact,
 				  [&](const auto& lhs, const auto& rhs) -> bool { return lhs.getKey() < rhs.getKey(); });
 	if (it != GetPNQueue.end() and it->getKey() == tmpcontact.getKey()) {
-		EV_TRACE << "scheduleGetONReq() found entry in GetPNQueue, setting flag" << endl;
+		EV_TRACE << "scheduleGetONReq() found entry for " << tmpcontact.getKey() << " in GetPNQueue, setting get_ON flag" << endl;
 		it->setState(KadContact::State::_get_ON);
+		// delete it from GetONQueue
+		// if (auto ONit= std::lower_bound(GetONQueue.begin(), GetONQueue.end(), tmpcontact,
+		// 		  [&](const auto& lhs, const auto& rhs) -> bool { return lhs.getKey() < rhs.getKey(); });
+		//     ONit != GetONQueue.end()) {
+		// 	GetONQueue.erase(ONit);
+		// }
 	}
 	else {
 		// put into GetONQueue
-		scheduleRequest(GetONQueue, tmpcontact);
+		auto it= scheduleRequest(GetONQueue, tmpcontact);
+		ASSERT(it != GetONQueue.end());
+		if (it != GetONQueue.end()) {
+			it->setState(KadContact::State::_get_ON);
+		}
 	}
 };
 

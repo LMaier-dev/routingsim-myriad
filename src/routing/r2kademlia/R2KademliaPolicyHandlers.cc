@@ -352,9 +352,10 @@ void R2Kademlia::reSyncPN(const KadContact& contact, stateseqno_t expected_seqno
 
 
 void R2Kademlia::onPathCheck(const KadContact& contact, RequestQueueElementActionType action) {
-	EV_TRACE << "path check triggered for " << contact.getKey().shortStr() << endl;
-	// check whether the current path is still working properly
-	//old: sendPathProbeToContact(contact, pathsetupcheck);
+	EV_TRACE << "path check triggered for " << contact.getKey().shortStr() << " "
+		 << ((action & probeProposedPath) ? "Proposed " : "Active ")
+		 << ((action & probeProposedPath) ? contact.getProposedPath() : contact.getActivePath()) << endl;
+	// check whether the current or proposed path is working properly (depends on action)
 	scheduleOnDemandPathProbeReq(OnDemandPathProbeQueue, contact, action);
 }
 
