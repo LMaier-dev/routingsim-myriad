@@ -51,6 +51,8 @@ public:
 	void setSource(const OverlayKey & source);
 	/// appends the specified path to the source route
 	void appendRoute(const kad_path& path);
+	/// appends the specified path to the source route, including target
+	void appendRoute(const kad_path& path, const OverlayKey& target);
 	/// appends the specified key to the source route
 	void appendHop(const OverlayKey& key);
 	/// appends the key and path of the specified contact to the source route

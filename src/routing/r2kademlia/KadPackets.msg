@@ -81,8 +81,7 @@ packet KadRTableRsp extends KadAnswer {
 	stateseqno_t seqNo[];
 	age_t pathInfoAge[];
 	nodedegree_t nodeDegree[];
-	// bool unknownFlag[];
-	// bool intermediateFlag[];
+	bool PNListDelivered = false;
 }
 
 

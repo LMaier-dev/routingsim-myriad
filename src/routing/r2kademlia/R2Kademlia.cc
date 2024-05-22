@@ -342,14 +342,17 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		//TODO optimization use isPathInteresting
 
 
-		// for packets from physical neighbors: check need for resynchronization:
-		// in case the packet indicates a newer state seq no, resynch with neighbor
-		if (packet->getType() != KAD_PNDiscRsp and neighborTable.isNeighbor(packet->getSource()))
-			checkForResync(packet->getSource(), packet->getStateSeqNo());
+		if (packet->getType() != KAD_PNDiscRsp) {
+			// for packets from physical neighbors: check need for resynchronization:
+			// in case the packet indicates a newer state seq no, resynch with neighbor
+			if (neighborTable.isNeighbor(packet->getSource()))
+				checkForResync(packet->getSource(), packet->getStateSeqNo());
 
-		// evaluate return path for routing table (packet came to us this way, so path was recently working)
-		// Trusted Path Info (no need to check)
-		routingTable.addPath(packet->getSource(), packet->reversePath(packet->getIntermediatePath()), packet->getStateSeqNo(), 0, packet->getSrcNodeDegree(), true);
+			// evaluate return path for routing table (packet came to us this way, so path was recently working)
+			// Trusted Path Info (no need to check)
+			// for PNDiscRsp no need to add path here
+			routingTable.addPath(packet->getSource(), packet->reversePath(packet->getIntermediatePath()), packet->getStateSeqNo(), 0, packet->getSrcNodeDegree(), true);
+		}
 
 		// these types may forward packets, so they count themselves
 		if (handleIfFitting<KadFindNodeReq>(packet)) return;
@@ -1386,7 +1389,7 @@ void R2Kademlia::readRTableRsp(const KadRTableRsp& packet) {
 							       packet.getSeqNo(i));
 
 				if (auto vn= vicinity.getNode(neighborhoodContact.getKey()); vn == nullptr) {
-					// newly put intro vicinity, so get its PNs
+					// newly put into vicinity, so get its PNs (unconditionally, therefore store invalid seq no)
 					querynode= true;
 				}
 				else {
@@ -1396,9 +1399,8 @@ void R2Kademlia::readRTableRsp(const KadRTableRsp& packet) {
 				}
 
 				// try to add node
-				bool nodeOrLinkAdded= vicinity.addNode(neighborhoodContact.getPath().empty() ? myOverlayKey : neighborhoodContact.getPath().back(), // parent node
+				auto [nodeOrLinkAdded, nodeptr]= vicinity.addNode(neighborhoodContact.getPath().empty() ? myOverlayKey : neighborhoodContact.getPath().back(), // parent node
 								  neighborhoodContact.getKey(), // new child node
-								  neighborhoodContact.getStateSeqNo(),
 								  neighborhoodContact.getPathLength()+1); // distance of child node to us
 
 				// still room for one more hop in neighborhood exploration?

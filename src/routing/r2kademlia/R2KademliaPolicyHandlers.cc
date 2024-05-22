@@ -158,7 +158,7 @@ void R2Kademlia::onContactInvalidation(KadContact_p contact)
 // this is called from KadRoutingTable
 void R2Kademlia::onNewContact(KadContact_p contact) {
 
-	EV_TRACE << "onNewContact(" << contact->getKey().shortStr() << ") called, SeqNo #" << contact->getStateSeqNo() << " (" << contact->getNodeDegree() << ')' << endl;
+	EV_TRACE << "onNewContact(" << contact->getKey().shortStr() << ") called " << *contact << endl;
 	//ASSERT( getKadObserver().checkSeqNo(contact->getKey(),contact->getStateSeqNo()) == true );
 
 	// physical neighbor, may have been heard of its existence by some third node!
@@ -192,7 +192,6 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 		if (contact->getPathLength()+1 == nodeVicinityGraph::vicinityDiscoveryRadius) {
 			vicinity.addNode(contact->getPath().back(), // parent, path not empty, see precondition of outer if
 					 contact->getKey(), // new child
-					 contact->getStateSeqNo(),
 					 contact->getPathLength()+1);
 		}
 	}
@@ -203,7 +202,7 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 		if (routingTable.isInLastBucket(contact->getKey()))
 		{
 			//EV_TRACE << "New contact is in deepest bucket, will ask for contacts close to me" << endl;
-			scheduleGetONReq(*contact);// was sendGetOverlayNeighbors(contact);
+			scheduleGetONReq(*contact);
 		}
 
 		if (usePathIDs) {

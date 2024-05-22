@@ -4,6 +4,8 @@
 #awk -e '/^\*\* Event.*DefaultNetwork\.manager\.Node49\.protocol0.*$/ { out = 1; print; next } out == 1 && /^[^\*]/ { print; } out == 1 && /^\*\* Event/ { out = 0; next }'
 # filter out a specific time period
 #sed -n '/^\*\*\ Event .* t=1\..*$/,/^\*\*\ Event .* t=1\.8.* .*$/p
+#extract just the contact node ID
+#sed -n 's/.*onNewContact(\(.*\)) called.*/\1/p'
 
 #older stuff
 #sed -n '/^\*\*\ Event.*DefaultNetwork\.manager\.Node3\.protocol0.*$/,/^\*\*\ Event/p'

@@ -260,10 +260,10 @@ private:
 	NodePkt_p makeHelloPacket();
 	/// crafts a packet of type T, sets the route to the given contact.
 	template<typename T>
-	std::unique_ptr<T> makePacket(const KadContact* contact, const char *name=nullptr);
+	std::unique_ptr<T> makePacket(const KadContact* contact, const char *name=nullptr, bool append_route= true);
 	template<typename T>
-	std::unique_ptr<T> makePacket(const KadContact& contact, const char *name=nullptr){
-		return makePacket<T>(&contact, name);
+	std::unique_ptr<T> makePacket(const KadContact& contact, const char *name=nullptr, bool append_route= true){
+		return makePacket<T>(&contact, name, append_route);
 	};
 	/// crafts a data packet, sets the DestNodeID to first argument and also PathID according to the given viacontact.
 	template<typename T>
@@ -570,7 +570,7 @@ public:
 	// refresh within [0.5,1.5]*PathRefreshThreshold, garbage collection after 3*PathRefreshThreshold
 	static constexpr unsigned long PathRefreshThreshold = 30000UL; // ms
 	static constexpr unsigned long ProbeSelfMinInterval = 250; // ms
-	static constexpr unsigned long notifyLinkFailureWaitTime = 10UL; 
+	static constexpr unsigned long notifyLinkFailureWaitTime = 10UL; // ms
 	static constexpr unsigned long RediscoveryNextTryWaitTime = 100UL; // ms
 	static constexpr unsigned long PNHelloMinInterval = 200UL; // ms
 	static constexpr unsigned long PNHelloMaxInterval = 30000UL; // ms
@@ -679,13 +679,14 @@ R2Kademlia::addIncomingIFtoPIDEntry(const OverlayKey& incomingULN, PathID incomi
 
 // template functions
 template<typename T>
-std::unique_ptr<T> R2Kademlia::makePacket(const KadContact* contact, const char *name) {
+std::unique_ptr<T> R2Kademlia::makePacket(const KadContact* contact, const char *name, bool append_route) {
 	auto packet = std::make_unique<T>();
 	packet->setName(name);
 	// TODO optimization: do this in one pass
 	packet->setSource(myOverlayKey);
 	packet->setHopLimit(hopLimit);
-	packet->appendRoute(contact);
+	if (append_route)
+		packet->appendRoute(contact);
 	packet->setStateSeqNo(getLSSeqNo());
 	packet->setSrcNodeDegree(neighborTable.size());
 	return packet;

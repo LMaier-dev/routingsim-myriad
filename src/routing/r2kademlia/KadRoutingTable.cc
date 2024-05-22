@@ -68,11 +68,11 @@ std::string KadRoutingTable::str() const
 	{
 		out << "B[" << i << "]:{";
 		for (const auto& contact : b.getContacts()) {
-			out << ' ' << *contact;
+			out << *contact << endl;
 		}
 		out << "}+{";
 		for (const auto& econtact : b.getPNContacts()) {
-			out << ' ' << *econtact;
+			out << *econtact << endl;
 		}
 		out << '}';
 		i++;
@@ -178,7 +178,9 @@ void KadRoutingTable::addPNContact(const OverlayKey& key, stateseqno_t stateseqn
 
 		if (contact->getStateSeqNo() < stateseqno) { // contact has newer state for its physical neighbors
 			contact->setNodeDegree(nodeDegree);
-			policy->reSyncPN(*contact, stateseqno);
+			contact->setStateSeqNo(stateseqno);
+			if (not contact->getStateSeqNo().isInvalid())
+				policy->reSyncPN(*contact, stateseqno);
 		}
 		else { // current received sequence number older
 		       // this may happen, however, when we learned about the PN from other nodes that had newer information from the node
@@ -357,7 +359,7 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path newpath, stateseqn
 	}
 
 	// from here on the following condition holds:
-	// newer_seqno or (same_seqno and (contact->isNotValid() or path_is_eligible or (consider_proposed_path and path_verified and identical_path)) )
+	// shorter_path or newer_seqno or (same_seqno and (contact->isNotValid() or path_is_eligible or (consider_proposed_path and path_verified and identical_path)) )
 
 	bool recheckPhysicalNeighbors(false);
 	// special case for non updated sequence number
@@ -383,8 +385,8 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path newpath, stateseqn
 			} // end for
 		}
 	}
-	else // must be newer_seqno due to surrounding if
-	{ // contact has new state?
+	else
+	if (newer_seqno) { // contact has new state?
 		// sometimes updates may be received that carry a newer sequence number
 		// from physical neighbors; this indicates that we do not have the latest state about its neighbors
 		// if PN link is still up, we ignore this for now and initiate a resynch
@@ -398,13 +400,16 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path newpath, stateseqn
 			if (stateseqno > contact->getStateSeqNo()) {
 				EV_TRACE << "resync required for " << contact->getKey().shortStr() << " new: "
 					 << stateseqno << " old: " << contact->getStateSeqNo() << endl;
-				policy->reSyncPN(*contact, stateseqno);
+				if (not contact->getStateSeqNo().isInvalid())
+					policy->reSyncPN(*contact, stateseqno);
 				return false;
 			}
 		}
 
 		// if contact is within discovery radius, ask again for its neighbors since something has changed
-		if ( not contact->isPhysicalNeighbor() and (contact->getPathLength()+1 < nodeVicinityGraph::vicinityDiscoveryRadius or newpath.size()+1 < nodeVicinityGraph::vicinityDiscoveryRadius) ) {
+		if ( not contact->isPhysicalNeighbor() and
+		     (contact->getPathLength()+1 <=nodeVicinityGraph::vicinityDiscoveryRadius
+		      or newpath.size()+1 <=nodeVicinityGraph::vicinityDiscoveryRadius) ) {
 			// we "defer" that until new path has been set (see below)
 			// otherwise addNode() in sendGetPhysicalNeighbors will not update correctly
 			recheckPhysicalNeighbors= true;
@@ -556,7 +561,8 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path newpath, stateseqn
 	// update lastseen to that of the originator, but only if we are sure to have validated the full path
 	if (path_verified) {
 		// update sequence number
-		contact->setStateSeqNo(stateseqno);
+		if (newer_seqno)
+			contact->setStateSeqNo(stateseqno);
 		contact->setNodeDegree(nodeDegree);
 		contact->setValid();
 		contact->clearProposedPath();
@@ -1192,10 +1198,12 @@ void KadRoutingTable::updatePaths(const KadContact& improvedContact)
 						}
 
 						if (contact->isValid()) {
-							// this may be an improval, so just check the new alternative without actually changing the path yet
-							contact->setProposedPath(newpath, HashSum(myKey,newpath,contact->getKey()));
-							policy->onPathCheck(*contact, probeProposedPath | pathSetupCheck);
-							found=true; // break the loop
+							if (not contact->proposedPathDefined() or (contact->proposedPathDefined() and newpath.size() < contact->getProposedPath().length())) {
+									// this may be an improval, so just check the new alternative without actually changing the path yet
+									contact->setProposedPath(newpath, HashSum(myKey,newpath,contact->getKey()));
+									policy->onPathCheck(*contact, probeProposedPath | pathSetupCheck);
+							}
+							found= true; // break the loop
 							continue;
 						}
 						else
@@ -1216,7 +1224,7 @@ void KadRoutingTable::updatePaths(const KadContact& improvedContact)
 							// update the PID
 							policy->onPathChange(*contact);
 						}
-						found=true; // break the loop
+						found= true; // break the loop
 					}
 				} // end for: iterating backwards over path
 			}
