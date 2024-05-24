@@ -268,7 +268,7 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 
 void R2Kademlia::onImprovement(const KadContact& contact) {
 	// path got improved for this contact -> potentially send UpdateRouteReq
-	EV_TRACE << "onImprovement(" << contact.getKey().shortStr() << ") called, SeqNo #" << contact.getStateSeqNo() << ' ' << contact.getPath() << endl;
+	EV_TRACE << "onImprovement called " << contact << endl;
 
 	//ASSERT( getKadObserver().checkSeqNo(contact.getKey(),contact.getStateSeqNo()) == true );
 
@@ -310,11 +310,10 @@ void R2Kademlia::onImprovement(const KadContact& contact) {
 // this is different from onImprovement(): path has maybe the same length but is different (e.g., due to higher seq no)
 // no UpdateRouteReq is sent, but possibly PathSetup needs to be initiated or PID needs to change
 void R2Kademlia::onPathChange(const KadContact& contact) {
-	EV_TRACE << "onPathChange(" << contact.getKey().shortStr() << ") called, SeqNo #" << contact.getStateSeqNo() << ' ' << contact.getPath() << endl;
 
 	//ASSERT( getKadObserver().checkSeqNo(contact.getKey(),contact.getStateSeqNo()) == true );
-
 	if (usePathIDs and contact.isValid()) {
+		EV_TRACE << "onPathChange(" << contact.getKey().shortStr() << ") called, SeqNo #" << contact.getStateSeqNo() << ' ' << contact.getPath() << endl;
 
 		// no need to setup routes within discovery radius + 1 distance
 		// (note/remember: getPathLength() does not include the last hop)

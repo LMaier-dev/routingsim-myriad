@@ -67,7 +67,6 @@ public:
 		undefined     = 0,
 		valid         = 1, // contact should be reachable
 		rediscovering = 2, // contact not usable, but rediscovering
-		checking      = 3, // contact probably usable, but need to test path
 		invalid       = 4, // contact invalid
 		dead          = 5, // contact considered dead, i.e., not responding several times
 		_get_ON       = 126, // pseudo state, not used for real contacts, see R2Kademlia::scheduleGetONReq
@@ -121,7 +120,6 @@ public:
 	bool isValid() const { return (state == State::valid) ; }
 	bool isNotValid() const { return (state != State::valid) ; } // this is not the same as isInvalid()!
 	bool isRediscovering() const { return (state == State::rediscovering) ; }
-	bool isChecking() const { return (state == State::checking) ; }
 
 	/// this will be kept being true, even if the link goes down
 	bool isPhysicalNeighbor() const { return physicalNeighbor; }
@@ -129,7 +127,6 @@ public:
 	/// set contact state
 	inline bool setInvalid(const link_t& failed_link, age_t failed_link_age);
 	void setValid() { state= State::valid; rds_p.reset(nullptr); }
-	void setChecking() { ASSERT(state == State::invalid or state == State::valid or state == State::checking); state= State::checking; }
 	void setRediscovering() { ASSERT(state == State::invalid); state= State::rediscovering; }
 	void setState(State newstate) { state= newstate; }
 
@@ -274,7 +271,7 @@ inline KadContact& KadContact::operator=(KadContact&& other)
 // returns true in case it is initially set invalid
 inline bool KadContact::setInvalid(const link_t& failed_link, age_t failed_link_age)
 {
-	if (state == State::valid or state == State::checking) {
+	if (state == State::valid) {
 		state= State::invalid;
 		active_path.updateLastValidatedTo(simTime() - SimTime(failed_link_age,SIMTIME_MS));
 		rds_p= std::make_unique<RediscoveryState>(std::make_pair(failed_link, simTime() - SimTime(failed_link_age,SIMTIME_MS)));
