@@ -482,8 +482,22 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt, simtime_t 
 		sendToNode(nid, std::move(nodePkt), delay);
 
 		return;
-	}
-	else { // next hop not available
+        }
+
+        // next hop not available: for some packet types we can try to reroute
+        bool try_to_reroute(false);
+        switch (packet->getType()) {
+        case KAD_UpdateRouteReq:
+        case KAD_FindNodeReq:
+        case KAD_LinkFailureNotify:
+		try_to_reroute= true;
+                break;
+        // default:
+        // try_to_reroute= false;
+	// break;
+	}; // end switch
+
+        if (try_to_reroute) {
                // for Routing Updates and Rediscovery messages try to use overlay-based forwarding
 		EV_TRACE << "forwardPacket(): next hop " << nextHop.shortStr() << " unavailable" << endl;
 
@@ -586,7 +600,7 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt, simtime_t 
 			reroutePacket(*finaldestination, std::move(packet), std::move(nodePkt), delay);
 			return;
 		}
-	} // end else (no next hop found)
+	} // end else try_to_reroute
 
 	EV_ERROR << "forwardPacket(): could not find next hop!" << endl;
 	onMissingNeighbor(std::move(packet), std::move(nodePkt), nextHop);

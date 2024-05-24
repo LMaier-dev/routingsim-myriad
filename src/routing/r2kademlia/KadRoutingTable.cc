@@ -342,10 +342,10 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path newpath, stateseqn
 		  (same_seqno and (contact->isNotValid() or path_is_eligible or (consider_proposed_path and path_verified and identical_path))))
 	   ) {
 		//  contact exists, but new path is not interesting (or does not confirm a proposed path)
-		EV_TRACE << "contact " << *contact <<  " rejecting new path "
-			 << newpath << " (seq#" << stateseqno << " verified:" << path_verified <<"), not interesting compared to " << (consider_proposed_path ? "proposed" : "active") << " path "
-			 << (consider_proposed_path ? contact->getProposedPath().getRawPath() : contact->getActivePath()).getRawPath()
-			 << endl;
+		// EV_TRACE << "contact " << *contact <<  " rejecting new path "
+		// 	 << newpath << " (seq#" << stateseqno << " verified:" << path_verified <<"), not interesting compared to " << (consider_proposed_path ? "proposed" : "active") << " path "
+		// 	 << (consider_proposed_path ? contact->getProposedPath().getRawPath() : contact->getActivePath()).getRawPath()
+		// 	 << endl;
 		// TODO however if path_verified and identical_path one should update the contact
 		// (not the path as we need this for probing)
 		if (path_verified and identical_path) {
@@ -428,12 +428,14 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path newpath, stateseqn
 			//	policy->onPathCheck(*contact, unset);
 			//}
 			//else {
-			EV_TRACE << "contact " << contact->getKey().shortStr() <<  " rejecting new path "
-				 << newpath << ", longer compared to " << (consider_proposed_path ? "proposed" : "active") << " path "
-				 << (consider_proposed_path ? contact->getProposedPath().getRawPath() : contact->getActivePath().getRawPath())
-				 << endl;
-			return false; // returning from here would reject the longer route
-			//}
+			// EV_TRACE << "contact " << contact->getKey().shortStr() <<  " rejecting new path "
+			// 	 << newpath << ", longer compared to " << (consider_proposed_path ? "proposed" : "active") << " path "
+			// 	 << (consider_proposed_path ? contact->getProposedPath().getRawPath() : contact->getActivePath().getRawPath())
+			// 	 << endl;
+
+                        return false; // returning from here would reject the longer route
+
+                        //}
 		}
 	} // end else newer_seqno
 
@@ -751,7 +753,7 @@ bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, sta
 
                 // if result is set, it is the (last) contact in the bucket with the largest path length (larger than the current contact)
 		if (result != contacts.end()) { // existing contact with longer path found
-			if (not path_verified) {
+			if (not path_verified and (contact->getPathLength() > nodeVicinityGraph::vicinityDiscoveryRadius or contact->getPathAge() > R2Kademlia::PathInfoAgeThreshold)) {
                           EV_TRACE << "contact candidate untrusted (PNS): "
                                    << *contact << endl;
 			  policy->onContactCandidate(std::move(contact));
@@ -785,7 +787,7 @@ bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, sta
 
 			return true;
                 } else if (resultconn != contacts.end()) { // contact with better connectivity found
-			if (not path_verified) {
+			if (not path_verified and (contact->getPathLength() > nodeVicinityGraph::vicinityDiscoveryRadius or contact->getPathAge() > R2Kademlia::PathInfoAgeThreshold)) {
 				EV_TRACE << "contact candidate untrusted (Conn): " << *contact << endl;
 				policy->onContactCandidate(std::move(contact));
 				return false;
