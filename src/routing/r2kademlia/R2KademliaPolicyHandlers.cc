@@ -186,7 +186,7 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 		if (contact->getPathLength()+1 < discoveryRadius) {
 			// sends a QueryRouteReq requesting their 1 hop neighborhood
 			// sendGetPhysicalNeighbors() adds contact to vicinity to keep track of already queried nodes in vicinity
-			scheduleGetPNReq(*contact); // was sendGetPhysicalNeighbors(contact);
+			scheduleGetPNReq(KadContact(*contact));
 		}
 		else // maybe just on the radius, check to add contact for vicinity
 		if (contact->getPathLength()+1 == nodeVicinityGraph::vicinityDiscoveryRadius) {
@@ -336,14 +336,17 @@ void R2Kademlia::onPathChange(const KadContact& contact) {
 
 }
 
-void R2Kademlia::recheckPhysicalNeighbors(const KadContact& contact) {
+
+void
+R2Kademlia::recheckPhysicalNeighbors(const KadContact& contact) {
 	// simply recheck the physical Neighbors
 	EV_TRACE << "recheckPhysicalNeighbors triggered for " << contact.getKey().shortStr() << endl;
-	scheduleGetPNReq(contact);
+	scheduleGetPNReq(KadContact(contact));
 }
 
 
-void R2Kademlia::reSyncPN(const KadContact& contact, stateseqno_t expected_seqno) {
+void
+R2Kademlia::reSyncPN(const KadContact& contact, stateseqno_t expected_seqno) {
 	// simply trigger a PNDiscReq to update any sequence number
 	EV_TRACE << "reSyncPN scheduled for " << contact.getKey().shortStr() << " expected seqno: " << expected_seqno << endl;
 
@@ -351,12 +354,17 @@ void R2Kademlia::reSyncPN(const KadContact& contact, stateseqno_t expected_seqno
 }
 
 
-void R2Kademlia::onPathCheck(const KadContact& contact, RequestQueueElementActionType action) {
+void
+R2Kademlia::onPathCheck(const KadContact& contact, RequestQueueElementActionType action) {
 	EV_TRACE << "path check triggered for " << contact.getKey().shortStr() << " "
 		 << ((action & probeProposedPath) ? "Proposed " : "Active ")
 		 << ((action & probeProposedPath) ? contact.getProposedPath() : contact.getActivePath()) << endl;
 	// check whether the current or proposed path is working properly (depends on action)
 	scheduleOnDemandPathProbeReq(OnDemandPathProbeQueue, contact, action);
+}
+
+void R2Kademlia::onContactCandidate(std::unique_ptr<KadContact> contactp) {
+	scheduleContactCandidateProbe(std::move(*(contactp.release())));
 }
 
 } // end namespace

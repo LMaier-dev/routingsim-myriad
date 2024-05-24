@@ -23,7 +23,6 @@
 #include <algorithm>
 #include <cstdlib>
 #include <limits>
-#include "BaseTypes.h"
 #include "routing/r2kademlia/RequestQueue.h"
 
 namespace routingsim {
@@ -149,7 +148,7 @@ void KadRoutingTable::addPNContact(const OverlayKey& key, stateseqno_t stateseqn
 		ASSERT(neighbortable.isNeighbor(key));
 	}
 
-	KadContact *contact = getContactInternal(key);
+	KadContact *contact= getContactInternal(key);
 	if (contact == nullptr) { // contact is new
 		if (handleNewContact(key, kad_path(), stateseqno, 0, nodeDegree, true)) {
 			updatePaths(*getContactInternal(key));
@@ -181,8 +180,7 @@ void KadRoutingTable::addPNContact(const OverlayKey& key, stateseqno_t stateseqn
 		if (contact->getStateSeqNo() < stateseqno) { // contact has newer state for its physical neighbors
 			contact->setNodeDegree(nodeDegree);
 			contact->setStateSeqNo(stateseqno);
-			if (not contact->getStateSeqNo().isInvalid())
-				policy->reSyncPN(*contact, stateseqno);
+			contact->setSyncPNSeqNo(stateseqno);
 		}
 		else { // current received sequence number older
 		       // this may happen, however, when we learned about the PN from other nodes that had newer information from the node
@@ -749,9 +747,16 @@ bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, sta
 				minconnectivity= (*it)->getConnectivity();
 				resultconn = it;
 			}
-		}
-		// if result is set, it is the (last) contact in the bucket with the largest path length (larger than the current contact)
-		if (result != contacts.end() and path_verified) { // existing contact with longer path found
+                }
+
+                // if result is set, it is the (last) contact in the bucket with the largest path length (larger than the current contact)
+		if (result != contacts.end()) { // existing contact with longer path found
+			if (not path_verified) {
+                          EV_TRACE << "contact candidate untrusted (PNS): "
+                                   << *contact << endl;
+			  policy->onContactCandidate(std::move(contact));
+			  return false;
+			}
 			replacementCount++;
 			EV_DEBUG << "replacing contact (PNS), new: " << *contact << " old: " << **result << endl;
 			policy->onContactRemoval(result->get());
@@ -779,8 +784,13 @@ bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, sta
 			policy->onNewContact(newcontactp);
 
 			return true;
-		}
-		else if (resultconn != contacts.end() and path_verified) { // contact with better connectivity found
+                } else if (resultconn != contacts.end()) { // contact with better connectivity found
+			if (not path_verified) {
+				EV_TRACE << "contact candidate untrusted (Conn): " << *contact << endl;
+				policy->onContactCandidate(std::move(contact));
+				return false;
+			}
+
 			replacementCount++;
 			EV_DEBUG << "replacing contact (Conn), new: " << *contact << " (" << contact->getConnectivity() << ") old: "
 				 << **resultconn << " (" << (*resultconn)->getConnectivity()  << ")" << endl;
@@ -795,7 +805,7 @@ bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, sta
 			*resultconn = std::move(contact);
 			// restore the correct order
 			// depending on the correct position we need to rotate right or left
-			if (correctpos < resultconn) {
+                        if (correctpos < resultconn) {
 				// rotate left
 				std::rotate(correctpos, resultconn, resultconn+1);
 			}

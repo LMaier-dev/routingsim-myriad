@@ -1388,26 +1388,25 @@ void R2Kademlia::readRTableRsp(const KadRTableRsp& packet) {
 							       routingTable.concatViaPath(viaPath, packet.getPath(i)),
 							       packet.getSeqNo(i));
 
-				if (auto vn= vicinity.getNode(neighborhoodContact.getKey()); vn == nullptr) {
+				// try to add node to vicinity, but maybe already there
+				auto [nodeAdded, linkAdded, vn]= vicinity.addNode(neighborhoodContact.getPath().empty() ? myOverlayKey : neighborhoodContact.getPath().back(), // parent node
+								  neighborhoodContact.getKey(), // new child node
+								  neighborhoodContact.getPathLength()+1); // distance of child node to us
+				if (nodeAdded) {
 					// newly put into vicinity, so get its PNs (unconditionally, therefore store invalid seq no)
 					querynode= true;
 				}
 				else {
 					// newer sequence number for existing neighbor? reget PNs
-					if (vn->stateseqno < neighborhoodContact.getStateSeqNo())
+					if (vn != nullptr and vn->stateseqno < neighborhoodContact.getStateSeqNo())
 						querynode= true;
 				}
-
-				// try to add node
-				auto [nodeOrLinkAdded, nodeptr]= vicinity.addNode(neighborhoodContact.getPath().empty() ? myOverlayKey : neighborhoodContact.getPath().back(), // parent node
-								  neighborhoodContact.getKey(), // new child node
-								  neighborhoodContact.getPathLength()+1); // distance of child node to us
 
 				// still room for one more hop in neighborhood exploration?
 				// the same is done for new contacts in RT (see onNewContact)
 				//bool expandDiscovery(viaPath.size() + packet.getPath(i).size() + 1  < nodeVicinityGraph::vicinityDiscoveryRadius);
 				// add PID entry as this neighbor is in our vicinityDiscoveryRadius
-				if (usePathIDs and nodeOrLinkAdded) {
+				if (usePathIDs and (nodeAdded or linkAdded)) {
 					auto pathtoadd(neighborhoodContact.getPath());
 					pathtoadd.push_back(neighborhoodContact.getKey());
 					fwdTablePathID.addPrecalcEntry(pathtoadd);
@@ -1423,7 +1422,7 @@ void R2Kademlia::readRTableRsp(const KadRTableRsp& packet) {
 							       routingTable.concatViaPath(viaPath, packet.getPath(i)),
 							       packet.getSeqNo(i));
 
-				scheduleGetPNReq(neighborhoodContact);
+				scheduleGetPNReq(std::move(neighborhoodContact));
 			}
 		} // endif: new path not added
 	} // end for each reported contact

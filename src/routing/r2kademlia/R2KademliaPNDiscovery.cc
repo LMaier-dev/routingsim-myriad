@@ -63,11 +63,11 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 		neighborTable.addNeighbor(packet->getSource(), packet->getSourceId());
 
 		// add node to vicinity
-		auto [node_added, nodeptr]= vicinity.addNode(myOverlayKey, // parent
+		auto [node_added, link_added, nodeptr]= vicinity.addNode(myOverlayKey, // parent
 						  packet->getSource(), // new child
 						  1);
 
-		if (usePathIDs and node_added) {
+		if (usePathIDs and (node_added or link_added)) {
 			fwdTablePathID.addPrecalcEntry({neighborcontact.getKey()});
 			vicinityPathIDCompletion(neighborcontact);
 		}
@@ -127,10 +127,10 @@ simtime_t R2Kademlia::sendGetPhysicalNeighbors(const KadContact& contact, Reques
 	LastPNQueryRouteReq= simTime()+delay;
 
 	// update vicinity to avoid future redundant requests
-	auto [nodeOrLinkAdded, nodeptr]= vicinity.addNode(contact.getPath().empty() ? myOverlayKey : contact.getPath().back(), // parent
+	auto [nodeAdded, linkAdded, nodeptr]= vicinity.addNode(contact.getPath().empty() ? myOverlayKey : contact.getPath().back(), // parent
 					       contact.getKey(), // new child
 					       contact.getPathLength()+1);
-	if (usePathIDs and nodeOrLinkAdded) {
+	if (usePathIDs and (nodeAdded or linkAdded)) {
 		auto newpath(contact.getPath());
 		newpath.push_back(contact.getKey());
 		fwdTablePathID.addPrecalcEntry(newpath);
@@ -266,13 +266,13 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadPNDiscReq> packet) {
 	neighborTable.addNeighbor(packet->getSource(), packet->getSourceId());
 
 	// add physical neighbor to my vicinity
-	auto [node_added, nodeptr]= vicinity.addNode(myOverlayKey, packet->getSource(), 1);
+	auto [node_added, link_added, nodeptr]= vicinity.addNode(myOverlayKey, packet->getSource(), 1);
 	if (nodeptr != nullptr) {
 		// set or update the sequence number
 		nodeptr->stateseqno= packet->getStateSeqNo();
 	}
 	KadContact pncontact(myOverlayKey, packet->getSource(), kad_path());
-	if (usePathIDs and node_added) {
+	if (usePathIDs and (node_added or link_added)) {
 		fwdTablePathID.addPrecalcEntry({pncontact.getKey()});
 		vicinityPathIDCompletion(pncontact);
 	}
@@ -292,10 +292,10 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadPNDiscReq> packet) {
 						     packet->getPhyNeighborDegree(i),
 						     false)) {
 				// if not put into routing table, add PN's neighbor to vicinity nevertheless
-				auto [node_added, nodeptr]= vicinity.addNode(packet->getSource(),
+				auto [node_added, link_added, nodeptr]= vicinity.addNode(packet->getSource(),
 								  packet->getPhyNeighbor(i),
 								  2);
-				if (usePathIDs and node_added) {
+				if (usePathIDs and (node_added or link_added)) {
 					KadContact nncontact(myOverlayKey, packet->getPhyNeighbor(i), { {packet->getSource()} });
 					auto newpath(path);
 					newpath.push_back(nncontact.getKey());
@@ -469,8 +469,8 @@ bool R2Kademlia::handlePNDiscResponse(KadPacket_p answer, RPCState& rpcState)
 		EV_ERROR << "PNDiscRsp not received via direct link" << endl;
 
 	// update sequence number or restore direct link
-	routingTable.addPNContact(response->getSource(), response->getStateSeqNo(), response->getSrcNodeDegree());
 	vicinity.updateNodeStateSeqNo(response->getSource(), response->getStateSeqNo());
+	routingTable.addPNContact(response->getSource(), response->getStateSeqNo(), response->getSrcNodeDegree());
 
 	// update PNsyncSeqNo
 	if (KadContact* contact_p= const_cast<KadContact*>(routingTable.getContact(response->getSource())); contact_p != nullptr) {
@@ -507,7 +507,8 @@ bool R2Kademlia::handleQueryRouteResponse(KadPacket_p answer, RPCState& rpcState
 /// also record expected new seqno, so if state had been updated meanwhile we can avoid resync
 /// this will avoid triggering frequent resynchronizations
 /// note that the given contact is a temporary contact that does not need to actually exist in the routing table
-ContactRequestQueue::iterator R2Kademlia::scheduleRequest(ContactRequestQueue& q, const KadContact& tmpcontact)
+ContactRequestQueue::iterator
+R2Kademlia::scheduleRequest(ContactRequestQueue& q, KadContact&& tmpcontact)
 {
 	auto it= std::lower_bound(q.begin(), q.end(), tmpcontact, [&](const auto& lhs, const auto& rhs) -> bool { return lhs.getKey() < rhs.getKey(); });
 	if (it != q.end() and it->getKey() == tmpcontact.getKey()) {
@@ -520,22 +521,22 @@ ContactRequestQueue::iterator R2Kademlia::scheduleRequest(ContactRequestQueue& q
 			if (expected_seqno > it->getStateSeqNo())
 				it->setStateSeqNo(expected_seqno);
 		}
-		EV_TRACE << "scheduleRequest(" << q.getDescription() << "): " << tmpcontact.getKey().shortStr() << " already queued, updated expected SSeq#" << expected_seqno << endl;
+		EV_TRACE << "scheduleRequest(" << q.getDescription() << "): " << tmpcontact.getKey().shortStr() << " already queued, expected SSeq#" << expected_seqno << endl;
 		return it;
 	}
 	else
 	{ // it == q.end() or it->getKey() != tmpcontact.getKey()
                 // entry does not exist yet, so insert it at the right place
-		it= q.insert(it, tmpcontact);
+		it= q.insert(it, std::move(tmpcontact));
 	}
 
-	EV_TRACE << "scheduleRequest(" << q.getDescription() << "): "  << tmpcontact.getKey().shortStr() << " queued, expected  seq#" << tmpcontact.getStateSeqNo() << endl;
+	EV_TRACE << "scheduleRequest(" << q.getDescription() << "): "  << it->getKey().shortStr() << " queued, expected  SSeq#" << it->getStateSeqNo() << endl;
 
 	if (not q.isScheduled())
 	{
 		simtime_t wait_time(SimTime(uniform(q.initialScheduleDelay/2,
 						    3*q.initialScheduleDelay/2),SIMTIME_US));
-		EV_TRACE << "scheduling " << q.getDescription() << " for " << tmpcontact.getKey().shortStr()
+		EV_TRACE << "scheduling " << q.getDescription() << " for " << it->getKey().shortStr()
 			 << " in " << wait_time << 's' << endl;
 		addOneShotTimer(wait_time, q.sendscheduledcall);
 		q.setScheduled();
@@ -552,7 +553,7 @@ R2Kademlia::scheduleGetONReq(const KadContact& tmpcontact) {
 	auto it= std::lower_bound(GetPNQueue.begin(), GetPNQueue.end(), tmpcontact,
 				  [&](const auto& lhs, const auto& rhs) -> bool { return lhs.getKey() < rhs.getKey(); });
 	if (it != GetPNQueue.end() and it->getKey() == tmpcontact.getKey()) {
-		EV_TRACE << "scheduleGetONReq() found entry for " << tmpcontact.getKey() << " in GetPNQueue, setting get_ON flag" << endl;
+		EV_TRACE << "scheduleGetONReq() found entry for " << tmpcontact.getKey().shortStr() << " in GetPNQueue, setting get_ON flag" << endl;
 		it->setState(KadContact::State::_get_ON);
 		// delete it from GetONQueue
 		// if (auto ONit= std::lower_bound(GetONQueue.begin(), GetONQueue.end(), tmpcontact,
@@ -562,8 +563,8 @@ R2Kademlia::scheduleGetONReq(const KadContact& tmpcontact) {
 		// }
 	}
 	else {
-		// put into GetONQueue
-		auto it= scheduleRequest(GetONQueue, tmpcontact);
+		// put into GetONQueue (as copy)
+		auto it= scheduleRequest(GetONQueue, KadContact(tmpcontact));
 		ASSERT(it != GetONQueue.end());
 		if (it != GetONQueue.end()) {
 			it->setState(KadContact::State::_get_ON);
@@ -593,11 +594,11 @@ R2Kademlia::sendScheduledRequests(ContactRequestQueue& q) {
 		}
 		else { // try to find node in vicinity
 			// e.g., if we only received a PNHello, PN is not a contact yet, but it is in the vicinity
-			// furthermore, other nodes
+			// furthermore, other nodes may never be a contact due to bucket size restrictions
 			if (tmpcontact.getPath().size() < nodeVicinityGraph::vicinityDiscoveryRadius) {
 				if (auto vnodep= vicinity.getNode(tmpcontact.getKey()); vnodep != nullptr) {
 					lastseenseqno= vnodep->stateseqno;
-					EV_TRACE << tmpcontact.getKey() << " found in vicinity, lastseenseqno==" << lastseenseqno << endl;
+					EV_TRACE << tmpcontact.getKey().shortStr() << " found in vicinity, lastseenseqno==" << lastseenseqno << endl;
 				}
 			}
 		}
@@ -628,7 +629,7 @@ R2Kademlia::sendScheduledRequests(ContactRequestQueue& q) {
 		// remove the scheduled request now
 		q.pop_back();
 
-		if (delay_next_call > 0) {
+		if (not q.empty() and delay_next_call > 0) {
 			// schedule next call
 			addOneShotTimer(delay_next_call, q.sendscheduledcall);
 			q.setScheduled();

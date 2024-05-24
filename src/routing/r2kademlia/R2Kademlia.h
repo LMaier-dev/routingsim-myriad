@@ -196,7 +196,8 @@ private:
 	ContactRequestQueue PNDiscoverQueue; // for sending PNDiscReq
 	ContactRequestQueue GetPNQueue;      // for sending QueryRouteReq (Physical Neighbors)
 	ContactRequestQueue GetONQueue;      // for sending QueryRouteReq (Overlay Neighbors)
-	KeyRequestQueue OnDemandPathProbeQueue; // for sending path probes on demand (in contrast to periodical ones)
+	ContactRequestQueue ContactCandidateProbeQueue; // for probing contact candidates
+        KeyRequestQueue OnDemandPathProbeQueue; // for sending path probes on demand (in contrast to periodical ones)
 
 	// selfMessage
 	bool pathSetupScheduled= false;
@@ -209,6 +210,8 @@ private:
 	simtime_t LastONQueryRouteReq;
 	// timestamp for outstanding On Demand PathProbe
 	simtime_t LastOnDemandProbeReq;
+	// timestamp for outstanding contact Candidate PathProbe
+	simtime_t LastContactCandidateProbeReq;
 
 	// state seq number sent with last PNHello
 	stateseqno_t lastPNHelloStateSeqNo= stateseqno_t::invalidSeqNo;
@@ -467,18 +470,23 @@ private:
 	void scheduleRegularRediscovery(const OverlayKey& contactkey) override { scheduleRediscovery(contactkey, regularRediscoverQueue, regularRediscoveryWaitTime); };
 	void scheduleSlowRediscovery(const OverlayKey& contactkey) override { scheduleRediscovery(contactkey, slowRediscoverQueue, slowRediscoveryWaitTime); };
 
-	ContactRequestQueue::iterator scheduleRequest(ContactRequestQueue& q, const KadContact& tmpcontact);
+	ContactRequestQueue::iterator scheduleRequest(ContactRequestQueue& q, KadContact&& tmpcontact);
 	/// schedule sending PNDiscReq
-	void schedulePNDiscReq(const KadContact& tmpcontact) { scheduleRequest(PNDiscoverQueue, tmpcontact); };
-	void scheduleGetPNReq(const KadContact& tmpcontact) { scheduleRequest(GetPNQueue, tmpcontact); };
+	void schedulePNDiscReq(KadContact&& tmpcontact) { scheduleRequest(PNDiscoverQueue, std::move(tmpcontact)); };
+	void scheduleGetPNReq(KadContact&& tmpcontact) { scheduleRequest(GetPNQueue, std::move(tmpcontact)); };
 	void scheduleGetONReq(const KadContact& tmpcontact);
-	// schedule on demand ProbeReq
+	void scheduleContactCandidateProbe(KadContact&& tmpcontact) { scheduleRequest(ContactCandidateProbeQueue, std::move(tmpcontact)); }
+        // schedule on demand ProbeReq
 	void scheduleOnDemandPathProbeReq(KeyRequestQueue& q, const KadContact& tmpcontact, RequestQueueElementActionType action);
 	/// schedule sending PNDiscReq
 	void sendScheduledPNDiscReqs() { sendScheduledRequests(PNDiscoverQueue); };
 	void sendScheduledQueryRouteReqsPN() { sendScheduledRequests(GetPNQueue); };
 	void sendScheduledQueryRouteReqsON() { sendScheduledRequests(GetONQueue); };
-	void sendScheduledRequests(ContactRequestQueue& q);
+        void sendScheduledRequests(ContactRequestQueue& q);
+
+	void sendScheduledContactCandidateProbeReqs(ContactRequestQueue& q);
+        void sendScheduledContactCandidateProbes() { sendScheduledContactCandidateProbeReqs(ContactCandidateProbeQueue); }
+	simtime_t sendPathProbeToContactCandidate(const KadContact& tmpcontact, RequestQueueElementActionType action);
 
 	void sendScheduledOnDemandPathProbe() { sendScheduledPathProbeRequests(OnDemandPathProbeQueue); };
 	void sendScheduledPathProbeRequests(KeyRequestQueue& q);
@@ -518,7 +526,9 @@ public:
 	/** called when last contact is removed from a bucket*/
 	virtual void onBucketEmpty(KadBucket& bucket) override;
 	/** called when a new contact is created in the routing table*/
-	virtual void onNewContact(KadContact_p contact) override;
+        virtual void onNewContact(KadContact_p contact) override;
+	/** called for contact candidates **/
+	virtual void onContactCandidate(std::unique_ptr<KadContact> contactp) override;
 	/** called when a contact is going to be deleted from routing table*/
 	virtual void onContactRemoval(KadContact_p contact) override;
 	/** called when a contact is invalidated */
@@ -580,6 +590,7 @@ public:
 	static constexpr unsigned long GetPNWaitTime = 20000UL; // µs (50 Requests/s)
 	static constexpr unsigned long GetONInitialWaitTime = 20000UL; // µs
 	static constexpr unsigned long GetONWaitTime = 40000UL; // µs (25 Requests/s)
+	static constexpr unsigned long ContactCandidateInitialWaitTime = 40000UL; // µs (40ms)
 	static constexpr unsigned long OnDemandPathProbeReqInitialWaitTime = 50000UL; // µs (50ms)
 	static constexpr unsigned long OnDemandPathProbeReqDiscoverWaitTime = 20000UL; // µs (20ms ~ 50 Requests/s)
 
@@ -589,15 +600,26 @@ public:
 
 // default constructor
 inline
-R2Kademlia::R2Kademlia() :
-	routingTable(neighborTable), cmp(myOverlayKey),
-	PNRediscoverQueue(cmp),
-	urgentRediscoverQueue(cmp),
-	regularRediscoverQueue(cmp),
-	slowRediscoverQueue(cmp),
-	PNDiscoverQueue("PNDiscover", std::bind(&R2Kademlia::sendDiscoveryReq, this, ph::_1, ph::_2), std::bind(&R2Kademlia::sendScheduledPNDiscReqs, this), PNDiscoverInitialWaitTime),
-	GetPNQueue("QueryRouteReq(PN)", std::bind(&R2Kademlia::sendGetPhysicalNeighbors, this, ph::_1, ph::_2), std::bind(&R2Kademlia::sendScheduledQueryRouteReqsPN, this), GetPNInitialWaitTime),
-	GetONQueue("QueryRouteReq(ON)", std::bind(&R2Kademlia::sendGetOverlayNeighbors, this, ph::_1, ph::_2), std::bind(&R2Kademlia::sendScheduledQueryRouteReqsON, this), GetONInitialWaitTime),
+R2Kademlia::R2Kademlia()
+    : routingTable(neighborTable), cmp(myOverlayKey), PNRediscoverQueue(cmp),
+      urgentRediscoverQueue(cmp), regularRediscoverQueue(cmp),
+      slowRediscoverQueue(cmp),
+      PNDiscoverQueue("PNDiscover",
+          std::bind(&R2Kademlia::sendDiscoveryReq, this, ph::_1, ph::_2),
+          std::bind(&R2Kademlia::sendScheduledPNDiscReqs, this),
+          PNDiscoverInitialWaitTime),
+      GetPNQueue("QueryRouteReq(PN)",
+                 std::bind(&R2Kademlia::sendGetPhysicalNeighbors, this, ph::_1, ph::_2),
+                 std::bind(&R2Kademlia::sendScheduledQueryRouteReqsPN, this),
+                 GetPNInitialWaitTime),
+      GetONQueue("QueryRouteReq(ON)",
+          std::bind(&R2Kademlia::sendGetOverlayNeighbors, this, ph::_1, ph::_2),
+          std::bind(&R2Kademlia::sendScheduledQueryRouteReqsON, this),
+          GetONInitialWaitTime),
+      ContactCandidateProbeQueue("ContactCandidateProbeQueue",
+          std::bind(&R2Kademlia::sendPathProbeToContactCandidate, this, ph::_1, ph::_2),
+          std::bind(&R2Kademlia::sendScheduledContactCandidateProbes, this),
+          ContactCandidateInitialWaitTime),
 	OnDemandPathProbeQueue("OnDemandPathProbeReq",std::bind(&R2Kademlia::sendOnDemandPathProbe, this, ph::_1, ph::_2), std::bind(&R2Kademlia::sendScheduledOnDemandPathProbe, this), OnDemandPathProbeReqInitialWaitTime)
 {
 };

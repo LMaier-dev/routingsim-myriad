@@ -5,25 +5,26 @@ namespace routingsim {
 
 // adds a new childnode to the parent or at least the link if the childnode is already known
 // also updates distance if childnode already known
-// @returns whether something has been changed (link or node added)
-std::pair<bool, nodeVicinityNode*>
+// @returns (node added, link added, node*)
+std::tuple<bool, bool, nodeVicinityNode*>
 nodeVicinityGraph::addNode(const OverlayKey& parentNodeKey, const OverlayKey& childNodeKey, unsigned short distance) {
 	ASSERT(distance > 0U);
 
 	nodeVicinityNode* foundnode(nullptr);
 	// nodes further away than the vicinityDiscoveryRadius are ignored
 	if (distance > vicinityDiscoveryRadius)
-		return { false, foundnode };
+		return { false, false, foundnode };
 
 	//EV_TRACE << "vicinity.addNode(): " << childNodeKey.shortStr()
 	//	 << " parent: " << parentNodeKey.shortStr() << " distance:" << distance << endl;
 
-	bool modified(false);
+	bool node_added(false);
+	bool link_added(false);
 
 	// never add own key as child
 	if (childNodeKey == *rootNodeKey) {
 		foundnode= &graph.at(*rootNodeKey);
-		return { false, foundnode };
+		return { node_added, link_added, foundnode };
 	}
 
 	if (auto parentnode_it= graph.find(parentNodeKey); parentnode_it != graph.end()) {
@@ -37,7 +38,7 @@ nodeVicinityGraph::addNode(const OverlayKey& parentNodeKey, const OverlayKey& ch
 			graph[childNodeKey].distance= distance;
 			// EV_TRACE << "vicinity.addNode(): added new node " <<  childNodeKey.shortStr() << endl;
 			childnodeptr= &graph[childNodeKey];
-			modified= true;
+			node_added= true;
 		}
 		else { // entry for child exists already
 			childnodeptr= &(child_it->second);
@@ -46,7 +47,7 @@ nodeVicinityGraph::addNode(const OverlayKey& parentNodeKey, const OverlayKey& ch
 			// EV_TRACE << "vicinity.addNode(): node exists already, distance " <<  old_distance << endl;
 			if (distance < old_distance) {
 				child_it->second.distance= distance;
-				modified= true;
+				link_added= true;
 			}
 		}
 
@@ -57,7 +58,7 @@ nodeVicinityGraph::addNode(const OverlayKey& parentNodeKey, const OverlayKey& ch
 		// if not found, add (parent, child) as new link
 		if (child_it == childrenlist.cend() or *child_it != childnodeptr) {
 			childrenlist.insert(child_it, childnodeptr);
-			modified= true;
+			link_added= true;
 		}
 		//ASSERT(std::is_sorted(childrenlist.cbegin(),childrenlist.cend()));
 
@@ -68,7 +69,7 @@ nodeVicinityGraph::addNode(const OverlayKey& parentNodeKey, const OverlayKey& ch
 
 	//EV_TRACE << "vicinity.addNode(): " << childNodeKey.shortStr() << (modified ? " modified" : " not modified") << endl;
 
-	return { modified, foundnode };
+	return { node_added, link_added, foundnode };
 }
 
 

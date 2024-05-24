@@ -2,6 +2,7 @@
 
 namespace routingsim {
 
+
 void R2Kademlia::scheduleOnDemandPathProbeReq(KeyRequestQueue& q, const KadContact& tmpcontact, RequestQueueElementActionType action)
 {
 	// the following compare is a bit hacky:
@@ -33,7 +34,7 @@ void R2Kademlia::scheduleOnDemandPathProbeReq(KeyRequestQueue& q, const KadConta
 }
 
 
-// sendPathProbe along full source routing path to given contact
+// sendPathProbe along full source routing path to existing contact w/ given key
 // called by periodic refresh function doProbeNeighbors() and doProbeContacts()
 void R2Kademlia::sendPathProbe(const OverlayKey& contactkey)
 {
@@ -45,7 +46,8 @@ void R2Kademlia::sendPathProbe(const OverlayKey& contactkey)
 }
 
 
-// sendPathProbe along full source routing path
+
+// sendPathProbe along full source routing path, only works with existing contacts
 // called by periodic refresh function doProbeNeighbors() and doProbeContacts()
 simtime_t R2Kademlia::sendOnDemandPathProbe(KeyRequestQueue::value_type keyactionpair, RequestQueueElementActionType unused_arg)
 {
@@ -98,7 +100,76 @@ R2Kademlia::sendScheduledPathProbeRequests(KeyRequestQueue& q) {
 		// remove the scheduled request now
 		q.pop_back();
 
-		if (delay_next_call > 0) {
+		if (not q.empty() and delay_next_call > 0) {
+			// schedule next call
+			addOneShotTimer(delay_next_call, q.sendscheduledcall);
+			q.setScheduled();
+			EV_TRACE << "scheduling " << q.getDescription() << " in " << delay_next_call << 's' << endl;
+
+			return;
+		}
+	}
+
+	// queue is empty now
+	// next call of this procedure will be scheduled on demand
+	q.clearScheduled();
+}
+
+
+// sendPathProbe along full source routing path of temporary contact
+simtime_t R2Kademlia::sendPathProbeToContactCandidate(const KadContact& tmpcontact, RequestQueueElementActionType action)
+{
+        // we rate limit the requests
+	simtime_t delay(0);
+
+	// default (see R2Kademlia.h): 40000µs is 40ms, so the rate limit is 25 Reqs/s
+	static const simtime_t mindelay(SimTime(OnDemandPathProbeReqDiscoverWaitTime,SIMTIME_US));
+	if  ( simTime() < LastContactCandidateProbeReq ) {
+		// last was scheduled in future, schedule it mindelay behind that
+		delay= LastContactCandidateProbeReq-simTime()+mindelay;
+	}
+	else { // last send in past
+		if (simTime()-LastContactCandidateProbeReq < mindelay) {
+			// we are too early, so delay until mindelay is fulfilled
+			delay= LastContactCandidateProbeReq+mindelay-simTime();
+		}
+		// otherwise no extra delay necessary
+	}
+
+	EV_TRACE << "sendPathProbeToContactCandidate(" << tmpcontact.getKey().shortStr() << ") next delay: " << delay << endl;
+
+	sendPathProbeToContact(tmpcontact, action);
+
+	LastContactCandidateProbeReq= simTime()+delay;
+
+	return delay;
+
+}
+
+
+void
+R2Kademlia::sendScheduledContactCandidateProbeReqs(ContactRequestQueue& q) {
+	simtime_t delay_next_call(0);
+	EV_TRACE << "sendScheduledRequests(" << q.getDescription() << ") called, queued requests:" << q.size() << endl;
+	while (not q.empty())
+	{
+		// normally we would use front(), but for vectors back() and pop_back() is easier
+		// due to the sorted order
+                auto contact = q.back();
+		// check whether it is a contact already (no need to check then)
+		if (not routingTable.isKnown(contact.getKey())) {
+			// send the path probe request (second argument is ignored, because the pair already contains the action)
+                        delay_next_call= q.sendrequestcall(contact, pathSetupCheck);
+                }
+                else { // skip this element: remove it from the queue and do not send anything
+			delay_next_call = 0;
+			EV_TRACE << "skipped contact candidate " << contact.getKey().shortStr() << " as it is already a contact" << endl;
+		}
+
+                // remove the scheduled request now
+		q.pop_back();
+
+		if (not q.empty() and delay_next_call > 0) {
 			// schedule next call
 			addOneShotTimer(delay_next_call, q.sendscheduledcall);
 			q.setScheduled();
@@ -116,7 +187,7 @@ R2Kademlia::sendScheduledPathProbeRequests(KeyRequestQueue& q) {
 
 // Path Probing: sends a ProbeReq to check for validity of an existing path
 // the ProbeReq will travel the full path to its final destination if the path is intact
-//  if pathsetupcheck is true it will also refresh PathIDs that have been installed in intermediate nodes
+// if pathsetupcheck is true it will also refresh PathIDs that have been installed in intermediate nodes
 void R2Kademlia::sendPathProbeToContact(const KadContact& contact, RequestQueueElementActionType action)
 {
 	// must be a valid contact

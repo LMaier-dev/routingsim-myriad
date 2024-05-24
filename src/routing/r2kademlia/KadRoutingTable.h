@@ -108,7 +108,9 @@ public:
 	/** called when last contact is removed from a bucket */
 	virtual void onBucketEmpty(KadBucket& bucket) = 0;
 	/** called when a new contact is created in the routing table */
-	virtual void onNewContact(KadContact_p contact) = 0;
+        virtual void onNewContact(KadContact_p contact) = 0;
+	/** called for contact candidates **/
+	virtual void onContactCandidate(std::unique_ptr<KadContact> contactp) = 0;
 	/** called when path has changed, but is not improved **/
 	virtual void onPathChange(const KadContact& contact) = 0;
 	/** called when a better path has been learned for a contact */
