@@ -256,8 +256,8 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 
 			// mainly for testing purposes: in case we use linkFailureNotifications, send a path probe to install state
 			// normally, this is done during regular path probing, so not really necessary to do it explicitly like here
-			if (linkFailureNotifications and contact->getPathLength() > 0)
-				addOneShotTimer(SimTime(500,SIMTIME_MS),std::bind(&R2Kademlia::sendPathProbe,this,contact->getKey()));
+			//if (linkFailureNotifications and contact->getPathLength() > 0)
+			//	addOneShotTimer(SimTime(500,SIMTIME_MS),std::bind(&R2Kademlia::sendPathProbe,this,contact->getKey()));
 
 		} // endif usePathIDs
 	}
@@ -284,8 +284,8 @@ void R2Kademlia::onImprovement(const KadContact& contact) {
 		}
 		else {  // 5 hops or less
 			// only required to install state for notifyFirstSegment, that is relevant for distances of at least 3 hops
-			if (linkFailureNotifications and contact.getPathLength() > 1)
-				addOneShotTimer(SimTime(500,SIMTIME_MS),std::bind(&R2Kademlia::sendPathProbe,this,contact.getKey()));
+			//if (linkFailureNotifications and contact.getPathLength() > 0)
+			//	addOneShotTimer(SimTime(500,SIMTIME_MS),std::bind(&R2Kademlia::sendPathProbe,this,contact.getKey()));
 			
 			// for these paths update the PID entry (max to 3rd hop)
 			fwdTablePathID.modEntry(contact.getKey(), contact.getPath(), false);
@@ -325,8 +325,8 @@ void R2Kademlia::onPathChange(const KadContact& contact) {
 		}
 		else { // 5 hops or less
 			// only required to install state for notifyFirstSegment, that is relevant for distances of at least 3 hops
-			if (linkFailureNotifications and contact.getPathLength() > 1)
-				addOneShotTimer(SimTime(500,SIMTIME_MS),std::bind(&R2Kademlia::sendPathProbe,this,contact.getKey()));
+			//if (linkFailureNotifications and contact.getPathLength() > 0)
+			//	addOneShotTimer(SimTime(500,SIMTIME_MS),std::bind(&R2Kademlia::sendPathProbe,this,contact.getKey()));
 
 			// for these paths update the PID entry (max to 3rd hop)
 			fwdTablePathID.modEntry(contact.getKey(), contact.getPath(), false);

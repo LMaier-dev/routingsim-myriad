@@ -800,6 +800,8 @@ R2Kademlia::notifyAffectedPathUsers(const OverlayKey& nexthop_key) {
 
 // this is a non-RPC flooding message, forwarded hop-by-hop in the underlay
 void R2Kademlia::handlePacket(std::unique_ptr<KadRevPathFlood> packet) {
+	receivedPackets++;
+	receivedVolume+= packet->getByteLength();
 	// NotVia information has been processed before this method is called
 	// Therefore, only the PIDs have to be looked up and it has to be figured out
 	// which PIDs need to be propagated further "upstream"
@@ -945,6 +947,8 @@ R2Kademlia::doNotifyFirstSegmentSources(const std::unordered_set<PathID>& upstre
 // non-RPC notification message that is forwarded via the normal overlay routing
 // no need for reliability of this message
 void R2Kademlia::handlePacket(std::unique_ptr<KadLinkFailureNotify> packet) {
+	receivedPackets++;
+	receivedVolume+= packet->getByteLength();
 
 	// when this method is called either we are an overlay hop or the final recipient
 	OverlayKey& target = packet->getDstNodeID(); // get the destination ID

@@ -422,7 +422,7 @@ void FwdTablePathID::delEntry(KadContact_p contact)
 }
 
 
-void FwdTablePathID::garbageCollect(const unsigned long fwdentry_refresh_timeout_ms)
+void FwdTablePathID::garbageCollect(std::unordered_map<PathID, std::unordered_set<OverlayKey>>& notifyFirstSegmentSources, const unsigned long fwdentry_refresh_timeout_ms)
 {
 	auto it= PIDFwdTable.begin();
 	while ( it != PIDFwdTable.end() )
@@ -431,7 +431,8 @@ void FwdTablePathID::garbageCollect(const unsigned long fwdentry_refresh_timeout
 		if (not it->second.isLocal() and not it->second.isPrecalc()
 		    and it->second.getAge() > fwdentry_refresh_timeout_ms) {
 			EV_TRACE << "garbageCollect(): actually deleting PID " << it->first << ": " << it->second.str() << endl;
-			it= PIDFwdTable.erase(it);
+			notifyFirstSegmentSources.erase(it->first);
+                        it= PIDFwdTable.erase(it);
 		}
 		else {
 			it++;

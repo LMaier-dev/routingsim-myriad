@@ -10,6 +10,7 @@
 #include <unordered_map>
 #include <tuple>
 #include <functional>
+#include <unordered_set>
 
 #include "KadContact.h"
 #include "PathID.h"
@@ -139,7 +140,7 @@ public:
 	void delForeignPIDEntry(PathID pid);
 
 	// garbage collect, actually delete unnecessary entries
-	void garbageCollect(const unsigned long fwdentry_refresh_timeout_ms);
+	void garbageCollect(std::unordered_map<PathID, std::unordered_set<OverlayKey>>& notifyFirstSegmentSources, const unsigned long fwdentry_refresh_timeout_ms);
 
 	// for gathering statistics
 	size_type getNumEntries() const { return PIDFwdTable.size(); };
