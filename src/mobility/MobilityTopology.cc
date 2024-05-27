@@ -11,9 +11,13 @@ MobilityTopology::MobilityTopology(cModule *networkManager) {
   EV_DEBUG << "MobilityTopology created" << endl;
 }
 
-// TODO: par
 void MobilityTopology::initialize() {
-  createTopology();
+  for (cModule *nodeMod : *mobilityNodeMods) {
+    if (!nodeMod->initialized()) nodeMod->callInitialize();
+    auto *node = check_and_cast<MobilityNode*>(nodeMod->getSubmodule("node"));
+    EV_DEBUG << "MobilityNode " << node->getNodeId() << " created with range " << node->getAntennaModel()->getRange() << "m" << endl;
+    nodeMod->scheduleStart(simTime());
+  }
 }
 
 void MobilityTopology::setDatarate(MobilityNode *fromNode, MobilityNode *toNode,
@@ -22,6 +26,7 @@ void MobilityTopology::setDatarate(MobilityNode *fromNode, MobilityNode *toNode,
 }
 
 void MobilityTopology::createTopology() {
+  EV_INFO << "Create mobility typology" << endl;
   BGLtopology = new topologyGraph(numNodes);
 
   for (BGLVertexIt it = vertices(*BGLtopology).first;
@@ -36,14 +41,8 @@ void MobilityTopology::createTopology() {
       cModuleType::get("routingsim.mobility.MobilityNodeWrapper");
 
   for (tie(vi, ve) = vertices(*BGLtopology); vi != ve; vi++) {
-
-    // jump over disabled nodes
-    if ((*BGLtopology)[*vi].disabled) {
-      // EV << "IGNORING NODE " << *vi << endl;
-      continue;
-    }
     std::stringstream node_name;
-    node_name << "MobilNode_" << (nodeid_t)*vi;
+    node_name << "MobilityNode_" << (nodeid_t)*vi;
     cModule *node_wrapper =
         node_wrapper_type->create(node_name.str().c_str(), networkManager);
     node_wrapper->par("nodeId") = *vi;
@@ -57,11 +56,6 @@ void MobilityTopology::createTopology() {
     nodeMod->finalizeParameters();
     nodeMod->buildInside();
   }
-
-  for (cModule *nodeMod : *mobilityNodeMods) {
-    nodeMod->callInitialize();
-    nodeMod->scheduleStart(simTime());
-  }
 }
 
 void MobilityTopology::deleteLink(MobilityNode *fromNode,
@@ -74,6 +68,13 @@ void MobilityTopology::deleteLink(MobilityNode *fromNode,
     return;
   disableLink(fromNode->getNodeId(), toNode->getNodeId());
   remove_edge(fromNode->getNodeId(), toNode->getNodeId(), *BGLtopology);
+  const char *gatename = "toNeighbors$o";
+  for (int i = 0; i < fromNode->gateSize(gatename); i++) {
+    cGate *gateToNode = fromNode->gate(gatename, i);
+    if (toNode == fromNode->getOtherNode(gateToNode)) {
+      gateToNode->disconnect();
+    }
+  }
 }
 
 void MobilityTopology::createLink(MobilityNode *fromNode,

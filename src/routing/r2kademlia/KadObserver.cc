@@ -564,7 +564,7 @@ KadObserver& getKadObserver() {
 		cModuleType* type = cModuleType::get(
 				"routingsim.routing.r2kademlia.KadObserver");
 		cModule* mod = getSimulation()->getModuleByPath("<root>");
-		observer = dynamic_cast<KadObserver*>(type->createScheduleInit("KadObserver", mod));
+		observer = dynamic_cast<KadObserver*>(type->create("KadObserver", mod));
 	}
 	return *observer;
 }

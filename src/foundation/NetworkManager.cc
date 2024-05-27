@@ -3,12 +3,12 @@
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
-// 
+//
 // This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU Lesser General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU Lesser General Public License
 // along with this program.  If not, see http://www.gnu.org/licenses/.
 //
@@ -56,9 +56,11 @@ namespace routingsim {
           const bool useMobility = par("mobility").boolValue();
           if (useMobility) {
             EV << "creating mobility manager" << std::endl;
-            mobilityTopology = new MobilityTopology(this);
             cModule *dynamicsModule = gate("mobilityDynamics")->getPathStartGate()->getOwnerModule();
+            mobilityTopology = new MobilityTopology(this);
+            mobilityTopology->createTopology();
             mobilityDynamics = dynamic_cast<MobilityDynamics *>(dynamicsModule);
+            mobilityDynamics->mobilityTopology = mobilityTopology;
             scheduleAt(simTime(), new cMessage{"init mobility", INIT_MOBILITY});
           }
         }
@@ -141,6 +143,7 @@ namespace routingsim {
             dynamics->topology = topology;
         } else
             EV << "No dynamic model available." << endl;
+
         // statistics
         activeNodesCount = new cOutVector("activeNodesCount");
         activeEdgesCount = new cOutVector("activeEdgesCount");
@@ -195,7 +198,6 @@ namespace routingsim {
             switch (msg->getKind()) {
                 case INIT_MOBILITY:
                     mobilityTopology->initialize();
-                    mobilityDynamics->mobilityTopology = mobilityTopology;
                     mobilityDynamics->initialize(1);
                     break;
                 default:
@@ -216,15 +218,14 @@ namespace routingsim {
 
         if (evaluateStatistics) {
             if (topologyStatistics == string("Light") || topologyStatistics == string("Heavy")) {
-                ann = topology->getActiveNumberNodes();
-                anl = topology->getActiveNumberLinks();
+                ann = topology->getActiveNumberNodes() + mobilityTopology->getActiveNumberNodes();
+                anl = topology->getActiveNumberLinks() + mobilityTopology->getActiveNumberLinks();
             }
             if (topologyStatistics == string("Heavy")) {
-                pc = topology->getNumPartitions();
+                pc = topology->getNumPartitions() + mobilityTopology->getNumPartitions();
             }
             evaluateStatistics = false;
         }
-
 
         if (topologyStatistics == string("Light") || topologyStatistics == string("Heavy")) {
             activeNodesCount->record(ann);

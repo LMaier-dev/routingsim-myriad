@@ -967,7 +967,7 @@ void NetworkTopology::enableLink(nodeid_t f, nodeid_t t) {
 	BGLEdgeDesc e;
 	bool edgeValid;
 
-	tie( e, edgeValid) = edge(f, t, *BGLtopology);
+	tie(e, edgeValid) = edge(f, t, *BGLtopology);
 	if (!edgeValid) {
 		throw cRuntimeError("trying to enable non-existing link!");
 	}
@@ -978,7 +978,7 @@ void NetworkTopology::enableLink(nodeid_t f, nodeid_t t) {
 	}
 
 	// if link is already enabled, return instantly
-	if ( (*BGLtopology)[e].active == true ) {
+	if ((*BGLtopology)[e].active) {
 		return;
 	}
 

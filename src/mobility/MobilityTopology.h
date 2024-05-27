@@ -19,12 +19,12 @@ public:
   void deleteLink(MobilityNode *fromNode, MobilityNode *toNode);
   std::vector<cModule*> getNodeMods() const { return *mobilityNodeMods; }
   std::vector<cModule*> *mobilityNodeMods = new std::vector<cModule *>();
+  void createTopology();
 
 private:
   cRNG *rng;
   cModule *networkManager = nullptr;
   int numNodes = 0;
-  void createTopology();
 };
 } // namespace routingsim
 

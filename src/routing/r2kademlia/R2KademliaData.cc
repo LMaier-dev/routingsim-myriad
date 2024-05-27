@@ -319,8 +319,8 @@ bool R2Kademlia::forwardDataPacketToNextHop(KadDataPacket_p& packet, NodePkt_p& 
 						// send back error message (requires copy of packet)
 						onMissingNeighbor(std::make_unique<KadDataPacket>(*packet), nh.nextHopNode);
 
-						// recursive call
-						return forwardDataPacketToNextHop(packet, nodePkt);
+						// recursive call TODO: Stack Overflow in mobility
+						// return forwardDataPacketToNextHop(packet, nodePkt);
 					}
 				} // endif PathID to next hop available
 
@@ -534,7 +534,7 @@ void R2Kademlia::onMissingNeighbor(KadDataPacket_p packet, const OverlayKey& mis
 	EV_WARN << "onMissingNeighbor(data) called - packet next hop should be ";
 	EV_WARN << "NID: " << missingNeighborNodeID.shortStr();
 	if (packet->getFirstPathID() != PathID::UndefinedPathID) {
-		EV_WARN << " PID: " << packet->getFirstPathID() << endl;
+		//EV_WARN << " PID: " << packet->getFirstPathID() << endl;
 	}
 	else
 		EV_WARN << endl;

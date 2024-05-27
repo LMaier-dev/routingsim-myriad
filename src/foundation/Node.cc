@@ -232,7 +232,7 @@ void Node::sendToNeighbors(NodePkt *np) {
 void Node::sendNotify(NodePkt *packet, cGate *dg) {
   Enter_Method_Silent("Node::sendNotify");
   take(packet);
-  EV_WARN << "SendNotify: From gate " << dg->getFullName() << " to fake gate "
+  EV_TRACE << "SendNotify: From gate " << dg->getFullName() << " to fake gate "
           << dg->getPathEndGate()->getFullName() << endl;
   packet->setDestGateId(dg->getPathEndGate()->getIndex());
   sendDirect(packet, getOtherNode(dg), "directIn");
@@ -262,7 +262,6 @@ void Node::onHello(NodePkt *pkt) {
   nodeid_t nid = pkt->getHop().from;
 
   // add new neighbor data
-
   if (neighbor_map.count(nid) == 0) {
     neighbor_map.insert(std::make_pair(nid, neighbor_t()));
     neighbor_set.push_back(nid);
@@ -275,11 +274,11 @@ void Node::onHello(NodePkt *pkt) {
   nr.id = nid;
   if (pkt->getDestGateId() == -1) {
     nr.out = gate("toNeighbors$o", pkt->getArrivalGate()->getIndex());
-    EV_WARN << "onHello: Node " << id << " received hello from " << nid
+    EV_TRACE << "onHello: Node " << id << " received hello from " << nid
             << " on gate " << pkt->getArrivalGate()->getIndex() << endl;
   } else {
     nr.out = gate("toNeighbors$o", pkt->getDestGateId());
-    EV_WARN << "onHello: Node " << id << " received hello from " << nid
+    EV_TRACE << "onHello: Node " << id << " received hello from " << nid
             << " on fake gate " << pkt->getDestGateId() << endl;
   }
 
