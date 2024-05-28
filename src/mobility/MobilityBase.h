@@ -19,9 +19,7 @@ enum { MOBILITY_UPDATE };
 namespace routingsim {
     class MobilityBase : public Environment {
     private:
-        cMessage *updatePositionMessage = new cMessage("mobility_update", MOBILITY_UPDATE);
         static int reflect(double, double, double &, double &);
-        void sendUpdatePositionMessage();
 
     protected:
         // The interval to update the position of the node.
@@ -46,17 +44,6 @@ namespace routingsim {
         // Initialize the heading of the node.
         void initializeHeading();
 
-        // Handle the messages received.
-        // The method schedules a self message every updateIntervall to update the position of the node.
-        // If the message is not a self message, an error is thrown.
-        void handleMessage(cMessage *msg) override;
-
-        // Handle the self messages to update the position of the node.
-        void handleSelfMessage(cMessage *pMessage);
-
-        // Update the position of the node using the move method and handle the node if it is outside the environment.
-        void updatePosition();
-
         // Move the node to the next position based on the mobility model.
         // This method must be implemented by subclasses to define the mobility model of the node.
         virtual void move() = 0;
@@ -75,8 +62,10 @@ namespace routingsim {
         // Returns the position of node
         Coord2D getPosition() { return lastPosition; }
 
+        // Update the position of the node using the move method and handle the node if it is outside the environment.
+        void updatePosition();
+
         double getUpdateInterval() const;
-        static simsignal_t mobilityStateChangedSignal;
     };
 
 };
