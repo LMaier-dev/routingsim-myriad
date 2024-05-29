@@ -55,7 +55,6 @@ void MobilityDynamics::updateConnection(MobilityNode *fromNode,
   }
 }
 void MobilityDynamics::scheduleMobilityUpdate() {
-  scheduleAt(simTime() + updateInterval * 1000,
-             const_cast<cMessage *>(mobilityUpdateMsg));
+  scheduleAt(simTime() + updateInterval, const_cast<cMessage *>(mobilityUpdateMsg));
 }
 } // namespace routingsim
