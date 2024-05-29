@@ -125,7 +125,8 @@ void KadObserver::initialize() {
 	addOutVectors[droppedDataPacketsV] = std::make_unique<cOutVector>("droppedDataPackets");
 	addOutVectors[roamingDataPacketsV] = std::make_unique<cOutVector>("roamingDataPackets");
 
-#define DEBUG_LINKFAILURENOTIFICATIONS 1
+#ifndef NDEBUG
+#define DEBUG_LINKFAILURENOTIFICATIONS 0
 #ifdef DEBUG_LINKFAILURENOTIFICATIONS
 	auto msg = new cMessage("TimerMsg", -1);
 	std::function<void()> callback(std::bind(&KadObserver::getFailedContacts,this));
@@ -133,7 +134,7 @@ void KadObserver::initialize() {
 	// callback will be carried out after delay
 	scheduleAt(SimTime(21,SIMTIME_S) , msg);
 #endif
-
+#endif
 }
 
 void KadObserver::finish() {

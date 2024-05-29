@@ -1025,16 +1025,26 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 			// we have found a contact that is closer than us to target (query)
 			// => forward request
 			// note: chooseNextHop may choose the next hop with the shortest path (proximity routing)
-			const KadContact& contact = chooseNextHop(contacts, query);
+			const KadContact& contact= chooseNextHop(contacts, query);
 			EV_TRACE << "KadFindNodeReq received query for: " << packet->getDstNodeID().shortStr() << " next overlay hop is " << contact << endl;
-			// note: the log_2 will be smaller for a longer common prefix
-			ASSERT((contact.getKey() ^ query).log_2() <= (myOverlayKey ^ query).log_2());
+                        // note: the log_2 will be smaller for a longer common prefix
+#ifndef NDEBUG
+			ASSERT(&contact != &KadContact::undefinedContact);
+                        ASSERT((contact.getKey() ^ query).log_2() <= (myOverlayKey ^ query).log_2());
 			if((contact.getKey() ^ query).log_2() > (myOverlayKey ^ query).log_2()) {
 				EV_WARN << "no prefix progress made" << endl;
 			}
-			ASSERT((contact.getKey() ^ query) < (myOverlayKey ^ query));
-			packet->appendRoute(contact);
-			ASSERT(packet->getRouteArraySize() - packet->getProgress() <= packet->getHopLimit());
+#endif
+                        // in rare cases, chooseNextHop may choose a PNS contact
+                        // that is further away than this node (e.g., many
+                        // invalid contacts in higher buckets and the query is in such a higher bucket)
+                        // then we would use the first contact instead as this makes progress
+			if ((contact.getKey() ^ query) < (myOverlayKey ^ query))
+				packet->appendRoute(contact);
+                        else
+				packet->appendRoute(contacts.front());
+
+                        ASSERT(packet->getRouteArraySize() - packet->getProgress() <= packet->getHopLimit());
 			resendPacket(std::move(packet));
 			if (is_rediscovery)
 				forwardedRediscovery++;

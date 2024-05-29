@@ -142,12 +142,13 @@ size_type KadRoutingTable::getBucketIndex(const OverlayKey& key) const
 /// this should be called by PNDiscReq and PNDiscRsp only!
 void KadRoutingTable::addPNContact(const OverlayKey& key, stateseqno_t stateseqno, uint32_t nodeDegree)
 {
+#ifndef NDEBUG
 	if (not neighbortable.isNeighbor(key)) {
 		// this should not happen, either we got a PNHello before or it was added just before this call
 		EV_ERROR << "addPNContact: PN is not a neighbor yet" << endl;
 		ASSERT(neighbortable.isNeighbor(key));
 	}
-
+#endif
 	KadContact *contact= getContactInternal(key);
 	if (contact == nullptr) { // contact is new
 		if (handleNewContact(key, kad_path(), stateseqno, 0, nodeDegree, true)) {
