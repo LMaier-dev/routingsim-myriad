@@ -1050,8 +1050,10 @@ void KadRoutingTable::updatePaths(const KadContact& improvedContact)
 
 						// set new path (must be more current than old one)
 						// note: this will set the contact to be valid!
-						if (contact->isValid() or (contact->isInvalid() and pathrepaired))
+						if (contact->isValid() or (contact->isInvalid() and pathrepaired)) {
+							EV_TRACE << "updatePaths: found improved path for contact " << *contact << " proposed: " << newpath << endl;
 							contact->updatePath( myKey, newpath );
+						}
 
 						if (pathimproved) {
 							// call onImprovement(contact) also for updating PID
