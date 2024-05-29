@@ -23,6 +23,7 @@ namespace routingsim {
 
         // Field noise for the environment
         double systemNoise;
+
     public:
         // Check if a position is outside the environment
         bool isOutside(Coord2D) const;

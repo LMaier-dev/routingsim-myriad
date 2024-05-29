@@ -17,10 +17,10 @@ void RandomWaypointMobility::move() {
   simtime_t now = simTime();
   if (now >= nextChange) {
     lastPosition = targetPosition;
-    EV_INFO << "reached current target position = " << lastPosition.toString()
+    EV_TRACE << "reached current target position = " << lastPosition.toString()
             << endl;
     setNextTarget();
-    EV_INFO << "new target position = " << targetPosition.toString()
+    EV_TRACE << "new target position = " << targetPosition.toString()
             << ", next change = " << nextChange << endl;
   } else if (now > lastUpdate) {
     ASSERT(nextChange == -1 || now < nextChange);
@@ -41,8 +41,8 @@ void RandomWaypointMobility::setTargetPosition() {
   if (waitNextPeriod) {
     targetPosition = lastPosition;
   } else {
-    targetPosition = Coord2D(uniform(borderMin.x, borderMax.x),
-                             uniform(borderMin.y, borderMax.y));
+    targetPosition = Coord2D(uniform(borderMin.x, borderMax.x, 1),
+                             uniform(borderMin.y, borderMax.y, 1));
   }
 }
 
@@ -59,7 +59,7 @@ void RandomWaypointMobility::setTargetVelocity() {
 }
 
 void RandomWaypointMobility::setTargetSpeed() {
-  speed = uniform(minSpeed, maxSpeed);
+  speed = uniform(minSpeed, maxSpeed, 1);
 }
 
 void RandomWaypointMobility::setTargetNextPeriod() {

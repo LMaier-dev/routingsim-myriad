@@ -15,7 +15,7 @@ void MobilityBase::initialize() {
 void MobilityBase::initializePosition() { lastPosition = getRandomPosition(); }
 
 void MobilityBase::initializeHeading() {
-  heading.setRadius(getRNG(par("mobilityRNG").intValue())->doubleRand() * 360);
+  heading.setRadius(getRNG(1)->doubleRand() * 360);
 }
 
 void MobilityBase::updatePosition() {

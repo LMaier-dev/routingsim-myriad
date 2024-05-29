@@ -82,9 +82,6 @@ simple NetworkManager
         /// number of mobility nodes to add to the network
         int mobilityNodes = default(100);
 
-        /// index of the random number generator to use for mobility
-        int mobilityRNG = default(0);
-
     gates:
         /// input gate for topoplogy dynamics
         input dynamics @loose;

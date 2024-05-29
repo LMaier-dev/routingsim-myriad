@@ -11,7 +11,7 @@ Define_Module(Environment)
     }
 
     Coord2D Environment::getRandomPosition() {
-        return {uniform(borderMin.x, borderMax.x), uniform(borderMin.y, borderMax.y)};
+        return {uniform(borderMin.x, borderMax.x, 1), uniform(borderMin.y, borderMax.y, 1)};
     }
 
     bool Environment::isOutside(Coord2D position) const {

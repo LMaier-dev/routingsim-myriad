@@ -22,7 +22,6 @@ public:
   void createTopology();
 
 private:
-  cRNG *rng;
   cModule *networkManager = nullptr;
   int numNodes = 0;
 };
