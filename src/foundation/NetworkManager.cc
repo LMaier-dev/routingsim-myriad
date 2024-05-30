@@ -224,7 +224,7 @@ namespace routingsim {
             if (topologyStatistics == string("Heavy")) {
                 pc = topology->getNumPartitions() + mobilityTopology->getNumPartitions();
             }
-            evaluateStatistics = false;
+            // evaluateStatistics = false;
         }
 
         if (topologyStatistics == string("Light") || topologyStatistics == string("Heavy")) {

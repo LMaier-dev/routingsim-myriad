@@ -187,12 +187,12 @@ public:
     return sqrt(pow(x - rhs.x, 2) + pow(y - rhs.y, 2));
   }
 
-  double distance_squared() const { return sqrt(pow(x, 2) + pow(y, 2)); }
+  double distance() const { return sqrt(pow(x, 2) + pow(y, 2)); }
 
   Coord2D get_normalized() const {
-    if (this->distance_squared() == 0)
+    if (this->distance() == 0)
       return *this;
-    return *this / this->distance_squared();
+    return *this / this->distance();
   }
 
   [[nodiscard]] std::string toString() const {
