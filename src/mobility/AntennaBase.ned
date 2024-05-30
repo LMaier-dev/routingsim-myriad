@@ -11,6 +11,7 @@ simple AntennaBase {
         double maxRecvGain @unit(db) = default(0db);
         double minFreq @unit(MHz) = default(2400MHz);
         double maxFreq @unit(MHz) = default(2400MHz);
+        double bandwidth @unit(MHz) = default(40MHz);
         double systemNoise @unit(db) = default(-172db);
 }
 

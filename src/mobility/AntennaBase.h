@@ -20,6 +20,7 @@ protected:
   DB recvGain = DB(0);
   DB systemNoise = DB(0);
   MHz frequency = MHz(0);
+  MHz bandwidth = MHz(0);
   double range = 0;
 
 public:

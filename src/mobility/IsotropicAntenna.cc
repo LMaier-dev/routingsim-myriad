@@ -17,8 +17,8 @@ double IsotropicAntenna::distance_from_pathloss(DB pathloss) {
 
 double IsotropicAntenna::calcDatarate(double distance) {
   DB PL = pathloss(distance);
-  double signalToNoiceRatio = (DB(1) + (signalPower - PL) / systemNoise).getValue();
-  return frequency.toHz() * log2(signalToNoiceRatio);
+  double signalToNoiceRatio = (DB(1) + (signalPower - PL) / systemNoise).toDouble();
+  return bandwidth.toHz() * log2(signalToNoiceRatio);
 }
 
 } // namespace routingsim

@@ -13,8 +13,8 @@ void AntennaBase::initialize() {
   this->recvGain = DB(uniform(par("minRecvGain").doubleValue(),
                               par("maxRecvGain").doubleValue(), 1));
   this->systemNoise = DB(par("systemNoise").doubleValue());
-  this->frequency =
-      MHz(uniform(par("minFreq").doubleValue(), par("maxFreq").doubleValue(), 1));
+  this->frequency = MHz(uniform(par("minFreq").doubleValue(), par("maxFreq").doubleValue(), 1));
+  this->bandwidth = MHz(par("bandwidth").doubleValue());
   this->range = calcRange();
 }
 
