@@ -241,12 +241,31 @@ public:
   T operator*(const Unit &rhs) const { return T{value * rhs.value}; }
   T operator/(const Unit &rhs) const { return T{value / rhs.value}; }
 
-  double getValue() const { return value; }
+  [[nodiscard]] double getValue() const { return value; }
 };
 
-class DB: public Unit<DB> {
+class DB {
+protected:
+  double value;
+
 public:
-  explicit DB(const double d) : Unit<DB>(d) {};
+  explicit DB(const double d = 0) : value(d) {}
+  DB operator+(const DB &rhs) const { return DB(getValue() + rhs.getValue()); }
+  DB operator-(const DB &rhs) const { return DB(getValue() - rhs.getValue()); }
+  DB operator*(const DB &rhs) const { return DB{value + rhs.value}; }
+  DB operator/(const DB &rhs) const { return DB{value - rhs.value}; }
+
+  [[nodiscard]] double getValue() const {
+    return value;
+  }
+
+  [[nodiscard]] double toDouble() const {
+    return pow(10, value/10);
+  }
+
+  [[nodiscard]] void fromDouble(const double d) {
+    value = 10 * log10(d);
+  }
 };
 
 class MHz: public Unit<MHz> {

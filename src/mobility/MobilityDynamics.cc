@@ -103,8 +103,8 @@ void MobilityDynamics::sampleStatistics(Statistics &stats) {
 
   // mobilityNodeAvgDistance
   double avgDistance = 0;
-  double numDistance = 0;
-  if (topologyStatistics == "Heavy") {
+  double numDistance = 1;
+  if (topologyStatistics == "Heavy" && numActiveNodes != 1) {
     numDistance = (numActiveNodes * (numActiveNodes - 1)) / 2;
     auto nodeMods = mobilityTopology->getNodeMods();
     for (int i = 0; i < nodeMods.size(); i++) {
