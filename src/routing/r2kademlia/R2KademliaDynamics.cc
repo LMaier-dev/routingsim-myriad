@@ -1009,13 +1009,18 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadLinkFailureNotify> packet) {
 		// note: chooseNextHop may choose the next hop with the shortest path (proximity routing)
 		const KadContact& contact = chooseNextHop(contacts, target);
 		EV_TRACE << "KadLinkFailureNotify destined for: " << packet->getDstNodeID().shortStr() << " next overlay hop is " << contact << endl;
-		// note: the log_2 will be smaller for a longer common prefix
+#ifndef NDEBUG
+                // note: the log_2 will be smaller for a longer common prefix
 		ASSERT((contact.getKey() ^ target).log_2() <= (myOverlayKey ^ target).log_2());
 		if((contact.getKey() ^ target).log_2() > (myOverlayKey ^ target).log_2()) {
 			EV_WARN << "no prefix progress made" << endl;
 		}
-		ASSERT((contact.getKey() ^ target) < (myOverlayKey ^ target));
-		packet->appendRoute(contact);
+#endif
+		if ((contact.getKey() ^ target) < (myOverlayKey ^ target))
+			packet->appendRoute(contact);
+		else
+			packet->appendRoute(contacts.front());
+
 		ASSERT(packet->getRouteArraySize() - packet->getProgress() <= packet->getHopLimit());
 		resendPacket(std::move(packet));
 		return;
