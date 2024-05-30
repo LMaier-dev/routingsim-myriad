@@ -17,6 +17,8 @@ public:
   void setDatarate(MobilityNode *fromNode, MobilityNode *toNode, double datarate);
   void createLink(MobilityNode *fromNode, MobilityNode *toNode);
   void deleteLink(MobilityNode *fromNode, MobilityNode *toNode);
+  cGate *getGateBetweenNodes(MobilityNode *fromNode, MobilityNode *toNode);
+  double getDatarate(MobilityNode *fromNode, MobilityNode *toNode);
   std::vector<cModule*> getNodeMods() const { return *mobilityNodeMods; }
   std::vector<cModule*> *mobilityNodeMods = new std::vector<cModule *>();
   void createTopology();

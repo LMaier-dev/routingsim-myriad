@@ -11,9 +11,11 @@ MobilityTopology::MobilityTopology(cModule *networkManager) {
 
 void MobilityTopology::initialize() {
   for (cModule *nodeMod : *mobilityNodeMods) {
-    if (!nodeMod->initialized()) nodeMod->callInitialize();
-    auto *node = check_and_cast<MobilityNode*>(nodeMod->getSubmodule("node"));
-    EV_DEBUG << "MobilityNode " << node->getNodeId() << " created with range " << node->getAntennaModel()->getRange() << "m" << endl;
+    if (!nodeMod->initialized())
+      nodeMod->callInitialize();
+    auto *node = check_and_cast<MobilityNode *>(nodeMod->getSubmodule("node"));
+    EV_DEBUG << "MobilityNode " << node->getNodeId() << " created with range "
+             << node->getAntennaModel()->getRange() << "m" << endl;
     nodeMod->scheduleStart(simTime());
   }
 }
@@ -21,6 +23,26 @@ void MobilityTopology::initialize() {
 void MobilityTopology::setDatarate(MobilityNode *fromNode, MobilityNode *toNode,
                                    double datarate) {
   fromNode->setLinkDatarate(toNode, "toNeighbors$o", datarate);
+}
+
+double MobilityTopology::getDatarate(MobilityNode *fromNode,
+                                     MobilityNode *toNode) {
+  cGate *gateToNode = getGateBetweenNodes(fromNode, toNode);
+  auto *channel = check_and_cast<cDatarateChannel *>(gateToNode->getChannel());
+  return channel->getDatarate();
+}
+
+cGate *MobilityTopology::getGateBetweenNodes(MobilityNode *fromNode,
+                                             MobilityNode *toNode) {
+  const char *gatename = "toNeighbors$o";
+  for (int i = 0; i < fromNode->gateSize(gatename); i++) {
+    cGate *gateToNode = fromNode->gate(gatename, i);
+    if (toNode == fromNode->getOtherNode(gateToNode)) {
+      return gateToNode;
+    }
+  }
+
+  return nullptr;
 }
 
 void MobilityTopology::createTopology() {
@@ -66,13 +88,8 @@ void MobilityTopology::deleteLink(MobilityNode *fromNode,
     return;
   disableLink(fromNode->getNodeId(), toNode->getNodeId());
   remove_edge(fromNode->getNodeId(), toNode->getNodeId(), *BGLtopology);
-  const char *gatename = "toNeighbors$o";
-  for (int i = 0; i < fromNode->gateSize(gatename); i++) {
-    cGate *gateToNode = fromNode->gate(gatename, i);
-    if (toNode == fromNode->getOtherNode(gateToNode)) {
-      gateToNode->disconnect();
-    }
-  }
+  cGate *gateToNode = getGateBetweenNodes(fromNode, toNode);
+  gateToNode->disconnect();
 }
 
 void MobilityTopology::createLink(MobilityNode *fromNode,

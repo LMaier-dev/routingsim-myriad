@@ -2,8 +2,8 @@
 #ifndef ROUTINGSIM_MOBILITYDYNAMICS_H
 #define ROUTINGSIM_MOBILITYDYNAMICS_H
 
-#include "MobilityTopology.h"
 #include "MobilityBase.h"
+#include "MobilityTopology.h"
 #include "StatisticSample.h"
 
 namespace routingsim {
@@ -14,11 +14,14 @@ enum {
 
 class MobilityDynamics : public cSimpleModule, public StatisticSample {
 private:
-  const cMessage *mobilityUpdateMsg = new cMessage("MobilityEvent", MOBILITY_UPDATE);
+  const cMessage *mobilityUpdateMsg =
+      new cMessage("MobilityEvent", MOBILITY_UPDATE);
   double updateInterval = 0.1;
   void updateConnection(MobilityNode *fromNode, MobilityNode *toNode) const;
   void scheduleMobilityUpdate();
   cOutVector *mobilityNodeAvgDegree;
+  cOutVector *mobilityNodeAvgDatarate;
+  cOutVector *mobilityNodeAvgDistance;
 
 protected:
   void sampleStatistics(Statistics &stats) override;
