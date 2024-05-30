@@ -9,6 +9,8 @@ Define_Module(MobilityDynamics);
 void MobilityDynamics::initialize(int stage) {
   if (stage == 1)  {
     scheduleMobilityUpdate();
+    mobilityNodeAvgDegree = new cOutVector("mobilityNodeAvgDegree");
+    addStatisticSample(this);
   }
 }
 
@@ -56,5 +58,11 @@ void MobilityDynamics::updateConnection(MobilityNode *fromNode,
 }
 void MobilityDynamics::scheduleMobilityUpdate() {
   scheduleAt(simTime() + updateInterval, const_cast<cMessage *>(mobilityUpdateMsg));
+}
+
+void MobilityDynamics::sampleStatistics(Statistics &stats) {
+  auto numLinks = mobilityTopology->getActiveNumberLinks();
+  auto numNodes = mobilityTopology->getActiveNumberNodes();
+  mobilityNodeAvgDegree->record((2 * numLinks)/numNodes);
 }
 } // namespace routingsim
