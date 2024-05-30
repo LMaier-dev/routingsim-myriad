@@ -263,7 +263,7 @@ public:
     return pow(10, value/10);
   }
 
-  [[nodiscard]] void fromDouble(const double d) {
+  void fromDouble(const double d) {
     value = 10 * log10(d);
   }
 };
