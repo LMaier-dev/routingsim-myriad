@@ -739,11 +739,14 @@ bool NetworkTopology::isConnected(nodeid_t node1, nodeid_t node2) const {
 	BGLEdgeDesc e;
 	bool edgeExists;
 	tie(e, edgeExists) = edge(node1, node2, *BGLtopology);
-	if (edgeExists and (*BGLtopology)[e].active) {
-		return true;
-	} else {
-		return false;
-	}
+        return (edgeExists and (*BGLtopology)[e].active);
+}
+
+bool NetworkTopology::edgeExists(nodeid_t node1, nodeid_t node2) const {
+  BGLEdgeDesc e;
+  bool edgeExists;
+  tie(e, edgeExists) = edge(node1, node2, *BGLtopology);
+  return edgeExists;
 }
 
 

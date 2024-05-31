@@ -257,6 +257,9 @@ protected:
 	// are the two nodes directly connected with an active link
 	bool isConnected(nodeid_t node1, nodeid_t node2) const;
 
+        // does an edge from node1 to node 2 exist
+        bool edgeExists(nodeid_t node1, nodeid_t node2) const;
+
 	/// Returns true, if the network is connected
 	bool isConnected() const;
 

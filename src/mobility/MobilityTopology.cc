@@ -86,7 +86,10 @@ void MobilityTopology::deleteLink(MobilityNode *fromNode,
       edge(fromNode->getNodeId(), toNode->getNodeId(), *BGLtopology);
   if (!edgeValid)
     return;
-  disableLink(fromNode->getNodeId(), toNode->getNodeId());
+  //if (isConnected(fromNode->getNodeId(), toNode->getNodeId())) {
+  //  disableLink(fromNode->getNodeId(), toNode->getNodeId());
+  //  disableLink(toNode->getNodeId(), fromNode->getNodeId());
+  //}
   remove_edge(fromNode->getNodeId(), toNode->getNodeId(), *BGLtopology);
   cGate *gateToNode = getGateBetweenNodes(fromNode, toNode);
   gateToNode->disconnect();
@@ -118,6 +121,12 @@ void MobilityTopology::createLink(MobilityNode *fromNode,
     (*BGLtopology)[e].weight = 1.0;
   }
   enableLink(fromNode->getNodeId(), toNode->getNodeId());
+
+  // only enable link, when nodes can communicate in both directions
+  //if (edgeExists(toNode->getNodeId(), fromNode->getNodeId())) {
+  //  enableLink(fromNode->getNodeId(), toNode->getNodeId());
+  //  enableLink(toNode->getNodeId(), fromNode->getNodeId());
+  //}
 }
 
 } // namespace routingsim
