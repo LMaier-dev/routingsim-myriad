@@ -36,7 +36,10 @@ namespace routingsim {
 class NetworkManager: public cSimpleModule, public StatisticSample {
 public:
 	/// Returns the network topology  // TODO: mobilityTopology
-	inline NetworkTopology& getTopology() { return *mobilityTopology; }
+	inline NetworkTopology& getTopology() {
+          if (useMobility) return *mobilityTopology;
+          else return *topology;
+        }
 
 	/// Returns the network dynamics module
 	inline NetworkDynamics& getDynamics() { return *dynamics; }
@@ -71,6 +74,7 @@ private:
         MobilityDynamics* mobilityDynamics;
 
         std::unordered_set<nodeid_t> failedNodes;
+        bool useMobility = false;
 
 	// Topology Statistics
 	bool evaluateStatistics;

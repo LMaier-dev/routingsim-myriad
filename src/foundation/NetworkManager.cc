@@ -53,7 +53,7 @@ namespace routingsim {
         mgr = this;
 
         { // create mobility manager
-          const bool useMobility = par("mobility").boolValue();
+          useMobility = par("mobility").boolValue();
           if (useMobility) {
             EV << "creating mobility manager" << std::endl;
             cModule *dynamicsModule = gate("mobilityDynamics")->getPathStartGate()->getOwnerModule();
@@ -218,8 +218,8 @@ namespace routingsim {
 
         if (evaluateStatistics) {
             if (topologyStatistics == string("Light") || topologyStatistics == string("Heavy")) {
-                ann = topology->getActiveNumberNodes() + mobilityTopology->getActiveNumberNodes();
-                anl = topology->getActiveNumberLinks() + mobilityTopology->getActiveNumberLinks();
+                ann = topology->getActiveNumberNodes() + (useMobility ? mobilityTopology->getActiveNumberNodes() : 0);
+                anl = topology->getActiveNumberLinks() + (useMobility ? mobilityTopology->getActiveNumberLinks() : 0);
             }
             if (topologyStatistics == string("Heavy")) {
                 pc = topology->getNumPartitions() + mobilityTopology->getNumPartitions();
