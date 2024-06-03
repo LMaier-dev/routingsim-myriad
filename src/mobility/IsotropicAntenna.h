@@ -1,4 +1,9 @@
 
+//
+// This module inherits from the AntennaBase module and is a concrete antenna model that implements the isotropic antenna model
+// It overwrites the methods for calculating the path loss and the data rate in order to take into account the specific properties of the isotropic antenna model
+//
+
 #ifndef ROUTINGSIM_ISOTROPICANTENNA_H
 #define ROUTINGSIM_ISOTROPICANTENNA_H
 

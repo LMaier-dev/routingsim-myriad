@@ -1,4 +1,12 @@
 
+//
+// This module is responsible for the antenna model.
+// It defines the basic properties of an antenna, which are determined by the scenario parameters when the module is initialised.
+// Since the \emph{AntennaBase} module is abstract, concrete methods and values must be implemented by a specific antenna model.
+// These determine the calculation of the path loss through air, the maximum transmission range of the node and the available data rate depending on the distance.
+// MobilityDynamics uses these methods to update the data rates of the connections between the nodes.
+//
+
 #ifndef ROUTINGSIM_ANTENNABASE_H
 #define ROUTINGSIM_ANTENNABASE_H
 
@@ -34,7 +42,8 @@ public:
   // Calculate pathloss of the signal power at a given distance
   virtual DB pathloss(double distance) = 0;
 
-  virtual double distance_from_pathloss(DB pathloass) = 0;
+  // Calculate the maximum transmission range to reach the given pathloss
+  virtual double distance_from_pathloss(DB pathloss) = 0;
 
   // Calculate achievable datarate at a given distance
   virtual double calcDatarate(double distance) = 0;

@@ -365,7 +365,6 @@ void Node::disableGate(cGate *dg) {
   // add gate to filter list
   // EV << "disabling cGate * " << dg << endl;
   disabledLinks.push_back(dg);
-  return;
 }
 
 void Node::enableGate(cGate *dg) {

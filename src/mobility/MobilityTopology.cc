@@ -51,6 +51,7 @@ void MobilityTopology::createTopology() {
 
   for (BGLVertexIt it = vertices(*BGLtopology).first;
        it != vertices(*BGLtopology).second; it++) {
+    (*BGLtopology)[*it].maxRTentries = std::numeric_limits<int>::max();
     (*BGLtopology)[*it].disabled = false;
     (*BGLtopology)[*it].active = true;
   }
@@ -80,29 +81,19 @@ void MobilityTopology::createTopology() {
 
 void MobilityTopology::deleteLink(MobilityNode *fromNode,
                                   MobilityNode *toNode) {
-  BGLEdgeDesc e;
-  bool edgeValid;
-  tie(e, edgeValid) =
-      edge(fromNode->getNodeId(), toNode->getNodeId(), *BGLtopology);
-  if (!edgeValid)
-    return;
-  //if (isConnected(fromNode->getNodeId(), toNode->getNodeId())) {
-  //  disableLink(fromNode->getNodeId(), toNode->getNodeId());
-  //  disableLink(toNode->getNodeId(), fromNode->getNodeId());
-  //}
-  remove_edge(fromNode->getNodeId(), toNode->getNodeId(), *BGLtopology);
-  cGate *gateToNode = getGateBetweenNodes(fromNode, toNode);
-  gateToNode->disconnect();
+  disableLink(fromNode->getNodeId(), toNode->getNodeId());
+  //remove_edge(fromNode->getNodeId(), toNode->getNodeId(), *BGLtopology);
+  //cGate *gateToNode = getGateBetweenNodes(fromNode, toNode);
+  //cGate *reverseGate = gateToNode->getPathEndGate();
+  //gateToN//ode->disconnect();
+  //reverseGate->disconnect();
 }
 
 void MobilityTopology::createLink(MobilityNode *fromNode,
                                   MobilityNode *toNode) {
   BGLEdgeDesc e;
   bool edgeValid;
-  tie(e, edgeValid) =
-      edge(fromNode->getNodeId(), toNode->getNodeId(), *BGLtopology);
-  if (edgeValid)
-    return;
+  if (edgeExists(fromNode->getNodeId(), toNode->getNodeId())) return enableLink(fromNode->getNodeId(), toNode->getNodeId());
 
   cGate *fromOut = fromNode->getOrCreateFirstUnconnectedGate("toNeighbors", 'o',
                                                              false, true);
@@ -111,11 +102,10 @@ void MobilityTopology::createLink(MobilityNode *fromNode,
   std::string channel_name = "datarateChannel";
   cDatarateChannel *datarateChannel =
       cDatarateChannel::create(channel_name.c_str());
-  datarateChannel->setDatarate(1000.0);
+  datarateChannel->setDatarate(0);
   fromOut->connectTo(toIn, datarateChannel);
 
-  tie(e, edgeValid) =
-      add_edge(fromNode->getNodeId(), toNode->getNodeId(), *BGLtopology);
+  tie(e, edgeValid) = add_edge(fromNode->getNodeId(), toNode->getNodeId(), *BGLtopology);
   if (edgeValid) {
     (*BGLtopology)[e].active = false;
     (*BGLtopology)[e].weight = 1.0;
