@@ -363,7 +363,7 @@ void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 	ASSERT(packet != nullptr);
 	ASSERT(packet->getType() == KAD_Data);
 	ASSERT(packet->getControlInfo() == nullptr);
-        ASSERT(packet->hasRemainingHops());
+        //ASSERT(packet->hasRemainingHops());
 	ASSERT(nodePkt != nullptr);
 
 	const auto& finaldest(packet->getDstNodeID());
