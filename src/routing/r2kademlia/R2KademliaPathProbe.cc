@@ -59,8 +59,8 @@ simtime_t R2Kademlia::sendOnDemandPathProbe(KeyRequestQueue::value_type keyactio
 	if (contactp == nullptr)
 		return delay;
 
-	// default (see R2Kademlia.h): 40000µs is 40ms, so the rate limit is 25 Reqs/s
-	static const simtime_t mindelay(SimTime(OnDemandPathProbeReqDiscoverWaitTime,SIMTIME_US));
+	// default (see R2Kademlia.h): 50000µs is 50ms, so the rate limit is 20 Reqs/s
+	static const simtime_t mindelay(SimTime(OnDemandPathProbeReqWaitTime,SIMTIME_US));
 	if  ( simTime() < LastOnDemandProbeReq ) {
 		// last was scheduled in future, schedule it mindelay behind that
 		delay= LastOnDemandProbeReq-simTime()+mindelay;
@@ -122,8 +122,8 @@ simtime_t R2Kademlia::sendPathProbeToContactCandidate(const KadContact& tmpconta
         // we rate limit the requests
 	simtime_t delay(0);
 
-	// default (see R2Kademlia.h): 40000µs is 40ms, so the rate limit is 25 Reqs/s
-	static const simtime_t mindelay(SimTime(OnDemandPathProbeReqDiscoverWaitTime,SIMTIME_US));
+	// default (see R2Kademlia.h): 50000µs is 50ms, so the rate limit is 20 Reqs/s
+	static const simtime_t mindelay(SimTime(OnDemandPathProbeReqWaitTime,SIMTIME_US));
 	if  ( simTime() < LastContactCandidateProbeReq ) {
 		// last was scheduled in future, schedule it mindelay behind that
 		delay= LastContactCandidateProbeReq-simTime()+mindelay;
