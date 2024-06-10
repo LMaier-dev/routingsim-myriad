@@ -803,7 +803,9 @@ R2Kademlia::sendScheduledLinkFailureNotifications()
 	  } // endif neighbor exists
         } // end for
 	// erase the whole list
-	LFNFloodList.clear();
+        LFNFloodList.clear();
+	// reset variable so next call to scheduleLinkFailureNotificationForwarding will actually schedule the call
+	linkFailureNotificationForwardingScheduled= false;
 }
 
 
