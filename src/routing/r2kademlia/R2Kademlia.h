@@ -46,7 +46,8 @@ using KadHello_p = std::unique_ptr<KadHello>;
 using KadError_p = std::unique_ptr<KadError>;
 
 using UpdateList_t = std::list< std::pair<KadContact, KadRouteUpdateAction> >;
-using NotViaList_t = std::list< std::pair<link_t,age_t> >;
+using NotViaList_t = std::list< std::pair<link_t,age_t> >; // link with relative time (age)
+using NotViaListAbsTime_t = std::list< std::pair<link_t,simtime_t> >; // link with absolute time (timestamp)
 
 enum reasoncode : uint8_t {
 	unspecified = 0,
@@ -68,7 +69,8 @@ constexpr uint8_t OverlayKeyLength= 112;
 
 using ContactRequestQueue = RequestQueue<KadContact> ;
 using KeyRequestQueue = RequestQueue< std::pair<OverlayKey,RequestQueueElementActionType> >;
-
+using LFNFloodList_t = std::unordered_map<OverlayKey, std::pair<NotViaListAbsTime_t,
+								std::list<PathID>>>;
 
 /**
  * Implementation of R2Kad.
@@ -143,10 +145,14 @@ private:
 	//@}
 
 	// to notify neighbors about affected PathIDs after a failure
-	std::unordered_set<PathID> notifyPIDs;
+        std::unordered_set<PathID> notifyPIDs;
+	NotViaListAbsTime_t collectedNotVias;
 	std::unordered_map<PathID, std::unordered_set<OverlayKey>> notifyFirstSegmentSources;
 	std::unordered_map<OverlayKey, std::pair<OverlayKey, PathID>> notifyFirstSegmentSourcesReversePath; // target, <outgoingIF, PathID to target>
-	std::unordered_map<OverlayKey, std::unordered_set<PathID>> incomingIFtoPIDmap;
+        std::unordered_map<OverlayKey, std::unordered_set<PathID>> incomingIFtoPIDmap;
+        LFNFloodList_t LFNFloodList;
+
+
 	inline void addIncomingIFtoPIDEntry(const OverlayKey& incomingULN, PathID pidentry);
 	// a list that is used to send rediscover messages
 	// UpdateList_t is std::list< std::pair<KadContact, KadRouteUpdateAction> >
@@ -155,6 +161,7 @@ private:
 	bool updateScheduled= false;
 	bool urgentUpdateScheduled= false;
 	bool linkFailureNotificationScheduled= false;
+	bool linkFailureNotificationForwardingScheduled= false;
 
 	struct greatercmp {
 		const OverlayKey& ownkey;
@@ -219,7 +226,7 @@ private:
 	/** @name statistics */
 	//@{
 	uint forwardedPackets = 0;
-	uint droppedPackets = 0;
+	uint discardedPackets = 0;
 	uint sentPackets = 0;
 	uint receivedPackets = 0;
 	unsigned long sentVolume = 0; /// sent data by control messages in bytes
@@ -371,10 +378,12 @@ private:
 	void incLSSeqNo() { lsseqno++; }
 
 	void notifyAffectedPathUsers(const OverlayKey &key);
-	void sendLinkFailureNotifications(const NotViaList_t& notvialist, const std::unordered_set<PathID>& notifyPIDList, OverlayKey excludeNode);
+	void sendLinkFailureNotifications(const NotViaListAbsTime_t& notvialist, const std::unordered_set<PathID>& notifyPIDList, OverlayKey excludeNode);
+	void scheduleLinkFailureNotificationForwarding(NotViaListAbsTime_t& notvialist, std::unordered_set<PathID>& notifyPIDList, OverlayKey excludeNode);
 	inline void sendLocalLinkFailureNotifications();
-	void scheduleLinkFailureNotification();
-	void doNotifyFirstSegmentSources(const std::unordered_set<PathID>& upstreamPIDs, const NotViaList_t& notvialist);
+	void scheduleLocalLinkFailureNotification();
+	void sendScheduledLinkFailureNotifications();
+	void doNotifyFirstSegmentSources(const std::unordered_set<PathID>& upstreamPIDs, const NotViaListAbsTime_t& notvialist);
 
 	/// adds contact and not via link for rediscovery queue (or send it immediately)
 	void scheduleRediscovery(const OverlayKey& contactkey, rediscoverQueueClass& rediscoveryQueue, simtime_t rediscoveryWaitTime);
@@ -553,7 +562,7 @@ public:
 	const KadRoutingTable& getRoutingTable() const { return routingTable; }
 	const OverlayKey& getOverlayKey() const { return myOverlayKey; }
 	uint getForwardedPackets() const { return forwardedPackets; }
-	uint getDroppedPackets() const { return droppedPackets; }
+	uint getDiscardedPackets() const { return discardedPackets; }
 	uint getSentPackets() const { return sentPackets; }
 	uint getReceivedPackets() const { return receivedPackets; }
 	unsigned long getSentVolume() const { return sentVolume; }
@@ -646,7 +655,7 @@ bool R2Kademlia::processNotViaInformation(const KadPacket& packet)
 		for (uint i= 0; i < packet.getFailedLinkArraySize(); i++) {
 			auto &[unreachablenode, detectingnode]= packet.getFailedLink(i);
 			ASSERT(not unreachablenode.isUnspecified() and not detectingnode.isUnspecified());
-			EV_TRACE << "Packet " << packet.getName() << " contains not via <" << unreachablenode.shortStr() << ',' << detectingnode.shortStr() << "> Age: " << packet.getFailedLinkAge(i) << endl;
+			//EV_TRACE << "Packet " << packet.getName() << " contains not via <" << unreachablenode.shortStr() << ',' << detectingnode.shortStr() << "> Age: " << packet.getFailedLinkAge(i) << endl;
 			if (unreachablenode == myOverlayKey or detectingnode == myOverlayKey) {
 				// we should never trust notVia information about our own physical links
 				ownIDFound= true;
@@ -664,24 +673,26 @@ bool R2Kademlia::processNotViaInformation(const KadPacket& packet)
 inline
 void R2Kademlia::sendLocalLinkFailureNotifications()
 {
-	EV_TRACE << "sendLocalLinkFailureNotifications, notifyPIDList " << notifyPIDs.size() << endl;
-	//<< " entries, { ";
-	//for (auto pid : notifyPIDs)
-	//	EV_TRACE << pid << ' ';
-	//EV_TRACE << '}' << endl;
-	auto failedPNList(routingTable.getFailedPNs());
-	EV_TRACE << "sendLinkFailureNotifications failedPNs " << failedPNList.size() << endl;
+#ifndef NDEBUG
+	EV_TRACE << "sendLocalLinkFailureNotifications, notifyPIDList " << notifyPIDs.size() << " entries, { ";
+	for (auto pid : notifyPIDs)
+		EV_TRACE << pid << ' ';
+        EV_TRACE << '}' << endl;
+#endif
+        auto failedPNList(routingTable.getFailedPNs());
+	EV_TRACE << "sendLocalLinkFailureNotifications failedPNs " << failedPNList.size() << endl;
 	// fill notvialist with locally failed PNs
-	NotViaList_t notvialist;
+	NotViaListAbsTime_t notvialist;
 	for ( auto& failedPN : failedPNList ) {
 		if (auto pncontact= routingTable.getContact(failedPN); pncontact != nullptr) {
-			notvialist.push_back(std::make_pair(std::make_pair(myOverlayKey,failedPN),pncontact->getPathAge()));
+			notvialist.push_back(std::make_pair(std::make_pair(myOverlayKey,failedPN),simTime() - SimTime(pncontact->getPathAge(),SIMTIME_MS)));
 		}
 	}
-
+	notvialist.splice(notvialist.end(),collectedNotVias);
 	sendLinkFailureNotifications(notvialist, notifyPIDs, OverlayKey::UNSPECIFIED_KEY);
-	// delete all local PIDs for notification
-	notifyPIDs.clear();
+	// delete all local and collected PIDs for notification
+        notifyPIDs.clear();
+	linkFailureNotificationScheduled= false;
 }
 
 

@@ -177,7 +177,7 @@ FwdTablePathID::setNIDtoPIDmapping(const OverlayKey& nid, const PathID incomingP
 inline
 void
 FwdTablePathID::eraseNIDtoPIDmapping(const OverlayKey& nid) {
-	EV_TRACE << "erasing NID to PID mappings for " << nid.shortStr() << endl;
+	//EV_TRACE << "erasing NID to PID mappings for " << nid.shortStr() << endl;
 	NIDPIDTable.erase(nid);
 	NIDPIDTableLastSeg.erase(nid);
 }

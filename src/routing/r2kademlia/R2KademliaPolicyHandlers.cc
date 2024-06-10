@@ -22,7 +22,7 @@ namespace routingsim {
 void R2Kademlia::onMissingNeighbor(KadPacket_p packet, NodePkt_p pkt, const OverlayKey& missingNeighborNodeID) {
 //  	getStatistics().dropMessage(pkt, undefined_node);
 	EV_WARN << "onMissingNeighbor called - packet next hop should be " << packet->getNextHop().shortStr() << endl;
-	droppedPackets++;
+	discardedPackets++;
 	// do not generate Error packets for Error or UpdateRoute packets
 	switch (packet->getType()) {
 		case KAD_Error:

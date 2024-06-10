@@ -296,7 +296,7 @@ bool FwdTablePathID::modEntry(const OverlayKey& contact_key, const kad_path& new
 	// if PID already exists, just re-enable mapping and set to valid or modify flags
 	if (auto it= PIDFwdTable.find(incomingPathID); it != PIDFwdTable.end())
 	{
-		EV_TRACE << "modEntry(): inPID " << incomingPathID << " already existed" << endl;
+		//EV_TRACE << "modEntry(): inPID " << incomingPathID << " already existed" << endl;
 		it->second.setValid();
 		if (isForeignPID)
 			it->second.setForeign();

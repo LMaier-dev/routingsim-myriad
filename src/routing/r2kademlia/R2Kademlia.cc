@@ -1250,7 +1250,7 @@ void R2Kademlia::sampleStatistics (Statistics &stats) {
 // (this is usually a reduced set, not all nodes!)
 void R2Kademlia::recordScalars() {
 	recordScalar("forwardedPackets", forwardedPackets);
-	recordScalar("droppedPackets", droppedPackets);
+	recordScalar("discardedPackets", discardedPackets);
 	recordScalar("sentPackets", sentPackets);
 	recordScalar("receivedPackets", receivedPackets);
 	recordScalar("sentVolume", sentVolume);
@@ -1469,7 +1469,7 @@ void R2Kademlia::countReceived(KadPacket& packet) {
 
 
 void R2Kademlia::countDropped(KadPacket& packet, const OverlayKey& target, uint8_t reason) {
-	droppedPackets++;
+	discardedPackets++; // note that this is different from droppedPackets in KadObserver
 	if (packet.isTracked())
 		EV_TRACE << "+DROPPED+ nonce:" << packet.getNonce() << " reason:" << (unsigned int) reason << endl;
 
