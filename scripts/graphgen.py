@@ -10,7 +10,7 @@ import concurrent.futures
 import os
 import pathlib
 import json
-from random import seed as rd_seed, choice
+from random import seed as rd_seed, choice, choices, sample
 
 import networkx
 
@@ -60,6 +60,10 @@ def main():
     parser_plc = subparsers.add_parser('grid', help='grid graph with given dimensions')
     parser_plc.add_argument('dim', help='dimensions, e.g. 1,2 or 4,8,9')
 
+    parser_plc = subparsers.add_parser('hexgrid', help='hexgrid graph with given dimensions')
+    parser_plc.add_argument('X', type=int, help='')
+    parser_plc.add_argument('Y', type=int, help='')
+
     parser_plc = subparsers.add_parser('graphml', help='read graphml file')
     parser_plc.add_argument('PATH', help='path to graphml file')
 
@@ -68,6 +72,10 @@ def main():
     parser_plc_cc.add_argument('M', type=int, help='power law: added edges per node')
     parser_plc_cc.add_argument('C', type=float, help='power law: clustering parameter')
     parser_plc_cc.add_argument("D", type=int, help="number of connections between clusters", default=1)
+
+    parser_fcc = subparsers.add_parser('fcc', help='full mesh clusters with sparse interconnect')
+    parser_fcc.add_argument('N', type=int, help='number of nodes')
+    parser_fcc.add_argument('C', type=int, help='power law: clustering parameter')
 
     opt = parser.parse_args()
 
@@ -144,6 +152,12 @@ def main():
             ["time", datetime.now()]]
         G.graph['filename'] = f"connected_powerlaw_cluster_graphs_n{opt.N}_m{opt.M}_p{opt.C}_d{opt.D}_seed{opt.seed}.txt"
 
+    elif(opt.type == 'fcc'):
+        G = generate_plc_fcc(opt.N, opt.C, seed=opt.seed)
+        G.graph['info'] = [
+            ["time", datetime.now()]]
+        G.graph['filename'] = f"full_mesh_clusters_sparse_interconnect_n{opt.N}_cs{opt.C}_seed{opt.seed}.txt"
+
     # NON RANDOM MODELS
     elif(opt.type == 'cft'):
         G = clos_fat_tree(opt.K, opt.hosts)
@@ -170,6 +184,21 @@ def main():
             ["", f"dimensions = {dim}"],
             ["time", datetime.now()]]
         G.graph['filename'] = f"grid_{','.join(str(x) for x in dim)}.txt"
+    elif(opt.type == 'hexgrid'):
+        G = networkx.Graph()
+        x=opt.X
+        y=opt.Y
+        for i in range(x):
+            for j in range(y):
+                if i < x-1:
+                    G.add_edge(i+x*j,i+x*j+1)
+                if j < y-1:
+                    G.add_edge(i+x*j,i+x*j+x)
+                if i < x-1 and j < y-1:
+                    G.add_edge(i+x*j,i+x*j+x+1)
+        G = networkx.convert_node_labels_to_integers(G)
+        G.graph['info'] = [["time", datetime.now()]]
+        G.graph['filename'] = f"hexgrid_{','.join(str(a) for a in [x,y])}.txt"
     # CONVERSION
     elif(opt.type == 'graphml'):
         G = networkx.Graph(networkx.read_graphml(opt.PATH, node_type=int))
@@ -218,9 +247,7 @@ def add_stats(G, seed=0):
     ac = lambda g: networkx.average_clustering(g)
     f1 = [['radius', exe.submit(networkx.radius, G, ecc.result())],
         ['diameter', exe.submit(networkx.diameter, G, ecc.result())],
-        ['average clustering', exe.submit(networkx.average_clustering, G)],
-        ['average shortest path length (sampled)', 
-        exe.submit(sampling_aspl, G, seed=seed)]]
+        ['average clustering', exe.submit(networkx.average_clustering, G)]]
     if 'info' not in G.graph:
         G.graph['info'] = []
     stats =  G.graph['info']
@@ -286,6 +313,59 @@ def clos_fat_tree(k, hosts=False):
                 assert(len(G.edges(node_id)) == k)
     G = networkx.convert_node_labels_to_integers(G)
     return G
+
+def generate_plc_fcc(n, cs, seed):
+    num_full_clusters = n // cs 
+    num_clusters = num_full_clusters
+    if n % cs != 0:
+        num_clusters += 1
+    G = networkx.generators.random_graphs.powerlaw_cluster_graph(num_clusters, 1, 0.2, seed)
+    target_edges = 3 * n
+    interconnect_edges = len(G.edges)
+    random_edges = target_edges - interconnect_edges - num_clusters * (cs - 1) 
+    random_edges_per_cluster = random_edges // num_clusters
+    print(f"Graph connected: {networkx.is_connected(G)}")
+    
+    node_number = max(int(n) for n in G.nodes) + 1
+    rd_seed(seed)
+    nodes = [c_i for c_i in G.nodes]
+    for c_i in nodes:
+        # create new cluster
+        new_nodes = [i for i in range(node_number, node_number + cs)]
+        # connect nodes in ring
+        networkx.add_cycle(G, new_nodes)
+
+        # add random edges within cluster
+        random_edge_counter = 0
+        while random_edge_counter < random_edges_per_cluster:
+           a, b = choices(new_nodes, k=2)
+           if (a, b) not in G and (b, a) not in G:
+               G.add_edge(a,b)
+               random_edge_counter += 1
+        
+        # add connection to neighboring clusters
+        neighbors = networkx.all_neighbors(G, c_i)
+        for neigh in neighbors:
+            #create edge to random node in cluster
+            G.add_edge(choice(new_nodes), neigh)
+
+        #remove old node - was replaced by cluster
+        G.remove_node(c_i)
+        node_number += cs
+        print(f"Graph connected: {networkx.is_connected(G)}")
+
+    nodes = list(G.nodes())
+    print(len(G.edges))
+    # add remaining edges as triangles
+    while len(G.edges) < target_edges:
+        start = choice(nodes)
+        potential_neighbors = [n for n, l in networkx.single_source_dijkstra_path_length(G, start, cutoff=2).items() if l == 2]
+        if len(potential_neighbors) > 0:
+            end = choice(potential_neighbors)
+            G.add_edge(start, end)
+    print(f"Graph connected: {networkx.is_connected(G)}")
+
+    return networkx.convert_node_labels_to_integers(G)
 
 def generate_plc_cc(n, m, c, d, seed):
     # generate two powerlaw clusters
