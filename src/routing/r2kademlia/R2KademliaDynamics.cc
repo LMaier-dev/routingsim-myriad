@@ -708,6 +708,7 @@ void R2Kademlia::scheduleLinkFailureNotificationForwarding(
 		return;
 	}
 
+	ASSERT(not notvialist.empty());
 	EV_TRACE << "scheduleLinkFailureNotificationForwarding(): added notvia list of "
 		 << notvialist.size() << " and PIDList of " << notifyPIDList.size()
 		 << endl;
@@ -747,9 +748,9 @@ void R2Kademlia::scheduleLinkFailureNotificationForwarding(
                     lfnlistit != LFNFloodList.end()) { // entry for this neighbor exists already
 			// add notvia and filteredPIDList
                         auto& [collected_notvialist, collected_pidlist] = lfnlistit->second;
-                        collected_notvialist.splice(collected_notvialist.end(),
-                                                    notvialist);
-			collected_pidlist.splice(collected_pidlist.end(), filteredPIDList);
+                        collected_notvialist.insert(collected_notvialist.end(),
+                                                    notvialist.begin(),notvialist.end());
+			collected_pidlist.insert(collected_pidlist.end(), filteredPIDList.begin(), filteredPIDList.end());
                 } else {
 			LFNFloodList.insert({contactp->getKey(), std::make_pair(notvialist, filteredPIDList)});
 		}
@@ -770,9 +771,8 @@ void R2Kademlia::scheduleLinkFailureNotificationForwarding(
 void
 R2Kademlia::sendScheduledLinkFailureNotifications()
 {
-#ifndef NDEBUG
 	EV_TRACE << "sendScheduledLinkFailureNotifications, " << LFNFloodList.size() << " entries" << endl;
-#endif
+
         for (auto neighbor_it = LFNFloodList.begin(); neighbor_it != LFNFloodList.end(); neighbor_it++) {
           if (auto contactp(routingTable.getContact(neighbor_it->first));
               contactp != nullptr) {
@@ -787,7 +787,7 @@ R2Kademlia::sendScheduledLinkFailureNotifications()
 			  packet->setPIDList(i,*pidcit);
 			  pidcit++;
 		  }
-
+		  ASSERT(notvialist.size()>0);
 		  packet->setNotVia(true);
 		  packet->setFailedLinkArraySize(notvialist.size());
 		  packet->setFailedLinkAgeArraySize(notvialist.size());
@@ -815,12 +815,13 @@ R2Kademlia::sendScheduledLinkFailureNotifications()
 void
 R2Kademlia::sendLinkFailureNotifications(const NotViaListAbsTime_t& notvialist, const std::unordered_set<PathID>& notifyPIDList, OverlayKey excludeNode)
 {
-#ifndef NDEBUG
-	EV_TRACE << "sendLinkFailureNotifications, notifyPIDList " << notifyPIDList.size() << " entries, { ";
-	for (auto pid : notifyPIDList)
-		EV_TRACE << pid << ' ';
-	EV_TRACE << '}' << endl;
-#endif
+
+	_DEBUG_ONLY(
+		EV_TRACE << "sendLinkFailureNotifications, notifyPIDList " << notifyPIDList.size() << " entries, { ";
+		for (auto pid : notifyPIDList)
+			EV_TRACE << pid << ' ';
+		EV_TRACE << '}' << endl;
+	)
 	// if there are no incoming PIDs, nothing to notify about
         if (notifyPIDList.empty()) {
 		return;
@@ -903,13 +904,14 @@ R2Kademlia::notifyAffectedPathUsers(const OverlayKey& nexthop_key) {
 			notifyPIDs.insert(it->first);
 		}
         }
-#ifndef NDEBUG
-	EV_DEBUG << "found " << notifyPIDs.size() << " affected PathIDs (total)" << endl;
-	EV_TRACE << "notifyPIDs " << notifyPIDs.size() << " entries, { ";
-	for (auto pid : notifyPIDs)
-		EV_TRACE << pid << ' ';
-        EV_TRACE << '}' << endl;
-#endif
+
+	_DEBUG_ONLY(
+		EV_DEBUG << "found " << notifyPIDs.size() << " affected PathIDs (total)" << endl;
+		EV_TRACE << "notifyPIDs " << notifyPIDs.size() << " entries, { ";
+		for (auto pid : notifyPIDs)
+			EV_TRACE << pid << ' ';
+		EV_TRACE << '}' << endl;
+        )
 	// schedule the sending of local link failure notifications if not already scheduled
 	scheduleLocalLinkFailureNotification();
 }
@@ -921,25 +923,27 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadRevPathFlood> packet) {
 	receivedVolume+= packet->getByteLength();
 
 #ifndef NDEBUG
-	EV_TRACE << "received KadRevPathFlood from " << packet->getSource().shortStr() << " not via ";
-	for (uint i= 0; i < packet->getFailedLinkArraySize(); i++) {
-		auto &[unreachablenode, detectingnode]= packet->getFailedLink(i);
-		EV_TRACE << " <" << unreachablenode.shortStr() << ',' << detectingnode.shortStr() << "> (" << packet->getFailedLinkAge(i) << "ms)";
-        }
-	EV_TRACE << endl;
+        EV_TRACE << "received KadRevPathFlood from " << packet->getSource().shortStr() << " not via ";
+		    for (uint i = 0; i < packet->getFailedLinkArraySize(); i++) {
+			 auto &[unreachablenode, detectingnode] = packet->getFailedLink(i);
+			 EV_TRACE << " <" << unreachablenode.shortStr() << ',' << detectingnode.shortStr() << "> (" << packet->getFailedLinkAge(i) << "ms)";
+																				     }
+		EV_TRACE << endl;
 #endif
+	ASSERT(packet->getNotVia());
 	// NotVia information has been processed before this method is called
 	// Therefore, only the PIDs have to be looked up and it has to be figured out
 	// which PIDs need to be propagated further "upstream"
         std::unordered_set<PathID> upstreamPIDs;
         auto numPIDs = packet->getPIDListArraySize();
-#ifndef NDEBUG
-	EV_TRACE << "PIDList: { ";
-	for (unsigned long i= 0; i < numPIDs; i++) {
-		EV_TRACE << packet->getPIDList(i) << ' ';
-	}
-        EV_TRACE << '}' << endl;
-#endif
+
+        _DEBUG_ONLY(
+		EV_TRACE << "PIDList: { ";
+		for (unsigned long i= 0; i < numPIDs; i++) {
+			EV_TRACE << packet->getPIDList(i) << ' ';
+		}
+		EV_TRACE << '}' << endl;
+	)
 
 	// iterate over all forwarding table entries to find any upstream PIDs
 	for (auto it= fwdTablePathID.PIDFwdTable.cbegin(); it != fwdTablePathID.PIDFwdTable.cend(); it++) {
@@ -965,12 +969,12 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadRevPathFlood> packet) {
 	}
 
         if (not upstreamPIDs.empty()) {
-#ifndef NDEBUG
-		EV_TRACE << "sendLinkFailureNotifications for upstream PIDs { ";
-		for (const auto& pid : upstreamPIDs)
-			EV_TRACE << pid << ' ';
-		EV_TRACE << '}' << endl;
-#endif
+		_DEBUG_ONLY(
+			EV_TRACE << "sendLinkFailureNotifications for upstream PIDs { ";
+			for (const auto& pid : upstreamPIDs)
+				EV_TRACE << pid << ' ';
+			EV_TRACE << '}' << endl;
+		)
                 // exclude the packet source for further flood messages
 		scheduleLinkFailureNotificationForwarding(notvialist, upstreamPIDs, packet->getSource());
 		//old: sendLinkFailureNotifications(notvialist, upstreamPIDs, packet->getSource());
@@ -1024,7 +1028,7 @@ R2Kademlia::doNotifyFirstSegmentSources(const std::unordered_set<PathID>& upstre
 					notify_packet->setFailedLinkAge(i, (simTime()-it->second).inUnit(SIMTIME_MS));
 					it++;
 				}
-				//ASSERT(notvialist.size() > 0);
+				ASSERT(notvialist.size() > 0);
 				notify_packet->setNotVia(notvialist.size() > 0);
 				// normally we would use PID encapsulation, but here we use a hop-wise constructed source route
 				EV_TRACE << "Sending LinkFailureNotify to " << notify_target.shortStr() << " next hop: " << pid_it->second.first.shortStr()
@@ -1087,13 +1091,15 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadLinkFailureNotify> packet) {
 
 	if (target == myOverlayKey) { // notification is for this node and ends here
 		EV_TRACE << "KadLinkFailureNotify reached final destination " << myOverlayKey.shortStr() << endl;
+
 #ifndef NDEBUG
-		for (uint i= 0; i < packet->getFailedLinkArraySize(); i++) {
-			auto &[unreachablenode, detectingnode]= packet->getFailedLink(i);
-			EV_TRACE << "not via <" << unreachablenode.shortStr() << ',' << detectingnode.shortStr() << "> Age: " << packet->getFailedLinkAge(i) << "ms" << endl;
+		for (uint i = 0; i < packet->getFailedLinkArraySize(); i++) {
+			auto &[unreachablenode, detectingnode] = packet->getFailedLink(i);
+			EV_TRACE << "not via <" << unreachablenode.shortStr() << ',' << detectingnode.shortStr()
+				 << "> Age: " << packet->getFailedLinkAge(i) << "ms" << endl;
 		}
 #endif
-                // nothing to do, just drop the packet
+		// nothing to do, just drop the packet
 		return;
 	}
 
@@ -1146,13 +1152,14 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadLinkFailureNotify> packet) {
 		// note: chooseNextHop may choose the next hop with the shortest path (proximity routing)
 		const KadContact& contact = chooseNextHop(contacts, target);
 		EV_TRACE << "KadLinkFailureNotify destined for: " << packet->getDstNodeID().shortStr() << " next overlay hop is " << contact << endl;
-#ifndef NDEBUG
-                // note: the log_2 will be smaller for a longer common prefix
-		ASSERT((contact.getKey() ^ target).log_2() <= (myOverlayKey ^ target).log_2());
-		if((contact.getKey() ^ target).log_2() > (myOverlayKey ^ target).log_2()) {
-			EV_WARN << "no prefix progress made" << endl;
-		}
-#endif
+                _DEBUG_ONLY(
+                    // note: the log_2 will be smaller for a longer common prefix
+                    ASSERT((contact.getKey() ^ target).log_2() <= (myOverlayKey ^ target).log_2());
+                    if ((contact.getKey() ^ target).log_2() > (myOverlayKey ^ target).log_2()) {
+			    EV_WARN << "no prefix progress made" << endl;
+                    }
+		)
+
 		if ((contact.getKey() ^ target) < (myOverlayKey ^ target))
 			packet->appendRoute(contact);
 		else

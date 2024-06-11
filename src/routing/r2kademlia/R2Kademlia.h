@@ -16,6 +16,12 @@
 #ifndef __ROUTINGSIM_R2Kademlia_H_
 #define __ROUTINGSIM_R2Kademlia_H_
 
+#ifndef NDEBUG
+#define _DEBUG_ONLY(X) X
+#else
+#define _DEBUG_ONLY(X)
+#endif
+
 #include <omnetpp.h>
 #include <unordered_map>
 #include <queue>
