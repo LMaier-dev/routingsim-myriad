@@ -106,7 +106,7 @@ void R2Kademlia::stopTimer(short timerId)
 // if duration is omnetpp::SimTime::ZERO, timer is stopped
 void R2Kademlia::resetTimer(short timerId, simtime_t duration)
 {
-	EV_TRACE << "resetTimer() called: timerId=" << timerId << " duration " << duration.str() << endl;
+	//EV_TRACE << "resetTimer() called: timerId=" << timerId << " duration " << duration.str() << endl;
 	// periodic timer
 	if (timerId >= 0 and (size_type) timerId < randomTimerMsg.size()) {
 		cMessage* timermsg(randomTimerMsg[timerId]);

@@ -894,7 +894,7 @@ R2Kademlia::sendLinkFailureNotifications(const NotViaListAbsTime_t& notvialist, 
 void
 R2Kademlia::notifyAffectedPathUsers(const OverlayKey& nexthop_key) {
 
-	EV_TRACE << "notifyAffectedPathUsers()" << endl;
+	EV_TRACE << "notifyAffectedPathUsers() for failed next hop " << nexthop_key.shortStr() << endl;
 	// traverse the complete PIDFwdTable and check for incoming PIDs that use the outgoing link
 	for (auto it= fwdTablePathID.PIDFwdTable.cbegin(); it != fwdTablePathID.PIDFwdTable.cend(); it++) {
 		if (it->second.nextHopNode == nexthop_key and
@@ -1081,10 +1081,19 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadLinkFailureNotify> packet) {
 	// when this method is called either we are an overlay hop or the final recipient
 	OverlayKey& target = packet->getDstNodeID(); // get the destination ID
 
-	EV_TRACE << "KadLinkFailureNotify to " << target.shortStr() << " (id=" << packet->getId() << ")" << endl;
+        EV_TRACE << "KadLinkFailureNotify to " << target.shortStr() << " (id=" << packet->getId() << ")" << endl;
+
+	ASSERT(packet->getNotVia());
+
 	if (target == myOverlayKey) { // notification is for this node and ends here
 		EV_TRACE << "KadLinkFailureNotify reached final destination " << myOverlayKey.shortStr() << endl;
-		// nothing to do, just drop the packet
+#ifndef NDEBUG
+		for (uint i= 0; i < packet->getFailedLinkArraySize(); i++) {
+			auto &[unreachablenode, detectingnode]= packet->getFailedLink(i);
+			EV_TRACE << "not via <" << unreachablenode.shortStr() << ',' << detectingnode.shortStr() << "> Age: " << packet->getFailedLinkAge(i) << "ms" << endl;
+		}
+#endif
+                // nothing to do, just drop the packet
 		return;
 	}
 
