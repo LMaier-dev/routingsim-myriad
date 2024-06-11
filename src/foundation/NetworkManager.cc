@@ -31,6 +31,7 @@ NetworkManager::~NetworkManager() {
 	delete activeEdgesCount;
 	delete activeNodesCount;
 	delete partitionCount;
+
 	activeEdgesCount = activeNodesCount = partitionCount = NULL;
 }
 

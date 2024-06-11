@@ -131,8 +131,11 @@ void KadObserver::initialize() {
 	auto msg = new cMessage("TimerMsg", -1);
 	std::function<void()> callback(std::bind(&KadObserver::getFailedContacts,this));
 	msg->setContextPointer( reinterpret_cast<void *>( new auto(callback) ) );
-	// callback will be carried out after delay
-	scheduleAt(SimTime(21,SIMTIME_S) , msg);
+        // callback will be carried out after delay
+	if (auto dynamicsmod= getSimulation()->getModuleByPath("*.dynamics"); dynamicsmod != nullptr) {
+		simtime_t period= dynamicsmod->par("period");
+                scheduleAt(period + SimTime(1, SIMTIME_S), msg);
+	}
 #endif
 #endif
 }
