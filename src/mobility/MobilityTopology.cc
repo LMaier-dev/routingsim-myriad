@@ -81,11 +81,14 @@ void MobilityTopology::createTopology() {
 
 void MobilityTopology::deleteLink(MobilityNode *fromNode,
                                   MobilityNode *toNode) {
+  if (!isConnected(fromNode->getNodeId(), toNode->getNodeId())) return;
   disableLink(fromNode->getNodeId(), toNode->getNodeId());
+
+  // TODO: track unconnected gates, that were connected once
   //remove_edge(fromNode->getNodeId(), toNode->getNodeId(), *BGLtopology);
   //cGate *gateToNode = getGateBetweenNodes(fromNode, toNode);
   //cGate *reverseGate = gateToNode->getPathEndGate();
-  //gateToN//ode->disconnect();
+  //gateToNode->disconnect();
   //reverseGate->disconnect();
 }
 
@@ -93,7 +96,7 @@ void MobilityTopology::createLink(MobilityNode *fromNode,
                                   MobilityNode *toNode) {
   BGLEdgeDesc e;
   bool edgeValid;
-  if (edgeExists(fromNode->getNodeId(), toNode->getNodeId())) return enableLink(fromNode->getNodeId(), toNode->getNodeId());
+  if (isConnected(fromNode->getNodeId(), toNode->getNodeId())) return;
 
   cGate *fromOut = fromNode->getOrCreateFirstUnconnectedGate("toNeighbors", 'o',
                                                              false, true);

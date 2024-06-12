@@ -51,7 +51,8 @@ void MobilityDynamics::updateConnection(MobilityNode *fromNode,
   double distance = fromNode->getMobilityModel()->getPosition().distance(
       toNode->getMobilityModel()->getPosition());
   double rangeFromNode = fromNode->getAntennaModel()->getRange();
-  if (distance <= rangeFromNode) {
+  double rangeToNode = toNode->getAntennaModel()->getRange();
+  if (distance <= std::min(rangeFromNode, rangeToNode)) {
     double newDatarate = fromNode->getAntennaModel()->calcDatarate(distance);
     if (!mobilityTopology->isConnected(fromNode->getNodeId(),
                                        toNode->getNodeId())) {
