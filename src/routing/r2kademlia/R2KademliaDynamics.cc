@@ -757,7 +757,7 @@ void R2Kademlia::scheduleLinkFailureNotificationForwarding(
 	} // end for
 
 	if ( not linkFailureNotificationForwardingScheduled ) {
-		addRandomizedTimer(uniform(PNRediscoveryWaitTime/8, 3*PNRediscoveryWaitTime/8), 0, std::bind(&R2Kademlia::sendScheduledLinkFailureNotifications, this));
+		addOneShotTimer(uniform(PNRediscoveryWaitTime/8, 3*PNRediscoveryWaitTime/8), std::bind(&R2Kademlia::sendScheduledLinkFailureNotifications, this));
 		EV_TRACE << "scheduled sendScheduledLinkFailureNotifications from scheduleLinkFailureNotificationForwarding" << endl;
 		linkFailureNotificationForwardingScheduled= true;
         }
@@ -800,11 +800,14 @@ R2Kademlia::sendScheduledLinkFailureNotifications()
 		  }
 
                   sendPacket(std::move(packet));
+                  LFNFloodList.erase(neighbor_it);
+		  // schedule next call (PNRediscoveryWaitTime is usually 100ms, so every 12.5ms means a rate of 80 msgs/s)
+		  addOneShotTimer(PNRediscoveryWaitTime/8, std::bind(&R2Kademlia::sendScheduledLinkFailureNotifications, this));
+                  return;
 	  } // endif neighbor exists
         } // end for
-	// erase the whole list
-        LFNFloodList.clear();
-	// reset variable so next call to scheduleLinkFailureNotificationForwarding will actually schedule the call
+
+        // reset variable so next call to scheduleLinkFailureNotificationForwarding will actually schedule the call
 	linkFailureNotificationForwardingScheduled= false;
 }
 
@@ -977,7 +980,6 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadRevPathFlood> packet) {
 		)
                 // exclude the packet source for further flood messages
 		scheduleLinkFailureNotificationForwarding(notvialist, upstreamPIDs, packet->getSource());
-		//old: sendLinkFailureNotifications(notvialist, upstreamPIDs, packet->getSource());
 	}
 	else {
 		EV_TRACE << "not distributing linkFailureNotification any further" << endl;
@@ -989,7 +991,7 @@ void
 R2Kademlia::doNotifyFirstSegmentSources(const std::unordered_set<PathID>& upstreamPIDs, const NotViaListAbsTime_t& notvialist)
 {
 	// structure to collect all nodes to be notified (there may be many duplicates)
-	std::unordered_set<OverlayKey> nodestonotify;
+	std::unordered_set<OverlayKey> nodes_to_notify;
 	// now check for nodes (sources of the first segment) to be notified
 	for (const auto& incomingPID : upstreamPIDs) {
 		if (const auto it= notifyFirstSegmentSources.find(incomingPID);
@@ -998,12 +1000,12 @@ R2Kademlia::doNotifyFirstSegmentSources(const std::unordered_set<PathID>& upstre
 
 			// entry for PID found, so notify all first segment sources with an update
 			for (const auto &notify_target : it->second) {
-				nodestonotify.insert(notify_target);
+				nodes_to_notify.insert(notify_target);
 			} // end for all sources to notify
 		} // end if there is an entry for this PID
 	} // end for all PIDs to check
 
-	for (const auto &notify_target : nodestonotify) {
+	for (const auto &notify_target : nodes_to_notify) {
 
 		bool sentViaPID(false);
 		if (const auto pid_it= notifyFirstSegmentSourcesReversePath.find(notify_target); pid_it != notifyFirstSegmentSourcesReversePath.cend())
