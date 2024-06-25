@@ -363,7 +363,8 @@ R2Kademlia::onPathCheck(const KadContact& contact, RequestQueueElementActionType
 }
 
 void R2Kademlia::onContactCandidate(std::unique_ptr<KadContact> contactp) {
-	scheduleContactCandidateProbe(std::move(*(contactp.release())));
+	scheduleContactCandidateProbe(std::move(*(contactp.get())));
+	contactp.reset(nullptr);
 }
 
 } // end namespace

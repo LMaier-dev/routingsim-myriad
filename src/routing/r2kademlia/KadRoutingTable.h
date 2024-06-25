@@ -42,20 +42,24 @@ class KadBucket
 {
 public:
 	using BucketElement = std::unique_ptr<KadContact>;
-	using BucketType = std::vector<BucketElement>;
+        using BucketType = std::vector<BucketElement>;
 
+	KadBucket() {};
+        KadBucket(KadBucket &&other);
+        ~KadBucket() { clear(); };
+	void clear();
 	KadContact_p getContact(const OverlayKey& key) const;
-	inline void insertContact(BucketType& bucket, BucketElement contactp);
-	void insertContact(BucketElement contactp) { insertContact(contacts, std::move(contactp)); } ;
-	void insertPNContact(BucketElement contactp) { insertContact(PNContacts,std::move(contactp)); } ;
+	inline void insertContact(BucketType& bucket, BucketElement&& contactp);
+	void insertContact(BucketElement&& contactp) { insertContact(contacts, std::move(contactp)); } ;
+	void insertPNContact(BucketElement&& contactp) { insertContact(PNContacts,std::move(contactp)); } ;
 	const BucketType& getContacts() const { return contacts; }
 	BucketType& getContactsWrite() { return contacts; }
 	const BucketType& getPNContacts() const { return PNContacts; }
 	BucketType& getPNContactsWrite() { return PNContacts; }
 	/** tries to remove the contact, returns true if found */
-	inline bool removeContact(const OverlayKey& key);
-	inline auto removeContact(BucketType::iterator it) { return contacts.erase(it); }
-	inline auto removePNContact(BucketType::iterator it) { return PNContacts.erase(it); }
+	bool removeContact(const OverlayKey& key);
+	inline auto removeContact(BucketType::iterator it) { it->reset(nullptr); return contacts.erase(it); }
+	inline auto removePNContact(BucketType::iterator it) { it->reset(nullptr); return PNContacts.erase(it); }
 	/** returns true if the contact list is empty */
 	inline bool empty() { return contacts.empty() and PNContacts.empty(); }
 	/** returns the size of the contact list including PNcontacts */
@@ -88,12 +92,12 @@ private:
 
 
 /// inserts a KadContact into a bucket (kept sorted order)
-inline void KadBucket::insertContact(BucketType& bucket, BucketElement contactp) {
+inline void KadBucket::insertContact(BucketType& bucket, BucketElement&& contactp) {
 	//ASSERT(is_sorted(bucket.cbegin(),bucket.cend(),[](const BucketElement& lhs, const BucketElement& rhs) -> bool { return lhs.get()->getKey() < rhs.get()->getKey(); }));
 
 	// Note that this performs a binary search, but the insertion itself may cause O(n) move operations inside the vector
-	bucket.insert(std::upper_bound(bucket.begin(), bucket.end(), contactp,
-		      [](const BucketElement& lhs, const BucketElement& rhs) -> bool { return lhs->getKey() < rhs->getKey(); }), std::move(contactp));
+	bucket.insert(std::upper_bound(bucket.cbegin(), bucket.cend(), contactp->getKey(),
+				       [&](const OverlayKey& key, const BucketElement& rhs) -> bool { return key < rhs.get()->getKey(); }), std::move(contactp));
 
 	//ASSERT(is_sorted(bucket.cbegin(),bucket.cend(),[](const BucketElement& lhs, const BucketElement& rhs) -> bool { return lhs.get()->getKey() < rhs.get()->getKey(); }));
 }
@@ -276,7 +280,7 @@ public:
 	/// concatenates the two paths
 	kad_path concatViaPath(const kad_path& viaPath, const kad_path& path) const;
 	/// removes duplicates and loops from a path
-	bool simplifyPath(kad_path& path, const OverlayKey* destination) const;
+	bool simplifyPath(kad_path& path, const OverlayKey& destination) const;
         inline size_t getBucketCount() const { return buckets.size(); }
         KadContactList getValidContactsFromBucket(size_t index) const;
 

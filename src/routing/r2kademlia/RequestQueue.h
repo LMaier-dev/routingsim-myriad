@@ -16,7 +16,7 @@ class RequestQueue : public std::vector<T> {
 public:
 	RequestQueue(const std::string descriptiontxt,
 		     std::function<simtime_t(const T&, RequestQueueElementActionType)> sendrequestcall,
-		     std::function<void()> sendscheduledcall,
+		     std::function<void(short int)> sendscheduledcall,
 		     unsigned long initialScheduleDelay) :
 		sendrequestcall(sendrequestcall),
 		sendscheduledcall(sendscheduledcall),
@@ -28,7 +28,7 @@ public:
 	void setScheduled() { scheduled= true; }
 	void clearScheduled() { scheduled= false; }
 	std::function<simtime_t(const T&, RequestQueueElementActionType)> sendrequestcall;
-	std::function<void()> sendscheduledcall;
+	std::function<void(short int)> sendscheduledcall;
 	unsigned long initialScheduleDelay = 0; // in µs
 private:
 	const std::string description;

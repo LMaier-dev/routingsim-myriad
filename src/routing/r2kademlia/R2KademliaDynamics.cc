@@ -692,25 +692,25 @@ void
 R2Kademlia::scheduleLocalLinkFailureNotification() {
 
 	if ( not linkFailureNotificationScheduled ) {
-		addRandomizedTimer(uniform(SimTime(notifyLinkFailureWaitTime/2,SIMTIME_MS),
-					   SimTime(notifyLinkFailureWaitTime*1.5,SIMTIME_MS)), 0, std::bind(&R2Kademlia::sendLocalLinkFailureNotifications, this));
+		addOneShotTimer(uniform(SimTime(notifyLinkFailureWaitTime/2,SIMTIME_MS),
+					   SimTime(notifyLinkFailureWaitTime*1.5,SIMTIME_MS)), std::bind(&R2Kademlia::sendLocalLinkFailureNotifications, this));
 		linkFailureNotificationScheduled= true;
 	}
 }
 
 
 void R2Kademlia::scheduleLinkFailureNotificationForwarding(
-    NotViaListAbsTime_t &notvialist, std::unordered_set<PathID> &notifyPIDList,
+    NotViaListAbsTime_t* notvialist_p, std::unordered_set<PathID>* notifyPIDList_p,
     OverlayKey excludeNode)
 {
 	// if there are no incoming PIDs, nothing to notify about
-        if (notifyPIDList.empty()) {
+        if (notvialist_p == nullptr or notifyPIDList_p->empty()) {
 		return;
 	}
 
-	ASSERT(not notvialist.empty());
+	ASSERT(not notvialist_p->empty());
 	EV_TRACE << "scheduleLinkFailureNotificationForwarding(): added notvia list of "
-		 << notvialist.size() << " and PIDList of " << notifyPIDList.size()
+		 << notvialist_p->size() << " and PIDList of " << notifyPIDList_p->size()
 		 << endl;
 
 	// iterate over all active/intact direct underlay neighbors
@@ -733,7 +733,7 @@ void R2Kademlia::scheduleLinkFailureNotificationForwarding(
 
 		// only send PIDs to this neighbor that are requested by this neighbor
 		std::list<PathID> filteredPIDList;
-		for (auto pidcit = notifyPIDList.cbegin(); pidcit != notifyPIDList.cend(); pidcit++) {
+		for (auto pidcit = notifyPIDList_p->cbegin(); pidcit != notifyPIDList_p->cend(); pidcit++) {
 			if ( ifitmapcit->second.find(*pidcit) != ifitmapcit->second.cend() )
 				filteredPIDList.push_back(*pidcit);
 		}
@@ -749,10 +749,10 @@ void R2Kademlia::scheduleLinkFailureNotificationForwarding(
 			// add notvia and filteredPIDList
                         auto& [collected_notvialist, collected_pidlist] = lfnlistit->second;
                         collected_notvialist.insert(collected_notvialist.end(),
-                                                    notvialist.begin(),notvialist.end());
+                                                    notvialist_p->begin(),notvialist_p->end());
 			collected_pidlist.insert(collected_pidlist.end(), filteredPIDList.begin(), filteredPIDList.end());
                 } else {
-			LFNFloodList.insert({contactp->getKey(), std::make_pair(notvialist, filteredPIDList)});
+			LFNFloodList.insert({contactp->getKey(), std::make_pair(*notvialist_p, filteredPIDList)});
 		}
 	} // end for
 
@@ -763,7 +763,7 @@ void R2Kademlia::scheduleLinkFailureNotificationForwarding(
         }
 	// wait for PN rediscovery to complete before sending these out
 	addOneShotTimer(uniform(3*PNRediscoveryWaitTime/2,9*PNRediscoveryWaitTime/2),
-			std::bind(&R2Kademlia::doNotifyFirstSegmentSources, this, notifyPIDList, notvialist));
+			std::bind(&R2Kademlia::doNotifyFirstSegmentSources, this, notifyPIDList_p, notvialist_p));
 }
 
 
@@ -812,23 +812,51 @@ R2Kademlia::sendScheduledLinkFailureNotifications()
 }
 
 
+// uses the global notifyPIDs_p PIDList created in notifyAffectedPathUsers()
+void
+R2Kademlia::sendLocalLinkFailureNotifications()
+{
+#ifndef NDEBUG
+	if (notifyPIDs_p == nullptr) {
+		EV_TRACE << "sendLocalLinkFailureNotifications, notifyPIDList = nullptr" << endl;
+		return;
+	}
+	EV_TRACE << "sendLocalLinkFailureNotifications, notifyPIDList " << notifyPIDs_p->size() << " entries, { ";
+	for (auto pid : *notifyPIDs_p)
+		EV_TRACE << pid << ' ';
+        EV_TRACE << '}' << endl;
+#endif
+        auto failedPNList(routingTable.getFailedPNs());
+	EV_TRACE << "sendLocalLinkFailureNotifications failedPNs " << failedPNList.size() << endl;
+        // fill notvialist with locally failed PNs
+	auto notvialist_p = new(NotViaListAbsTime_t);
+	for ( auto& failedPN : failedPNList ) {
+		if (auto pncontact= routingTable.getContact(failedPN); pncontact != nullptr) {
+			notvialist_p->push_back(std::make_pair(std::make_pair(myOverlayKey,failedPN),simTime() - SimTime(pncontact->getPathAge(),SIMTIME_MS)));
+		}
+	}
+        sendLinkFailureNotifications(notvialist_p, notifyPIDs_p, OverlayKey::UNSPECIFIED_KEY);
+	linkFailureNotificationScheduled= false;
+}
+
+
 // this method sends KadRevPathFlood messages to all neighbors that use the incoming PIDs in
 // the notifyPIDList, except excludeNode; it also triggers doNotifyFirstSegmentSources
 // called from sendLocalLinkFailureNotifications()
 void
-R2Kademlia::sendLinkFailureNotifications(const NotViaListAbsTime_t& notvialist, const std::unordered_set<PathID>& notifyPIDList, OverlayKey excludeNode)
+R2Kademlia::sendLinkFailureNotifications(NotViaListAbsTime_t* notvialist_p, std::unordered_set<PathID>* notifyPIDList_p, OverlayKey excludeNode)
 {
+	// if there are no incoming PIDs, nothing to notify about
+        if (notifyPIDList_p == nullptr or notifyPIDList_p->empty()) {
+		return;
+	}
 
 	_DEBUG_ONLY(
-		EV_TRACE << "sendLinkFailureNotifications, notifyPIDList " << notifyPIDList.size() << " entries, { ";
-		for (auto pid : notifyPIDList)
+		EV_TRACE << "sendLinkFailureNotifications, notifyPIDList " << notifyPIDList_p->size() << " entries, { ";
+		for (auto pid : *notifyPIDList_p)
 			EV_TRACE << pid << ' ';
 		EV_TRACE << '}' << endl;
 	)
-	// if there are no incoming PIDs, nothing to notify about
-        if (notifyPIDList.empty()) {
-		return;
-	}
 
 	// iterate over all active/intact direct underlay neighbors
 	for (auto ntcit= neighborTable.getTable().cbegin(); ntcit!=neighborTable.getTable().cend(); ntcit++) {
@@ -850,7 +878,7 @@ R2Kademlia::sendLinkFailureNotifications(const NotViaListAbsTime_t& notvialist, 
 
 		// only send PIDs to this neighbor that are requested by this neighbor
 		std::list<PathID> filteredPIDList;
-		for (auto pidcit = notifyPIDList.cbegin(); pidcit != notifyPIDList.cend(); pidcit++) {
+		for (auto pidcit = notifyPIDList_p->cbegin(); pidcit != notifyPIDList_p->cend(); pidcit++) {
 			if ( ifitmapcit->second.find(*pidcit) != ifitmapcit->second.cend() )
 				filteredPIDList.push_back(*pidcit);
 		}
@@ -873,10 +901,10 @@ R2Kademlia::sendLinkFailureNotifications(const NotViaListAbsTime_t& notvialist, 
 		}
 
 		packet->setNotVia(true);
-		packet->setFailedLinkArraySize(notvialist.size());
-		packet->setFailedLinkAgeArraySize(notvialist.size());
+		packet->setFailedLinkArraySize(notvialist_p->size());
+		packet->setFailedLinkAgeArraySize(notvialist_p->size());
 		unsigned long i= 0UL;
-		for ( auto& notvialinkinfo : notvialist ) {
+		for ( auto& notvialinkinfo : *notvialist_p ) {
 			// add the failed links
 			packet->setFailedLink(i,notvialinkinfo.first);
 			packet->setFailedLinkAge(i,(simTime()-notvialinkinfo.second).inUnit(SIMTIME_MS));
@@ -886,9 +914,10 @@ R2Kademlia::sendLinkFailureNotifications(const NotViaListAbsTime_t& notvialist, 
 		sendPacket(std::move(packet));
 	} // end for every underlay neighbor
 
-	// wait for PN rediscovery to complete before sending these out
+        // wait for PN rediscovery to complete before sending these out
+	// note: doNotifyFirstSegmentSources will take care of deleting the object memory after use
 	addOneShotTimer(uniform(3*PNRediscoveryWaitTime/2,9*PNRediscoveryWaitTime/2),
-			std::bind(&R2Kademlia::doNotifyFirstSegmentSources, this, notifyPIDList, notvialist));
+			std::bind(&R2Kademlia::doNotifyFirstSegmentSources, this, notifyPIDList_p, notvialist_p));
 }
 
 
@@ -898,20 +927,23 @@ R2Kademlia::sendLinkFailureNotifications(const NotViaListAbsTime_t& notvialist, 
 void
 R2Kademlia::notifyAffectedPathUsers(const OverlayKey& nexthop_key) {
 
-	EV_TRACE << "notifyAffectedPathUsers() for failed next hop " << nexthop_key.shortStr() << endl;
+	if (notifyPIDs_p == nullptr)
+		notifyPIDs_p = new(std::unordered_set<PathID>);
+
+        EV_TRACE << "notifyAffectedPathUsers() for failed next hop " << nexthop_key.shortStr() << endl;
 	// traverse the complete PIDFwdTable and check for incoming PIDs that use the outgoing link
 	for (auto it= fwdTablePathID.PIDFwdTable.cbegin(); it != fwdTablePathID.PIDFwdTable.cend(); it++) {
 		if (it->second.nextHopNode == nexthop_key and
 			it->second.isUsed() > 0) { // for debugging only
 			// TODO should be replaced by .getAge() < 2*PathRefreshThreshold)
-			notifyPIDs.insert(it->first);
+			notifyPIDs_p->insert(it->first);
 		}
         }
 
 	_DEBUG_ONLY(
-		EV_DEBUG << "found " << notifyPIDs.size() << " affected PathIDs (total)" << endl;
-		EV_TRACE << "notifyPIDs " << notifyPIDs.size() << " entries, { ";
-		for (auto pid : notifyPIDs)
+		EV_DEBUG << "found " << notifyPIDs_p->size() << " affected PathIDs (total)" << endl;
+		EV_TRACE << "notifyPIDs_p " << notifyPIDs_p->size() << " entries, { ";
+		for (auto pid : *notifyPIDs_p)
 			EV_TRACE << pid << ' ';
 		EV_TRACE << '}' << endl;
         )
@@ -937,7 +969,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadRevPathFlood> packet) {
 	// NotVia information has been processed before this method is called
 	// Therefore, only the PIDs have to be looked up and it has to be figured out
 	// which PIDs need to be propagated further "upstream"
-        std::unordered_set<PathID> upstreamPIDs;
+        auto upstreamPIDs_p= new(std::unordered_set<PathID>);
         auto numPIDs = packet->getPIDListArraySize();
 
         _DEBUG_ONLY(
@@ -956,53 +988,74 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadRevPathFlood> packet) {
 				if (it->second.outgoingPathID == packet->getPIDList(i)
 				    and it->second.isUsed()) { // for debugging only
 					// TODO should be replaced by .getAge() < 2*PathRefreshThreshold
-					upstreamPIDs.insert(it->first);
+					upstreamPIDs_p->insert(it->first);
 				}
 			} // end for inner loop
 		}
 	}
 
 	// just copy the notvia list for passing it on
-	NotViaListAbsTime_t notvialist;
+	auto notvialist_p= new(NotViaListAbsTime_t);
 	if (packet->getNotVia())
 	{
 		for (uint i= 0; i < packet->getFailedLinkArraySize(); i++) {
-			notvialist.push_back(std::make_pair(packet->getFailedLink(i), simTime()-SimTime(packet->getFailedLinkAge(i), SIMTIME_MS)));
+			notvialist_p->push_back(std::make_pair(packet->getFailedLink(i), simTime()-SimTime(packet->getFailedLinkAge(i), SIMTIME_MS)));
 		}
 	}
 
-        if (not upstreamPIDs.empty()) {
+        if (not upstreamPIDs_p->empty()) {
 		_DEBUG_ONLY(
 			EV_TRACE << "sendLinkFailureNotifications for upstream PIDs { ";
-			for (const auto& pid : upstreamPIDs)
+			for (const auto& pid : *upstreamPIDs_p)
 				EV_TRACE << pid << ' ';
 			EV_TRACE << '}' << endl;
 		)
                 // exclude the packet source for further flood messages
-		scheduleLinkFailureNotificationForwarding(notvialist, upstreamPIDs, packet->getSource());
+		scheduleLinkFailureNotificationForwarding(notvialist_p, upstreamPIDs_p, packet->getSource());
 	}
 	else {
 		EV_TRACE << "not distributing linkFailureNotification any further" << endl;
+		delete notvialist_p;
 	}
 }
 
 
+// normally, I'd like to work with reference, but here we need pointers due to passing them in subsequent calls
 void
-R2Kademlia::doNotifyFirstSegmentSources(const std::unordered_set<PathID>& upstreamPIDs, const NotViaListAbsTime_t& notvialist)
+R2Kademlia::doNotifyFirstSegmentSources(std::unordered_set<PathID>* upstreamPIDs_p, NotViaListAbsTime_t* notvialist_p)
 {
-	// structure to collect all nodes to be notified (there may be many duplicates)
+	ASSERT(upstreamPIDs_p != nullptr and notvialist_p != nullptr);
+	//EV_TRACE << "doNotifyFirstSegmentSources() upstreamPIDs_p: " << (void*) upstreamPIDs_p << " notvialist_p: " << (void*) notvialist_p << endl;
+        // now check for nodes (sources of the first segment) to be notified
+        if (upstreamPIDs_p->empty()) {
+		EV_TRACE << "doNotifyFirstSegmentSources() deleting upstreamPIDs_p and notvialist_p" << endl;
+                delete upstreamPIDs_p;
+		// prevent double free at destructor for global list
+                if (upstreamPIDs_p == notifyPIDs_p)
+			notifyPIDs_p = nullptr;
+                delete notvialist_p;
+                return;
+	}
+
 	std::unordered_set<OverlayKey> nodes_to_notify;
-	// now check for nodes (sources of the first segment) to be notified
-	for (const auto& incomingPID : upstreamPIDs) {
-		if (const auto it= notifyFirstSegmentSources.find(incomingPID);
+        // check for next upstream PID
+        auto incomingPID_it = upstreamPIDs_p->begin();
+	bool foundPID(false);
+	while (incomingPID_it != upstreamPIDs_p->end() and not foundPID) {
+		// structure to collect all nodes to be notified (there may be many duplicates)
+		if (const auto it= notifyFirstSegmentSources.find(*incomingPID_it);
 		    it != notifyFirstSegmentSources.cend()) {
 			EV_TRACE << "check for notifyFirstSegmentSources: PID " << it->first << " #sources=" << it->second.size() << endl;
 
-			// entry for PID found, so notify all first segment sources with an update
+                        // entry for PID found, so notify all first segment sources with an update
 			for (const auto &notify_target : it->second) {
 				nodes_to_notify.insert(notify_target);
-			} // end for all sources to notify
-		} // end if there is an entry for this PID
+                        } // end for all sources to notify
+			// jump out of the while loop
+                        foundPID= true;
+                } // end if there is an entry for this PID
+		// remove this entry for next iteration
+                incomingPID_it= upstreamPIDs_p->erase(incomingPID_it);
 	} // end for all PIDs to check
 
 	for (const auto &notify_target : nodes_to_notify) {
@@ -1022,16 +1075,16 @@ R2Kademlia::doNotifyFirstSegmentSources(const std::unordered_set<PathID>& upstre
 				notify_packet->setDstPID(pid_it->second.second);
 				notify_packet->appendHop(pid_it->second.first);
 				// copy notvia list
-				notify_packet->setFailedLinkArraySize(notvialist.size());
-				notify_packet->setFailedLinkAgeArraySize(notvialist.size());
-				auto it(notvialist.cbegin());
-				for (uint i= 0; i < notvialist.size(); i++) {
+				notify_packet->setFailedLinkArraySize(notvialist_p->size());
+				notify_packet->setFailedLinkAgeArraySize(notvialist_p->size());
+				auto it(notvialist_p->cbegin());
+				for (uint i= 0; i < notvialist_p->size(); i++) {
 					notify_packet->setFailedLink(i,it->first);
 					notify_packet->setFailedLinkAge(i, (simTime()-it->second).inUnit(SIMTIME_MS));
 					it++;
 				}
-				ASSERT(notvialist.size() > 0);
-				notify_packet->setNotVia(notvialist.size() > 0);
+				ASSERT(notvialist_p->size() > 0);
+				notify_packet->setNotVia(notvialist_p->size() > 0);
 				// normally we would use PID encapsulation, but here we use a hop-wise constructed source route
 				EV_TRACE << "Sending LinkFailureNotify to " << notify_target.shortStr() << " next hop: " << pid_it->second.first.shortStr()
 					 << " outgoing PID: " << pid_it->second.second << endl;
@@ -1046,7 +1099,7 @@ R2Kademlia::doNotifyFirstSegmentSources(const std::unordered_set<PathID>& upstre
 		if (not sentViaPID) { // send via overlay
 			size_t contactsLen = std::max((size_t)findNodeNumber, routingTable.getSplitSize());
                         NotViaList_t tmpnotvialist; // getClosestContacts needs relative time (NotViaList_t)
-                        for (auto it= notvialist.cbegin(); it != notvialist.cend(); it++)
+                        for (auto it= notvialist_p->cbegin(); it != notvialist_p->cend(); it++)
 				tmpnotvialist.push_back(std::make_pair(it->first, (simTime()-it->second).inUnit(SIMTIME_MS)));
                         KadContactList closeContacts(routingTable.getClosestContacts(notify_target, contactsLen, true, tmpnotvialist));
 			if (not closeContacts.empty()) {
@@ -1075,6 +1128,20 @@ R2Kademlia::doNotifyFirstSegmentSources(const std::unordered_set<PathID>& upstre
 			}
 		}
 	} // end for all nodes to be notified
+
+        if (upstreamPIDs_p->empty()) {
+		EV_TRACE << "doNotifyFirstSegmentSources() deleting upstreamPIDs_p and notvialist_p" << endl;
+                delete upstreamPIDs_p;
+		// prevent double free at destructor for global list
+                if (upstreamPIDs_p == notifyPIDs_p)
+			notifyPIDs_p = nullptr;
+		delete notvialist_p;
+                return;
+        }
+	else { // schedule next call due to rate limiting
+		addOneShotTimer(PNRediscoveryWaitTime/8,
+				std::bind(&R2Kademlia::doNotifyFirstSegmentSources, this, upstreamPIDs_p, notvialist_p));
+	}
 }
 
 

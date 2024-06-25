@@ -29,6 +29,36 @@ namespace routingsim {
 
 namespace ph = std::placeholders;
 
+KadBucket::KadBucket(KadBucket &&other) {
+  clear();
+  contacts.reserve(other.contacts.size());
+  for (auto it = other.contacts.begin(); it != other.contacts.end(); it++) {
+    contacts.push_back(std::move(*it));
+    *it = nullptr;
+  }
+  PNContacts.reserve(other.PNContacts.size());
+  for (auto it = other.PNContacts.begin(); it != other.PNContacts.end(); it++) {
+    PNContacts.push_back(std::move(*it));
+    *it = nullptr;
+  }
+  other.clear();
+};
+
+
+void
+KadBucket::clear() {
+	// clear/cleanup means to release memory all contacts
+	for (auto it = contacts.begin(); it != contacts.end(); it++) {
+		it->reset(nullptr);
+        }
+	for (auto it = PNContacts.begin(); it != PNContacts.end(); it++) {
+		it->reset(nullptr);
+        }
+	contacts.clear();
+	PNContacts.clear();
+}
+
+
 void KadRoutingTable::init(const OverlayKey& myKey, KadPolicy* policy,
 			   size_type accelerationFactor, size_type bucketSize,
 			   bool proximityNeighborSelection,
@@ -168,7 +198,7 @@ void KadRoutingTable::addPNContact(const OverlayKey& key, stateseqno_t stateseqn
 			auto it = bucket.findContactWrite(key);
 			if (it != bucket.getContacts().end()) {
 				bucket.insertPNContact(std::move(*it));
-				bucket.removeContact(it);
+                                bucket.removeContact(it);
 			}
 			else
 				EV_ERROR << "Contact existed already, but not found" << endl;
@@ -222,7 +252,7 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path newpath, stateseqn
 
 	const bool pathWasNotEmpty(newpath.size() > 0);
 	// find my key -> this is a poisonous path via me, simply ignore this
-	if (pathWasNotEmpty and std::find(newpath.begin(), newpath.end(), myKey) != newpath.end())
+	if (pathWasNotEmpty and std::find(newpath.cbegin(), newpath.cend(), myKey) != newpath.cend())
 	{
 		//EV_TRACE << "not adding poisonous path to " << key.shortStr() << " leading via me (" << myKey.shortStr() << "): ";
 		//for (const auto& node : newpath)
@@ -232,7 +262,7 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path newpath, stateseqn
 	}
 
 	// find other cycles/duplicates (note: path may even be empty afterwards)
-	simplifyPath(newpath, &key);
+	simplifyPath(newpath, key);
 
 	// try to shorten the newpath using local routing table
 	if (newpath.size() > 0) {
@@ -240,7 +270,7 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path newpath, stateseqn
 		if (shortenPath(newpath, pathinfo_age)) {
 			// we must simplify again as it could be the case
 			// that we have a cycle with the destination now
-			simplifyPath(newpath, &key);
+			simplifyPath(newpath, key);
 		}
 	}
 
@@ -606,7 +636,7 @@ KadRoutingTable::addPath(const OverlayKey& key, const kad_path& path, stateseqno
 /// removes cycles, i.e., result is free of cycles, but
 /// outcome does not guarantee to find the optimal solution
 /// @returns true if path was simplified, false if not
-bool KadRoutingTable::simplifyPath(kad_path& path, const OverlayKey* destination) const
+bool KadRoutingTable::simplifyPath(kad_path& path, const OverlayKey& destination) const
 {
 	/*
 	 * the algorithm may not achieve an optimal solution depending on how cycles overlap
@@ -616,8 +646,8 @@ bool KadRoutingTable::simplifyPath(kad_path& path, const OverlayKey* destination
 	if (path.size() < 2) // nothing to optimize here
 		return false;
 
-	if (destination != nullptr)
-		path.push_back(*destination);
+	if (not destination.isUnspecified())
+		path.push_back(destination);
 
 	bool modified(false);
 	// start from the end of the path (right)
@@ -631,8 +661,8 @@ bool KadRoutingTable::simplifyPath(kad_path& path, const OverlayKey* destination
 			modified= true;
 			// special case if only one element left
 			if (right == path.begin()) {
-				// remove destination again
-				if (destination != nullptr) {
+				// remove destination again if still present
+				if (not destination.isUnspecified() and not path.empty() and path.back() == destination) {
 					path.pop_back();
 				}
 				return modified;
@@ -640,8 +670,8 @@ bool KadRoutingTable::simplifyPath(kad_path& path, const OverlayKey* destination
 		}
 	}
 
-	// remove destination again
-	if (destination != nullptr) {
+	// remove destination again if still present
+	if (not destination.isUnspecified() and not path.empty() and path.back() == destination) {
 		path.pop_back();
 	}
 	return modified;
@@ -727,7 +757,7 @@ bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, sta
 	}
 	else { // no space in bucket for inserting the new contact: replace existing one?
 		if (not proximityNeighborSelection) {
-			//EV_DEBUG << "dropping new contact " << *contact << endl;
+			// EV_DEBUG << "dropping new contact " << *contact << endl;
 			return false;
 		}
 		// contact replacement if contact is "better" than existing ones
@@ -764,8 +794,10 @@ bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, sta
 			auto correctpos= std::upper_bound(contacts.begin(), contacts.end(), contactkey,
 							  [](const OverlayKey& lhs, const KadBucket::BucketElement& rhs) -> bool { return lhs < rhs->getKey(); });
 
-			// this may destroy the sorted order
-			*result = std::move(contact);
+			// need to delete/destroy the previous contact object
+                        result->reset();
+                        // this may destroy the sorted order
+			*result= std::move(contact);
 			// restore the correct order
 			// depending on the correct position we need to rotate right or left
 			if (correctpos < result) {
@@ -799,7 +831,9 @@ bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, sta
 			auto correctpos= std::upper_bound(contacts.begin(), contacts.end(), contactkey,
 							  [](const OverlayKey& lhs, const KadBucket::BucketElement& rhs) -> bool { return lhs < rhs->getKey(); });
 
-			// this may destroy the sorted order
+			// need to delete/destroy the previous contact object
+                        resultconn->reset();
+                        // this may destroy the sorted order
 			*resultconn = std::move(contact);
 			// restore the correct order
 			// depending on the correct position we need to rotate right or left
@@ -834,8 +868,8 @@ void KadRoutingTable::splitLastBucket()
 	EV_DEBUG << "splitting bucket" << endl;
 	ASSERT(isSplittable(buckets.back()));
 	ASSERT(buckets.size() < getMaxNumBuckets());
-	KadBucket oldBucket{};
-	std::swap(oldBucket, buckets.back());
+        KadBucket oldBucket(std::move(buckets.back()));
+	buckets.back().clear();
 	ASSERT(oldBucket.size() >= bucketSize);
 	// create new buckets
 	size_type newSize = std::min(buckets.size() + getLevelWidth(), getMaxNumBuckets());
@@ -1200,7 +1234,7 @@ void KadRoutingTable::updatePaths(const KadContact& improvedContact)
 
 						// NOTE: new path may contain cycles, must remove them
 						if (pathimproved) {
-							simplifyPath(newpath, &contact->getKey());
+							simplifyPath(newpath, contact->getKey());
 						}
 						// path is only repaired in case no (known) failed links remain
 						if (pathrepaired) {
@@ -1618,15 +1652,17 @@ KadBucket::getContact(const OverlayKey& key) const
 
 bool KadBucket::removeContact(const OverlayKey& key)
 {
-	auto it = findContact(key);
-	if (it != contacts.end()){
+	auto it = findContactWrite(key);
+        if (it != contacts.end()) {
+		it->reset();
 		contacts.erase(it);
 		return true;
 	}
 	else
 	{ // not found in contacts yet, try PNContacts
-		it = findPNContact(key);
-		if (it != PNContacts.end()){
+		it = findPNContactWrite(key);
+                if (it != PNContacts.end()) {
+			it->reset();
 			PNContacts.erase(it);
 			return true;
 		}

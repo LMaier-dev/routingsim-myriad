@@ -27,7 +27,6 @@
 #include <queue>
 #include <functional>
 
-#include "foundation.h"
 #include "Protocol.h"
 #include "StatisticSample.h"
 #include "KadPackets_m.h"
@@ -36,6 +35,7 @@
 #include "KadRoutingTable.h"
 #include "FwdTable.h"
 #include "RPC.h"
+#include "TimerMsg.h"
 
 #include "RequestQueue.h"
 
@@ -54,6 +54,7 @@ using KadError_p = std::unique_ptr<KadError>;
 using UpdateList_t = std::list< std::pair<KadContact, KadRouteUpdateAction> >;
 using NotViaList_t = std::list< std::pair<link_t,age_t> >; // link with relative time (age)
 using NotViaListAbsTime_t = std::list< std::pair<link_t,simtime_t> >; // link with absolute time (timestamp)
+using KadPacketQueue = std::list<KadPacket_p>;
 
 enum reasoncode : uint8_t {
 	unspecified = 0,
@@ -151,8 +152,7 @@ private:
 	//@}
 
 	// to notify neighbors about affected PathIDs after a failure
-        std::unordered_set<PathID> notifyPIDs;
-	NotViaListAbsTime_t collectedNotVias;
+        std::unordered_set<PathID>* notifyPIDs_p = nullptr;
 	std::unordered_map<PathID, std::unordered_set<OverlayKey>> notifyFirstSegmentSources;
 	std::unordered_map<OverlayKey, std::pair<OverlayKey, PathID>> notifyFirstSegmentSourcesReversePath; // target, <outgoingIF, PathID to target>
         std::unordered_map<OverlayKey, std::unordered_set<PathID>> incomingIFtoPIDmap;
@@ -212,7 +212,9 @@ private:
 	ContactRequestQueue ContactCandidateProbeQueue; // for probing contact candidates
         KeyRequestQueue OnDemandPathProbeQueue; // for sending path probes on demand (in contrast to periodical ones)
 
-	// selfMessage
+	KadPacketQueue NotifyQueue;
+
+        // selfMessage
 	bool pathSetupScheduled= false;
 
 	// timestamp for outstanding PNDiscReqs
@@ -265,8 +267,8 @@ private:
 	//@{
 	std::vector<simtime_t> randomTimerDuration;
 	std::vector<simtime_t> fixedTimerDuration;
-	std::vector<cMessage *> randomTimerMsg;
-	std::vector<cMessage *> fixedTimerMsg;
+	std::vector<TimerMsg *> randomTimerMsg;
+	std::vector<TimerMsg *> fixedTimerMsg;
 	short PNHelloTimerId= 0;
 	//@}
 
@@ -299,9 +301,9 @@ private:
 	/** @name timer functions */
 	//@{
 	/// adds a timer to the timer vectors, sends a timer packet
-	short addRandomizedTimer(simtime_t initialOffset, simtime_t duration, std::function<void(short timerId)> callback);
-	short addFixedTimer(simtime_t initialOffset, simtime_t duration, std::function<void(short timerId)> callback);
-	inline void addOneShotTimer(simtime_t delay, std::function<void()> callback) override;
+	short addRandomizedTimer(simtime_t initialOffset, simtime_t duration, TimerMsg::cbfunc_t callback);
+	short addFixedTimer(simtime_t initialOffset, simtime_t duration, TimerMsg::cbfunc_t callback);
+	inline void addOneShotTimer(simtime_t delay, TimerMsg::cbfunc_t callback) override;
 	/// stops timer and cancels timer message
 	void stopTimer(short timerId);
 	/// stops timer and cancel timer message, starts new timer with new duration
@@ -384,12 +386,12 @@ private:
 	void incLSSeqNo() { lsseqno++; }
 
 	void notifyAffectedPathUsers(const OverlayKey &key);
-	void sendLinkFailureNotifications(const NotViaListAbsTime_t& notvialist, const std::unordered_set<PathID>& notifyPIDList, OverlayKey excludeNode);
-	void scheduleLinkFailureNotificationForwarding(NotViaListAbsTime_t& notvialist, std::unordered_set<PathID>& notifyPIDList, OverlayKey excludeNode);
+	void sendLinkFailureNotifications(NotViaListAbsTime_t* notvialist_p, std::unordered_set<PathID>* notifyPIDList_p, OverlayKey excludeNode);
+	void scheduleLinkFailureNotificationForwarding(NotViaListAbsTime_t* notvialist_p, std::unordered_set<PathID>* notifyPIDList_p, OverlayKey excludeNode);
 	inline void sendLocalLinkFailureNotifications();
 	void scheduleLocalLinkFailureNotification();
 	void sendScheduledLinkFailureNotifications();
-	void doNotifyFirstSegmentSources(const std::unordered_set<PathID>& upstreamPIDs, const NotViaListAbsTime_t& notvialist);
+	void doNotifyFirstSegmentSources(std::unordered_set<PathID>* upstreamPIDs, NotViaListAbsTime_t* notvialist);
 
 	/// adds contact and not via link for rediscovery queue (or send it immediately)
 	void scheduleRediscovery(const OverlayKey& contactkey, rediscoverQueueClass& rediscoveryQueue, simtime_t rediscoveryWaitTime);
@@ -642,9 +644,8 @@ R2Kademlia::R2Kademlia()
 
 // for functions that only get called once and not periodically
 inline
-void R2Kademlia::addOneShotTimer(simtime_t delay, std::function<void()> callback) {
-	auto msg = new cMessage("TimerMsg", -1);
-	msg->setContextPointer( reinterpret_cast<void *>( new auto(callback) ) );
+void R2Kademlia::addOneShotTimer(simtime_t delay, TimerMsg::cbfunc_t callback) {
+	auto msg = new TimerMsg(-1, callback);
 	// callback will be carried out after delay
 	scheduleAt(simTime() + delay, msg);
 }
@@ -675,31 +676,6 @@ bool R2Kademlia::processNotViaInformation(const KadPacket& packet)
 	return ownIDFound;
 }
 
-
-inline
-void R2Kademlia::sendLocalLinkFailureNotifications()
-{
-#ifndef NDEBUG
-	EV_TRACE << "sendLocalLinkFailureNotifications, notifyPIDList " << notifyPIDs.size() << " entries, { ";
-	for (auto pid : notifyPIDs)
-		EV_TRACE << pid << ' ';
-        EV_TRACE << '}' << endl;
-#endif
-        auto failedPNList(routingTable.getFailedPNs());
-	EV_TRACE << "sendLocalLinkFailureNotifications failedPNs " << failedPNList.size() << endl;
-	// fill notvialist with locally failed PNs
-	NotViaListAbsTime_t notvialist;
-	for ( auto& failedPN : failedPNList ) {
-		if (auto pncontact= routingTable.getContact(failedPN); pncontact != nullptr) {
-			notvialist.push_back(std::make_pair(std::make_pair(myOverlayKey,failedPN),simTime() - SimTime(pncontact->getPathAge(),SIMTIME_MS)));
-		}
-	}
-	notvialist.splice(notvialist.end(),collectedNotVias);
-	sendLinkFailureNotifications(notvialist, notifyPIDs, OverlayKey::UNSPECIFIED_KEY);
-	// delete all local and collected PIDs for notification
-        notifyPIDs.clear();
-	linkFailureNotificationScheduled= false;
-}
 
 
 inline

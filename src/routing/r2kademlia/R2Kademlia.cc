@@ -37,6 +37,8 @@ NotViaList_t R2Kademlia::emptyNotViaList={};
 
 R2Kademlia::~R2Kademlia()
 {
+	delete notifyPIDs_p;
+	notifyPIDs_p= nullptr;
 	updateQueue.clear();
 	pathSetupQueue.clear();
 
@@ -166,7 +168,7 @@ void R2Kademlia::onConnect( nodeid_t nid ) {
 	getKadObserver().removeFailedLink({myOverlayKey,key});
 
 	// send a hello packet to new neighbor after some very small random delay
-	addOneShotTimer(SimTime(uniform(1000,3000),SIMTIME_US), [this,nid]() {
+	addOneShotTimer(SimTime(uniform(1000,3000),SIMTIME_US), [this,nid](short int ignored) {
 		auto packet(makeHelloPacket());
 		sentVolume+= packet->getByteLength();
 		sendToNode(nid, std::move(packet));
@@ -546,7 +548,7 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt, simtime_t 
 			//               < 49d984 b20388 f8d1e5 2550d5 d65e04 2550d5 4f5cc2 >
 			// due to broken link < b20388 d65e04 > sustituted by <f8d1e5 2550d5 d65e04>
 			// destination node is already contained in path
-			routingTable.simplifyPath(newpath, nullptr);
+			routingTable.simplifyPath(newpath, {});
 			EV_TRACE << "forwardPacket(): reroute PN, contact " << *contact << endl;
 			// rerouting makes this intermediate node to overlay hop
 			packet->setActive(packet->getProgress(), true);

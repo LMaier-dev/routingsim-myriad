@@ -62,7 +62,7 @@ void RPCProtocol::sendRpcCall(packet_p rpcCall, rpc_callback_t success_callback,
 		// save the rpcCall message to be sent in a queue
 		delayedRpcCalls.push_back(std::move(rpcCall));
 		// note: the lambda function will be the callback function invoked after delay
-		addOneShotTimer(delay, [this]() {
+		addOneShotTimer(delay, [this](short int ignored) {
 			// simply send the first packet in queue waiting as they are queued FIFO
 			if (not delayedRpcCalls.empty()) {
 				sendPacket(std::move(delayedRpcCalls.front()), 0);

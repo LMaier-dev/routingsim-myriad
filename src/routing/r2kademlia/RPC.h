@@ -21,6 +21,7 @@
 #include <unordered_map>
 #include <functional>
 #include "Protocol.h"
+#include "TimerMsg.h"
 
 namespace routingsim {
 
@@ -94,7 +95,7 @@ protected:
 	//@{
 	/// used for sending packets
 	virtual void sendPacket(packet_p packet, simtime_t delay) = 0;
-	virtual void addOneShotTimer(simtime_t delay, std::function<void()> callback) = 0;
+	virtual void addOneShotTimer(simtime_t delay, TimerMsg::cbfunc_t callback) = 0;
 	//@}
 
 public:	

@@ -81,7 +81,7 @@ public:
 					  rds_p(o.rds_p == nullptr ? nullptr :
 						std::make_unique<RediscoveryState>(*o.rds_p)) {};
         KadContact(KadContact&& k) : key(std::move(k.key)), lastseen(std::move(k.lastseen)),
-				     active_path(k.active_path), proposed_path(k.proposed_path),
+				     active_path(std::move(k.active_path)), proposed_path(std::move(k.proposed_path)),
 				     seqno(k.seqno), state(k.state),
 				     physicalNeighbor(k.physicalNeighbor),
 				     nodeDegree(k.nodeDegree),
