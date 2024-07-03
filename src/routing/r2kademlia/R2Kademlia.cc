@@ -168,11 +168,12 @@ void R2Kademlia::onConnect( nodeid_t nid ) {
 	getKadObserver().removeFailedLink({myOverlayKey,key});
 
 	// send a hello packet to new neighbor after some very small random delay
-	addOneShotTimer(SimTime(uniform(1000,3000),SIMTIME_US), [this,nid](short int ignored) {
+	addOneShotTimer(SimTime(uniform(1000,3000),SIMTIME_US), [this,nid](short int ignored)->bool {
 		auto packet(makeHelloPacket());
 		sentVolume+= packet->getByteLength();
 		sendToNode(nid, std::move(packet));
-		sentPackets++;
+                sentPackets++;
+		return true;
 	} );
 	// additionally, reset PNHello timer if this fires too far away in the future
 	if (randomTimerDuration[PNHelloTimerId] > 3*SimTime(PNHelloMinInterval,SIMTIME_MS))

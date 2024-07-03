@@ -134,7 +134,7 @@ private:
 	/// sets the max number of message dropped infos to be recorded
 	size_type numMessageDroppedInfos;
 	/// simtime limit
-	simtime_t simTimeLimit= SIMTIME_MAX;
+        simtime_t simTimeLimit = SIMTIME_MAX;
 private:
 	R2Kademlia& getR2Kademlia(Node* nodeMod);
 	const R2Kademlia& getR2Kademlia(const Node* nodeMod) const;
@@ -150,6 +150,13 @@ private:
         // export simulation state for later analysis
         void exportRoutingTables(std::ofstream file) const;
         void exportOverlayKeyNodeIdMapping(std::ofstream file) const;
+#endif
+
+#ifndef NDEBUG
+#define DEBUG_LINKFAILURENOTIFICATIONS 1
+#if DEBUG_LINKFAILURENOTIFICATIONS != 0
+	TimerMsg* single_selfmsg_debug= nullptr;
+#endif
 #endif
 
 public:
@@ -199,7 +206,7 @@ public:
 	// this is for debuging purposes
 	void addFailedLink(link_t failedlink) { failedLinkSet.insert(failedlink); } ;
 	void removeFailedLink(const link_t& failedlink) { failedLinkSet.erase(failedlink); }
-	void getFailedContacts();
+	bool getFailedContacts();
 };
 
 KadObserver& getKadObserver();

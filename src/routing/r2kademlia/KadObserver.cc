@@ -126,15 +126,12 @@ void KadObserver::initialize() {
 	addOutVectors[roamingDataPacketsV] = std::make_unique<cOutVector>("roamingDataPackets");
 
 #ifndef NDEBUG
-#define DEBUG_LINKFAILURENOTIFICATIONS 0
-#ifdef DEBUG_LINKFAILURENOTIFICATIONS
-	auto msg = new cMessage("TimerMsg", -1);
-	std::function<void()> callback(std::bind(&KadObserver::getFailedContacts,this));
-	msg->setContextPointer( reinterpret_cast<void *>( new auto(callback) ) );
-        // callback will be carried out after delay
+#if DEBUG_LINKFAILURENOTIFICATIONS != 0
+	single_selfmsg_debug = new TimerMsg(-1, [this](short int ignored)->bool { this->getFailedContacts(); single_selfmsg_debug= nullptr; return true; } );
+        // callback will be carried out with delay of 1s after the linkfailure
 	if (auto dynamicsmod= getSimulation()->getModuleByPath("*.dynamics"); dynamicsmod != nullptr) {
 		simtime_t period= dynamicsmod->par("period");
-                scheduleAt(period + SimTime(1, SIMTIME_S), msg);
+                scheduleAt(period + SimTime(1, SIMTIME_S), single_selfmsg_debug);
 	}
 #endif
 #endif
@@ -162,7 +159,15 @@ void KadObserver::finish() {
 	histograms.clear();
 	outVectors.clear();
 	addOutVectors.clear();
-	ASSERT(observer == this);
+#ifndef NDEBUG
+#if DEBUG_LINKFAILURENOTIFICATIONS != 0
+	if (single_selfmsg_debug != nullptr) {
+          cancelAndDelete(single_selfmsg_debug);
+	  single_selfmsg_debug= nullptr;
+	}
+#endif
+#endif
+        ASSERT(observer == this);
 	observer = NULL;
 }
 
@@ -170,9 +175,9 @@ void KadObserver::finish() {
 void KadObserver::handleMessage(cMessage *msg) {
 	if (msg->getKind() == -1) {
 		std::function<void()>* cbfuncp(static_cast< std::function<void()>* >(msg->getContextPointer()));
-		(*cbfuncp)();
+                (*cbfuncp)();
 	}
-	delete msg;
+        delete msg;
 }
 
 
@@ -578,7 +583,7 @@ void KadObserver::sampleStatistics (Statistics &stats) {
 }
 
 
-void KadObserver::getFailedContacts() {
+bool KadObserver::getFailedContacts() {
 	// iterate over all nodes
 	for (auto i = nodes.right.begin(); i != nodes.right.end(); i++) {
 		nodeid_t id = i->first;
@@ -588,7 +593,8 @@ void KadObserver::getFailedContacts() {
 			// now check every path for containing failed links and print them
 			rt.getBrokenPaths(failedlink);
 		}
-	}
+        }
+	return true;
 }
 
 

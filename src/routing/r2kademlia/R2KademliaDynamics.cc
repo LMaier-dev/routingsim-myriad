@@ -289,7 +289,7 @@ void R2Kademlia::propagateUpdateReq(std::unique_ptr<KadUpdateRouteReq> packet)
 
 
 /// send all updates with KAD_Unreachable only
-void R2Kademlia::sendUrgentUpdates()
+bool R2Kademlia::sendUrgentUpdates()
 {
 	// the queue (map) will be traversed
 	// std::unordered_map< OverlayKey, UpdateList_t > updateQueue;
@@ -372,12 +372,13 @@ void R2Kademlia::sendUrgentUpdates()
 		EV_TRACE << "left non-urgent updates: " << updateQueue.size() << endl;
 	}
 
-	urgentUpdateScheduled= false;
+        urgentUpdateScheduled = false;
+	return false;
 }
 
 
 /// send all updates
-void R2Kademlia::sendUpdates()
+bool R2Kademlia::sendUpdates()
 {
 	EV_TRACE << "sendUpdates() enter. Queued Updates:" << updateQueue.size() << endl;
 
@@ -467,6 +468,8 @@ void R2Kademlia::sendUpdates()
 	// the updateQueue map should is now empty again
 	// reset the updateScheduled variable
 	updateScheduled= false;
+
+        return false;
 }
 
 
@@ -506,7 +509,7 @@ void R2Kademlia::scheduleRediscovery(const OverlayKey& contactkey, rediscoverQue
 }
 
 
-void R2Kademlia::rediscoverContacts(RediscoveryState::rediscoverQ_type qtype, simtime_t rediscoveryWaitTime) {
+bool R2Kademlia::rediscoverContacts(RediscoveryState::rediscoverQ_type qtype, simtime_t rediscoveryWaitTime) {
 	// traverse list of scheduled contacts for rediscovery
 	// the list is sorted by ID-wise vicinity, because contacts in lower buckets are more important
 	// recheck status and set to rediscover
@@ -589,7 +592,9 @@ void R2Kademlia::rediscoverContacts(RediscoveryState::rediscoverQ_type qtype, si
 	}
 	else { // queue is now empty, so reset scheduled flag
 		rediscoverQ.clearScheduled();
-	}
+        }
+
+        return false; // do not stop timer
 }
 
 
@@ -597,13 +602,13 @@ void R2Kademlia::rediscoverContacts(RediscoveryState::rediscoverQ_type qtype, si
 // sends a find node call for rediscovery, possibly using "not via" failed link,
 // maxFanOut determines how many messages are sent in parallel via different contacts
 // last two parameters required for scheduling retries
-void R2Kademlia::sendRediscovery(OverlayKey failedcontactkey, uint8_t maxFanOut, simtime_t rediscoveryWaitTime) {
+bool R2Kademlia::sendRediscovery(OverlayKey failedcontactkey, uint8_t maxFanOut, simtime_t rediscoveryWaitTime) {
 	//EV_TRACE << "sendRediscovery called for " << failedcontactkey.shortStr() << endl;
 
 	KadContact* failedcontact= const_cast<KadContact*>(routingTable.getContact(failedcontactkey));
 	// do nothing if contact has been deleted or has been rediscovered successfully meanwhile
 	if (failedcontact == nullptr or not failedcontact->isRediscovering())
-		return;
+		return false;
 	// contact still exists
 	// get the correct queue object
 	RediscoveryState::rediscoverQ_type qtype(failedcontact->getRDS().rediscoverQtype);
@@ -630,7 +635,7 @@ void R2Kademlia::sendRediscovery(OverlayKey failedcontactkey, uint8_t maxFanOut,
 				if (contact->getKey() == myOverlayKey)
 				{
 					EV_ERROR << "I'm the next hop for the destination. Will not send anything." << endl;
-					return;
+					return false;
 				}
 				auto packet = makePacket<KadFindNodeReq>(contact, "FindNode");
 				packet->setDstNodeID(failedcontact->getKey());
@@ -661,7 +666,7 @@ void R2Kademlia::sendRediscovery(OverlayKey failedcontactkey, uint8_t maxFanOut,
 		if (std::find(rediscoverQ.begin(),rediscoverQ.end(),failedcontactkey) != rediscoverQ.end()) {
 			if (rediscoverQ.isScheduled()) {
 				EV_TRACE << "already rescheduled for rediscovery" << endl;
-				return;
+				return false;
 			}
 		}
 
@@ -680,7 +685,8 @@ void R2Kademlia::sendRediscovery(OverlayKey failedcontactkey, uint8_t maxFanOut,
 				routingTable.removeContact(failedcontact);
 			}
 		}
-	}
+        }
+	return false;
 }
 
 ///
@@ -705,7 +711,8 @@ void R2Kademlia::scheduleLinkFailureNotificationForwarding(
 {
 	// if there are no incoming PIDs, nothing to notify about
         if (notvialist_p == nullptr or notifyPIDList_p->empty()) {
-		return;
+	  delete notifyPIDList_p;
+	  return;
 	}
 
 	ASSERT(not notvialist_p->empty());
@@ -768,7 +775,7 @@ void R2Kademlia::scheduleLinkFailureNotificationForwarding(
 
 
 // this method sends KadRevPathFlood messages to all neighbors that were collected in the LFNFloodList
-void
+bool
 R2Kademlia::sendScheduledLinkFailureNotifications()
 {
 	EV_TRACE << "sendScheduledLinkFailureNotifications, " << LFNFloodList.size() << " entries" << endl;
@@ -803,23 +810,24 @@ R2Kademlia::sendScheduledLinkFailureNotifications()
                   LFNFloodList.erase(neighbor_it);
 		  // schedule next call (PNRediscoveryWaitTime is usually 100ms, so every 12.5ms means a rate of 80 msgs/s)
 		  addOneShotTimer(PNRediscoveryWaitTime/8, std::bind(&R2Kademlia::sendScheduledLinkFailureNotifications, this));
-                  return;
+                  return false;
 	  } // endif neighbor exists
         } // end for
 
         // reset variable so next call to scheduleLinkFailureNotificationForwarding will actually schedule the call
 	linkFailureNotificationForwardingScheduled= false;
+	return false;
 }
 
 
 // uses the global notifyPIDs_p PIDList created in notifyAffectedPathUsers()
-void
+bool
 R2Kademlia::sendLocalLinkFailureNotifications()
 {
 #ifndef NDEBUG
 	if (notifyPIDs_p == nullptr) {
 		EV_TRACE << "sendLocalLinkFailureNotifications, notifyPIDList = nullptr" << endl;
-		return;
+		return false;
 	}
 	EV_TRACE << "sendLocalLinkFailureNotifications, notifyPIDList " << notifyPIDs_p->size() << " entries, { ";
 	for (auto pid : *notifyPIDs_p)
@@ -837,6 +845,7 @@ R2Kademlia::sendLocalLinkFailureNotifications()
 	}
         sendLinkFailureNotifications(notvialist_p, notifyPIDs_p, OverlayKey::UNSPECIFIED_KEY);
 	linkFailureNotificationScheduled= false;
+	return false;
 }
 
 
@@ -911,7 +920,7 @@ R2Kademlia::sendLinkFailureNotifications(NotViaListAbsTime_t* notvialist_p, std:
 			i++;
 		}
 
-		sendPacket(std::move(packet));
+		NotifyQueue.addPacket(std::move(packet));
 	} // end for every underlay neighbor
 
         // wait for PN rediscovery to complete before sending these out
@@ -1015,13 +1024,14 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadRevPathFlood> packet) {
 	}
 	else {
 		EV_TRACE << "not distributing linkFailureNotification any further" << endl;
-		delete notvialist_p;
+                delete notvialist_p;
+		delete upstreamPIDs_p;
 	}
 }
 
 
 // normally, I'd like to work with reference, but here we need pointers due to passing them in subsequent calls
-void
+bool
 R2Kademlia::doNotifyFirstSegmentSources(std::unordered_set<PathID>* upstreamPIDs_p, NotViaListAbsTime_t* notvialist_p)
 {
 	ASSERT(upstreamPIDs_p != nullptr and notvialist_p != nullptr);
@@ -1034,7 +1044,7 @@ R2Kademlia::doNotifyFirstSegmentSources(std::unordered_set<PathID>* upstreamPIDs
                 if (upstreamPIDs_p == notifyPIDs_p)
 			notifyPIDs_p = nullptr;
                 delete notvialist_p;
-                return;
+                return false;
 	}
 
 	std::unordered_set<OverlayKey> nodes_to_notify;
@@ -1136,12 +1146,13 @@ R2Kademlia::doNotifyFirstSegmentSources(std::unordered_set<PathID>* upstreamPIDs
                 if (upstreamPIDs_p == notifyPIDs_p)
 			notifyPIDs_p = nullptr;
 		delete notvialist_p;
-                return;
+                return false;
         }
 	else { // schedule next call due to rate limiting
 		addOneShotTimer(PNRediscoveryWaitTime/8,
 				std::bind(&R2Kademlia::doNotifyFirstSegmentSources, this, upstreamPIDs_p, notvialist_p));
-	}
+        }
+	return false;
 }
 
 

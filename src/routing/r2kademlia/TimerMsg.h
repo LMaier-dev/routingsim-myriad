@@ -8,8 +8,8 @@ namespace routingsim {
 
 class TimerMsg : public cMessage {
 public:
-	// callback function type
-	using cbfunc_t = std::function<void(short timerId)>;
+	// callback function type: should return true if timer should stop
+	using cbfunc_t = std::function<bool(short timerId)>;
 
 	TimerMsg(short timerId, cbfunc_t callback) : cMessage("TimerMsg", timerId) {
 		setContextPointer( reinterpret_cast<void *>( new auto(callback) ) );

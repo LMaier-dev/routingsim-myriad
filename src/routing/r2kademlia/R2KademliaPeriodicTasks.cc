@@ -50,14 +50,14 @@ namespace routingsim {
 
 // add a timer that calls callback exactly every duration period
 // if duration is 0, this is a one shot timer, consider using addOneShotTimer() instead
-short R2Kademlia::addFixedTimer(simtime_t initialOffset, simtime_t duration, std::function<void(short timerId)> callback) {
+short R2Kademlia::addFixedTimer(simtime_t initialOffset, simtime_t duration, TimerMsg::cbfunc_t callback) {
 	ASSERT(fixedTimerDuration.size() == fixedTimerMsg.size());
 	ASSERT(fixedTimerDuration.size() < (size_type) std::numeric_limits<short int>::max());
 	ASSERT(duration >= omnetpp::SimTime::ZERO);
 	if (duration > omnetpp::SimTime::ZERO)
 		fixedTimerDuration.push_back(duration);
 	// for fixed timers the timerId is negative and starts at -2
-	short int ntimerId(duration == omnetpp::SimTime::ZERO ? -1 : -1-fixedTimerDuration.size());
+	short int ntimerId((duration == omnetpp::SimTime::ZERO) ? -1 : -1-fixedTimerDuration.size());
 	auto msg= new TimerMsg(ntimerId, callback);
 
 	if (duration > omnetpp::SimTime::ZERO)
@@ -76,8 +76,10 @@ void R2Kademlia::stopTimer(short timerId)
 		TimerMsg* timermsg(randomTimerMsg[timerId]);
 		randomTimerMsg[timerId]= nullptr;
 		// cancel potentially scheduled message (nothing happens if it was not)
-		cancelEvent(timermsg);
-		delete timermsg;
+		if (timermsg != nullptr) {
+		  cancelEvent(timermsg);
+                  delete timermsg;
+		}
 	}
 	else
 	if (timerId < 0) {
@@ -85,8 +87,10 @@ void R2Kademlia::stopTimer(short timerId)
 			TimerMsg* timermsg(fixedTimerMsg[timerIdx]);
 			fixedTimerMsg[timerIdx]= nullptr;
 			// cancel potentially scheduled message (nothing happens if it was not)
-			cancelEvent(timermsg);
-			delete timermsg;
+			if (timermsg != nullptr) {
+			  cancelEvent(timermsg);
+                          delete timermsg;
+			}
 		}
 	}
 }
@@ -163,12 +167,25 @@ void R2Kademlia::onSelfMessage(cMessage_p msg)
 	if (auto timerCallback(static_cast<TimerMsg::cbfunc_t *>(msg->getContextPointer()));
 	    timerCallback != nullptr) {
 		// now call the callback function
-		(*timerCallback)(timerId);
+		bool stop_timer= (*timerCallback)(timerId);
 
-		// delete the callback function for one shot messages
-		if (timerId == -1) {
+		// delete the callback function for one shot messages or if the callback returns true
+		if (timerId == -1  or stop_timer) {
 			delete timerCallback;
-			msg->setContextPointer(nullptr);
+                        msg->setContextPointer(nullptr);
+                        if (stop_timer) {
+			  if (timerId >= 0 and (size_type) timerId < randomTimerMsg.size()) {
+                            randomTimerMsg[timerId]= nullptr;
+			    randomTimerDuration[timerId]= omnetpp::SimTime::ZERO;
+                          }
+			  else
+			  if (timerId < 0) {
+                            if (size_type timerIdx = -2 - timerId; timerIdx < fixedTimerMsg.size()) {
+                              fixedTimerMsg[timerIdx]= nullptr;
+			      fixedTimerDuration[timerIdx]= omnetpp::SimTime::ZERO;
+                            }
+                          }
+                        }
 			return;
 		}
 	}
@@ -200,11 +217,11 @@ void R2Kademlia::onSelfMessage(cMessage_p msg)
 
 
 // periodically send a Hello packet to keep state seq no in synch
-void R2Kademlia::doSendHello(short timerId)
+bool R2Kademlia::doSendHello(short timerId)
 {
 	ASSERT(timerId >= 0);
 	if (neighborTable.empty())
-		return; // node is isolated
+		return false; // node is isolated
 
 	static const simtime_t maxHelloInterval(SimTime(PNHelloMaxInterval,SIMTIME_MS)); // check every 30 seconds
 
@@ -224,7 +241,9 @@ void R2Kademlia::doSendHello(short timerId)
 	sentVolume+= neighborTable.size() * hellopkt->getByteLength();
 	sendToNeighbors(std::move(hellopkt));
 	sentPackets+= neighborTable.size();
-	lastPNHelloStateSeqNo= getLSSeqNo();
+        lastPNHelloStateSeqNo = getLSSeqNo();
+
+	return false;
 }
 
 
@@ -232,11 +251,11 @@ void R2Kademlia::doSendHello(short timerId)
 // sends at most one probe per call
 // contact probing uses ProbeReq to check for reachability of the contact,
 // this detects any broken links along the current path
-void R2Kademlia::doProbeNeighbors(short timerId)
+bool R2Kademlia::doProbeNeighbors(short timerId)
 {
 	ASSERT(timerId >= 0);
 	if (neighborTable.empty())
-		return; // node is isolated
+		return false; // node is isolated
 
 	// if no contacts selected for probing, construct a list first
 	if ( probeNeighborQueue.empty() )
@@ -259,7 +278,9 @@ void R2Kademlia::doProbeNeighbors(short timerId)
 			probed= true;
 		}
 		probeNeighborQueue.pop_front();
-	} // end while
+        } // end while
+
+	return false;
 }
 
 
@@ -268,11 +289,11 @@ void R2Kademlia::doProbeNeighbors(short timerId)
 // sends at most one probe per call
 // contact probing uses ProbeReq to check for reachability of the contact,
 // this detects any broken links along the current path
-void R2Kademlia::doProbeContacts(short timerId)
+bool R2Kademlia::doProbeContacts(short timerId)
 {
 	ASSERT(timerId >= 0);
 	if (neighborTable.empty())
-		return; // node is isolated
+		return false; // node is isolated
 
 	// if no contacts selected for probing, construct a list first
 	// note that doPathRefresh() also fills contacts into this queue (consecutively at the front) 
@@ -308,15 +329,16 @@ void R2Kademlia::doProbeContacts(short timerId)
 			EV_TRACE << "skipped contact: " << probeContactQueue.front() << endl; 
 
 		probeContactQueue.pop_front();
-	};
+        };
+	return false;
 }
 
 
-void R2Kademlia::doSendExplorePathPacket(short timerId)
+bool R2Kademlia::doSendExplorePathPacket(short timerId)
 {
 	ASSERT(timerId >= 0);
 	if (neighborTable.empty())
-		return; // node is isolated
+		return false; // node is isolated
 
 	// check for alternative paths to contacts
 	if (auto contactp= routingTable.getRandomContact();
@@ -337,19 +359,20 @@ void R2Kademlia::doSendExplorePathPacket(short timerId)
 	else
 		EV_WARN << "no contact found for path exploration" << endl;
 
+	return false; // do not stop timer
 }
 
 
-void R2Kademlia::doProbeRandomly(short timerId)
+bool R2Kademlia::doProbeRandomly(short timerId)
 {
 	ASSERT(timerId >= 0);
-	if (neighborTable.empty()) return; // we are isolated
+	if (neighborTable.empty()) return false; // we are isolated
 	OverlayKey probeKey;
 	bool exact = false;
 	uint32_t index = 0;
 	switch (probeStrategy) {
 		case 0:
-			return;
+			return false;
 		case 1:
 			probeKey = OverlayKey::random(getRNG(0));
 			break;
@@ -379,11 +402,13 @@ void R2Kademlia::doProbeRandomly(short timerId)
 			throw cRuntimeError("unknown probe strategy %u, values from 0 to 6 are allowed", probeStrategy);
 	}
 	if (probeKey == myOverlayKey) probeKey[0] ^= 1;
-	sendFindNode(probeKey, exact);
+        sendFindNode(probeKey, exact);
+
+	return false;
 }
 
 
-void R2Kademlia::doProbeSelf(short timerId)
+bool R2Kademlia::doProbeSelf(short timerId)
 {
 	ASSERT(timerId >= 0);
 	static const simtime_t maxDuration(SimTime(300,SIMTIME_S)); // check every 5 minutes
@@ -394,16 +419,19 @@ void R2Kademlia::doProbeSelf(short timerId)
 		randomTimerDuration[timerId] = std::min(2 * randomTimerDuration[timerId], maxDuration);
 	}
 
-	if (neighborTable.empty()) return; // we are isolated
+        if (neighborTable.empty())
+          return false; // we are isolated
 
-	sendFindNode(myOverlayKey, false);
+        sendFindNode(myOverlayKey, false);
+	return false; // do not stop timer
 }
 
 
-void R2Kademlia::doReachabilityTest(short timerId)
+bool R2Kademlia::doReachabilityTest(short timerId)
 {
 	ASSERT(timerId >= 0);
-	if (neighborTable.empty()) return; // we are isolated
+        if (neighborTable.empty())
+          return false; // we are isolated
 	const OverlayKey* key(nullptr);
 	unsigned int maxtries= 10;
 	bool nodefound= false;
@@ -455,11 +483,13 @@ void R2Kademlia::doReachabilityTest(short timerId)
 		sendFindNode(*key, true, true);
 	}
 	else
-		EV_WARN << "Reachability Test cannot be performed (key==nullptr)" << endl;
+          EV_WARN << "Reachability Test cannot be performed (key==nullptr)" << endl;
+
+	return false; // do not stop timer
 }
 
 
-void R2Kademlia::doPathRefresh(short timerId)
+bool R2Kademlia::doPathRefresh(short timerId)
 {
 	std::list<OverlayKey> contactlist;
 	// refresh paths of contacts in the forwarding tier by sending a ProbeReq
@@ -474,14 +504,18 @@ void R2Kademlia::doPathRefresh(short timerId)
 		}
 	}
 	// note that the queue will be served by doProbeContacts
+
+        return false; // do not stop timer
 }
 
 
-void R2Kademlia::doGarbageCollectPathIDs(short timerId)
+bool R2Kademlia::doGarbageCollectPathIDs(short timerId)
 {
 	ASSERT(timerId < 0); // assume fixed timer
 	EV_TRACE << "PathID garbage collection called" << endl;
-	fwdTablePathID.garbageCollect(notifyFirstSegmentSources, 3*R2Kademlia::PathRefreshThreshold);
+        fwdTablePathID.garbageCollect(notifyFirstSegmentSources,
+                                      3 * R2Kademlia::PathRefreshThreshold);
+	return false; // do not stop timer after callback
 }
 
 } // end namespace

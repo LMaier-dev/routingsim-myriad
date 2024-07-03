@@ -185,7 +185,7 @@ void R2Kademlia::schedulePathSetup(const OverlayKey& contactkey)
 }
 
 
-void R2Kademlia::sendScheduledPathSetups() {
+bool R2Kademlia::sendScheduledPathSetups() {
 	// traverse list of scheduled contact keys for path setup
 	// recheck status and set to rediscover
 	EV_TRACE << "sendScheduledPathSetups() called, Queued: " << pathSetupQueue.size() << endl;
@@ -207,6 +207,7 @@ void R2Kademlia::sendScheduledPathSetups() {
 
 	// next call of this procedure will be scheduled on demand
 	pathSetupScheduled= false;
+	return false;
 }
 
 

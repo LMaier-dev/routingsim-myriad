@@ -38,6 +38,7 @@
 #include "TimerMsg.h"
 
 #include "RequestQueue.h"
+#include "RateLimitedQueue.h"
 
 namespace routingsim {
 
@@ -54,7 +55,6 @@ using KadError_p = std::unique_ptr<KadError>;
 using UpdateList_t = std::list< std::pair<KadContact, KadRouteUpdateAction> >;
 using NotViaList_t = std::list< std::pair<link_t,age_t> >; // link with relative time (age)
 using NotViaListAbsTime_t = std::list< std::pair<link_t,simtime_t> >; // link with absolute time (timestamp)
-using KadPacketQueue = std::list<KadPacket_p>;
 
 enum reasoncode : uint8_t {
 	unspecified = 0,
@@ -212,7 +212,7 @@ private:
 	ContactRequestQueue ContactCandidateProbeQueue; // for probing contact candidates
         KeyRequestQueue OnDemandPathProbeQueue; // for sending path probes on demand (in contrast to periodical ones)
 
-	KadPacketQueue NotifyQueue;
+	RateLimitedQueue NotifyQueue;
 
         // selfMessage
 	bool pathSetupScheduled= false;
@@ -311,15 +311,15 @@ private:
 	void stopAllTimers() { for (short timerId= 0; (size_type) timerId < randomTimerMsg.size(); timerId++) { stopTimer(timerId); }; for (short timerIdx= 0; (size_type) timerIdx < fixedTimerMsg.size(); timerIdx++) { stopTimer(-2-timerIdx); } };
 
 	/// timer callbacks
-	void doSendHello(short timerId);
-	void doProbeRandomly(short timerId);
-	void doProbeSelf(short timerId);
-	void doProbeNeighbors(short timerId);
-	void doProbeContacts(short timerId);
-	void doDataProbe(short timerId);
-	void doReachabilityTest(short timerId);
-	void doSendExplorePathPacket(short timerId);
-	void doPathRefresh(short timerId);
+	bool doSendHello(short timerId);
+	bool doProbeRandomly(short timerId);
+	bool doProbeSelf(short timerId);
+	bool doProbeNeighbors(short timerId);
+	bool doProbeContacts(short timerId);
+	bool doDataProbe(short timerId);
+	bool doReachabilityTest(short timerId);
+	bool doSendExplorePathPacket(short timerId);
+	bool doPathRefresh(short timerId);
 	//@}
 
 	/** @name private helpers */
@@ -388,14 +388,14 @@ private:
 	void notifyAffectedPathUsers(const OverlayKey &key);
 	void sendLinkFailureNotifications(NotViaListAbsTime_t* notvialist_p, std::unordered_set<PathID>* notifyPIDList_p, OverlayKey excludeNode);
 	void scheduleLinkFailureNotificationForwarding(NotViaListAbsTime_t* notvialist_p, std::unordered_set<PathID>* notifyPIDList_p, OverlayKey excludeNode);
-	inline void sendLocalLinkFailureNotifications();
+	bool sendLocalLinkFailureNotifications();
 	void scheduleLocalLinkFailureNotification();
-	void sendScheduledLinkFailureNotifications();
-	void doNotifyFirstSegmentSources(std::unordered_set<PathID>* upstreamPIDs, NotViaListAbsTime_t* notvialist);
+	bool sendScheduledLinkFailureNotifications();
+	bool doNotifyFirstSegmentSources(std::unordered_set<PathID>* upstreamPIDs, NotViaListAbsTime_t* notvialist);
 
 	/// adds contact and not via link for rediscovery queue (or send it immediately)
 	void scheduleRediscovery(const OverlayKey& contactkey, rediscoverQueueClass& rediscoveryQueue, simtime_t rediscoveryWaitTime);
-	void rediscoverContacts(RediscoveryState::rediscoverQ_type qtype, simtime_t rediscoveryWaitTime);
+	bool rediscoverContacts(RediscoveryState::rediscoverQ_type qtype, simtime_t rediscoveryWaitTime);
   protected:
 	/** @name Protocol interface */
 	//@{
@@ -450,6 +450,8 @@ private:
 	void reroutePacket(const OverlayKey& finaldest, KadPacket_p packet, NodePkt_p nodePkt, simtime_t delay= 0);
 	/// routes a packet to a neighbor based on the source route in the packet
 	void sendPacket(KadPacket_p packet, simtime_t delay= 0) override;
+	/// routes a packet to a neighbor based on the source route in the packet
+	void sendCtrlPacket(KadPacket_p packet) { sendPacket(std::move(packet)); }
 	/// routes a packet to a neighbor based on the Segment PIDs  in the packet
 	void sendPacket(KadDataPacket_p packet);
 	KadContactList::const_iterator chooseNextHop(const KadContactList& contacts, const OverlayKey& target, KadContactList::const_iterator startit);
@@ -475,7 +477,7 @@ private:
 	/// sends a find node call via viacontactkey to find a path to this node
 	void sendFindNodeVia(const OverlayKey& destkey, KadContact_p viacontactkey, bool exact, bool track);
 	/// sends a find node call for rediscovery, possibly using "not via" failed link, last two parameters required for scheduling retries
-	void sendRediscovery(OverlayKey failedcontact, uint8_t maxFanOut, simtime_t rediscoveryWaitTime);
+	bool sendRediscovery(OverlayKey failedcontact, uint8_t maxFanOut, simtime_t rediscoveryWaitTime);
 
 	/// sends a data packet
 	void sendData(const OverlayKey& key);
@@ -496,16 +498,16 @@ private:
         // schedule on demand ProbeReq
 	void scheduleOnDemandPathProbeReq(KeyRequestQueue& q, const KadContact& tmpcontact, RequestQueueElementActionType action);
 	/// schedule sending PNDiscReq
-	void sendScheduledPNDiscReqs() { sendScheduledRequests(PNDiscoverQueue); };
-	void sendScheduledQueryRouteReqsPN() { sendScheduledRequests(GetPNQueue); };
-	void sendScheduledQueryRouteReqsON() { sendScheduledRequests(GetONQueue); };
-        void sendScheduledRequests(ContactRequestQueue& q);
+	bool sendScheduledPNDiscReqs() { sendScheduledRequests(PNDiscoverQueue); return false; };
+	bool sendScheduledQueryRouteReqsPN() { sendScheduledRequests(GetPNQueue); return false; };
+	bool sendScheduledQueryRouteReqsON() { sendScheduledRequests(GetONQueue); return false; };
+        bool sendScheduledRequests(ContactRequestQueue& q);
 
 	void sendScheduledContactCandidateProbeReqs(ContactRequestQueue& q);
-        void sendScheduledContactCandidateProbes() { sendScheduledContactCandidateProbeReqs(ContactCandidateProbeQueue); }
+	bool sendScheduledContactCandidateProbes() { sendScheduledContactCandidateProbeReqs(ContactCandidateProbeQueue); return false; }
 	simtime_t sendPathProbeToContactCandidate(const KadContact& tmpcontact, RequestQueueElementActionType action);
 
-	void sendScheduledOnDemandPathProbe() { sendScheduledPathProbeRequests(OnDemandPathProbeQueue); };
+	bool sendScheduledOnDemandPathProbe() { sendScheduledPathProbeRequests(OnDemandPathProbeQueue); return false; };
 	void sendScheduledPathProbeRequests(KeyRequestQueue& q);
 
 	/// adds routing table updates for contacts to an update queue
@@ -517,15 +519,15 @@ private:
 	/// send Update closer towards target contacts
 	void propagateUpdateReq(std::unique_ptr<KadUpdateRouteReq> packet);
 	/// sends all queued updates
-	void sendUpdates();
+	bool sendUpdates();
 	/// sends only KAD_Unreachable updates
-	void sendUrgentUpdates();
+	bool sendUrgentUpdates();
 	/// schedule a PathSetup
 	void schedulePathSetup(const OverlayKey& contactkey);
 	/// send all queue (valid) path setups
-	void sendScheduledPathSetups();
+	bool sendScheduledPathSetups();
 	/// perform garbage collection of unused PathIDs
-	void doGarbageCollectPathIDs(short timerId);
+	bool doGarbageCollectPathIDs(short timerId);
 
 	/** @name policy foo */
 	//@{
@@ -610,34 +612,47 @@ public:
 	static constexpr unsigned long ContactCandidateInitialWaitTime = 40000UL; // µs (40ms)
 	static constexpr unsigned long OnDemandPathProbeReqInitialWaitTime = 50000UL; // µs (50ms)
 	static constexpr unsigned long OnDemandPathProbeReqWaitTime = 50000UL; // µs (50ms ~ 20 Requests/s)
+	static constexpr unsigned long notifyLinkFailurePauseTime = 10000UL; // µs (10ms ~ 100 Requests/s)
 
 	static NotViaList_t emptyNotViaList;
 };
 
 
 // default constructor
-inline
-R2Kademlia::R2Kademlia()
+inline R2Kademlia::R2Kademlia()
     : routingTable(neighborTable), cmp(myOverlayKey), PNRediscoverQueue(cmp),
       urgentRediscoverQueue(cmp), regularRediscoverQueue(cmp),
       slowRediscoverQueue(cmp),
-      PNDiscoverQueue("PNDiscover",
+      PNDiscoverQueue(
+          "PNDiscover",
           std::bind(&R2Kademlia::sendDiscoveryReq, this, ph::_1, ph::_2),
           std::bind(&R2Kademlia::sendScheduledPNDiscReqs, this),
           PNDiscoverInitialWaitTime),
       GetPNQueue("QueryRouteReq(PN)",
-                 std::bind(&R2Kademlia::sendGetPhysicalNeighbors, this, ph::_1, ph::_2),
+                 std::bind(&R2Kademlia::sendGetPhysicalNeighbors, this, ph::_1,
+                           ph::_2),
                  std::bind(&R2Kademlia::sendScheduledQueryRouteReqsPN, this),
                  GetPNInitialWaitTime),
-      GetONQueue("QueryRouteReq(ON)",
+      GetONQueue(
+          "QueryRouteReq(ON)",
           std::bind(&R2Kademlia::sendGetOverlayNeighbors, this, ph::_1, ph::_2),
           std::bind(&R2Kademlia::sendScheduledQueryRouteReqsON, this),
           GetONInitialWaitTime),
-      ContactCandidateProbeQueue("ContactCandidateProbeQueue",
-          std::bind(&R2Kademlia::sendPathProbeToContactCandidate, this, ph::_1, ph::_2),
+      ContactCandidateProbeQueue(
+          "ContactCandidateProbeQueue",
+          std::bind(&R2Kademlia::sendPathProbeToContactCandidate, this, ph::_1,
+                    ph::_2),
           std::bind(&R2Kademlia::sendScheduledContactCandidateProbes, this),
           ContactCandidateInitialWaitTime),
-	OnDemandPathProbeQueue("OnDemandPathProbeReq",std::bind(&R2Kademlia::sendOnDemandPathProbe, this, ph::_1, ph::_2), std::bind(&R2Kademlia::sendScheduledOnDemandPathProbe, this), OnDemandPathProbeReqInitialWaitTime)
+      OnDemandPathProbeQueue(
+          "OnDemandPathProbeReq",
+          std::bind(&R2Kademlia::sendOnDemandPathProbe, this, ph::_1, ph::_2),
+          std::bind(&R2Kademlia::sendScheduledOnDemandPathProbe, this),
+          OnDemandPathProbeReqInitialWaitTime),
+      NotifyQueue(
+          "NotifyQueue", notifyLinkFailurePauseTime, notifyLinkFailurePauseTime,
+          std::bind(&R2Kademlia::addFixedTimer, this, ph::_1, ph::_2, ph::_3),
+          std::bind(&R2Kademlia::sendCtrlPacket, this, ph::_1))
 {
 };
 

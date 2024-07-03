@@ -43,14 +43,14 @@ void NetworkDynamics::initialize(int stage) {
 }
 
 void NetworkDynamics::initialize() {
-
 }
 
 void NetworkDynamics::finish() {
 }
 
 NetworkDynamics::~NetworkDynamics() {
-	cancelAndDelete(timer);
+  if (timer != nullptr)
+    cancelAndDelete(timer);
 }
 
 int NetworkDynamics::numInitStages() const {

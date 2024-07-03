@@ -573,7 +573,7 @@ R2Kademlia::scheduleGetONReq(const KadContact& tmpcontact) {
 };
 
 
-void
+bool
 R2Kademlia::sendScheduledRequests(ContactRequestQueue& q) {
 	simtime_t delay_next_call(0);
 	EV_TRACE << "sendScheduledRequests(" << q.getDescription() << ") called, queued requests:" << q.size() << endl;
@@ -635,13 +635,14 @@ R2Kademlia::sendScheduledRequests(ContactRequestQueue& q) {
 			q.setScheduled();
 			EV_TRACE << "scheduling " << q.getDescription() << " in " << delay_next_call << 's' << endl;
 
-			return;
+			return false;
 		}
 	}
 
 	// queue is empty now
 	// next call of this procedure will be scheduled on demand
-	q.clearScheduled();
+        q.clearScheduled();
+	return true;
 }
 
 
