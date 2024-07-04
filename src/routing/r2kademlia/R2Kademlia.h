@@ -76,8 +76,6 @@ constexpr uint8_t OverlayKeyLength= 112;
 
 using ContactRequestQueue = RequestQueue<KadContact> ;
 using KeyRequestQueue = RequestQueue< std::pair<OverlayKey,RequestQueueElementActionType> >;
-using LFNFloodList_t = std::unordered_map<OverlayKey, std::pair<NotViaListAbsTime_t,
-								std::list<PathID>>>;
 
 /**
  * Implementation of R2Kad.
@@ -156,7 +154,6 @@ private:
 	std::unordered_map<PathID, std::unordered_set<OverlayKey>> notifyFirstSegmentSources;
 	std::unordered_map<OverlayKey, std::pair<OverlayKey, PathID>> notifyFirstSegmentSourcesReversePath; // target, <outgoingIF, PathID to target>
         std::unordered_map<OverlayKey, std::unordered_set<PathID>> incomingIFtoPIDmap;
-        LFNFloodList_t LFNFloodList;
 
 
 	inline void addIncomingIFtoPIDEntry(const OverlayKey& incomingULN, PathID pidentry);
@@ -166,8 +163,6 @@ private:
 	// selfMessage
 	bool updateScheduled= false;
 	bool urgentUpdateScheduled= false;
-	bool linkFailureNotificationScheduled= false;
-	bool linkFailureNotificationForwardingScheduled= false;
 
 	struct greatercmp {
 		const OverlayKey& ownkey;
@@ -212,8 +207,10 @@ private:
 	ContactRequestQueue ContactCandidateProbeQueue; // for probing contact candidates
         KeyRequestQueue OnDemandPathProbeQueue; // for sending path probes on demand (in contrast to periodical ones)
 
+	RateLimitedQueue FloodQueue;
 	RateLimitedQueue NotifyQueue;
 
+	bool localLinkFailureNotificationsScheduled = false;
         // selfMessage
 	bool pathSetupScheduled= false;
 
@@ -387,10 +384,9 @@ private:
 
 	void notifyAffectedPathUsers(const OverlayKey &key);
 	void sendLinkFailureNotifications(NotViaListAbsTime_t* notvialist_p, std::unordered_set<PathID>* notifyPIDList_p, OverlayKey excludeNode);
-	void scheduleLinkFailureNotificationForwarding(NotViaListAbsTime_t* notvialist_p, std::unordered_set<PathID>* notifyPIDList_p, OverlayKey excludeNode);
+
 	bool sendLocalLinkFailureNotifications();
 	void scheduleLocalLinkFailureNotification();
-	bool sendScheduledLinkFailureNotifications();
 	bool doNotifyFirstSegmentSources(std::unordered_set<PathID>* upstreamPIDs, NotViaListAbsTime_t* notvialist);
 
 	/// adds contact and not via link for rediscovery queue (or send it immediately)
@@ -649,6 +645,10 @@ inline R2Kademlia::R2Kademlia()
           std::bind(&R2Kademlia::sendOnDemandPathProbe, this, ph::_1, ph::_2),
           std::bind(&R2Kademlia::sendScheduledOnDemandPathProbe, this),
           OnDemandPathProbeReqInitialWaitTime),
+      FloodQueue(
+          "FloodQueue", notifyLinkFailurePauseTime, notifyLinkFailurePauseTime,
+          std::bind(&R2Kademlia::addFixedTimer, this, ph::_1, ph::_2, ph::_3),
+          std::bind(&R2Kademlia::sendCtrlPacket, this, ph::_1)),
       NotifyQueue(
           "NotifyQueue", notifyLinkFailurePauseTime, notifyLinkFailurePauseTime,
           std::bind(&R2Kademlia::addFixedTimer, this, ph::_1, ph::_2, ph::_3),
