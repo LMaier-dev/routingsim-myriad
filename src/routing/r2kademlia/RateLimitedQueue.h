@@ -11,7 +11,7 @@ namespace routingsim {
 using namespace omnetpp;
 
 using KadPacket_p = std::unique_ptr<KadPacket>;
-using KadPacketQueue = std::list<KadPacket_p>;
+  using KadPacketQueue = std::list<std::pair<simtime_t,KadPacket_p>>;
 
 class RateLimitedQueue : public KadPacketQueue {
 public:
@@ -19,7 +19,7 @@ public:
                    unsigned long initialScheduleDelay,
                    unsigned long nextCallPauseTime,
 		   std::function<void(simtime_t initialOffset, simtime_t duration, std::function<bool(short timerId)> callback)> addfixedtimer,
-                   std::function<void(KadPacket_p)> sendscheduledcall)
+                   std::function<void(simtime_t,KadPacket_p)> sendscheduledcall)
     : initialScheduleDelay(initialScheduleDelay), nextCallPauseTime(nextCallPauseTime), description(descriptiontxt),
     scheduled(false), scheduletimer(addfixedtimer), sendscheduledcall(sendscheduledcall)
     {};
@@ -35,7 +35,7 @@ private:
   const std::string description;
   bool scheduled = false;
   std::function<void(simtime_t initialOffset, simtime_t duration, std::function<bool(short int timerId)> callback)> scheduletimer;
-  std::function<void(KadPacket_p)> sendscheduledcall;
+  std::function<void(simtime_t,KadPacket_p)> sendscheduledcall;
 };
 
 
@@ -45,7 +45,7 @@ void
 RateLimitedQueue::addPacket(KadPacket_p p)
 {
   //EV_TRACE << "addPacket called" << endl;
-  push_back(std::move(p));
+  push_back(std::make_pair(simTime(),std::move(p)));
   if (not scheduled) {
     scheduletimer(SimTime(initialScheduleDelay, SIMTIME_US),
                   SimTime(nextCallPauseTime, SIMTIME_US),
@@ -53,7 +53,7 @@ RateLimitedQueue::addPacket(KadPacket_p p)
 		      EV_TRACE << description << ": timer " << timerID << " callback for rate limited sending called" << endl;
                       if (not this->empty()) {
 			EV_TRACE << "sendscheduled call" << endl;
-			sendscheduledcall(std::move(this->front()));
+			sendscheduledcall(this->front().first,std::move(this->front().second));
                         this->pop_front();
                         if (not this->empty())
 			  return false;

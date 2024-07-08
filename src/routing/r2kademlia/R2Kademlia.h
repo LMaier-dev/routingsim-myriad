@@ -447,7 +447,7 @@ private:
 	/// routes a packet to a neighbor based on the source route in the packet
 	void sendPacket(KadPacket_p packet, simtime_t delay= 0) override;
 	/// routes a packet to a neighbor based on the source route in the packet
-	void sendCtrlPacket(KadPacket_p packet) { sendPacket(std::move(packet)); }
+	void sendCtrlPacket(simtime_t time_added, KadPacket_p packet);
 	/// routes a packet to a neighbor based on the Segment PIDs  in the packet
 	void sendPacket(KadDataPacket_p packet);
 	KadContactList::const_iterator chooseNextHop(const KadContactList& contacts, const OverlayKey& target, KadContactList::const_iterator startit);
@@ -648,11 +648,11 @@ inline R2Kademlia::R2Kademlia()
       FloodQueue(
           "FloodQueue", notifyLinkFailurePauseTime, notifyLinkFailurePauseTime,
           std::bind(&R2Kademlia::addFixedTimer, this, ph::_1, ph::_2, ph::_3),
-          std::bind(&R2Kademlia::sendCtrlPacket, this, ph::_1)),
+          std::bind(&R2Kademlia::sendCtrlPacket, this, ph::_1, ph::_2)),
       NotifyQueue(
           "NotifyQueue", notifyLinkFailurePauseTime, notifyLinkFailurePauseTime,
           std::bind(&R2Kademlia::addFixedTimer, this, ph::_1, ph::_2, ph::_3),
-          std::bind(&R2Kademlia::sendCtrlPacket, this, ph::_1))
+          std::bind(&R2Kademlia::sendCtrlPacket, this, ph::_1, ph::_2))
 {
 };
 
