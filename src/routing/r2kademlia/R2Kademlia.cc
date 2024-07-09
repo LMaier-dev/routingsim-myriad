@@ -780,14 +780,19 @@ void R2Kademlia::sendPacket(KadPacket_p packet, simtime_t delay) {
 }
 
 
+// this sends a R²/Kad control message
 void
 R2Kademlia::sendCtrlPacket(simtime_t time_added, KadPacket_p packet)
 {
   // need to adjust notvia timestamp by waiting time before sending
   if (packet->getNotVia()) {
 	for (uint i= 0; i < packet->getFailedLinkArraySize(); i++) {
-	  auto age_in_ms= packet->getFailedLinkAge(i);
-	  packet->setFailedLinkAge(i, age_in_ms+((simTime()-time_added).inUnit(SIMTIME_MS)));
+          auto age_in_ms = packet->getFailedLinkAge(i);
+          simtime_t timediff(simTime() > time_added + SimTime(1, SIMTIME_MS)
+                                 ? simTime() - time_added
+                                 : SIMTIME_ZERO);
+	  EV_TRACE << "sendCtrlPacket: Time added = " << time_added << ", now = " << simTime() << " timediff=" << timediff << endl;
+	  packet->setFailedLinkAge(i, age_in_ms+timediff.trunc(SIMTIME_MS).inUnit(SIMTIME_MS));
 	} // end for
   }
   sendPacket(std::move(packet));
