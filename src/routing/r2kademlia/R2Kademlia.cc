@@ -787,7 +787,7 @@ R2Kademlia::sendCtrlPacket(simtime_t time_added, KadPacket_p packet)
   if (packet->getNotVia()) {
 	for (uint i= 0; i < packet->getFailedLinkArraySize(); i++) {
 	  auto age_in_ms= packet->getFailedLinkAge(i);
-	  packet->setFailedLinkAge(i, age_in_ms+(simTime()-time_added).inUnit(SIMTIME_MS));
+	  packet->setFailedLinkAge(i, age_in_ms+((simTime()-time_added).inUnit(SIMTIME_MS)));
 	} // end for
   }
   sendPacket(std::move(packet));
