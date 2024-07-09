@@ -397,7 +397,7 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path newpath, stateseqn
 	if (same_seqno) {
 		// check for age information if seq no is equal
 		if (path_to_consider.getAge() < pathinfo_age) {
-			EV_TRACE << "ignoring older path info: mine " << path_to_consider.getAge() << " other " << pathinfo_age << endl;
+			//EV_TRACE << "ignoring older path info: mine " << path_to_consider.getAge() << " other " << pathinfo_age << endl;
 			return false;
 		}
 

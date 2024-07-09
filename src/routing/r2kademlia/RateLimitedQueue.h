@@ -44,7 +44,7 @@ inline
 void
 RateLimitedQueue::addPacket(KadPacket_p p)
 {
-  //EV_TRACE << "addPacket called" << endl;
+  EV_TRACE << description << " addPacket called - scheduled=" << scheduled << endl;
   push_back(std::make_pair(simTime(),std::move(p)));
   if (not scheduled) {
     scheduletimer(SimTime(initialScheduleDelay, SIMTIME_US),
