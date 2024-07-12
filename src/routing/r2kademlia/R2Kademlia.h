@@ -608,7 +608,8 @@ public:
 	static constexpr unsigned long ContactCandidateInitialWaitTime = 40000UL; // µs (40ms)
 	static constexpr unsigned long OnDemandPathProbeReqInitialWaitTime = 50000UL; // µs (50ms)
 	static constexpr unsigned long OnDemandPathProbeReqWaitTime = 50000UL; // µs (50ms ~ 20 Requests/s)
-	static constexpr unsigned long notifyLinkFailurePauseTime = 10000UL; // µs (10ms ~ 100 Requests/s)
+	static constexpr unsigned long notifyLinkFailurePauseTime = 2500UL; // µs (2.5ms ~ 400 Requests/s)
+	static constexpr unsigned long revPathFloodPauseTime = 1000UL; // µs (1ms ~ 1000 Requests/s)
 
 	static NotViaList_t emptyNotViaList;
 };
@@ -646,7 +647,7 @@ inline R2Kademlia::R2Kademlia()
           std::bind(&R2Kademlia::sendScheduledOnDemandPathProbe, this),
           OnDemandPathProbeReqInitialWaitTime),
       FloodQueue(
-          "FloodQueue", notifyLinkFailurePauseTime, notifyLinkFailurePauseTime,
+          "FloodQueue", revPathFloodPauseTime, revPathFloodPauseTime,
           std::bind(&R2Kademlia::addFixedTimer, this, ph::_1, ph::_2, ph::_3),
           std::bind(&R2Kademlia::sendCtrlPacket, this, ph::_1, ph::_2)),
       NotifyQueue(

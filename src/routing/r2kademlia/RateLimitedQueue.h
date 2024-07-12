@@ -28,10 +28,11 @@ public:
   void setScheduled() { scheduled= true; }
   void clearScheduled() { scheduled = false; }
   void addPacket(KadPacket_p p);
-
+  size_t getMaxLength() { return maxLength; }
 private:
   unsigned long initialScheduleDelay= 0; // in µs
-  unsigned long nextCallPauseTime= 0; // in µs
+  unsigned long nextCallPauseTime = 0;   // in µs
+  size_t maxLength= 0;
   const std::string description;
   bool scheduled = false;
   std::function<void(simtime_t initialOffset, simtime_t duration, std::function<bool(short int timerId)> callback)> scheduletimer;
@@ -39,14 +40,17 @@ private:
 };
 
 
-
 inline
 void
 RateLimitedQueue::addPacket(KadPacket_p p)
 {
-  EV_TRACE << description << " addPacket called - scheduled=" << scheduled << endl;
-  push_back(std::make_pair(simTime(),std::move(p)));
+  //EV_TRACE << description << " addPacket called - scheduled=" << scheduled << endl;
+  push_back(std::make_pair(simTime(), std::move(p)));
+  if (size() > maxLength)
+    maxLength= size();
+
   if (not scheduled) {
+    //EV_TRACE << description << " initialScheduleDelay " << initialScheduleDelay << "µs, nextCallPauseTime " << nextCallPauseTime << "µs" << endl;
     scheduletimer(SimTime(initialScheduleDelay, SIMTIME_US),
                   SimTime(nextCallPauseTime, SIMTIME_US),
                   [this](short int timerID){

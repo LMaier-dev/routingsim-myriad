@@ -928,7 +928,7 @@ R2Kademlia::doNotifyFirstSegmentSources(std::unordered_set<PathID>* upstreamPIDs
 	//EV_TRACE << "doNotifyFirstSegmentSources() upstreamPIDs_p: " << (void*) upstreamPIDs_p << " notvialist_p: " << (void*) notvialist_p << endl;
         // now check for nodes (sources of the first segment) to be notified
         if (upstreamPIDs_p->empty()) {
-		EV_TRACE << "doNotifyFirstSegmentSources() deleting upstreamPIDs_p and notvialist_p" << endl;
+		//EV_TRACE << "doNotifyFirstSegmentSources() deleting upstreamPIDs_p and notvialist_p" << endl;
                 delete upstreamPIDs_p;
 		// prevent double free at destructor for global list
                 if (upstreamPIDs_p == notifyPIDs_p)
@@ -1019,7 +1019,6 @@ R2Kademlia::doNotifyFirstSegmentSources(std::unordered_set<PathID>* upstreamPIDs
 					//ASSERT(notvialist.size() > 0);
 					notify_packet->setNotVia(tmpnotvialist.size() > 0);
 
-					EV_TRACE << "Sending LinkFailureNotify to " << notify_target.shortStr() << endl;
 					NotifyQueue.addPacket(std::move(notify_packet));
 				}
 			}
