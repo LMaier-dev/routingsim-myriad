@@ -1265,6 +1265,8 @@ void R2Kademlia::sampleStatistics (Statistics &stats) {
 	auto [numPrecalcEntries, numUsedPrecalcEntries]= fwdTablePathID.getNumUsedPrecalcEntries();
 	stats.value("fwdTablePrecalc", numPrecalcEntries);
 	stats.value("fwdTableUsedPrecalc", numUsedPrecalcEntries);
+	stats.value("floodQueueMaxLength", FloodQueue.getMaxLength());
+	stats.value("notifyQueueMaxLength", NotifyQueue.getMaxLength());
 }
 
 
