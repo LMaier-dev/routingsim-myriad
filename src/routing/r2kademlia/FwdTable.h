@@ -143,12 +143,13 @@ public:
 	void garbageCollect(std::unordered_map<PathID, std::unordered_set<OverlayKey>>& notifyFirstSegmentSources, const unsigned long fwdentry_refresh_timeout_ms);
 
 	// for gathering statistics
-	size_type getNumEntries() const { return PIDFwdTable.size(); };
+	size_type getNumEntries() const { return PIDFwdTable.size()+NIDPIDTable.size()+NIDPIDTableLastSeg.size(); };
 	inline size_type getNumSelectedEntries(std::function<bool(const FwdTableEntry& fwdentry)> selectorFn) const;
 	size_type getNumValidEntries() const;
 	size_type getNumValidLocalEntries() const;
 	size_type getNumForeignEntries() const;
-	std::tuple<size_type, size_type> getNumUsedPrecalcEntries() const;
+        std::tuple<size_type, size_type> getNumUsedPrecalcEntries() const;
+	size_type getNumUpdates() const { return updates; };
 
 	// from cObject()
 	virtual std::string str() const;
@@ -157,7 +158,8 @@ protected:
 	std::pair<bool, PathID> addEntry(const kad_path& path_to_add, bool foreignPID, bool precalc);
 
 private:
-	const OverlayKey* ownNodeID = nullptr;
+	const OverlayKey *ownNodeID = nullptr;
+	size_type updates = 0;
 };
 
 
@@ -183,6 +185,9 @@ FwdTablePathID::eraseNIDtoPIDmapping(const OverlayKey& nid) {
 }
 
 
+// this counts the number of forwarding table lines
+// i.e., one for the PID-PID Table (PIDFwdTable) and one for the NID-PID Table
+// (NIDPIDTable) (even if a second segment is necessary, i.e., NIDPIDTableLastSeg is ignored)
 inline size_type FwdTablePathID::getNumSelectedEntries(std::function<bool(const FwdTableEntry& fwdentry)> selectorFn) const
 {
 	unsigned long sum= 0;
@@ -190,7 +195,19 @@ inline size_type FwdTablePathID::getNumSelectedEntries(std::function<bool(const 
 	{
 		if ( selectorFn(pidfwdtableentry.second) == true )
 			sum++;
-	}
+        }
+        // add local entries
+        for (auto &nidpidtableentry : NIDPIDTable) {
+	  // first segments
+          if (auto it = PIDFwdTable.find(nidpidtableentry.second);
+              it != PIDFwdTable.cend()) {
+	    // count this entry if status is ok for selector function
+	    if ( selectorFn(it->second) == true ) {
+              sum++;
+	    }
+	  }
+	} // end for
+
 	return sum;
 }
 
