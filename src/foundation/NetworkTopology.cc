@@ -863,10 +863,22 @@ void NetworkTopology::createNetwork(cModule *parent) {
 			fromOut = fromModule->getOrCreateFirstUnconnectedGate("toNeighbors", 'o', false, true);
 			toIn = toModule->getOrCreateFirstUnconnectedGate("toNeighbors", 'i', false, true);
 
-			fromOut->connectTo(toIn);
+			if (networkManager->par("limitBandwidthLinks").boolValue()) {
+				cDatarateChannel *datarateChannel = cDatarateChannel::create("channel");
+				datarateChannel->setDatarate(networkManager->par("bandwidthLinksBps").doubleValue());
+				fromOut->connectTo(toIn, datarateChannel);
+				datarateChannel->callInitialize();
+			} else {
+				fromOut->connectTo(toIn);
+			}
 		}
 	}
 	EV << "Created links (" << num_edges(*BGLtopology) << " unidirectional)." << endl;
+	if (networkManager->par("limitBandwidthLinks").boolValue()) {
+		EV << "Bandwidth Links: " << networkManager->par("bandwidthLinksBps").doubleValue() << "bps" << endl;
+	} else {
+		EV << "Bandwidth Links: unlimited" << endl;
+	}
 
 	// start simulation
 	for (auto modMapIt = moduleMap.begin(); modMapIt != moduleMap.end(); modMapIt++) {
