@@ -107,7 +107,7 @@ void R2Kademlia::onInitialize() {
 	updatePropagateStrategy = (uint) par("updatePropagateStrategy").intValue();
 	linkFailureNotifications = par("linkFailureNotifications").boolValue();
 	failureFocussedProbing = par("failureFocussedProbing").boolValue();
-
+	addGratituousContacts = par("addGratituousContacts").boolValue();
 	// register this module for statistics
 	getStatistics().addSample(this);
 	simtime_t probeInterval = (simtime_t) par("probeInterval").doubleValue();
@@ -1140,7 +1140,12 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 		EV_TRACE << "packet was tracked, setTracked for answer" << endl;
 		answer->markTracked();
 	}
-	fillRTableRsp(*answer, contacts);
+
+	// add valid randomly chosen contacts from all other buckets to improve connectivity
+        if (addGratituousContacts)
+	  routingTable.addRandomGratituousContacts(contacts);
+
+        fillRTableRsp(*answer, contacts);
 	countReceived(*packet);
 	if (is_rediscovery)
 		succeededRediscovery++;

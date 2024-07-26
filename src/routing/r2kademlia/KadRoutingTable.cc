@@ -756,6 +756,9 @@ bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, sta
 		return true;
 	}
 	else { // no space in bucket for inserting the new contact: replace existing one?
+
+		// TODO: do not use PNS in second last bullet if last bucket is not
+		// reasonably filled with contacts -> need to keep all ID-wise neighbors in the 2nd last bucket
 		if (not proximityNeighborSelection) {
 			// EV_DEBUG << "dropping new contact " << *contact << endl;
 			return false;
@@ -1066,6 +1069,79 @@ std::list<OverlayKey> KadRoutingTable::getFailedPNs() const
 		}
 	}
 	return resultlist;
+}
+
+
+// assumption is that the given contact list is sorted by XOR
+// returns contacList with a number of appended contacts
+void KadRoutingTable::addRandomGratituousContacts(KadContactList &contactList) const {
+	// if contact list is empty, we do not add anything
+	if (contactList.empty())
+          return;
+	// we compare XOR-wise to the last contact in the contactlist to avoid adding duplicates
+	OverlayKey lastContactKey(contactList.back()->getKey());
+
+        constexpr unsigned int randomContactsPerBucket= 2;
+        constexpr unsigned int retriesMax= 5*randomContactsPerBucket;
+
+        // try to add randomContactsPerBucket per bucket that are in valid state
+	// this may not be possible if not enough valid contacts exist
+	EV_TRACE << "addRandomGratituousContacts:";
+        for (const auto &bucket : buckets) {
+		unsigned int foundContacts= 0;
+		unsigned int retries= 0;
+		while (foundContacts < randomContactsPerBucket and retries < retriesMax) {
+			if (auto contactp= getRandomContact(bucket, lastContactKey); contactp != nullptr) {
+				// avoid adding the same entry twice (not guaranteed if randomContactsPerBucket>2)
+				if (contactp != contactList.back()) {
+					contactList.push_back(contactp);
+					EV_TRACE << ' ' << contactp->getKey().shortStr();
+                                        foundContacts++;
+                                }
+                                else {
+					retries++;
+				}
+                        }
+                        else {
+				retries++;
+                        }
+		}; // end while
+        } // end for all buckets
+	EV_TRACE << endl;
+}
+
+
+KadContact_p
+KadRoutingTable::getRandomContact(const KadBucket &bucket, OverlayKey lastContactKey) const
+{
+	auto numContacts(bucket.size());
+
+        unsigned int randomContactIndex(intuniform(getEnvir()->getRNG(0), 0, numContacts > 0 ? numContacts - 1 : 0));
+	if (randomContactIndex < bucket.getContacts().size()) {
+		// try normal contact bucket if index is there
+		// compare XOR-wise to the last contact in the contactlist to avoid adding duplicates
+		if (KadContact_p selectedcontact= bucket.getContacts().at(randomContactIndex).get();
+		    selectedcontact != nullptr and selectedcontact->isValid()
+		    and (selectedcontact->getKey() ^ myKey) > (lastContactKey ^ myKey)) {
+			return selectedcontact;
+		}
+		else {
+			return nullptr;
+		}
+	}
+	else { // try in PN bucket
+		randomContactIndex= randomContactIndex- bucket.getContacts().size();
+		// compare XOR-wise to the last contact in the contactlist to avoid adding duplicates
+		if (KadContact_p selectedcontact= bucket.getPNContacts().at(randomContactIndex).get();
+		    selectedcontact != nullptr and selectedcontact->isValid()
+		    and (selectedcontact->getKey() ^ myKey) > (lastContactKey ^ myKey)) {
+			return selectedcontact;
+		}
+		else {
+			return nullptr;
+		}
+        }
+	return nullptr;
 }
 
 
