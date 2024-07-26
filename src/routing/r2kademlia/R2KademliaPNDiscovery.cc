@@ -381,8 +381,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadQueryRouteReq> packet)
 	if (packet->getOverlayNeighbors() or packet->getOverlayNeighborsSource())
 	{
 		ovlyneighbors= routingTable.getClosestContacts(packet->getOverlayNeighbors() ? myOverlayKey : packet->getSource(), routingTable.getSplitSize(), true);
-		//routingTable.addRandomGratituousContacts(ovlyneighbors);
-
+		routingTable.addRandomGratituousContacts(ovlyneighbors);
 	}
 
 	uint effective_size= 0;

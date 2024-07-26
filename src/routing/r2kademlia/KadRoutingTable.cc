@@ -868,7 +868,7 @@ bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, sta
 
 void KadRoutingTable::splitLastBucket()
 {
-	EV_DEBUG << "splitting bucket" << endl;
+	EV_DEBUG << "splitting bucket " << buckets.size() - 1 << endl;
 	ASSERT(isSplittable(buckets.back()));
 	ASSERT(buckets.size() < getMaxNumBuckets());
         KadBucket oldBucket(std::move(buckets.back()));
@@ -1115,8 +1115,11 @@ KadContact_p
 KadRoutingTable::getRandomContact(const KadBucket &bucket, OverlayKey lastContactKey) const
 {
 	auto numContacts(bucket.size());
+	// nothing todo if bucket is completely empty
+        if (numContacts == 0)
+		return nullptr;
 
-        unsigned int randomContactIndex(intuniform(getEnvir()->getRNG(0), 0, numContacts > 0 ? numContacts - 1 : 0));
+        unsigned int randomContactIndex(intuniform(getEnvir()->getRNG(0), 0, numContacts - 1));
 	if (randomContactIndex < bucket.getContacts().size()) {
 		// try normal contact bucket if index is there
 		// compare XOR-wise to the last contact in the contactlist to avoid adding duplicates
@@ -1130,7 +1133,7 @@ KadRoutingTable::getRandomContact(const KadBucket &bucket, OverlayKey lastContac
 		}
 	}
 	else { // try in PN bucket
-		randomContactIndex= randomContactIndex- bucket.getContacts().size();
+		randomContactIndex= randomContactIndex - bucket.getContacts().size();
 		// compare XOR-wise to the last contact in the contactlist to avoid adding duplicates
 		if (KadContact_p selectedcontact= bucket.getPNContacts().at(randomContactIndex).get();
 		    selectedcontact != nullptr and selectedcontact->isValid()
