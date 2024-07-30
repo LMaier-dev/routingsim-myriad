@@ -105,7 +105,19 @@ void R2Kademlia::onInitialize() {
 	updateMaxNotification = (uint) par("updateMaxNotification").intValue();
 	updateNotifyStrategy = (uint) par("updateNotifyStrategy").intValue();
 	updatePropagateStrategy = (uint) par("updatePropagateStrategy").intValue();
-	linkFailureNotifications = par("linkFailureNotifications").boolValue();
+        switch ((uint)par("linkFailureNotifications").intValue()) {
+        case lfn_floodonly:
+		linkFailureNotifications= lfn_floodonly;
+		break;
+        case lfn_flood_and_directPID:
+		linkFailureNotifications= lfn_flood_and_directPID;
+		break;
+        case lfn_full:
+		linkFailureNotifications= lfn_full;
+		break;
+        default:
+		linkFailureNotifications= lfn_none;
+        };
 	failureFocussedProbing = par("failureFocussedProbing").boolValue();
 	addGratituousContacts = par("addGratituousContacts").boolValue();
 	// register this module for statistics
@@ -222,7 +234,7 @@ void R2Kademlia::onDisconnect( nodeid_t nid ) {
 	}
 
 	// if this option is enabled, we flood a notification in reverse path directions
-	if (linkFailureNotifications)
+	if (linkFailureNotifications != lfn_none)
 		notifyAffectedPathUsers(key);
 
 	// Try to rediscover that contact

@@ -70,6 +70,12 @@ enum reasoncode : uint8_t {
 	unhandledType= 128
 };
 
+enum linkFailureNotificationType : uint8_t {
+	lfn_none = 0, // do not send linkFailureNotifications
+	lfn_floodonly= 1, // only flood LFNs to the direct neighbors
+	lfn_flood_and_directPID= 2, // flood LFNs to the direct neighbors and send to first segment sources directly via PID
+	lfn_full= 3 // flood LFNs to the direct neighbors and notify all first segments source, even via overlay
+};
 
 // OverlayKey length 112 bit (16 bit prefix will be prepended to make it an IPv6 address)
 constexpr uint8_t OverlayKeyLength= 112;
@@ -144,7 +150,7 @@ private:
 	simtime_t updateWaitTime;
 	simtime_t updateWaitTimeFast;
 	bool detailedRoutingTableStats;
-	bool linkFailureNotifications;
+	linkFailureNotificationType linkFailureNotifications;
 	// send reachability test packets only to nodes with failed links
 	bool failureFocussedProbing;
 	bool addGratituousContacts;
@@ -607,8 +613,8 @@ public:
 	static constexpr unsigned long GetONInitialWaitTime = 20000UL; // µs
 	static constexpr unsigned long GetONWaitTime = 40000UL; // µs (25 Requests/s)
 	static constexpr unsigned long ContactCandidateInitialWaitTime = 40000UL; // µs (40ms)
-	static constexpr unsigned long OnDemandPathProbeReqInitialWaitTime = 50000UL; // µs (50ms)
-	static constexpr unsigned long OnDemandPathProbeReqWaitTime = 50000UL; // µs (50ms ~ 20 Requests/s)
+	static constexpr unsigned long OnDemandPathProbeReqInitialWaitTime = 100000UL; // µs (100ms)
+	static constexpr unsigned long OnDemandPathProbeReqWaitTime = 100000UL; // µs (100ms ~ 10 Requests/s)
 	static constexpr unsigned long notifyLinkFailurePauseTime = 2500UL; // µs (2.5ms ~ 400 Requests/s)
 	static constexpr unsigned long revPathFloodPauseTime = 1000UL; // µs (1ms ~ 1000 Requests/s)
 

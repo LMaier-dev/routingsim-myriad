@@ -72,6 +72,8 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 		if (packet.hopsLeft() == nodeVicinityGraph::vicinityDiscoveryRadius and
 		    overallPathLengthHops > nodeVicinityGraph::vicinityDiscoveryRadius+1 and
 		    overallPathLengthHops < 2*(nodeVicinityGraph::vicinityDiscoveryRadius+1)) {
+			if (linkFailureNotifications == lfn_none)
+				return false;
 			// two hops left for 4 or 5 hops in total: this is the begin of the second segment
 			if (auto it= notifyFirstSegmentSources.find(incomingPID); it != notifyFirstSegmentSources.end()) {
 				it->second.insert(packet.getSource());
@@ -111,16 +113,18 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
  		if (auto [added,incomingPID]= fwdTablePathID.addForeignEntry(pathtoadd); added == true) {
 			EV_TRACE << " added " << incomingPID << endl;
 
-			if (auto it= notifyFirstSegmentSources.find(incomingPID); it != notifyFirstSegmentSources.end()) {
-				it->second.insert(packet.getSource());
-				EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources PID=" << incomingPID << endl;
-			}
-			else {
-				notifyFirstSegmentSources.insert({incomingPID,{packet.getSource()}});
-				EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources PID=" << incomingPID << endl;
+			if (linkFailureNotifications != lfn_none) {
+				if (auto it= notifyFirstSegmentSources.find(incomingPID); it != notifyFirstSegmentSources.end()) {
+					it->second.insert(packet.getSource());
+					EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources PID=" << incomingPID << endl;
+				}
+				else {
+					notifyFirstSegmentSources.insert({incomingPID,{packet.getSource()}});
+					EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources PID=" << incomingPID << endl;
+				}
 			}
 
-			if (packet.getProgress() == nodeVicinityGraph::vicinityDiscoveryRadius+1) {
+			if (packet.getProgress() == nodeVicinityGraph::vicinityDiscoveryRadius+1 and linkFailureNotifications != lfn_none) {
 				auto pathtosrc(packet.reversePath(packet.getSrcPath(0, packet.getProgress())));
 				// we need to store the outgoing PID as we will probably have no mapping for destinations in 3 hop distance
 				PathID PIDtoSrc(getPathID(pathtosrc));
@@ -143,7 +147,10 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 			fwdtableentry.setForeign();
 			fwdtableentry.setUsed();
  			EV_TRACE << " already present/ignored. " << fwdtableentry.str() << endl;
-			// PID may be known, but probably not the source of the first segment
+
+                        if (linkFailureNotifications == lfn_none)
+				return false;
+                        // PID may be known, but probably not the source of the first segment
 			if (auto it= notifyFirstSegmentSources.find(incomingPID); it != notifyFirstSegmentSources.end()) {
 				it->second.insert(packet.getSource());
 				EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources PID:"

@@ -806,7 +806,8 @@ R2Kademlia::sendLinkFailureNotifications(NotViaListAbsTime_t* notvialist_p, std:
 	} // end for every underlay neighbor
 
 	// note: doNotifyFirstSegmentSources will take care of deleting the object memory after use
-	doNotifyFirstSegmentSources(notifyPIDList_p, notvialist_p);
+	if (linkFailureNotifications == lfn_flood_and_directPID or linkFailureNotifications == lfn_full)
+	  doNotifyFirstSegmentSources(notifyPIDList_p, notvialist_p);
 }
 
 
@@ -993,7 +994,7 @@ R2Kademlia::doNotifyFirstSegmentSources(std::unordered_set<PathID>* upstreamPIDs
 				EV_TRACE << "Cannot continue with PID-based forwarding of LinkFailureNotify due to next hop failure" << endl;
 		}
 
-		if (not sentViaPID) { // send via overlay
+		if (not sentViaPID and linkFailureNotifications == lfn_full) { // send via overlay
 			size_t contactsLen = std::max((size_t)findNodeNumber, routingTable.getSplitSize());
                         NotViaList_t tmpnotvialist; // getClosestContacts needs relative time (NotViaList_t)
                         for (auto it= notvialist_p->cbegin(); it != notvialist_p->cend(); it++)
