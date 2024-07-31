@@ -1074,7 +1074,7 @@ std::list<OverlayKey> KadRoutingTable::getFailedPNs() const
 
 // assumption is that the given contact list is sorted by XOR
 // returns contacList with a number of appended contacts
-void KadRoutingTable::addRandomGratituousContacts(KadContactList &contactList) const {
+void KadRoutingTable::addRandomGratuitousContacts(KadContactList &contactList) const {
 	// if contact list is empty, we do not add anything
 	if (contactList.empty())
           return;
@@ -1086,7 +1086,7 @@ void KadRoutingTable::addRandomGratituousContacts(KadContactList &contactList) c
 
         // try to add randomContactsPerBucket per bucket that are in valid state
 	// this may not be possible if not enough valid contacts exist
-	EV_TRACE << "addRandomGratituousContacts:";
+	EV_TRACE << "addRandomGratuitousContacts:";
         for (const auto &bucket : buckets) {
 		unsigned int foundContacts= 0;
 		unsigned int retries= 0;

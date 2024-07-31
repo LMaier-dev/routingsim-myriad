@@ -231,7 +231,7 @@ public:
 	// get random contact from given bucket that is valid and larger than lastContactKey
 	KadContact_p getRandomContact(const KadBucket &bucket, OverlayKey lastContactKey) const;
 	/// appends two randomly selected contacts per bucket to the given contact list
-	void addRandomGratituousContacts(KadContactList& contactList) const;
+	void addRandomGratuitousContacts(KadContactList& contactList) const;
 
 	/// returns path if failedLink is contained in path to contact (for debugging)
 	kad_path checkPathValidityToContact(KadContact& contact, const link_t& failedLink) const;

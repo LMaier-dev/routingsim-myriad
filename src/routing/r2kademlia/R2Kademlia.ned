@@ -78,7 +78,7 @@ simple R2Kademlia extends routingsim.foundation.Protocol
 		/// otherwise choose nodes randomly
 		bool failureFocussedProbing = default(true);
 		/// add additional randomly selected contacts from various buckets in responses (usually 2 per bucket)
-		bool addGratituousContacts = default(true);
+		bool addGratuitousContacts = default(true);
 
 		// statistics foo
 		/// if true records avarage path lengths and stretch in routing tables.

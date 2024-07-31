@@ -153,7 +153,7 @@ private:
 	linkFailureNotificationType linkFailureNotifications;
 	// send reachability test packets only to nodes with failed links
 	bool failureFocussedProbing;
-	bool addGratituousContacts;
+	bool addGratuitousContacts;
 	//@}
 
 	// to notify neighbors about affected PathIDs after a failure

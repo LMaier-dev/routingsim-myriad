@@ -119,7 +119,7 @@ void R2Kademlia::onInitialize() {
 		linkFailureNotifications= lfn_none;
         };
 	failureFocussedProbing = par("failureFocussedProbing").boolValue();
-	addGratituousContacts = par("addGratituousContacts").boolValue();
+	addGratuitousContacts = par("addGratuitousContacts").boolValue();
 	// register this module for statistics
 	getStatistics().addSample(this);
 	simtime_t probeInterval = (simtime_t) par("probeInterval").doubleValue();
@@ -1154,8 +1154,8 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 	}
 
 	// add valid randomly chosen contacts from all other buckets to improve connectivity
-        if (addGratituousContacts)
-	  routingTable.addRandomGratituousContacts(contacts);
+        if (addGratuitousContacts)
+	  routingTable.addRandomGratuitousContacts(contacts);
 
         fillRTableRsp(*answer, contacts);
 	countReceived(*packet);
