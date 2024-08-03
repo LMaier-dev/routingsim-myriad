@@ -186,12 +186,17 @@ void Node::sendToNode( nodeid_t nid, NodePkt* np ) {
 		delay= n.lastsent-simTime();
 
 	// schedule not before transmission of other message on channel
-	cChannel *txChannel = n.out->getTransmissionChannel();
+	cChannel *txChannel = n.out->findTransmissionChannel();
 
 	linkusage_map[nid]++;
 	//EV_TRACE << "sendToNode() @Node "<<getNodeId()<<": Destination node " << nid << " msg:" << np->getName() << endl;
-	sendDelayed(np, delay, n.out);
-	n.lastsent= simTime()+delay+txChannel->calculateDuration(np);
+        sendDelayed(np, delay, n.out);
+	if (txChannel != nullptr) {
+		n.lastsent = simTime() + delay + txChannel->calculateDuration(np);
+	}
+        else {
+		n.lastsent = simTime() + delay;
+	}
 }
 
 
