@@ -185,11 +185,18 @@ void Node::sendToNode( nodeid_t nid, NodePkt* np ) {
 	if (simTime()+delay < n.lastsent)
 		delay= n.lastsent-simTime();
 
-	n.lastsent= simTime()+delay;
+	// schedule not before transmission of other message on channel
+	cChannel *txChannel = n.out->findTransmissionChannel();
 
 	linkusage_map[nid]++;
 	//EV_TRACE << "sendToNode() @Node "<<getNodeId()<<": Destination node " << nid << " msg:" << np->getName() << endl;
-	sendDelayed(np, delay, n.out);
+        sendDelayed(np, delay, n.out);
+	if (txChannel != nullptr) {
+		n.lastsent = simTime() + delay + txChannel->calculateDuration(np);
+	}
+        else {
+		n.lastsent = simTime() + delay;
+	}
 }
 
 
@@ -219,8 +226,8 @@ void Node::sendToNeighbors( NodePkt* np ) {
 void Node::sendNotify(NodePkt *packet, cGate *dg) {
 	Enter_Method_Silent("Node::sendNotify");
 	take(packet);
+	sendToNode(packet->getHop().to, packet);
 	//cout << "sendNotify from " << id << "to " << getOtherNode(dg)->id << endl;
-	send(packet, dg);
 }
 
 
