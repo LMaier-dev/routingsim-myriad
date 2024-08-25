@@ -56,7 +56,7 @@ using std::vector;
  */
 
 class NetworkTopology {
-private:
+protected:
 	typedef boost::unordered_map<string,string> properties_t;
 
 	NetworkTopology &operator=(NetworkTopology const &n);
@@ -94,7 +94,7 @@ private:
 		activeNodes( GraphType &g) : graph(&g) {};
 		template <typename VertexType>
 		bool operator() (const VertexType &v) const { return (*graph)[v].active; }
-	private:
+	protected:
 		GraphType *graph;
 	};
 
@@ -105,7 +105,7 @@ private:
 		activeEdges( GraphType &g) :graph(&g) {};
 		template <typename EdgeType>
 		bool operator() (const EdgeType &e) const { return (*graph)[e].active; }
-	private:
+	protected:
 		GraphType *graph;
 	};
 
@@ -116,10 +116,7 @@ private:
 	/// our topology as bgl graph
 	topologyGraph* BGLtopology;
 
-	/// link between the graph and the omnet network
-	std::unordered_map<nodeid_t, cModule *> moduleMap;
-
-	cModule *networkManager = nullptr;
+        cModule *networkManager = nullptr;
 	/// Bool to keep track of whether the topology was changed since last
 	/// shortest path calculation; needs to be set to true by topology-
 	/// modifying functions
@@ -135,7 +132,12 @@ private:
 	 *
 	 **/
 	float** allocateSPM(unsigned long numberOfNodes, float **spath);
-public:
+
+      protected:
+        /// link between the graph and the omnet network
+        std::unordered_map<nodeid_t, cModule *> moduleMap;
+
+      public:
 	//bool compareSPM();
 	/**
 	 * Constructs an empty network topology.
@@ -184,7 +186,7 @@ public:
 	 *
 	 * NetworkManager should be passed as the parent module.
 	 */
-	void createNetwork(cModule *networkManager);
+	void createNetwork(cModule *networkManager, std::string modTypeStr = "routingsim.foundation.NodeWrapper");
 
 	/**
 	 * Extract a constructed network topology built from a .ned file
@@ -254,6 +256,9 @@ public:
 
 	// are the two nodes directly connected with an active link
 	bool isConnected(nodeid_t node1, nodeid_t node2) const;
+
+        // does an edge from node1 to node 2 exist
+        bool edgeExists(nodeid_t node1, nodeid_t node2) const;
 
 	/// Returns true, if the network is connected
 	bool isConnected() const;

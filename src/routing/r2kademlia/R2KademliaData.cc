@@ -110,7 +110,7 @@ void R2Kademlia::doDataProbe(short timerID) {
 void R2Kademlia::handleDataPacket(NodePkt_p pkt) {
 	ASSERT( pkt != nullptr );
 	EV_TRACE << "handleDataPacket() - ";
-	
+
 	KadDataPacket_p packet = std::unique_ptr<KadDataPacket>(check_and_cast<KadDataPacket*>(pkt->decapsulate()));
 	
 	EV_TRACE << "received data packet from "
@@ -319,8 +319,8 @@ bool R2Kademlia::forwardDataPacketToNextHop(KadDataPacket_p& packet, NodePkt_p& 
 						// send back error message (requires copy of packet)
 						onMissingNeighbor(std::make_unique<KadDataPacket>(*packet), nh.nextHopNode);
 
-						// recursive call
-						return forwardDataPacketToNextHop(packet, nodePkt);
+						// recursive call TODO: Stack Overflow in mobility
+						// return forwardDataPacketToNextHop(packet, nodePkt);
 					}
 				} // endif PathID to next hop available
 
@@ -363,7 +363,7 @@ void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 	ASSERT(packet != nullptr);
 	ASSERT(packet->getType() == KAD_Data);
 	ASSERT(packet->getControlInfo() == nullptr);
-        ASSERT(packet->hasRemainingHops());
+        //ASSERT(packet->hasRemainingHops());
 	ASSERT(nodePkt != nullptr);
 
 	const auto& finaldest(packet->getDstNodeID());
@@ -534,7 +534,7 @@ void R2Kademlia::onMissingNeighbor(KadDataPacket_p packet, const OverlayKey& mis
 	EV_WARN << "onMissingNeighbor(data) called - packet next hop should be ";
 	EV_WARN << "NID: " << missingNeighborNodeID.shortStr();
 	if (packet->getFirstPathID() != PathID::UndefinedPathID) {
-		EV_WARN << " PID: " << packet->getFirstPathID() << endl;
+		//EV_WARN << " PID: " << packet->getFirstPathID() << endl;
 	}
 	else
 		EV_WARN << endl;

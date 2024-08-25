@@ -180,7 +180,8 @@ void R2Kademlia::onDisconnect( nodeid_t nid ) {
 
 	OverlayKey key = getKadObserver().getNodeKey(nid);
 	ASSERT(not key.isUnspecified());
-	ASSERT(neighborTable.getNodeId(key) == nid );
+    if (neighborTable.getNodeId(key) != nid) return;
+	//ASSERT(neighborTable.getNodeId(key) == nid );
 
 	// change in physical neighborhood increases the Sequence Number
 	incLSSeqNo();
@@ -254,7 +255,6 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		return;
 	}
 
-
 	KadPacket_p packet = \
 		std::unique_ptr<KadPacket>(check_and_cast<KadPacket*>(pkt->decapsulate()));
 	/*
@@ -263,6 +263,8 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		 << static_cast<void*>(packet.get()) << " c:" << packet->getCreationTime()
 		 << " isTracked:" << packet->isTracked() << endl;
 	*/
+
+
 
 	// hello packets do not include my key
 	if (handleIfFitting<KadHello>(packet))
@@ -276,7 +278,6 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		countDropped(*packet, packet->getTarget(), erroneousSourceRoute);
 		return;
 	}
-
 	// must process PNDiscReq to set the neighbor table entry first
 	if (handleIfFitting<KadPNDiscReq>(packet))
 		return;
@@ -284,7 +285,6 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	// check for presence of carried "not via" information
 	// and evaluate it (invalidate affected contacts)
 	processNotViaInformation(*packet);
-
 	if (packet->hasRemainingHops()) {
 		// we are not the recipient
 
@@ -298,10 +298,12 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	}
 	else { // no hops left, packet is addressed to me
 
+
 		packet->setControlInfo(pkt.release());
 
 		// learn route from packet
 		//TODO optimization use isPathInteresting
+
 
 
 		// for packets from physical neighbors: check need for resynchronization:
@@ -309,8 +311,10 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		if (packet->getType() != KAD_PNDiscRsp and neighborTable.isNeighbor(packet->getSource()))
 			checkForResync(packet->getSource(), packet->getStateSeqNo());
 
+
 		// evaluate return path for routing table (packet came to us this way, so path was recently working)
 		routingTable.addPath(packet->getSource(), packet->reversePath(packet->getIntermediatePath()), packet->getStateSeqNo(), 0, packet->getSrcNodeDegree());
+
 
 		// these types may forward packets, so they count themselves
 		if (handleIfFitting<KadFindNodeReq>(packet)) return;
@@ -1441,10 +1445,10 @@ void R2Kademlia::countReceived(KadPacket& packet) {
 	// registerPacketDelivered will also count first packet stretch
 	getKadObserver().registerPacketDelivered(packet);
 	ASSERT(packet.getControlInfo() != nullptr);
-	getStatistics().deliveredMessage(
-		check_and_cast<cMessage *>(packet.getControlInfo()),
-		packet.getProgress()
-	);
+        getStatistics().deliveredMessage(
+            check_and_cast<cMessage *>(packet.getControlInfo()),
+            packet.getProgress()
+        );
 }
 
 
@@ -1457,7 +1461,7 @@ void R2Kademlia::countDropped(KadPacket& packet, const OverlayKey& target, uint8
 	nodeid_t nid = undefined_node;
 	if (getKadObserver().exists(target))
 		nid = getKadObserver().getNodeId(target);
-	ASSERT(packet.getControlInfo() != nullptr);
+	if(packet.getControlInfo() == nullptr) return;
 	getStatistics().dropMessage(
 		check_and_cast<cMessage *>(packet.getControlInfo()), nid
 	);

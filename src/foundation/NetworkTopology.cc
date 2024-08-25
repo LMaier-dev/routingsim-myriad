@@ -3,15 +3,15 @@
 // it under the terms of the GNU Lesser General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
-// 
+//
 // This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU Lesser General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU Lesser General Public License
 // along with this program.  If not, see http://www.gnu.org/licenses/.
-// 
+//
 
 #include "NetworkTopology.h"
 
@@ -739,11 +739,14 @@ bool NetworkTopology::isConnected(nodeid_t node1, nodeid_t node2) const {
 	BGLEdgeDesc e;
 	bool edgeExists;
 	tie(e, edgeExists) = edge(node1, node2, *BGLtopology);
-	if (edgeExists and (*BGLtopology)[e].active) {
-		return true;
-	} else {
-		return false;
-	}
+        return (edgeExists and (*BGLtopology)[e].active);
+}
+
+bool NetworkTopology::edgeExists(nodeid_t node1, nodeid_t node2) const {
+  BGLEdgeDesc e;
+  bool edgeExists;
+  tie(e, edgeExists) = edge(node1, node2, *BGLtopology);
+  return edgeExists;
 }
 
 
@@ -812,12 +815,11 @@ void NetworkTopology::extractFromNetwork(const cModule *networkManager) {
 	}
 }
 
-void NetworkTopology::createNetwork(cModule *parent) {
-
+void NetworkTopology::createNetwork(cModule *parent, std::string modTypeStr) {
 	networkManager= parent;
 	// create nodes from bgl representation
 	BGLVertexIt vi, ve;
-	cModuleType *moduleType = cModuleType::get("routingsim.foundation.NodeWrapper");
+	cModuleType *moduleType = cModuleType::get(modTypeStr.c_str());
 
 	for ( tie(vi,ve) = vertices(*BGLtopology); vi!=ve; vi++) {
 
@@ -864,11 +866,15 @@ void NetworkTopology::createNetwork(cModule *parent) {
 			toIn = toModule->getOrCreateFirstUnconnectedGate("toNeighbors", 'i', false, true);
 
 			if (networkManager->par("limitBandwidthLinks").boolValue()) {
-				cDatarateChannel *datarateChannel = cDatarateChannel::create("channel");
+				cDatarateChannel *datarateChannel = cDatarateChannel::create("datarate_channel");
 				datarateChannel->setDatarate(networkManager->par("bandwidthLinksBps").doubleValue());
 				fromOut->connectTo(toIn, datarateChannel);
 				datarateChannel->callInitialize();
-			} else {
+			} else if (networkManager->par("mobility").boolValue()) {
+                            cDatarateChannel *datarateChannel = cDatarateChannel::create("datarate_channel");
+                            datarateChannel->setDatarate(1000.0);
+                            fromOut->connectTo(toIn, datarateChannel);
+                        } else {
 				fromOut->connectTo(toIn);
 			}
 		}
@@ -916,6 +922,9 @@ void NetworkTopology::createNetwork(cModule *parent) {
 	EV_INFO << "Modules ready to start." << endl;
 
 	for (auto modMapIt = moduleMap.begin(); modMapIt != moduleMap.end(); modMapIt++) {
+                if (networkManager->par("mobility").boolValue()) {
+                  modMapIt->second->callInitialize();
+                }
 		modMapIt->second->scheduleStart(simTime());
 	}
 	EV_INFO << "Modules started." << endl;
@@ -961,7 +970,7 @@ void NetworkTopology::enableLink(nodeid_t f, nodeid_t t) {
 	BGLEdgeDesc e;
 	bool edgeValid;
 
-	tie( e, edgeValid) = edge(f, t, *BGLtopology);
+	tie(e, edgeValid) = edge(f, t, *BGLtopology);
 	if (!edgeValid) {
 		throw cRuntimeError("trying to enable non-existing link!");
 	}
@@ -972,7 +981,7 @@ void NetworkTopology::enableLink(nodeid_t f, nodeid_t t) {
 	}
 
 	// if link is already enabled, return instantly
-	if ( (*BGLtopology)[e].active == true ) {
+	if ((*BGLtopology)[e].active) {
 		return;
 	}
 

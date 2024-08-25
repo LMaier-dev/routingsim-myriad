@@ -448,7 +448,7 @@ void Statistics::deliveredMessage( cMessage* msg, int hop_count ) {
 	nodeid_t srcNode = Node::getNode(static_cast<cModule*>(msg->getContextPointer()))->getNodeId();
 	nodeid_t dstNode = Node::getNode(getSimulation()->getContextModule())->getNodeId();
 	if (getNetworkManager()!=nullptr) {
-		int realDistance = (int)getNetworkManager()->getDistance(srcNode, dstNode);
+		int realDistance = (int)getNetworkManager()->getTopology().getDistance(srcNode, dstNode);
 		if (realDistance >= 0) {
 			realHopCount->collect(realDistance);
 			addStretch->collect(hop_count-realDistance);

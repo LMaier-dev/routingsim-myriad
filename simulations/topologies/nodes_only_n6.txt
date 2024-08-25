@@ -1,0 +1,43 @@
+# : generated with NetworkX 2.4, networkx.gnm_random_graph
+# : n = 6; m = 15; seed = 0
+# time: 2024-04-29 23:40:16.980830
+# size: 6
+# edges: 15
+# connected: True
+# average degree: 5.0
+# density: 1.0
+# radius: 1
+# diameter: 1
+# average clustering: 1.0
+# average shortest path length (sampled): 1.0
+6	5
+0	1
+1	0
+0	2
+2	0
+0	3
+3	0
+0	4
+4	0
+0	5
+5	0
+1	2
+2	1
+1	3
+3	1
+1	4
+4	1
+1	5
+5	1
+2	3
+3	2
+2	4
+4	2
+2	5
+5	2
+3	4
+4	3
+3	5
+5	3
+4	5
+5	4

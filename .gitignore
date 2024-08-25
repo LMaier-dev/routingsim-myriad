@@ -54,3 +54,4 @@ plots/*
 .buildconfig
 *.bak
 TAGS
+.idea

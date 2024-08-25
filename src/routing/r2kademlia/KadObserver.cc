@@ -29,6 +29,7 @@ Define_Module(KadObserver);
 static KadObserver* observer = NULL;
 
 void KadObserver::initialize() {
+
 	ASSERT(observer == NULL || observer == this);
 	if (getEnvir()->getConfig()->getConfigValue("sim-time-limit") != nullptr) {
 		simTimeLimit= SimTime::parse(getEnvir()->getConfig()->getConfigValue("sim-time-limit"));
@@ -163,7 +164,7 @@ std::set<nodeid_t> KadObserver::sampleNodes(int n) {
 	if (n < 0 or (size_type) n > nodes.size())
 		n = nodes.size();
 	std::set<nodeid_t> sample{};
-	NetworkTopology& topo = getNetworkManager()->getTopology();
+	NetworkTopology& topo = getNetworkManager()->getMobilityTypologie();
 	// use all nodes if n larger than 80% of all nodes (then sampling is not useful anymore)
 	if (n > nodes.size() * 0.8) {
 		for (auto& pair : nodes.right)
@@ -314,7 +315,7 @@ const OverlayKey& KadObserver::getClosestExistingKey(const OverlayKey& key) cons
 uint KadObserver::getPhysicalDistance(const OverlayKey& from, const OverlayKey& to) const {
 	ASSERT(exists(from));
 	ASSERT(exists(to));
-	return (uint) getNetworkManager()->getDistance(getNodeId(from), getNodeId(to));
+	return (uint) getNetworkManager()->getTopology().getDistance(getNodeId(from), getNodeId(to));
 }
 
 
@@ -402,7 +403,7 @@ void KadObserver::registerPacketDropped(KadDataPacket& packet, const OverlayKey&
 
 }
 
-
+// TODO: fix (segmentation fault after 6)
 void KadObserver::registerPacketDelivered(KadPacket& packet) {
 	if (not packet.isTracked())
 		return;
@@ -424,9 +425,7 @@ void KadObserver::registerPacketDelivered(KadPacket& packet) {
 	info.distance = getPhysicalDistance(fromKey, toKey);
 	info.prefixDist = fromKey.getLength() - fromKey.sharedPrefixLength(toKey);
 	info.overlayHops = packet.getOverlayHops();
-
 	//EV_TRACE << "packetDelivered: hops=" << info.hops << " distance=" << info.distance << endl;
-
 	ASSERT(info.overlayHops > 0);
 	histograms[hopCount]->collect(info.hops);
 	histograms[distance]->collect(info.distance);

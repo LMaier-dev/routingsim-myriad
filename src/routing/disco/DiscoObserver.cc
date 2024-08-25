@@ -136,11 +136,11 @@ float DiscoObserver::getDistance(discoid_t source, discoid_t destination) const 
 		EV_WARN << "Either source or destination node could not be mapped to a Node" << endl;
 	}
 
-	return networkMgr->getDistance(sourceNode->getNodeId(), destinationNode->getNodeId());
+	return networkMgr->getTopology().getDistance(sourceNode->getNodeId(), destinationNode->getNodeId());
 }
 
 int DiscoObserver::getNetworkSize() const {
-	return getNetworkManager()->getNetworkSize();
+	return getNetworkManager()->getTopology().getNetworkSize();
 }
 
 int DiscoObserver::getNumLandmarks() const {

@@ -27,23 +27,28 @@ NetworkManager* getNetworkManager();
 
 #include "NetworkTopology.h"
 #include "NetworkDynamics.h"
+#include "../mobility/MobilityTopology.h"
+#include "../mobility/MobilityDynamics.h"
 #include "StatisticSample.h"
 
 namespace routingsim {
 
 class NetworkManager: public cSimpleModule, public StatisticSample {
 public:
-	/// Returns the distance between two modules in the network topoology
-	distance_t getDistance(nodeid_t from, nodeid_t to);
-
-	/// Returns current size of the network, i.e. the number of ACTIVE nodes
-	unsigned int getNetworkSize();
-
-	/// Returns the network topology
-	inline NetworkTopology& getTopology() { return *topology; }
+	/// Returns the network topology  // TODO: mobilityTopology
+	inline NetworkTopology& getTopology() {
+          if (useMobility) return *mobilityTopology;
+          else return *topology;
+        }
 
 	/// Returns the network dynamics module
 	inline NetworkDynamics& getDynamics() { return *dynamics; }
+
+        /// Returns the mobility manager
+        inline MobilityTopology& getMobilityTypologie() { return *mobilityTopology; }
+
+        /// Returns the mobility dynamics module
+        inline MobilityDynamics& getMobilityDynamics() { return *mobilityDynamics; }
 
 	/// Returns a list of currently failed or affected nodes
 	inline const std::unordered_set<nodeid_t>& getFailedNodes() const { return failedNodes; }
@@ -65,8 +70,11 @@ protected:
 private:
 	NetworkTopology* topology;
 	NetworkDynamics* dynamics;
+        MobilityTopology* mobilityTopology;
+        MobilityDynamics* mobilityDynamics;
 
         std::unordered_set<nodeid_t> failedNodes;
+        bool useMobility = false;
 
 	// Topology Statistics
 	bool evaluateStatistics;
