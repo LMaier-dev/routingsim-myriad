@@ -49,6 +49,7 @@ public:
 	void clear() { table.clear(); }
 	/// returns the number of saved neighbors
 	size_t size() const { return table.size(); }
+	bool empty() const { return table.empty(); }
 
 	/// Common stdc++ console output method
 	friend std::ostream& operator<<(std::ostream& os, const NeighborTable& c);

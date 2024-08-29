@@ -16,61 +16,180 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 	if ( usePathIDs == false )
 		return false;
 
-	EV_TRACE << "checkForPathIDInstallation: " << packet.getSrcPath()
-		 << " Progress: " << packet.getProgress() << " SrcPathLen:" << packet.getRouteArraySize() << " hops left:" << packet.hopsLeft() <<  endl;
-
-	// if overall pathlen < 6 hops we should not see a request to set up a PathID
-	// (but it may be a ProbeReq)
-	// note: packet.getRouteArraySize()+1 == number of hops
-	if (packet.getRouteArraySize()+1 < 2*(nodeVicinityGraph::vicinityDiscoveryRadius+1)) {
-		EV_TRACE << "checkForPathIDInstallation: aborted – path too short" << endl;
+	unsigned int overallPathLengthHops(packet.getRouteArraySize()); // will be in number of hops after next if
+	// note: packet.getRouteArraySize()-1 == number of hops, we need to decrement by one
+	if (overallPathLengthHops>1) {
+		overallPathLengthHops--;
+	}
+	else {
+		ASSERT(overallPathLengthHops>1);
+		EV_ERROR << "checkForPathIDInstallation: path too short" << endl;
 		return false;
 	}
 
-	// if three hops left to destination: install PID here for the destination NodeID for last segments
-	if (packet.hopsLeft() == (nodeVicinityGraph::vicinityDiscoveryRadius+1)) {
+	EV_TRACE << "checkForPathIDInstallation: " << packet.getSrcPath()
+		 << " Progress: " << packet.getProgress() << " SrcPathLen:" << overallPathLengthHops << " hops, hops left:" << packet.hopsLeft() <<  endl;
+	ASSERT(packet.getProgress()>0);
 
+	// if overall pathlen < 6 hops we should not see a request to set up a PathID
+	// (but it may be a ProbeReq traversing the path)
+	if (packet.getType() == KAD_PathSetupReq) {
+		ASSERT(overallPathLengthHops >= 2*(nodeVicinityGraph::vicinityDiscoveryRadius+1));
+		// for paths <= 5 hops no path setup required
+		if (overallPathLengthHops < 2*(nodeVicinityGraph::vicinityDiscoveryRadius+1)) {
+			return false;
+		}
+	}
+
+	// determine first segment end in hops
+	auto firstsegment_end(overallPathLengthHops);
+	if (overallPathLengthHops == 2*nodeVicinityGraph::vicinityDiscoveryRadius) { // four hops
+		firstsegment_end= nodeVicinityGraph::vicinityDiscoveryRadius;
+	}
+	else // five hops
+	if (overallPathLengthHops == 2*nodeVicinityGraph::vicinityDiscoveryRadius+1) {
+		firstsegment_end= nodeVicinityGraph::vicinityDiscoveryRadius+1;
+	}
+	else // more than six hops
+	if (overallPathLengthHops >= 2*(nodeVicinityGraph::vicinityDiscoveryRadius+1)) {
+		firstsegment_end-= nodeVicinityGraph::vicinityDiscoveryRadius+1;
+	}
+
+	bool inside_firstsegment(packet.getProgress() < firstsegment_end);
+	const auto pathtoadd(packet.getSrcPath(packet.getProgress()+1, inside_firstsegment ? firstsegment_end+1 : packet.getRouteArraySize()));
+	PathID incomingPID(getPathID(myOverlayKey, pathtoadd));
+
+	// add incoming interface everywhere except at the end of the first segment
+	if (packet.getProgress() != firstsegment_end) {
+		addIncomingIFtoPIDEntry(packet.getHop(packet.getProgress()-1), incomingPID);
+	}
+
+	// paths up to nodeVicinityGraph::vicinityDiscoveryRadius hops have been precalculated
+	// nothing to install here, but maybe we need to add the incoming interface
+	// or store first segment source
+	if (packet.hopsLeft() <= nodeVicinityGraph::vicinityDiscoveryRadius) {
+
+		if (packet.hopsLeft() == nodeVicinityGraph::vicinityDiscoveryRadius and
+		    overallPathLengthHops > nodeVicinityGraph::vicinityDiscoveryRadius+1 and
+		    overallPathLengthHops < 2*(nodeVicinityGraph::vicinityDiscoveryRadius+1)) {
+			if (linkFailureNotifications == lfn_none)
+				return false;
+			// two hops left for 4 or 5 hops in total: this is the begin of the second segment
+			if (auto it= notifyFirstSegmentSources.find(incomingPID); it != notifyFirstSegmentSources.end()) {
+				it->second.insert(packet.getSource());
+				EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources PID=" << incomingPID << endl;
+			}
+			else {
+				notifyFirstSegmentSources.insert({incomingPID,{packet.getSource()}});
+				EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources PID=" << incomingPID << endl;
+			}
+
+			auto pathtosrc(packet.reversePath(packet.getSrcPath(0, packet.getProgress())));
+			// we need to store the outgoing PID as we will probably have no mapping for destinations in 3 hop distance
+			// but we also need to store the next hop as we may have no local mapping
+			PathID PIDtoSrc(getPathID(pathtosrc));
+			if (auto it= notifyFirstSegmentSourcesReversePath.find(packet.getSource()); it != notifyFirstSegmentSourcesReversePath.end()) {
+				notifyFirstSegmentSourcesReversePath[packet.getSource()]= {pathtosrc.at(0),PIDtoSrc};
+				EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources PID=" << PIDtoSrc << endl;
+			}
+			else {
+				notifyFirstSegmentSourcesReversePath.insert({packet.getSource(),{pathtosrc.at(0), PIDtoSrc}});
+				EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources PID=" << PIDtoSrc << endl;
+			}
+		}
+
+		return false;
+	}
+
+
+	// if three hops left to destination: install PID here for the destination NodeID for last segments and notify first segment source
+	if (packet.hopsLeft() == (nodeVicinityGraph::vicinityDiscoveryRadius+1)
+	    and overallPathLengthHops >= 2*(nodeVicinityGraph::vicinityDiscoveryRadius+1)) {
+		// note: getSrcPath() excludes the "to" node
 		const auto pathtoadd(packet.getSrcPath(packet.getProgress()+1, packet.getRouteArraySize()));
+
 		// PID must be installed if hops > vicinityDiscoveryRadius
 		EV_TRACE << "checkForPathIDInstallation: path to " << packet.getTarget().shortStr() << ": " << pathtoadd;
  		if (auto [added,incomingPID]= fwdTablePathID.addForeignEntry(pathtoadd); added == true) {
 			EV_TRACE << " added " << incomingPID << endl;
+
+			if (linkFailureNotifications != lfn_none) {
+				if (auto it= notifyFirstSegmentSources.find(incomingPID); it != notifyFirstSegmentSources.end()) {
+					it->second.insert(packet.getSource());
+					EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources PID=" << incomingPID << endl;
+				}
+				else {
+					notifyFirstSegmentSources.insert({incomingPID,{packet.getSource()}});
+					EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources PID=" << incomingPID << endl;
+				}
+			}
+
+			if (packet.getProgress() == nodeVicinityGraph::vicinityDiscoveryRadius+1 and linkFailureNotifications != lfn_none) {
+				auto pathtosrc(packet.reversePath(packet.getSrcPath(0, packet.getProgress())));
+				// we need to store the outgoing PID as we will probably have no mapping for destinations in 3 hop distance
+				PathID PIDtoSrc(getPathID(pathtosrc));
+				if (auto it= notifyFirstSegmentSourcesReversePath.find(packet.getSource()); it != notifyFirstSegmentSourcesReversePath.end()) {
+					notifyFirstSegmentSourcesReversePath[packet.getSource()]= {pathtosrc.at(0),PIDtoSrc};
+					EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources PID=" << PIDtoSrc << endl;
+				}
+				else {
+					notifyFirstSegmentSourcesReversePath.insert({packet.getSource(), {pathtosrc.at(0),PIDtoSrc}});
+					EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources PID=" << PIDtoSrc << endl;
+				}
+			}
 
 			return true;
 		}
 		else {
 			// touch entry and reset obsolete flag / refresh entry
 			auto& fwdtableentry= fwdTablePathID.PIDFwdTable.at(incomingPID);
-			fwdtableentry.unsetObsolete();
+			fwdtableentry.unsetObsolete(); // this includes a refresh
 			fwdtableentry.setForeign();
+			fwdtableentry.setUsed();
  			EV_TRACE << " already present/ignored. " << fwdtableentry.str() << endl;
+
+                        if (linkFailureNotifications == lfn_none)
+				return false;
+                        // PID may be known, but probably not the source of the first segment
+			if (auto it= notifyFirstSegmentSources.find(incomingPID); it != notifyFirstSegmentSources.end()) {
+				it->second.insert(packet.getSource());
+				EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources PID:"
+					 << incomingPID << endl;
+			}
+			else {
+				notifyFirstSegmentSources.insert({incomingPID,{packet.getSource()}});
+				EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources PID:"
+					 << incomingPID << endl;
+			}
 
 			return false;
 		}
 	}
-	else {
-		if (packet.hopsLeft() < 2*(nodeVicinityGraph::vicinityDiscoveryRadius+1))
+	else
+	if (packet.hopsLeft() >= 2*(nodeVicinityGraph::vicinityDiscoveryRadius+1)) {
+                // at least six hops left to destination: install PID to node three hops before destination
+		const auto target(packet.getRoute(overallPathLengthHops-nodeVicinityGraph::vicinityDiscoveryRadius-1));
+		const auto pathtoadd(packet.getSrcPath(packet.getProgress()+1, overallPathLengthHops-nodeVicinityGraph::vicinityDiscoveryRadius));
+		// PID must be installed if hops > vicinityDiscoveryRadius
+		EV_TRACE << "checkForPathIDInstallation: path to " << target.shortStr() << ": " << pathtoadd;
+		if (auto [added,incomingPID]= fwdTablePathID.addForeignEntry(pathtoadd); added == true) {
+			// no need to install NodeId to PID mapping as this is probably no local contact
+			EV_TRACE << " added " << incomingPID << endl;
+
+			return true;
+		}
+		else {
+			// touch entry and reset obsolete flag
+			auto& fwdtableentry= fwdTablePathID.PIDFwdTable.at(incomingPID);
+			fwdtableentry.unsetObsolete(); // this includes a refresh
+			fwdtableentry.setForeign();
+			fwdtableentry.setUsed();
+			EV_TRACE << " already present/ignored" << endl;
+
 			return false;
-		else { // at least six hops left to destination: install PID to node three hops before destination
-			const auto target(packet.getRoute(packet.getRouteArraySize()-1-nodeVicinityGraph::vicinityDiscoveryRadius-1));
-			const auto pathtoadd(packet.getSrcPath(packet.getProgress()+1, packet.getRouteArraySize()-nodeVicinityGraph::vicinityDiscoveryRadius-1));
-			// PID must be installed if hops > vicinityDiscoveryRadius
-			EV_TRACE << "checkForPathIDInstallation: path to " << target.shortStr() << ": " << pathtoadd;
-			if (auto [added,incomingPID]= fwdTablePathID.addForeignEntry(pathtoadd); added == true) {
-				// no need to install NodeId to PID mapping as this is probably no local contact
-				EV_TRACE << " added " << incomingPID << endl;
-				return true;
-			}
-			else {
-				// touch entry and reset obsolete flag
-				auto& fwdtableentry= fwdTablePathID.PIDFwdTable.at(incomingPID);
-				fwdtableentry.unsetObsolete();
-				fwdtableentry.setForeign();
-				EV_TRACE << " already present/ignored" << endl;
-				return false;
-			}
 		}
 	}
+	return false;
 }
 
 

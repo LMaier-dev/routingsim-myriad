@@ -43,14 +43,14 @@ void NetworkDynamics::initialize(int stage) {
 }
 
 void NetworkDynamics::initialize() {
-
 }
 
 void NetworkDynamics::finish() {
 }
 
 NetworkDynamics::~NetworkDynamics() {
-	cancelAndDelete(timer);
+  if (timer != nullptr)
+    cancelAndDelete(timer);
 }
 
 int NetworkDynamics::numInitStages() const {
@@ -95,7 +95,9 @@ void NetworkDynamics::scheduleNodeFailure(nodeid_t node, simtime_t occurrence,
 	sendDelayed(dim, di->occurrence, "toManager");
 }
 
-void NetworkDynamics::scheduleLinkFailure(nodeid_t from, nodeid_t to, simtime_t occurrence, simtime_t duration, bool bidir) {
+
+void
+NetworkDynamics::scheduleLinkFailure(nodeid_t from, nodeid_t to, simtime_t occurrence, simtime_t duration, bool bidir) {
 	DynamicsInfo* di;
 	cMessage* dim;
 

@@ -53,8 +53,8 @@ std::unique_ptr<T> R2Kademlia::makeDataPacket(const OverlayKey& dstNodeID, const
 
 
 
-void R2Kademlia::doDataProbe(short timerID) {
-	if (neighborTable.size() == 0) return; // we are isolated
+bool R2Kademlia::doDataProbe(short timerID) {
+	if (neighborTable.empty()) return false; // we are isolated
 	const OverlayKey* probeKey(nullptr);
 	unsigned int maxtries= 10;
 	bool nodefound= false;
@@ -104,6 +104,7 @@ void R2Kademlia::doDataProbe(short timerID) {
 
 	if (nodefound and probeKey != nullptr)
 		sendData(*probeKey);
+	return false;
 }
 
 

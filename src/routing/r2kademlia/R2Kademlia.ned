@@ -15,6 +15,7 @@
 
 package routingsim.routing.r2kademlia;
 
+
 //
 // 
 //
@@ -50,7 +51,7 @@ simple R2Kademlia extends routingsim.foundation.Protocol
 		/// waiting time until PN rediscovery is scheduled
 		double PNRediscoveryWaitTime = default(100ms) @unit(ms);
 		/// waiting time until urgent rediscovery is scheduled
-		double urgentRediscoveryWaitTime = default(500ms) @unit(ms);
+		double urgentRediscoveryWaitTime = default(300ms) @unit(ms);
 		/// waiting time until rediscovery is scheduled
 		double regularRediscoveryWaitTime = default(1000ms) @unit(ms);
 		/// waiting time until rediscovery is scheduled
@@ -71,9 +72,13 @@ simple R2Kademlia extends routingsim.foundation.Protocol
 		int updateNotifyStrategy @enum(UpdateNotifyStrategy) = default(1);
 		/// updatePropagateStrategy 0=none, 1=KAD_Unreachable, 2=KAD_Announce, 3=KAD_Change, 4 =KAD_Announce+KAD_Change, 5=all
 		int updatePropagateStrategy @enum(UpdatePropagateStrategy) = default(1);
+		/// sendLinkFailureNotifications (none = 0, floodonly= 1, flood_and_directPID= 2, full= 3)
+		int linkFailureNotifications @enum(linkFailureNotificationType) = default(0);
 		/// if failureFocussedProbing true: send reachability probes to affected nodes during failures (unless isolated),
 		/// otherwise choose nodes randomly
 		bool failureFocussedProbing = default(true);
+		/// add additional randomly selected contacts from various buckets in responses (usually 2 per bucket)
+		bool addGratuitousContacts = default(true);
 
 		// statistics foo
 		/// if true records avarage path lengths and stretch in routing tables.

@@ -38,6 +38,23 @@ void KadPacket::appendRoute(const kad_path& path) {
 }
 
 
+// appends path and target to source route
+// target is assumed to be an overlay hop
+void KadPacket::appendRoute(const kad_path& path, const OverlayKey& target) {
+	auto old_size = getRouteArraySize();
+	setRouteArraySize(old_size + path.size()+1);
+	setActiveArraySize(old_size + path.size()+1);
+	for (size_t i = 0; i < path.size(); i++) {
+		setRoute(old_size + i, path[i]);
+		setActive(old_size + i, false);
+	}
+	setRoute(old_size + path.size(), target);
+	setActive(old_size + path.size(), true);
+
+	addBitLength(OverlayKey::getLength()*(path.size()+1));
+}
+
+
 // replaces rest of path with newpath (starting from progress + 1)
 // path should also contain target node
 void KadPacket::modRoute(const kad_path& newpath) {

@@ -37,6 +37,7 @@ class noncobject key_vector_t;
 class noncobject stateseqno_t;
 class noncobject age_t;
 class noncobject nodedegree_t;
+class noncobject PathID;
 
 enum KadErrorType {
 	KAD_NoError = 0;
@@ -80,8 +81,7 @@ packet KadRTableRsp extends KadAnswer {
 	stateseqno_t seqNo[];
 	age_t pathInfoAge[];
 	nodedegree_t nodeDegree[];
-	// bool unknownFlag[];
-	// bool intermediateFlag[];
+	bool PNListDelivered = false;
 }
 
 
@@ -119,8 +119,11 @@ packet KadUpdateRouteReq extends KadPacket {
 packet KadError extends KadAnswer {
 	type = KAD_Error;
 	uint8_t errorType enum(KadErrorType);
+	// that is the final destination of the error
 	OverlayKey dstNodeID = OverlayKey::UNSPECIFIED_KEY;
+	// this denotes the link that failed: <packet source, failedNextHopNodeID>
 	OverlayKey failedNextHopNodeID = OverlayKey::UNSPECIFIED_KEY;
+	// origDstNodeID is the original destination of the data packet in forward direction
 	OverlayKey origDstNodeID = OverlayKey::UNSPECIFIED_KEY;
 }
 
@@ -198,3 +201,21 @@ packet KadQueryRouteRsp extends KadRTableRsp {
 	type = KAD_QueryRouteRsp;
 }
 
+
+// Reverse Flood along PathIDs
+packet KadRevPathFlood extends KadPacket {
+        type = KAD_RevPathFlood;
+
+	// List of PathIDs for further reverse path flooding of this message
+	PathID PIDList[];
+}
+
+
+packet KadLinkFailureNotify extends KadPacket {
+        type = KAD_LinkFailureNotify;
+
+	// the final destination of the message
+	OverlayKey dstNodeID = OverlayKey::UNSPECIFIED_KEY;
+	// PathID to reach first segment sources if applicable
+	PathID dstPID = PathID::UndefinedPathID;
+}

@@ -30,10 +30,11 @@ public:
 	//@{
 	KadPacket(const char *name=nullptr, short kind=0) : KadPacket_Base(name, kind) {
 		setByteLength(3+4+2); // type (8), hop limit (8), src route index (8), state seq (32), node degree (16)
+		// note: state sequence number in the simulation is only 16 bit, but in a real implementation it would be 32 bit
 	}
 	KadPacket(const KadPacket& other) : KadPacket_Base(other), overlayHops(other.overlayHops),
 					    tracked(other.tracked) {}
-	~KadPacket() { };
+	virtual ~KadPacket() { };
 	KadPacket& operator=(const KadPacket& other)
 		{ KadPacket_Base::operator=(other); overlayHops= other.overlayHops; tracked= other.tracked;
 			return *this; }
@@ -50,6 +51,8 @@ public:
 	void setSource(const OverlayKey & source);
 	/// appends the specified path to the source route
 	void appendRoute(const kad_path& path);
+	/// appends the specified path to the source route, including target
+	void appendRoute(const kad_path& path, const OverlayKey& target);
 	/// appends the specified key to the source route
 	void appendHop(const OverlayKey& key);
 	/// appends the key and path of the specified contact to the source route

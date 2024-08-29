@@ -9,6 +9,8 @@
 #include <BaseTypes.h>
 #include <unordered_map>
 #include <tuple>
+#include <functional>
+#include <unordered_set>
 
 #include "KadContact.h"
 #include "PathID.h"
@@ -22,6 +24,7 @@ private:
 	unsigned long usageCount = 0;
 	unsigned long referenceCount = 0;
 	simtime_t last_touched = SIMTIME_ZERO; // age for soft state refresh in ms
+	bool used = false;
 public:
 	PathID outgoingPathID = PathID::UndefinedPathID;
 	OverlayKey nextHopNode = OverlayKey::UNSPECIFIED_KEY;
@@ -60,15 +63,15 @@ public:
 	bool isValid() const { return fwdState & State::valid; }
 
 	void unsetForeign() { fwdState &= ~State::foreign; refresh(); };
-	void setForeign() { if (not isPrecalc()) fwdState = fwdState | State::foreign; refresh(); };
+	void setForeign() { if (not isPrecalc()) fwdState |= State::foreign; refresh(); };
 	bool isForeign() const { return fwdState & State::foreign; };
 
 	void unsetLocal() { fwdState &= ~State::local; refresh(); };
 	void setLocal() { fwdState |= State::local; refresh(); };
 	bool isLocal() const { return fwdState & State::local; };
 
-	void unsetPrecalc() { fwdState &= ~State::precalc; refresh(); };
-	void setPrecalc() { fwdState |= State::precalc; unsetForeign(); refresh(); };
+	// void unsetPrecalc() { fwdState &= ~State::precalc; refresh(); }; // unset is never used
+	void setPrecalc() { fwdState |= State::precalc; fwdState &= ~State::foreign; refresh(); };
 	bool isPrecalc() const { return fwdState & State::precalc; };
 
 	void unsetDeleted() { fwdState &= ~State::deleted; refresh(); };
@@ -101,10 +104,13 @@ public:
 	}
 	unsigned long getReferenceCount() const { return referenceCount; }
 
+	bool isUsed() const { return used; }
+	void setUsed() { used= true; }
+
 	std::string str() const;
 };
 
-	
+
 class FwdTablePathID : public cObject {
 public:
 	// This stores incoming PathID -> PathID/NextHop mappings plus state and action
@@ -134,13 +140,16 @@ public:
 	void delForeignPIDEntry(PathID pid);
 
 	// garbage collect, actually delete unnecessary entries
-	void garbageCollect(const unsigned long fwdentry_refresh_timeout_ms);
+	void garbageCollect(std::unordered_map<PathID, std::unordered_set<OverlayKey>>& notifyFirstSegmentSources, const unsigned long fwdentry_refresh_timeout_ms);
 
 	// for gathering statistics
-	size_type getNumEntries() const { return PIDFwdTable.size(); };
+	size_type getNumEntries() const { return PIDFwdTable.size()+NIDPIDTable.size()+NIDPIDTableLastSeg.size(); };
+	inline size_type getNumSelectedEntries(std::function<bool(const FwdTableEntry& fwdentry)> selectorFn) const;
 	size_type getNumValidEntries() const;
+	size_type getNumValidLocalEntries() const;
 	size_type getNumForeignEntries() const;
-	std::tuple<size_type, size_type> getNumUsedPrecalcEntries() const;
+        std::tuple<size_type, size_type> getNumUsedPrecalcEntries() const;
+	size_type getNumUpdates() const { return updates; };
 
 	// from cObject()
 	virtual std::string str() const;
@@ -149,7 +158,8 @@ protected:
 	std::pair<bool, PathID> addEntry(const kad_path& path_to_add, bool foreignPID, bool precalc);
 
 private:
-	const OverlayKey* ownNodeID = nullptr;
+	const OverlayKey *ownNodeID = nullptr;
+	size_type updates = 0;
 };
 
 
@@ -169,10 +179,60 @@ FwdTablePathID::setNIDtoPIDmapping(const OverlayKey& nid, const PathID incomingP
 inline
 void
 FwdTablePathID::eraseNIDtoPIDmapping(const OverlayKey& nid) {
-	EV_TRACE << "erasing NID to PID mappings for " << nid.shortStr() << endl;
+	//EV_TRACE << "erasing NID to PID mappings for " << nid.shortStr() << endl;
 	NIDPIDTable.erase(nid);
 	NIDPIDTableLastSeg.erase(nid);
 }
+
+
+// this counts the number of forwarding table lines
+// i.e., one for the PID-PID Table (PIDFwdTable) and one for the NID-PID Table
+// (NIDPIDTable) (even if a second segment is necessary, i.e., NIDPIDTableLastSeg is ignored)
+inline size_type FwdTablePathID::getNumSelectedEntries(std::function<bool(const FwdTableEntry& fwdentry)> selectorFn) const
+{
+	unsigned long sum= 0;
+	for (auto& pidfwdtableentry : PIDFwdTable)
+	{
+		if ( selectorFn(pidfwdtableentry.second) == true )
+			sum++;
+        }
+        // add local entries
+        for (auto &nidpidtableentry : NIDPIDTable) {
+	  // first segments
+          if (auto it = PIDFwdTable.find(nidpidtableentry.second);
+              it != PIDFwdTable.cend()) {
+	    // count this entry if status is ok for selector function
+	    if ( selectorFn(it->second) == true ) {
+              sum++;
+	    }
+	  }
+	} // end for
+
+	return sum;
+}
+
+
+inline
+size_type FwdTablePathID::getNumValidEntries() const
+{
+	// this counts only valid and active entries (=non obsolete)
+	return getNumSelectedEntries([](const FwdTableEntry& fwdentry)->bool{ return fwdentry.isValid() and not(fwdentry.isObsolete()); });
+};
+
+
+inline
+size_type FwdTablePathID::getNumValidLocalEntries() const
+{
+	return getNumSelectedEntries([](const FwdTableEntry& fwdentry)->bool{ return fwdentry.isValid() and not(fwdentry.isObsolete()) and fwdentry.isLocal(); });
+};
+
+
+inline
+size_type FwdTablePathID::getNumForeignEntries() const {
+	// this counts only foreign valid and active entries (=non obsolete)
+	// it may be the case that foreign entries are also precalculated or locally required, we do not count them as foreign then
+	return getNumSelectedEntries([](const FwdTableEntry& fwdentry)->bool{ return fwdentry.isForeign() and fwdentry.isValid() and  not(fwdentry.isPrecalc() or fwdentry.isLocal() or fwdentry.isObsolete()); });
+};
 
 } // end namespace
 

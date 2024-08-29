@@ -8,18 +8,19 @@ std::string FwdTableEntry::str() const {
 
 	std::ostringstream out;
 	out << outgoingPathID << " (";
-		if (isUndefined()) out << 'U';
+		if (isUndefined()) out << '?';
 		if (isValid()) out << 'V';
 		if (isObsolete()) out << 'O';
 		if (isInvalid()) out << 'I';
 		if (isForeign()) out << 'F';
 		if (isLocal()) out << 'L';
 		if (isPrecalc()) out << 'P';
+		if (isUsed()) out << 'U';
 	        out << ':';
 
 		switch (fwdAction) {
 			case FwdTableEntry::Action::undefined:
-				out << 'U';
+				out << '_';
 				break;
 			case FwdTableEntry::Action::fwdNextPathID:
 				out << 'P';
@@ -40,36 +41,6 @@ std::string FwdTableEntry::str() const {
 
 }
 
-
-// this counts only valid and active entries (=non obsolete)
-size_type FwdTablePathID::getNumValidEntries() const
-{
-	unsigned long sum= 0;
-	for (auto& pidfwdtableentry : PIDFwdTable)
-	{
-		const FwdTableEntry& fwdentry= pidfwdtableentry.second;
-
-		if (fwdentry.isValid() and not(fwdentry.isObsolete()))
-			sum++;
-	}
-	return sum;
-
-}
-
-
-// this counts only foreign valid and active entries (=non obsolete)
-size_type FwdTablePathID::getNumForeignEntries() const
-{
-	unsigned long sum= 0;
-	for (auto& pidfwdtableentry : PIDFwdTable)
-	{
-		const FwdTableEntry& fwdentry= pidfwdtableentry.second;
-		// it may be the case that foreign entries are also precalculated or locally required, we do not count them as foreign then
-		if (fwdentry.isForeign() and fwdentry.isValid() and  not(fwdentry.isPrecalc() or fwdentry.isLocal() or fwdentry.isObsolete()))
-			sum++;
-	}
-	return sum;
-}
 
 
 // this counts how many of the precalculated entries exist (first return value) and have been used (2nd return value)
@@ -175,6 +146,7 @@ FwdTablePathID::addEntry(const kad_path& path_to_add, bool isForeignPID, bool pr
 		// if it was marked for deletion before, reset the flag as it is used now
 		pidentry->second.unsetDeleted();
 		pidentry->second.setValid();
+		pidentry->second.setUsed();
 
 		// set foreign or local flag
 		if (isForeignPID)
@@ -187,8 +159,9 @@ FwdTablePathID::addEntry(const kad_path& path_to_add, bool isForeignPID, bool pr
 		if (precalc)
 			pidentry->second.setPrecalc();
 
-		EV_TRACE << "addEntry(): inPID entry " << incomingPathID << " exists already. " << pidentry->second.str() << endl;
+		//EV_TRACE << "addEntry(): inPID entry " << incomingPathID << " exists already. " << pidentry->second.str() << endl;
 
+		updates++;
 		return std::make_pair(false, incomingPathID); // already there, fine
 	}
 
@@ -216,8 +189,8 @@ FwdTablePathID::addEntry(const kad_path& path_to_add, bool isForeignPID, bool pr
 	PIDFwdTable[incomingPathID]= fwdentry;
 
 	// tpath: path including the target
-	EV_TRACE << "addEntry(): inPID: " << incomingPathID << " outPID: "
-		 << fwdentry.outgoingPathID << " tpath: " << path_to_add << " " << fwdentry.str() << endl;
+	//EV_TRACE << "addEntry(): inPID: " << incomingPathID << " outPID: "
+	//	 << fwdentry.outgoingPathID << " tpath: " << path_to_add << " " << fwdentry.str() << endl;
 
 	return std::make_pair(true, incomingPathID);
 }
@@ -284,8 +257,9 @@ bool FwdTablePathID::modEntry(const OverlayKey& contact_key, const kad_path& new
 	auto pidentry= NIDPIDTable.find(contact_key);
 	if ( pidentry != NIDPIDTable.end() )
 	{
-		EV_TRACE << "modEntry(): Dest NodeID " << contact_key.shortStr() << " new PID path " << newpath << endl;
 
+		//EV_TRACE << "modEntry(): Dest NodeID " << contact_key.shortStr() << " new PID path " << newpath << endl;
+		updates++;
 		// we probably want to keep the old PID in case there are still packets inflight
 		priorPathID= pidentry->second;
 		if ( PIDFwdTable.find(priorPathID) == PIDFwdTable.end() )
@@ -324,7 +298,8 @@ bool FwdTablePathID::modEntry(const OverlayKey& contact_key, const kad_path& new
 	// if PID already exists, just re-enable mapping and set to valid or modify flags
 	if (auto it= PIDFwdTable.find(incomingPathID); it != PIDFwdTable.end())
 	{
-		EV_TRACE << "modEntry(): inPID " << incomingPathID << " already existed" << endl;
+		//EV_TRACE << "modEntry(): inPID " << incomingPathID << " already existed" << endl;
+		updates++;
 		it->second.setValid();
 		if (isForeignPID)
 			it->second.setForeign();
@@ -338,6 +313,7 @@ bool FwdTablePathID::modEntry(const OverlayKey& contact_key, const kad_path& new
 	}
 	else
 	{ // create new entry in FwdTable
+		updates++;
 		// this may happen in case a PathSetup is still pending
 		fwdentry.outgoingPathID= outgoingPathID;
 		fwdentry.nextHopNode= fullpath.at(0); // fullpath will never be empty
@@ -381,7 +357,7 @@ void FwdTablePathID::delPIDEntry(PathID pid)
 
 	if ( auto it= PIDFwdTable.find(pid); it != PIDFwdTable.end() )
 	{ // entry exists
-		EV_TRACE << "FwdTablePathID::delPIDEntry called for " << pid << " " << it->second.str() << endl;
+		//EV_TRACE << "FwdTablePathID::delPIDEntry called for " << pid << " " << it->second.str() << endl;
 		// delete all related PID entries (prior entries)
 
 		// local and precalculated PID entries will not be deleted here,
@@ -446,11 +422,12 @@ void FwdTablePathID::delEntry(KadContact_p contact)
 		PathID incomingPathID(getPathID(*ownNodeID, newpath));
 		// try to find PID entry and unset the foreign flag
 		delForeignPIDEntry(incomingPathID);
-	}
+        }
+	updates++;
 }
 
 
-void FwdTablePathID::garbageCollect(const unsigned long fwdentry_refresh_timeout_ms)
+void FwdTablePathID::garbageCollect(std::unordered_map<PathID, std::unordered_set<OverlayKey>>& notifyFirstSegmentSources, const unsigned long fwdentry_refresh_timeout_ms)
 {
 	auto it= PIDFwdTable.begin();
 	while ( it != PIDFwdTable.end() )
@@ -459,7 +436,9 @@ void FwdTablePathID::garbageCollect(const unsigned long fwdentry_refresh_timeout
 		if (not it->second.isLocal() and not it->second.isPrecalc()
 		    and it->second.getAge() > fwdentry_refresh_timeout_ms) {
 			EV_TRACE << "garbageCollect(): actually deleting PID " << it->first << ": " << it->second.str() << endl;
-			it= PIDFwdTable.erase(it);
+			notifyFirstSegmentSources.erase(it->first);
+                        it = PIDFwdTable.erase(it);
+			updates++;
 		}
 		else {
 			it++;

@@ -40,6 +40,8 @@ enum KadPDUType {
 	KAD_UpdateRouteReq = 	0x0d;
 
 	KAD_Error =		0x71;
+	KAD_RevPathFlood =	0x73;
+	KAD_LinkFailureNotify =	0x75;
 	KAD_ProbeReq = 		0x81;
 	KAD_ProbeRsp = 		0x82;
 
@@ -82,11 +84,11 @@ class noncobject PathID;
 // a fast path Data packet
 packet KadDataPacket {
 	@customize(true);
-	PathID firstPathID = PathID::UndefinedPathID;
-	PathID secondPathID = PathID::UndefinedPathID;
-	OverlayKey pathSrcNodeID = OverlayKey::UNSPECIFIED_KEY;
-	OverlayKey dstNodeID = OverlayKey::UNSPECIFIED_KEY;
-	OverlayKey srcNodeID = OverlayKey::UNSPECIFIED_KEY;
+	PathID firstPathID = PathID::UndefinedPathID;             // outer header destination (outermost destination)
+	PathID secondPathID = PathID::UndefinedPathID;            // outer header destination
+	OverlayKey pathSrcNodeID = OverlayKey::UNSPECIFIED_KEY;   // outer header source (previous overlay hop)
+	OverlayKey dstNodeID = OverlayKey::UNSPECIFIED_KEY; // inner header
+	OverlayKey srcNodeID = OverlayKey::UNSPECIFIED_KEY; // inner header
 	uint8_t type enum(KadPDUType);
 	uint16_t hopLimit = 255;
 }

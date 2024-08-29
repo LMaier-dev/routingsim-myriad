@@ -18,7 +18,7 @@ namespace routingsim {
 
 // returns true if forwarding should stop here
 bool
-R2Kademlia::intermediateNodeProcessing(const KadPacket& packet) {
+R2Kademlia::intermediateNodeProcessing(KadPacket& packet) {
 
 	// special actions while forwarding packets
 	switch (packet.getType()) {
@@ -58,7 +58,8 @@ R2Kademlia::intermediateNodeProcessing(const KadPacket& packet) {
 				kad_path path_of_interest(packet.reversePath(packet.getSrcPath(1, packet.getProgress())));
 				if (path_of_interest.size() > 0)
 				{
-					routingTable.addPath(packet.getSource(), path_of_interest, packet.getStateSeqNo(), 0, packet.getSrcNodeDegree());
+					// Trusted Path Info: info originates from recently taken source path
+					routingTable.addPath(packet.getSource(), path_of_interest, packet.getStateSeqNo(), 0, packet.getSrcNodeDegree(), true);
 				}
 			}
 			const KadPathSetupReq* setupreq = static_cast<const KadPathSetupReq *>(&packet);
@@ -136,7 +137,8 @@ R2Kademlia::intermediateNodeProcessing(const KadPacket& packet) {
 		kad_path path_of_interest(packet.reversePath(packet.getSrcPath(1, packet.getProgress())));
 		if (path_of_interest.size() > 0)
 		{
-			routingTable.addPath(packet.getSource(), path_of_interest, packet.getStateSeqNo(), 0, packet.getSrcNodeDegree());
+			// Trusted Path Info: info originates from recently taken source path
+			routingTable.addPath(packet.getSource(), path_of_interest, packet.getStateSeqNo(), 0, packet.getSrcNodeDegree(), true);
 		}
 
 		// NOTE: the rest of the source routing path should not be used for improvement

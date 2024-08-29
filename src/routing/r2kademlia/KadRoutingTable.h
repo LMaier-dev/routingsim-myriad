@@ -25,6 +25,7 @@
 //#include <unordered_set> // only required for pathSet
 
 #include "KadContact.h"
+#include "RequestQueue.h"
 /**
  * @file KadRoutingTable.h
  * @author Jakob Thomas
@@ -41,21 +42,24 @@ class KadBucket
 {
 public:
 	using BucketElement = std::unique_ptr<KadContact>;
-	using BucketType = std::vector<BucketElement>;
-	/** returns the contact if found, nullptr otherwise */
-	KadContact *getContact(const OverlayKey& key);
-	KadContact_p getContact(const OverlayKey& key) const { return const_cast<KadBucket*>(this)->getContact(key); }
-	inline void insertContact(BucketType& bucket, BucketElement contactp);
-	void insertContact(BucketElement contactp) { insertContact(contacts, std::move(contactp)); } ;
-	void insertPNContact(BucketElement contactp) { insertContact(PNContacts,std::move(contactp)); } ;
+        using BucketType = std::vector<BucketElement>;
+
+	KadBucket() {};
+        KadBucket(KadBucket &&other);
+        ~KadBucket() { clear(); };
+	void clear();
+	KadContact_p getContact(const OverlayKey& key) const;
+	inline void insertContact(BucketType& bucket, BucketElement&& contactp);
+	void insertContact(BucketElement&& contactp) { insertContact(contacts, std::move(contactp)); } ;
+	void insertPNContact(BucketElement&& contactp) { insertContact(PNContacts,std::move(contactp)); } ;
 	const BucketType& getContacts() const { return contacts; }
 	BucketType& getContactsWrite() { return contacts; }
 	const BucketType& getPNContacts() const { return PNContacts; }
 	BucketType& getPNContactsWrite() { return PNContacts; }
 	/** tries to remove the contact, returns true if found */
-	inline bool removeContact(const OverlayKey& key);
-	inline auto removeContact(BucketType::iterator it) { return contacts.erase(it); }
-	inline auto removePNContact(BucketType::iterator it) { return PNContacts.erase(it); }
+	bool removeContact(const OverlayKey& key);
+	inline auto removeContact(BucketType::iterator it) { it->reset(nullptr); return contacts.erase(it); }
+	inline auto removePNContact(BucketType::iterator it) { it->reset(nullptr); return PNContacts.erase(it); }
 	/** returns true if the contact list is empty */
 	inline bool empty() { return contacts.empty() and PNContacts.empty(); }
 	/** returns the size of the contact list including PNcontacts */
@@ -88,12 +92,12 @@ private:
 
 
 /// inserts a KadContact into a bucket (kept sorted order)
-inline void KadBucket::insertContact(BucketType& bucket, BucketElement contactp) {
+inline void KadBucket::insertContact(BucketType& bucket, BucketElement&& contactp) {
 	//ASSERT(is_sorted(bucket.cbegin(),bucket.cend(),[](const BucketElement& lhs, const BucketElement& rhs) -> bool { return lhs.get()->getKey() < rhs.get()->getKey(); }));
 
 	// Note that this performs a binary search, but the insertion itself may cause O(n) move operations inside the vector
-	bucket.insert(std::upper_bound(bucket.begin(), bucket.end(), contactp,
-		      [](const BucketElement& lhs, const BucketElement& rhs) -> bool { return lhs->getKey() < rhs->getKey(); }), std::move(contactp));
+	bucket.insert(std::upper_bound(bucket.cbegin(), bucket.cend(), contactp->getKey(),
+				       [&](const OverlayKey& key, const BucketElement& rhs) -> bool { return key < rhs.get()->getKey(); }), std::move(contactp));
 
 	//ASSERT(is_sorted(bucket.cbegin(),bucket.cend(),[](const BucketElement& lhs, const BucketElement& rhs) -> bool { return lhs.get()->getKey() < rhs.get()->getKey(); }));
 }
@@ -108,7 +112,9 @@ public:
 	/** called when last contact is removed from a bucket */
 	virtual void onBucketEmpty(KadBucket& bucket) = 0;
 	/** called when a new contact is created in the routing table */
-	virtual void onNewContact(KadContact_p contact) = 0;
+        virtual void onNewContact(KadContact_p contact) = 0;
+	/** called for contact candidates **/
+	virtual void onContactCandidate(std::unique_ptr<KadContact> contactp) = 0;
 	/** called when path has changed, but is not improved **/
 	virtual void onPathChange(const KadContact& contact) = 0;
 	/** called when a better path has been learned for a contact */
@@ -127,7 +133,7 @@ public:
 	virtual void scheduleRegularRediscovery(const OverlayKey& contact) = 0;
 	virtual void scheduleSlowRediscovery(const OverlayKey& contact) = 0;
 	/** called when the path of a contact is probably broken and needs to be checked */
-	virtual void onPathCheck(const KadContact& contact) = 0;
+	virtual void onPathCheck(const KadContact& contact, RequestQueueElementActionType action) = 0;
 };
 
 /**
@@ -152,10 +158,10 @@ public:
 	virtual std::string str() const;
 
 	/**
-	 * add a potentially new path, adds a contacts or updates an existing one
+	 * add a potentially new path, adds a contact or updates an existing one
 	 * @returns true if path was added
 	 */
-	bool addPath(const OverlayKey& key, kad_path path, stateseqno_t pathseqno, age_t pathinfo_age, uint32_t nodeDegree);
+	bool addPath(const OverlayKey& key, kad_path path, stateseqno_t pathseqno, age_t pathinfo_age, uint32_t nodeDegree, bool path_verified);
 	/**
 	 * add a potentially new path, adds a contact or updates an existing one
 	 * @returns true if path was added
@@ -182,12 +188,14 @@ public:
 	 * Returns a nullptr if the contact was not found.
 	 */
 	inline KadContact_p getContact(const OverlayKey& key) const;
+	inline KadContact* getContactMutable(const OverlayKey& key);
 
 	// set contact invalid, returns true on success, false if contact not found
 	bool setContactInvalid(const OverlayKey& key) {
 		if (auto contactp= getContactInternal(key))
 		{
 			contactp->setInvalid({myKey, contactp->getKey()},0);
+			contactp->updateLastSeen();
 			return true;
 		}
 		else
@@ -207,6 +215,8 @@ public:
 	void getOldestValidContacts(std::list<OverlayKey>& result) const;
 	/// returns a list of contacts that need a path refresh
 	void getContactsforPathRefresh(std::list<OverlayKey>& result) const;
+	/// get list of failed PNs
+	std::list<OverlayKey> getFailedPNs() const;
 
 	/// returns the number of contacts in buckets
 	size_type getNumContacts() const;
@@ -217,7 +227,16 @@ public:
 	///size_type getNumFoundEquivPaths() const { return pathSet.size(); };
 
 	/// returns a pointer random valid contact
-	KadContact_p getRandomContact() const;
+        KadContact_p getRandomContact() const;
+	// get random contact from given bucket that is valid and larger than lastContactKey
+	KadContact_p getRandomContact(const KadBucket &bucket, OverlayKey lastContactKey) const;
+	/// appends two randomly selected contacts per bucket to the given contact list
+	void addRandomGratuitousContacts(KadContactList& contactList) const;
+
+	/// returns path if failedLink is contained in path to contact (for debugging)
+	kad_path checkPathValidityToContact(KadContact& contact, const link_t& failedLink) const;
+	/// diagnostic output of paths with failedlink
+	void getBrokenPaths(const link_t& failedlink) const;
 
 	/// if failed link is in contact's path send a ProbeReq to check for path validity
 	void checkPathToContact(KadContact& contact, const link_t& failed_link);
@@ -261,11 +280,11 @@ public:
 	// update all contact paths that are affected by improved contact path
 	void updatePaths(const KadContact& improvedContact);
 	/// tries to find shortcuts using own routing table entries
-	bool shortenPath(kad_path& path) const;
+	bool shortenPath(kad_path& path, age_t path_info_age) const;
 	/// concatenates the two paths
 	kad_path concatViaPath(const kad_path& viaPath, const kad_path& path) const;
 	/// removes duplicates and loops from a path
-	bool simplifyPath(kad_path& path, const OverlayKey* destination) const;
+	bool simplifyPath(kad_path& path, const OverlayKey& destination) const;
         inline size_t getBucketCount() const { return buckets.size(); }
         KadContactList getValidContactsFromBucket(size_t index) const;
 
@@ -274,7 +293,7 @@ public:
 
 protected:
 	/// adds a new contact, called by addPath, returns true if contact was added
-	virtual bool handleNewContact(const OverlayKey& key, kad_path path, stateseqno_t pathseqno, age_t pathinfo_age, uint32_t nodeDegree);
+	virtual bool handleNewContact(const OverlayKey& key, kad_path path, stateseqno_t pathseqno, age_t pathinfo_age, uint32_t nodeDegree, bool path_verified);
 	/** @name bucket access */
 	//@{
 	/** returns the index of the bucket corresponding to the given overlay key. */
@@ -339,6 +358,12 @@ inline
 KadContact_p KadRoutingTable::getContact(const OverlayKey& key) const
 {
 	return getBucket(key).getContact(key);
+}
+
+inline
+KadContact* KadRoutingTable::getContactMutable(const OverlayKey& key)
+{
+	return const_cast<KadContact*>(getBucket(key).getContact(key));
 }
 
 

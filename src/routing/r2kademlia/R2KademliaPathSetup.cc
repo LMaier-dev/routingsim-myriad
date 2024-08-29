@@ -114,7 +114,6 @@ bool R2Kademlia::handlePathSetupResponse(KadPacket_p answer, RPCState& rpcState)
 			// next path setup should have been scheduled then, or PID was precomputed
                     } else {
 			addthispath= true;
-                        contactp->updateLastPathRefresh();
                     }
 		}
 		else {
@@ -126,7 +125,6 @@ bool R2Kademlia::handlePathSetupResponse(KadPacket_p answer, RPCState& rpcState)
 			}
 			else {
 				addthispath= true;
-                                contactp->updateLastPathRefresh();
 			}
 		}
 	}
@@ -187,7 +185,7 @@ void R2Kademlia::schedulePathSetup(const OverlayKey& contactkey)
 }
 
 
-void R2Kademlia::sendScheduledPathSetups() {
+bool R2Kademlia::sendScheduledPathSetups() {
 	// traverse list of scheduled contact keys for path setup
 	// recheck status and set to rediscover
 	EV_TRACE << "sendScheduledPathSetups() called, Queued: " << pathSetupQueue.size() << endl;
@@ -209,6 +207,7 @@ void R2Kademlia::sendScheduledPathSetups() {
 
 	// next call of this procedure will be scheduled on demand
 	pathSetupScheduled= false;
+	return false;
 }
 
 

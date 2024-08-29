@@ -22,7 +22,7 @@ namespace routingsim {
 void R2Kademlia::onMissingNeighbor(KadPacket_p packet, NodePkt_p pkt, const OverlayKey& missingNeighborNodeID) {
 //  	getStatistics().dropMessage(pkt, undefined_node);
 	EV_WARN << "onMissingNeighbor called - packet next hop should be " << packet->getNextHop().shortStr() << endl;
-	droppedPackets++;
+	discardedPackets++;
 	// do not generate Error packets for Error or UpdateRoute packets
 	switch (packet->getType()) {
 		case KAD_Error:
@@ -126,7 +126,7 @@ void R2Kademlia::onContactRemoval(KadContact_p contact)
 		return;
 
 	// delete from Forwarding table PID (not for vicinity nodes)
-	// TODO: this can be scheduled for happpening later
+	// TODO: this can be scheduled for happening later
 	if (usePathIDs and contact->getPathLength() > 2*nodeVicinityGraph::vicinityDiscoveryRadius)
 	{ // this condition must be aligned with the sendPathSetup
 		// check for pending/scheduled PathSetup first
@@ -155,7 +155,7 @@ void R2Kademlia::onContactInvalidation(KadContact_p contact)
 }
 
 
-
+// this is called from KadRoutingTable
 void R2Kademlia::onNewContact(KadContact_p contact) {
 
 	EV_TRACE << "onNewContact(" << contact->getKey().shortStr() << ") called " << *contact << endl;
@@ -186,13 +186,12 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 		if (contact->getPathLength()+1 < discoveryRadius) {
 			// sends a QueryRouteReq requesting their 1 hop neighborhood
 			// sendGetPhysicalNeighbors() adds contact to vicinity to keep track of already queried nodes in vicinity
-			scheduleGetPNReq(*contact); // was sendGetPhysicalNeighbors(contact);
+			scheduleGetPNReq(KadContact(*contact));
 		}
 		else // maybe just on the radius, check to add contact for vicinity
 		if (contact->getPathLength()+1 == nodeVicinityGraph::vicinityDiscoveryRadius) {
 			vicinity.addNode(contact->getPath().back(), // parent, path not empty, see precondition of outer if
 					 contact->getKey(), // new child
-					 contact->getStateSeqNo(),
 					 contact->getPathLength()+1);
 		}
 	}
@@ -203,7 +202,7 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 		if (routingTable.isInLastBucket(contact->getKey()))
 		{
 			//EV_TRACE << "New contact is in deepest bucket, will ask for contacts close to me" << endl;
-			scheduleGetONReq(*contact);// was sendGetOverlayNeighbors(contact);
+			scheduleGetONReq(*contact);
 		}
 
 		if (usePathIDs) {
@@ -254,6 +253,12 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 				EV_TRACE << "Triggering path setup for contact " << contact->getKey().shortStr() << ": " << contact->getPath() << endl;
 				schedulePathSetup(contact->getKey());
 			}
+
+			// mainly for testing purposes: in case we use linkFailureNotifications, send a path probe to install state
+			// normally, this is done during regular path probing, so not really necessary to do it explicitly like here
+			//if (linkFailureNotifications and contact->getPathLength() > 0)
+			//	addOneShotTimer(SimTime(500,SIMTIME_MS),std::bind(&R2Kademlia::sendPathProbe,this,contact->getKey()));
+
 		} // endif usePathIDs
 	}
 
@@ -263,7 +268,7 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 
 void R2Kademlia::onImprovement(const KadContact& contact) {
 	// path got improved for this contact -> potentially send UpdateRouteReq
-	EV_TRACE << "onImprovement(" << contact.getKey().shortStr() << ") called, SeqNo #" << contact.getStateSeqNo() << ' ' << contact.getPath() << endl;
+	EV_TRACE << "onImprovement called " << contact << endl;
 
 	//ASSERT( getKadObserver().checkSeqNo(contact.getKey(),contact.getStateSeqNo()) == true );
 
@@ -278,6 +283,9 @@ void R2Kademlia::onImprovement(const KadContact& contact) {
 			schedulePathSetup(contact.getKey());
 		}
 		else {  // 5 hops or less
+			// only required to install state for notifyFirstSegment, that is relevant for distances of at least 3 hops
+			//if (linkFailureNotifications and contact.getPathLength() > 0)
+			//	addOneShotTimer(SimTime(500,SIMTIME_MS),std::bind(&R2Kademlia::sendPathProbe,this,contact.getKey()));
 			
 			// for these paths update the PID entry (max to 3rd hop)
 			fwdTablePathID.modEntry(contact.getKey(), contact.getPath(), false);
@@ -302,11 +310,10 @@ void R2Kademlia::onImprovement(const KadContact& contact) {
 // this is different from onImprovement(): path has maybe the same length but is different (e.g., due to higher seq no)
 // no UpdateRouteReq is sent, but possibly PathSetup needs to be initiated or PID needs to change
 void R2Kademlia::onPathChange(const KadContact& contact) {
-	EV_TRACE << "onPathChange(" << contact.getKey().shortStr() << ") called, SeqNo #" << contact.getStateSeqNo() << ' ' << contact.getPath() << endl;
 
 	//ASSERT( getKadObserver().checkSeqNo(contact.getKey(),contact.getStateSeqNo()) == true );
-
 	if (usePathIDs and contact.isValid()) {
+		EV_TRACE << "onPathChange(" << contact.getKey().shortStr() << ") called, SeqNo #" << contact.getStateSeqNo() << ' ' << contact.getPath() << endl;
 
 		// no need to setup routes within discovery radius + 1 distance
 		// (note/remember: getPathLength() does not include the last hop)
@@ -317,6 +324,9 @@ void R2Kademlia::onPathChange(const KadContact& contact) {
 			schedulePathSetup(contact.getKey());
 		}
 		else { // 5 hops or less
+			// only required to install state for notifyFirstSegment, that is relevant for distances of at least 3 hops
+			//if (linkFailureNotifications and contact.getPathLength() > 0)
+			//	addOneShotTimer(SimTime(500,SIMTIME_MS),std::bind(&R2Kademlia::sendPathProbe,this,contact.getKey()));
 
 			// for these paths update the PID entry (max to 3rd hop)
 			fwdTablePathID.modEntry(contact.getKey(), contact.getPath(), false);
@@ -325,14 +335,17 @@ void R2Kademlia::onPathChange(const KadContact& contact) {
 
 }
 
-void R2Kademlia::recheckPhysicalNeighbors(const KadContact& contact) {
+
+void
+R2Kademlia::recheckPhysicalNeighbors(const KadContact& contact) {
 	// simply recheck the physical Neighbors
 	EV_TRACE << "recheckPhysicalNeighbors triggered for " << contact.getKey().shortStr() << endl;
-	scheduleGetPNReq(contact);
+	scheduleGetPNReq(KadContact(contact));
 }
 
 
-void R2Kademlia::reSyncPN(const KadContact& contact, stateseqno_t expected_seqno) {
+void
+R2Kademlia::reSyncPN(const KadContact& contact, stateseqno_t expected_seqno) {
 	// simply trigger a PNDiscReq to update any sequence number
 	EV_TRACE << "reSyncPN scheduled for " << contact.getKey().shortStr() << " expected seqno: " << expected_seqno << endl;
 
@@ -340,10 +353,18 @@ void R2Kademlia::reSyncPN(const KadContact& contact, stateseqno_t expected_seqno
 }
 
 
-void R2Kademlia::onPathCheck(const KadContact& contact) {
-	EV_TRACE << "path check triggered for " << contact.getKey().shortStr() << endl;
-	// check whether the current path is still working properly
-	sendPathProbe(contact.getKey());
+void
+R2Kademlia::onPathCheck(const KadContact& contact, RequestQueueElementActionType action) {
+	EV_TRACE << "path check triggered for " << contact.getKey().shortStr() << " "
+		 << ((action & probeProposedPath) ? "Proposed " : "Active ")
+		 << ((action & probeProposedPath) ? contact.getProposedPath() : contact.getActivePath()) << endl;
+	// check whether the current or proposed path is working properly (depends on action)
+	scheduleOnDemandPathProbeReq(OnDemandPathProbeQueue, contact, action);
+}
+
+void R2Kademlia::onContactCandidate(std::unique_ptr<KadContact> contactp) {
+	scheduleContactCandidateProbe(std::move(*(contactp.get())));
+	contactp.reset(nullptr);
 }
 
 } // end namespace

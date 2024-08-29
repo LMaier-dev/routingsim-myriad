@@ -509,6 +509,10 @@ public:
 	 */
 	static int getCommonPrefixLength(const OverlayKey& a, const OverlayKey& b);
 
+	/**
+	 * reset key to INVALIDKEYVALUE
+	 */
+	void clear();
 private:
 	// private constants
 
@@ -527,11 +531,6 @@ private:
 	 * trims key after key operations
 	 */
 	void trim();
-
-	/**
-	 * set this->key to 0 and isUnspec to false
-	 */
-	void clear();
 };
 
 
