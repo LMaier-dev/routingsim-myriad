@@ -1,2 +1,8 @@
+# uncomment the following two lines for profiling
+#COPTS:=-pg -fprofile-arcs -fprofile-generate $(COPTS)
+#LDOPTS:=-pg $(LDOPTS) -lgcov
+
+# this simply adds debug symbols (even for release mode)
+#COPTS:=-g $(COPTS)
 # only needed for the new msg syntax when compiling with 5.7
 MSGC:=$(MSGC) --msg6
