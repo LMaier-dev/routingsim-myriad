@@ -32,13 +32,16 @@
 
 #include <omnetpp.h>
 #include <crng.h>
-
-class BinaryValue;
-class OverlayKeyGMPBit;
+#include <limits>
 
 using namespace omnetpp;
 
-typedef class OverlayKeyGMP OverlayKey;
+namespace routingsim {
+
+using OverlayKey = class OverlayKeyGMP;
+
+class BinaryValue;
+class OverlayKeyGMPBit;
 
 /**
  * replacement function for mpn_random() using omnet's rng
@@ -136,11 +139,6 @@ public:
 	 * @return Short string representation of this key
 	 */
 	std::string shortStr() const { return toString().substr(0,6); }
-
-	/**
-	 * Common stdc++ console output method
-	 */
-	friend std::ostream& operator<<(std::ostream& os, const OverlayKeyGMP& c);
 
 	/**
 	 * Returns true, if the key is unspecified
@@ -586,23 +584,6 @@ private:
 	OverlayKeyGMP* key;
 };
 
-namespace std {
-	template<> class hash<OverlayKeyGMP>
-	{
-	public:
-		size_t operator()(const OverlayKeyGMP& k) const;
-	};
-
-
-	inline
-	std::size_t std::hash<OverlayKeyGMP>::operator()(const OverlayKeyGMP& k) const {
-			using std::size_t;
-			
-			return k.hash();	
-	};
-
-}
-
 
 // default construction: create an unspecified node key
 inline
@@ -874,9 +855,34 @@ inline void omnet_random_gmp(mp_limb_t *r1p, mp_size_t r1n, cRNG* rng)
 	uint32_t* chunkPtr = (uint32_t*)r1p;
 
 	for (uint32_t i=0; i < ((r1n*sizeof(mp_limb_t) + 3) / 4); i++) {
-		chunkPtr[i] = intuniform(rng, 0, 0xFFFFFFFF);
+		chunkPtr[i] = rng->intRand(std::numeric_limits<uint32_t>::max());
 	}
 }
 
+} // end namespace
+
+namespace std {
+	template<> class hash<routingsim::OverlayKeyGMP>
+	{
+	public:
+		size_t operator()(const routingsim::OverlayKeyGMP& k) const;
+	};
+
+
+	inline
+	std::size_t std::hash<routingsim::OverlayKeyGMP>::operator()(const routingsim::OverlayKeyGMP& k) const {
+			using std::size_t;
+
+			return k.hash();
+	};
+
+	/**
+	 * Common stdc++ console output method
+	 */
+	inline
+	std::ostream& operator<<(std::ostream& os, const routingsim::OverlayKeyGMP& c) {
+		return (os << c.toString(16));
+	}
+}
 
 #endif

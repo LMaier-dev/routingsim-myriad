@@ -13,8 +13,8 @@
 #include <omnetpp.h>
 #include "foundation.h"
 
-#include "DiscoPkt_m.h"
 #include "StandardPkt_m.h"
+#include "DiscoPkt_m.h"
 #include "DiscoObserver.h"
 #include "StatisticSample.h"
 #include <algorithm>

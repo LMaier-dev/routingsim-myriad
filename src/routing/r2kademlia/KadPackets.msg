@@ -12,32 +12,21 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with this program.  If not, see http://www.gnu.org/licenses/.
 // 
+import KadPacket;
 
 cplusplus {{
-#include "BaseTypes.h"
-#include "OverlayKey.h"
-
-
-#include <memory>
-#include <vector>
 #include "KadPacket.h"
 #include "stateseqno.h"
-class KadPacket;
-typedef std::vector<OverlayKey> key_vector_t;
-typedef uint32_t age_t;
-typedef uint16_t nodedegree_t;
+
+namespace routingsim {
+using key_vector_t = std::vector<routingsim::OverlayKey>;
+}
+
 }}
 
 namespace routingsim;
-class KadPacket extends cPacket;
-class KadDataPacket extends cPacket;
-class noncobject nodeid_t;
-class noncobject OverlayKey;
-class noncobject key_vector_t;
-class noncobject stateseqno_t;
-class noncobject age_t;
-class noncobject nodedegree_t;
-class noncobject PathID;
+
+class key_vector_t { @existingClass; }
 
 enum KadErrorType {
 	KAD_NoError = 0;
@@ -111,14 +100,14 @@ packet KadUpdateRouteReq extends KadPacket {
        stateseqno_t seqNo[];
        age_t pathInfoAge[];
        nodedegree_t nodeDegree[];
-       uint8_t action[] enum(KadRouteUpdateAction);
+       uint8_t action[] @enum(KadRouteUpdateAction);
 }
 
 
 // ERROR
 packet KadError extends KadAnswer {
 	type = KAD_Error;
-	uint8_t errorType enum(KadErrorType);
+	uint8_t errorType @enum(KadErrorType);
 	// that is the final destination of the error
 	OverlayKey dstNodeID = OverlayKey::UNSPECIFIED_KEY;
 	// this denotes the link that failed: <packet source, failedNextHopNodeID>

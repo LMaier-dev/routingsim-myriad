@@ -19,7 +19,9 @@ cplusplus {{
 
 namespace routingsim;
 
-class noncobject vroute_update_t;
+class vroute_update_t {
+ @existingClass;
+}
 
 /// This packet transports route information
 packet VRoutePkt {

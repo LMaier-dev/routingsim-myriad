@@ -19,6 +19,7 @@ cleanall: checkmakefiles
 	rm -rf out
 
 makefiles:
+	echo 'creating Makefile for OMNeT++' $(OMNETPP_VERSION)
 	cd src && opp_makemake $(BUILD_OPTIONS)
 
 checkmakefiles:

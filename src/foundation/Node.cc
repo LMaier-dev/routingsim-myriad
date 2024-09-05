@@ -49,42 +49,46 @@ Node *Node::getOtherNode(cGate *gate) {
   return check_and_cast<Node *>(gate->getPathEndGate()->getOwnerModule());
 }
 
-void Node::initialize() {
+void Node::initialize(int stage) {
   // we need to be sure that the network manager is also initialized for
   // topologies read from RoutingSim-unaware ned files make sure that the
   // network manager instance is generated at first node initialization
-  getNetworkManager();
-  WATCH(id);
-  WATCH_VECTOR(neighbor_set);
+  if (stage == 0)
+  {
+	  getNetworkManager();
+	  WATCH(id);
+	  WATCH_VECTOR(neighbor_set);
 
-  if (par("id").intValue() == -1) {
-    this->id = gnodeid;
-    gnodeid++;
-  } else
-    this->id = par("id").intValue();
+          if (par("id").intValue() == -1) {
+		  this->id = gnodeid;
+		  gnodeid++;
+	  }
+	  else
+		  this->id = par("id").intValue();
 
-  minDelay = par("nodeMinDelay").intValue(); // nodeMinDelay is given in µs
-  maxDelay = par("nodeMaxDelay").intValue(); // nodeMaxDelay is given in µs
+          minDelay = par("nodeMinDelay").intValue(); // nodeMinDelay is given in µs
+	  maxDelay = par("nodeMaxDelay").intValue(); // nodeMaxDelay is given in µs
 
-  initNeighbors();
+          initNeighbors();
+  }
+  else {
+	  // create the protocol module dynamically
+	  const char* nodeModules = par("protocols");
+	  cModuleType* protocolType = cModuleType::get(nodeModules);
+	  cModule* protocol = protocolType->create( "protocol0", this->getParentModule() );
+	  protocol->finalizeParameters();
+
+          // connect gates
+	  cGate* in = NULL, *out = NULL;
+	  getOrCreateFirstUnconnectedGatePair("toProtocols", false, true, in, out );
+	  protocol->gate("toNode$o")->connectTo(in);
+	  out->connectTo( protocol->gate("toNode$i") );
+  } // end else
 }
 
 Node::~Node() { gnodeid = 1; }
 
 void Node::doBuildInside() {
-  // create node modules
-  const char *nodeModules = par("protocols");
-  cModuleType *protocolType = cModuleType::get(nodeModules);
-  cModule *protocol =
-      protocolType->create("protocol0", this->getParentModule());
-  protocol->finalizeParameters();
-
-  // connect gates
-  cGate *in = NULL, *out = NULL;
-  getOrCreateFirstUnconnectedGatePair("toProtocols", false, true, in, out);
-  protocol->gate("toNode$o")->connectTo(in);
-  out->connectTo(protocol->gate("toNode$i"));
-
   // We do not need to buildInside or scheduleStart, this is done
   // automatically since protocol is not a submodule.
 }
@@ -120,7 +124,7 @@ void Node::handleMessage(cMessage *msg) {
 
   // packet from Protocol? yes-> delegate!
   if (np->arrivedOn("toProtocols$i")) {
-    np->getHop().from = this->id;
+    np->getHopForUpdate().from = this->id;
 
     if (np->getHop().to == neighbor_cast)
       sendToNeighbors(np);

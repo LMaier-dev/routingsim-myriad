@@ -20,6 +20,7 @@
 #include <memory>
 #include <vector>
 #include <algorithm>
+#include "KadTypes.h"
 #include "KadPath.h"
 #include "stateseqno.h"
 
@@ -32,10 +33,6 @@ namespace routingsim {
 
 // type definitions
 
-using size_type = std::size_t;
-	//using stateseqno_t = uint16_t;
-using age_t = uint32_t;
-using nodedegree_t = uint16_t;
 constexpr unsigned short int maxRediscoveryRetries= 6;
 
 // see R2Kademlia.h

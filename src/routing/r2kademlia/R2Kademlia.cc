@@ -996,7 +996,7 @@ void R2Kademlia::sendFindNodeVia(const OverlayKey& destkey, KadContact_p viacont
 
 
 void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
-	OverlayKey& query = packet->getDstNodeID(); // get the destination ID
+	const OverlayKey& query = packet->getDstNodeID(); // get the destination ID
 	bool is_rediscovery= packet->getRediscovery();
 
 	EV_TRACE << "KadFindNodeReq (id=" << packet->getId() << ", nonce=" << packet->getNonce() << ") received query for: " << query.shortStr()

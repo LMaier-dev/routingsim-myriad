@@ -1044,7 +1044,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadLinkFailureNotify> packet) {
 	receivedVolume+= packet->getByteLength();
 
 	// when this method is called either we are an overlay hop or the final recipient
-	OverlayKey& target = packet->getDstNodeID(); // get the destination ID
+	const OverlayKey& target = packet->getDstNodeID(); // get the destination ID
 
         EV_TRACE << "KadLinkFailureNotify to " << target.shortStr() << " (id=" << packet->getId() << ")" << endl;
 

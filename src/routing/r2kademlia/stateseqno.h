@@ -13,6 +13,7 @@
  * 0xffff is an invalid seq number. it will be skipped over when incrementing.
  **/
 
+namespace routingsim {
 
 class stateseqno_t {
 private:	
@@ -46,4 +47,6 @@ public:
 
 inline
 std::ostream& operator<<(std::ostream& os, stateseqno_t sseq) { return sseq.operator<<(os); }
+
+}
 #endif // __ROUTINGSIM_Stateseqno_H_

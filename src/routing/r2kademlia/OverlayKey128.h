@@ -30,13 +30,17 @@
 
 #include <omnetpp.h>
 #include <crng.h>
+#include <limits>
 #define XXH_INLINE_ALL
 #include "xxhash.h"
+
+using namespace omnetpp;
+
+namespace routingsim {
 
 class BinaryValue;
 class OverlayKeyBit;
 
-using namespace omnetpp;
 
 /**
  * A common overlay key class based on int128
@@ -142,11 +146,6 @@ public:
 	 * @return Short string representation of this key
 	 */
 	std::string shortStr() const { return toString().substr(0,6); }
-
-	/**
-	 * Common stdc++ console output method
-	 */
-	friend std::ostream& operator<<(std::ostream& os, const OverlayKey& c);
 
 	/**
 	 * Returns true, if the key is unspecified
@@ -583,23 +582,6 @@ private:
 };
 
 
-namespace std {
-	template<> class hash<OverlayKey>
-	{
-	public:
-		size_t operator()(const OverlayKey& k) const;
-	};
-
-
-	inline
-	std::size_t std::hash<OverlayKey>::operator()(const OverlayKey& k) const {
-			using std::size_t;
-			
-			return k.hash();	
-	};
-
-}
-
 
 // default construction: create an unspecified node key
 inline
@@ -935,7 +917,7 @@ void omnet_random(OverlayKey::overlaykey_t& key, cRNG* rng)
 		// fill in 32 bit chunks
 		uint32_t tmpword;
 		for (uint32_t i= 0; i < 4; i++) {
-			tmpword= intuniform(rng, 0, 0xFFFFFFFF);
+			tmpword= rng->intRand(std::numeric_limits<uint32_t>::max());
 			key<<= 32;
 			key|= tmpword;
 		}
@@ -943,5 +925,30 @@ void omnet_random(OverlayKey::overlaykey_t& key, cRNG* rng)
 	while (key == OverlayKey::INVALIDKEYVALUE);
 }
 
+} // end namespace
+
+namespace std {
+	template<> class hash<routingsim::OverlayKey>
+	{
+	public:
+		size_t operator()(const routingsim::OverlayKey& k) const;
+	};
+
+
+	inline
+	std::size_t std::hash<routingsim::OverlayKey>::operator()(const routingsim::OverlayKey& k) const {
+			using std::size_t;
+
+			return k.hash();
+	};
+
+	/**
+	 * Common stdc++ console output method
+	 */
+	inline
+	std::ostream& operator<<(std::ostream& os, const routingsim::OverlayKey& c) {
+		return (os << c.toString(16));
+	};
+}
 
 #endif

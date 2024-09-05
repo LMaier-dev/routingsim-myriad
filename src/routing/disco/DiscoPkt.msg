@@ -12,36 +12,9 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with this program.  If not, see http://www.gnu.org/licenses/.
 // 
-
-
-cplusplus {{
-#include "foundation.h"
-}}
-
+import StandardPkt;
 
 namespace routingsim;
-
-cplusplus {{
-/// definition of a route
-class Node_ID {
-public:
-	nodeid_t id;
-	const char *origin= nullptr;
-	bool operator==(const Node_ID &cmp) const {
-		return(id==cmp.id);
-	}
-};
-inline std::ostream& operator<<(std::ostream& os, const Node_ID& u ) {
-    os << " id=" << u.id << " origin=" << (u.origin != nullptr ? u.origin : "NULL") ;
-    return os;
-}
-}}
-
-
-//
-// example message format
-//
-class noncobject Node_ID;
 
 /// if landmarkAnnouncement: landmark in position 0
 /// if vicinityAnnouncement: announcing node in position 0

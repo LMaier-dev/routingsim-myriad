@@ -1,0 +1,2 @@
+# only needed for the new msg syntax when compiling with 5.7
+MSGC:=$(MSGC) --msg6

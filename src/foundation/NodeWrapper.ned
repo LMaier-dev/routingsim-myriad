@@ -25,10 +25,17 @@ gates:
 	inout toNeighbors[];
 
 submodules:
+	// this will be dynamically created by NetworkTopology
 	node: Node {
-		id = nodeId;
+             //@dynamic(true);
+             id = parent.nodeId;
 	};
- 
+
+	// this will be dynamically created by NetworkTopology
+	protocol0 : Protocol {
+		  @dynamic(true);
+	};
+
 connections:
 	for i = 0..sizeof(toNeighbors)-1 {
 		toNeighbors[i] <--> node.toNeighbors++;

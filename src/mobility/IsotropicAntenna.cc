@@ -1,18 +1,20 @@
-
 #include "IsotropicAntenna.h"
+#include <numbers>
 
 namespace routingsim {
 
 Define_Module(IsotropicAntenna);
 
+constexpr double LIGHTSPEED = 299792458;
+
 // Free-Space-Path-Loss
 DB IsotropicAntenna::pathloss(double distance) {
   return DB(20 * log10(distance) + 20 * log10(frequency.toHz()) +
-            10 * log10(4 * PI / LIGHTSPEED));
+            10 * log10(4 * std::numbers::pi / LIGHTSPEED));
 }
 
 double IsotropicAntenna::distance_from_pathloss(DB pathloss) {
-  return pow(10, (pathloss.getValue() - 20 * log10(frequency.toHz()) - 10 * log10(4 * PI / LIGHTSPEED)) / 20);
+  return pow(10, (pathloss.getValue() - 20 * log10(frequency.toHz()) - 10 * log10(4 * std::numbers::pi / LIGHTSPEED)) / 20);
 }
 
 double IsotropicAntenna::calcDatarate(double distance) {

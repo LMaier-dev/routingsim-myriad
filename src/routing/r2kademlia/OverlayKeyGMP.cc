@@ -26,6 +26,8 @@
 #include <omnetpp.h>
 #include "OverlayKeyGMP.h"
 
+using namespace routingsim;
+
 uint32_t OverlayKeyGMP::keyLength = MAX_KEYLENGTH;
 
 // TODO: replace both commands below with simpler macros without conditionals
@@ -510,12 +512,6 @@ bool OverlayKeyGMP::isBetweenLR(const OverlayKeyGMP& keyA,
 // statics and globals
 //----------------------------------------------------------------------
 
-// default console output
-std::ostream& operator<<(std::ostream& os, const OverlayKeyGMP& c)
-{
-	os << c.toString(16);
-	return os;
-};
 
 // returns a key filled with bit 1
 OverlayKeyGMP OverlayKeyGMP::getMax()

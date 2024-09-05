@@ -14,15 +14,11 @@ namespace routingsim {
 #define foreach(a, b) BOOST_FOREACH (a, b)
 #endif
 
-#ifndef LIGHTSPEED
-#define LIGHTSPEED        299792458
-#endif
-
 /// identifier type
 typedef unsigned long id_t;
 
 /// node identifier definitions
-typedef id_t nodeid_t;
+using nodeid_t = id_t;
 const nodeid_t undefined_node = ~0;
 const nodeid_t neighbor_cast = ~0;
 

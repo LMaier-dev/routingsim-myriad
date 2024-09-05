@@ -17,11 +17,17 @@
 #include "StatisticSample.h"
 #include "NetworkManager.h"
 
-#include<boost/lexical_cast.hpp>
-#include<algorithm>
-#include<string>
-#include<omnetpp.h>
+#include <boost/lexical_cast.hpp>
+#include <string>
+#include <omnetpp.h>
 #include <cmath>
+
+// for backwards compatibility
+#if OMNETPP_VERSION <= 0x0507
+ #define findModuleByPath getModuleByPath
+#endif
+
+
 
 namespace routingsim {
 Define_Module(Statistics);
@@ -492,7 +498,7 @@ Statistics& getStatistics( const char* name ) {
 	}
 	if (name == nullptr && stats == nullptr) {
 		stats = dynamic_cast<Statistics*>(
-			getSimulation()->getModuleByPath(STATS_MAIN));
+			getSimulation()->findModuleByPath(STATS_MAIN));
 		if (stats == nullptr)
 			stats = createStats();
 	}

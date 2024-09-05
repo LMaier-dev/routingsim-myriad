@@ -28,6 +28,8 @@
 #include <iomanip>
 #include "OverlayKey128.h"
 
+using namespace routingsim;
+
 //--------------------------------------------------------------------
 // constants
 //--------------------------------------------------------------------
@@ -328,13 +330,6 @@ bool OverlayKey::isBetweenLR(const OverlayKey& keyA,
 //----------------------------------------------------------------------
 // statics and globals
 //----------------------------------------------------------------------
-
-// default console output
-std::ostream& operator<<(std::ostream& os, const OverlayKey& c)
-{
-	os << c.toString(16);
-	return os;
-};
 
 
 // generate random number

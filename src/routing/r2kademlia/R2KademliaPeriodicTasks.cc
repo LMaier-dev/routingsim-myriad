@@ -345,7 +345,9 @@ bool R2Kademlia::doSendExplorePathPacket(short timerId)
 	    contactp != nullptr) {
 		EV_TRACE << "explore path for contact: " << *contactp << endl;
 
-		if (auto contacts = routingTable.getClosestContacts(contactp->getKey(), 2*findNodeNumber, true); not contacts.empty()) {
+                if (auto contacts = routingTable.getClosestContacts(
+                        contactp->getKey(), 2 * findNodeNumber, true);
+                    not contacts.empty()) {
 
 			// choose random via contact
 			unsigned int random_index = intuniform(0,contacts.size()-1);

@@ -84,12 +84,13 @@ protected:
 	// ------------------------------------------------------------- private --
 private:
 	Node* parent;
-	virtual void initialize();
+	virtual void initialize(int stage);
+	virtual int numInitStages() const { return 2; };
 	virtual void handleMessage(cMessage *msg);
 };
 
 /**
- * Protocol class for legacy code that needs unwraped pointers.
+ * Protocol class for legacy code that needs unwrapped pointers
  * @author Jakob Thomas
  */
 class LegacyProtocol : public Protocol {

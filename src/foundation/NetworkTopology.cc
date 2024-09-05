@@ -314,7 +314,8 @@ void NetworkTopology::readTopology(const string& topofilename, string topologyty
 //     (int \t int) describing the "from" and "to" of an edge
 void NetworkTopology::readSelfDefinedTopology(std::ifstream &topologyFile, std::set<nodeid_t> &nodeset, vector< pair<nodeid_t, nodeid_t> > &edges, boost::unordered_map < nodeid_t, properties_t > &nodeproperties) {
 	string line;
-	unsigned int numNodes = 0, numLinks = 0; // as given by header
+	unsigned int numNodes(0); // as given by header
+	unsigned int numLinks(0); // as given by header
 	nodeid_t fromNode, toNode;
 	int lineNumber = 0;
 	bool undirectedGraph;
@@ -354,11 +355,13 @@ void NetworkTopology::readSelfDefinedTopology(std::ifstream &topologyFile, std::
 			}
 			if (headerVersion == 1 and lineNumber == 1 and tokenNumber == 3) {
 				numNodes = boost::lexical_cast<int>(*it);
-				continue;
+				EV << "Number of nodes: " << numNodes << endl;
+                                continue;
 			}
 			if (headerVersion == 1 and lineNumber == 1 and tokenNumber == 5) {
 				numLinks = boost::lexical_cast<int>(*it);
-				continue;
+				EV << "Number of links: " << numLinks << endl;
+                                continue;
 			}
 			if (headerVersion == 1 and lineNumber == 1 and tokenNumber == 7) {
 				if ( string(*it) == string("True") ||
@@ -377,13 +380,15 @@ void NetworkTopology::readSelfDefinedTopology(std::ifstream &topologyFile, std::
 			// old header
 			if (headerVersion == 0 and lineNumber == 1 and tokenNumber == 1) {
 				numNodes = boost::lexical_cast<int>(*it);
-				continue;
+				EV << "Number of nodes: " << numNodes << endl;
+                                continue;
 			}
 			if (headerVersion == 0 and lineNumber == 1 and tokenNumber == 2) {
 				numLinks = boost::lexical_cast<int>(*it);
 				undirectedGraph = true;
 				EV << "Old header version, assuming network topology is an undirected graph!" << endl;
-				continue;
+				EV << "Number of links: " << numLinks << endl;
+                                continue;
 			}
 
 			// skip comment lines in new header format

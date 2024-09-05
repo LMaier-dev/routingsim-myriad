@@ -23,9 +23,11 @@
 #include "R2Kademlia.h"
 #include "foundation/NetworkManager.h"
 
-namespace std {
+using namespace routingsim;
 
 using link_t = std::pair<OverlayKey,OverlayKey> ;
+
+namespace std {
 
 template<> class hash<link_t>
 {
@@ -76,7 +78,8 @@ struct MessageDroppedInfo {
 class KadObserver: public cSimpleModule, public StatisticSample {
 
 protected:
-	virtual void initialize() override;
+	virtual void initialize(int stage) override;
+	virtual int numInitStages() const override { return 2; };
 	virtual void finish() override;
 	virtual void handleMessage(cMessage *msg) override;
 	void recordStatistics();

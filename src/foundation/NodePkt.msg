@@ -18,7 +18,9 @@ cplusplus {{
 
 namespace routingsim;
 
-class noncobject hop_t;
+class hop_t {
+      @existingClass;
+}
 
 enum PayloadTypes {
     PAYLOAD_INVALID = 0;
@@ -27,7 +29,7 @@ enum PayloadTypes {
 }
 
 packet NodePkt {
-    int type enum(PayloadTypes);
+    int type @enum(PayloadTypes);
     hop_t hop;
     int destGateId = -1;
 }

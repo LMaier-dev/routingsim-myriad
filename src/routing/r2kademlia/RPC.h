@@ -26,7 +26,7 @@
 namespace routingsim {
 
 
-typedef unsigned int nonce_t;
+using  nonce_t = unsigned int;
 //KadPacket;
 using packet_t = class KadPacket;
 using packet_p = std::unique_ptr<KadPacket>;

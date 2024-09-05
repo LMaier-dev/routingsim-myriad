@@ -10,16 +10,18 @@ Singapore, SGP, December 14-16, 2011, 305–310, IEEE, Piscataway, NJ.
 doi:10.1109/ICON.2011.6168493 
 https://ieeexplore.ieee.org/document/6168493
 
-The current version has been tested with OMNeT++ 5.7 (5.6.1, 5.5.1 and 5.4.1 as well). 
-OMNeT++ 6.x support is not yet provided.
+The current version has been tested with OMNeT++ 6.0.3 and OMNeT++ 5.7.
 
 ## Installation
 While OMNeT++ is able to run under Windows, the recommended and
 tested environment is a native Linux installation (e.g., Ubuntu)
 Get OMNeT++ from https://omnetpp.org/ and install it according to
 the manual. You should make sure that
-`CXXFLAGS=-std=c++17`
+`CXXFLAGS=-std=c++20`
 is set in `configure.user` of OMNeT++.
+
+Note: you should use at least g++-12 as g++-11 has a compiler bug
+that causes crashes.
 
 Additionally, one needs boost, e.g., libboost-all-dev
 as well as libgmp (libgmp-dev).
@@ -29,9 +31,12 @@ type
 `make makefiles`
 to generate the makefiles and
 afterwards 
-`make`
-or `make -j 4 MODE=debug`
-to create a debug built.
+`make -j 8`
+or `make -j 8 MODE=debug`
+to create a debug built
+(`-j 8` starts 8 compile processes in parallel, choose according to
+you number of available cores, just using `-j` tries to do this automatically, but
+it may overload your machine, esp. with respect to RAM consumption).
 
 Create a symbolic link in src/ to the topologies directory:
 

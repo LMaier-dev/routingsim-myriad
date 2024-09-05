@@ -19,15 +19,21 @@
 #include <omnetpp.h>
 #include <vector>
 
+
 #include "foundation.h"
+
+namespace routingsim {
+
 /// virtual identifier definitions
-typedef uint32_t vid_t;
+using vid_t = uint32_t;
 const vid_t undefined_vid = 0;
+
+}
+
 #include "VRObserver.h"
 #include "StatisticSample.h"
 
 namespace routingsim {
-
 
 /**
  * The implementation of a Virtual Ring Routing (VRR)-inspired protocol.

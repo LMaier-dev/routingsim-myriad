@@ -35,8 +35,6 @@ namespace routingsim {
 class KadRoutingTable;
 class NeighborTable;
 
-typedef uint32_t age_t;
-
 // this class implements a single R²/Kad Bucket that distinguishes between normal contacts and physical neighbor contacts
 class KadBucket
 {

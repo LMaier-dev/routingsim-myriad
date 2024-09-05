@@ -26,12 +26,17 @@ namespace routingsim {
 Define_Module(KadObserver);
 
 /// singleton pointer
-static KadObserver* observer = NULL;
+static KadObserver* observer = nullptr;
 
-void KadObserver::initialize() {
-
-	ASSERT(observer == NULL || observer == this);
-	if (getEnvir()->getConfig()->getConfigValue("sim-time-limit") != nullptr) {
+void
+KadObserver::initialize(int stage) {
+       // since the Observer is initialized by the dynamically created protocol module
+       // it is called at stage 1 (stage 0 is never called then)
+       if (stage < 1)
+               return;
+       //EV << "KadObserver initialize() called, stage:" << stage << endl;
+       ASSERT(observer == this);
+       if (getEnvir()->getConfig()->getConfigValue("sim-time-limit") != nullptr) {
 		simTimeLimit= SimTime::parse(getEnvir()->getConfig()->getConfigValue("sim-time-limit"));
 	}
 	getStatistics().addSample(this);
@@ -598,11 +603,11 @@ bool KadObserver::getFailedContacts() {
 
 
 KadObserver& getKadObserver() {
-	if (observer == NULL) {
-		cModuleType* type = cModuleType::get(
-				"routingsim.routing.r2kademlia.KadObserver");
+	if (observer == nullptr) {
+		cModuleType* type = cModuleType::get("routingsim.routing.r2kademlia.KadObserver");
 		cModule* mod = getSimulation()->getModuleByPath("<root>");
-		observer = dynamic_cast<KadObserver*>(type->create("KadObserver", mod));
+                observer = dynamic_cast<KadObserver *>(type->create("KadObserver", mod));
+		observer->finalizeParameters();
 	}
 	return *observer;
 }

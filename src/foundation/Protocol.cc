@@ -18,11 +18,16 @@
 namespace routingsim {
 
 //Define_Module(Protocol);
+Register_Abstract_Class(Protocol);
 
-void Protocol::initialize() {
-	parent = Node::getOtherNode(gate("toNode$o"));
-	assert(parent!=NULL);
-	this->onInitialize();
+void Protocol::initialize(int stage) {
+
+	// Protocol entity is created at initialization stage 1
+	if (stage == 1) {
+		parent = Node::getOtherNode(gate("toNode$o"));
+		assert(parent!=NULL);
+		this->onInitialize();
+	}
 }
 
 void Protocol::handleMessage(cMessage *msg) {
@@ -63,7 +68,7 @@ void Protocol::unbind(int type) {
 
 /// sends a packet
 void Protocol::sendToNode( nodeid_t nid, NodePkt* pkt, simtime_t delay) {
-	pkt->getHop().to = nid;
+	pkt->getHopForUpdate().to = nid;
 
 	if (delay == 0)
 		cSimpleModule::send(pkt, "toNode$o");
@@ -74,7 +79,7 @@ void Protocol::sendToNode( nodeid_t nid, NodePkt* pkt, simtime_t delay) {
 
 /// sends a packet
 void Protocol::sendToNeighbors( NodePkt* pkt) {
-	pkt->getHop().to = neighbor_cast;
+	pkt->getHopForUpdate().to = neighbor_cast;
 	cSimpleModule::send(pkt, "toNode$o");
 }
 

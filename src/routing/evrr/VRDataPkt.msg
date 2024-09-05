@@ -13,14 +13,26 @@
 // along with this program.  If not, see http://www.gnu.org/licenses/.
 // 
 cplusplus {{
-#include "foundation.h"
 #include "VirtualRing.h"
 }}
 
 namespace routingsim;
 
-class noncobject nodeid_t;
-class noncobject vid_t;
+// class nodeid_t {
+//  @existingClass;
+//  @castFunction(false); // is just a typedef
+//  @subclassable(false);
+//  @descriptor(false);
+//  @supportsPtr(false);
+// }
+
+// class vid_t {
+//  @existingClass;
+//  @castFunction(false); // is just a typedef
+//  @subclassable(false);
+//  @descriptor(false);
+//  @supportsPtr(false);
+// }
 
 // virtual ring data packet
 packet VRDataPkt {
@@ -31,11 +43,11 @@ packet VRDataPkt {
     int hopcount;
     
     // best distance (zero in the end)
-    vid_t best;
+    uint32_t best; // vid_t
     
     // source address
-    nodeid_t src;
+    unsigned long src; // nodeid_t
     
     // destination address
-    nodeid_t dst;
+    unsigned long dst; // nodeid_t
 }

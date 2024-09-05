@@ -1,17 +1,20 @@
 cplusplus {{
-#include "foundation.h"
-#include "DiscoPkt_m.h"
+#include "Node_ID.h"
 }}
 
 
-namespace routingsim;
 //
 // example message format
 //
-class noncobject Node_ID;
+
+namespace routingsim;
+
+class Node_ID {
+ @existingClass;
+}
 
 packet StandardPkt {
-	 Node_ID via_Landmark;
+     Node_ID via_Landmark;
      Node_ID destination;
      Node_ID source;
      Node_ID RoutingPath[];
