@@ -84,8 +84,17 @@ using ContactRequestQueue = RequestQueue<KadContact> ;
 using KeyRequestQueue = RequestQueue< std::pair<OverlayKey,RequestQueueElementActionType> >;
 
 /**
- * Implementation of R2Kad.
- * Routing with R/Kademlia
+ * Implementation of KIRA – Kademlia-directed ID-based Routing Architecture
+ * Initial publication:
+ * R. Bless, M. Zitterbart, Z. Despotovic and A. Hecker, "KIRA: Distributed
+Scalable ID-based Routing with Fast Forwarding"
+ * 2022 IFIP Networking Conference (IFIP Networking), Catania, Italy, 2022,
+ * doi: 10.23919/IFIPNetworking55013.2022.9829816.
+ * https://ieeexplore.ieee.org/document/9829816
+ *
+ * Routing Tier: R²/Kad – Routing with R/Kademlia
+ * Forwarding Tier: PathID-based Forwarding with Two Segments
+ *
  * @author Jakob Thomas, Roland Bless
  */
 

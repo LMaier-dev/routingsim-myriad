@@ -46,12 +46,12 @@ Create a symbolic link in src/ to the topologies directory:
 To start a simulation you can change to src/
 and type in
 
-    ./RoutingSim_dbg ../simulations/r2kademlia/eval.ini
+    ./RoutingSim_dbg ../simulations/KIRA/eval.ini
 
 Simulations for evaluations should run with the Cmdenv interface
 and compiled with MODE=release.
 
-Result files are stored in ../simulations/r2kademlia/results
+Result files are stored in ../simulations/KIRA/results
 for the example above.
 
 ## State Export

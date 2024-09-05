@@ -19,7 +19,6 @@
 
 #include "Statistics.h"
 #include "KIRA.h"
-#include "KadRoutingTable.h"
 #include "KadObserver.h"
 
 #include "FwdTable.h"
