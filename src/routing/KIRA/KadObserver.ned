@@ -13,7 +13,7 @@
 // along with this program.  If not, see http://www.gnu.org/licenses/.
 // 
 
-package routingsim.routing.r2kademlia;
+package routingsim.routing.KIRA;
 
 //
 // 

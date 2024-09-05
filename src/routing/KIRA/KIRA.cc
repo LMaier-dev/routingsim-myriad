@@ -1344,7 +1344,7 @@ void R2Kademlia::recordScalars() {
 void R2Kademlia::recordRoutingTable() {
 	// these submodules are a hack to record scalars for the contacts
 	// they are only used for scalar recording
-	cModuleType* modType = cModuleType::get("routingsim.routing.r2kademlia.Dummy");
+	cModuleType* modType = cModuleType::get("routingsim.routing.KIRA.Dummy");
 	auto allContacts = routingTable.getAllContacts();
 	std::string contactStr{"contact"};
 	for (size_type i= 0; i < allContacts.size(); i++) {

@@ -246,7 +246,7 @@ void KadObserver::recordStatistics() {
 
 // this will only be called at KadObserver::finish()
 void KadObserver::recordMessageScalars() {
-	cModuleType* modType = cModuleType::get("routingsim.routing.r2kademlia.Dummy");
+	cModuleType* modType = cModuleType::get("routingsim.routing.KIRA.Dummy");
 	std::string messageDeliveredStr{"messageDelivered"};
 	uint i = 0;
 	for (auto& info : messageDeliveryInfos){
@@ -604,7 +604,7 @@ bool KadObserver::getFailedContacts() {
 
 KadObserver& getKadObserver() {
 	if (observer == nullptr) {
-		cModuleType* type = cModuleType::get("routingsim.routing.r2kademlia.KadObserver");
+		cModuleType* type = cModuleType::get("routingsim.routing.KIRA.KadObserver");
 		cModule* mod = getSimulation()->getModuleByPath("<root>");
                 observer = dynamic_cast<KadObserver *>(type->create("KadObserver", mod));
 		observer->finalizeParameters();
