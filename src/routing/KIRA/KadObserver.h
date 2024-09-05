@@ -20,7 +20,7 @@
 #include <fstream>
 #include "foundation.h"
 #include "OverlayKey.h"
-#include "R2Kademlia.h"
+#include "KIRA.h"
 #include "foundation/NetworkManager.h"
 
 using namespace routingsim;

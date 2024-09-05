@@ -13,8 +13,8 @@
 // along with this program.  If not, see http://www.gnu.org/licenses/.
 // 
 
-#ifndef __ROUTINGSIM_R2Kademlia_H_
-#define __ROUTINGSIM_R2Kademlia_H_
+#ifndef __ROUTINGSIM_KIRA_H_
+#define __ROUTINGSIM_KIRA_H_
 
 #ifndef NDEBUG
 #define _DEBUG_ONLY(X) X
@@ -769,4 +769,4 @@ template<typename T> std::unique_ptr<T> safe_packet_cast(KadPacket_p& packet) {
 
 } //namespace
 
-#endif // __ROUTINGSIM_R2Kademlia_H_
+#endif // __ROUTINGSIM_KIRA_H_

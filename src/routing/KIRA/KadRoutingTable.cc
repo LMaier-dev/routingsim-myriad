@@ -23,7 +23,7 @@
 #include <algorithm>
 #include <cstdlib>
 #include <limits>
-#include "routing/r2kademlia/RequestQueue.h"
+#include "RequestQueue.h"
 
 namespace routingsim {
 

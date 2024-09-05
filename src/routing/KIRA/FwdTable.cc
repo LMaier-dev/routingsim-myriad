@@ -1,5 +1,5 @@
+#include "KIRA.h"
 #include "FwdTable.h"
-#include "R2Kademlia.h"
 #include "PathIDUtils.h"
 
 namespace routingsim {

@@ -18,12 +18,12 @@
 #include <cstddef>
 
 #include "Statistics.h"
-#include "R2Kademlia.h"
+#include "KIRA.h"
 #include "KadRoutingTable.h"
 #include "KadObserver.h"
 
 #include "FwdTable.h"
-#include "routing/r2kademlia/OverlayKey128.h"
+#include "OverlayKey128.h"
 #include "simtime_t.h"
 
 namespace routingsim {

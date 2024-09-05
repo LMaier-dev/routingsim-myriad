@@ -1,4 +1,4 @@
-#include "R2Kademlia.h"
+#include "KIRA.h"
 
 /*********************************************************
  * This file contains code that is related to the discovery
