@@ -135,7 +135,7 @@ KadObserver::initialize(int stage) {
 #if DEBUG_LINKFAILURENOTIFICATIONS != 0
 	single_selfmsg_debug = new TimerMsg(-1, [this](short int ignored)->bool { this->getFailedContacts(); single_selfmsg_debug= nullptr; return true; } );
         // callback will be carried out with delay of 1s after the linkfailure
-	if (auto dynamicsmod= getSimulation()->getModuleByPath("*.dynamics"); dynamicsmod != nullptr) {
+	if (auto dynamicsmod= getSimulation()->findModuleByPath("*.dynamics"); dynamicsmod != nullptr) {
 		simtime_t period= dynamicsmod->par("period");
                 scheduleAt(period + SimTime(1, SIMTIME_S), single_selfmsg_debug);
 	}
