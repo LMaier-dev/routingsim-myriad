@@ -20,7 +20,6 @@
 
 #include "KadObserver.h"
 #include "NetworkManager.h"
-#include <fstream>
 
 namespace routingsim {
 Define_Module(KadObserver);
@@ -161,7 +160,8 @@ void KadObserver::finish() {
 #endif
         }
 
-	nodes.clear();
+	nodeid_to_key.clear();
+	key_to_nodeid.clear();
 	histograms.clear();
 	outVectors.clear();
 	addOutVectors.clear();
@@ -189,18 +189,18 @@ void KadObserver::handleMessage(cMessage *msg) {
 
 // returns a randomly chosen set of nodes of size n
 std::set<nodeid_t> KadObserver::sampleNodes(int n) {
-	if (n < 0 or (size_type) n > nodes.size())
-		n = nodes.size();
+	if (n < 0 or (size_type) n > nodeid_to_key.size())
+		n = nodeid_to_key.size();
 	std::set<nodeid_t> sample{};
-	NetworkTopology& topo = getNetworkManager()->getMobilityTypologie();
+	NetworkTopology& topo = getNetworkManager()->getMobilityTopology();
 	// use all nodes if n larger than 80% of all nodes (then sampling is not useful anymore)
-	if (n > nodes.size() * 0.8) {
-		for (auto& pair : nodes.right)
+	if (n > nodeid_to_key.size() * 0.8) {
+		for (auto& pair : nodeid_to_key)
 			sample.insert(pair.first);
 	}
 	while (sample.size() < (size_type) n) {
 		nodeid_t nid = topo.getRandomNode(getRNG(0));
-		ASSERT(nodes.right.count(nid) == 1);
+		ASSERT(nodeid_to_key.contains(nid));
 		sample.insert(nid);
 	}
 	while (sample.size() > (size_type) n)
@@ -217,7 +217,7 @@ void KadObserver::recordLinkUsage() const {
 	linkUsageHist.setMode(cHistogram::MODE_INTEGERS);
 	NetworkTopology& topo = getNetworkManager()->getTopology();
 
-	for (nodeid_t nid=0; nid < nodes.size(); nid++) {
+	for (nodeid_t nid=0; nid < nodeid_to_key.size(); nid++) {
 		if (const Node *np= topo.getNodeModule(nid); np != nullptr) {
 			// traverse all outgoing links to neighbors
 			//unsigned long long sum= 0;
@@ -309,33 +309,64 @@ const R2Kademlia& KadObserver::getR2Kademlia(const Node* nodeMod) const {
 void KadObserver::registerUp(const OverlayKey& key, nodeid_t owner) {
 	ASSERT(not key.isUnspecified());
 	ASSERT(owner != undefined_node);
-	ASSERT(nodes.left.count(key) == 0);
-	ASSERT(nodes.right.count(owner) == 0);
-	nodes.insert({key, owner});
+	ASSERT(key_to_nodeid.contains(key) == false);
+	ASSERT(nodeid_to_key.contains(owner) == false);
+        key_to_nodeid.insert({key, owner});
+	nodeid_to_key.insert({owner, key});
+	nodelist_is_consistent= false;
 }
+
 void KadObserver::registerDown(const OverlayKey& key, nodeid_t owner) {
 	ASSERT(not key.isUnspecified());
-	ASSERT(owner != undefined_node);
-	auto it = nodes.right.find(owner);
-	ASSERT(it != nodes.right.end());
-	ASSERT(it->second == key);
-	nodes.right.erase(it);
+        ASSERT(owner != undefined_node);
+        ASSERT(key_to_nodeid.contains(key));
+	ASSERT(nodeid_to_key.contains(owner));
+
+        key_to_nodeid.erase(key);
+        nodeid_to_key.erase(owner);
+	nodelist_is_consistent= false;
 }
 
-const OverlayKey& KadObserver::getRandomNodeKey() const {
-	auto it = nodes.left.begin();
-	//TODO optimization: this is O(n), find something better!
-	std::advance(it, intuniform(0, nodes.size() - 1));
-	return it->first;
+void
+KadObserver::updateNodelist()
+{
+	nodelist.clear();
+	nodelist.reserve(nodeid_to_key.size());
+	for (const auto &pair : key_to_nodeid) {
+		nodelist.push_back(pair.first);
+	}
+	std::sort(nodelist.begin(), nodelist.end());
+
+	nodelist_is_consistent= true;
 }
 
-const OverlayKey& KadObserver::getClosestExistingKey(const OverlayKey& key) const {
-	ASSERT(nodes.size() > 0);
-	auto itLower = nodes.left.lower_bound(key);
-	if (itLower == nodes.left.end()) return (++itLower)->first;
-	if (itLower->first == key) return key;
-	auto itUpper = itLower--;
-	return ((itLower->first ^ key) < (itUpper->first ^ key)) ? itLower->first : itUpper->first;
+
+const OverlayKey &KadObserver::getRandomNodeKey() {
+	// this is a one time effort to create the list,
+	// but getRandomNodeKey() will be called many times
+	if (not nodelist_is_consistent) {
+          // initialize node vector
+		updateNodelist();
+	}
+
+	return nodelist.at(intuniform(0, nodelist.size() - 1));
+}
+
+const OverlayKey& KadObserver::getClosestExistingKey(const OverlayKey& key) {
+	if (not nodelist_is_consistent) {
+          // initialize node vector
+		updateNodelist();
+	}
+	ASSERT(not nodelist.empty());
+	// Search for first element x such that key ≤ x
+        auto itLower = std::lower_bound(nodelist.cbegin(), nodelist.cend(), key);
+        if (itLower == nodelist.cend()) // not found, return last element
+		return *(--itLower);
+	auto itUpper = itLower++;
+        if (itUpper == nodelist.cend())
+		return *itLower;
+	// return the element that is closer with respect to XOR metrix
+	return ((*itLower ^ key) < (*itUpper ^ key)) ? *itLower : *itUpper;
 }
 
 
@@ -349,7 +380,7 @@ uint KadObserver::getPhysicalDistance(const OverlayKey& from, const OverlayKey& 
 
 uint KadObserver::getPopularity(const OverlayKey& key) const {
 	uint pop = 0;
-	for (auto pair : nodes.right)
+	for (auto pair : nodeid_to_key)
 		if (getR2Kademlia(pair.first).getRoutingTable().getContact(key) != nullptr)
 			pop++;
 	return pop;
@@ -589,9 +620,7 @@ void KadObserver::sampleStatistics (Statistics &stats) {
 
 bool KadObserver::getFailedContacts() {
 	// iterate over all nodes
-	for (auto i = nodes.right.begin(); i != nodes.right.end(); i++) {
-		nodeid_t id = i->first;
-		
+	for (auto [id,ignored] : nodeid_to_key) {
 		auto& rt = getR2Kademlia(id).getRoutingTable();
 		for (const auto& failedlink : failedLinkSet) {
 			// now check every path for containing failed links and print them

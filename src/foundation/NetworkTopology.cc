@@ -562,7 +562,8 @@ nodeid_t NetworkTopology::getRandomNode(cRNG *rng) const {
 	ActiveBGLVertexIt vi, vi_end;
 	FilteredGraph fg(*BGLtopology, activeEdges<topologyGraph>(*BGLtopology), activeNodes<topologyGraph>(*BGLtopology));
 	tie(vi, vi_end) = vertices(fg);
-	unsigned int n = getActiveNumberNodes();
+        unsigned int n = getActiveNumberNodes();
+	// advance this is O(n) in time
 	std::advance(vi, rng->intRand(n));
 	return *vi;
 }
@@ -886,9 +887,9 @@ void NetworkTopology::createNetwork(cModule *parent, std::string modTypeStr) {
 	}
 	EV << "Created links (" << num_edges(*BGLtopology) << " unidirectional)." << endl;
 	if (networkManager->par("limitBandwidthLinks").boolValue()) {
-		EV << "Bandwidth Links: " << networkManager->par("bandwidthLinksBps").doubleValue() << "bps" << endl;
+		EV << "Link Bandwidth: " << networkManager->par("bandwidthLinksBps").doubleValue() << "bps" << endl;
 	} else {
-		EV << "Bandwidth Links: unlimited" << endl;
+		EV << "Link Bandwidth: unlimited" << endl;
 	}
 
 	// start simulation

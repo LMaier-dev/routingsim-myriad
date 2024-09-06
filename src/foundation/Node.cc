@@ -283,12 +283,12 @@ void Node::onHello(NodePkt *pkt) {
   nr.id = nid;
   if (pkt->getDestGateId() == -1) {
     nr.out = gate("toNeighbors$o", pkt->getArrivalGate()->getIndex());
-    EV_TRACE << "onHello: Node " << id << " received hello from " << nid
-            << " on gate " << pkt->getArrivalGate()->getIndex() << endl;
+    //EV_TRACE << "onHello: Node " << id << " received hello from " << nid
+    //        << " on gate " << pkt->getArrivalGate()->getIndex() << endl;
   } else {
     nr.out = gate("toNeighbors$o", pkt->getDestGateId());
-    EV_TRACE << "onHello: Node " << id << " received hello from " << nid
-            << " on fake gate " << pkt->getDestGateId() << endl;
+    //EV_TRACE << "onHello: Node " << id << " received hello from " << nid
+    //        << " on fake gate " << pkt->getDestGateId() << endl;
   }
 
   // announce at modules

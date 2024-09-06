@@ -45,7 +45,7 @@ public:
 	inline NetworkDynamics& getDynamics() { return *dynamics; }
 
         /// Returns the mobility manager
-        inline MobilityTopology& getMobilityTypologie() { return *mobilityTopology; }
+        inline MobilityTopology& getMobilityTopology() { return *mobilityTopology; }
 
         /// Returns the mobility dynamics module
         inline MobilityDynamics& getMobilityDynamics() { return *mobilityDynamics; }

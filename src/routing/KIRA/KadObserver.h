@@ -16,10 +16,6 @@
 #ifndef __ROUTINGSIM_KadObserver_H_
 #define __ROUTINGSIM_KadObserver_H_
 
-#include <boost/bimap.hpp>
-#include <fstream>
-#include "foundation.h"
-#include "OverlayKey.h"
 #include "KIRA.h"
 #include "foundation/NetworkManager.h"
 
@@ -86,7 +82,10 @@ protected:
 	void recordMessageScalars();
 	void recordLinkUsage() const;
 private:
-	boost::bimap<OverlayKey, nodeid_t> nodes;
+	std::unordered_map<OverlayKey, nodeid_t> key_to_nodeid;
+	std::unordered_map<nodeid_t, OverlayKey> nodeid_to_key;
+        std::vector<OverlayKey> nodelist;
+	bool nodelist_is_consistent= false;
 
 	// this is for debugging purposes
 	std::unordered_set<link_t> failedLinkSet;
@@ -148,7 +147,7 @@ private:
 
 	// the set of nodes used for sampling statistics values
 	std::set<nodeid_t> sampleNodes(int n);
-
+	void updateNodelist();
 #ifdef R2K_RT_EXPORT
         // export simulation state for later analysis
         void exportRoutingTables(std::ofstream file) const;
@@ -170,22 +169,22 @@ public:
 	void registerDown(const OverlayKey& key, nodeid_t owner);
 
 	/// returns the key of a given node id, if it is unknown std::out_of_range is thrown
-	inline const OverlayKey& getNodeKey(nodeid_t owner) const { return nodes.right.at(owner); };
+	inline const OverlayKey& getNodeKey(nodeid_t owner) const { return nodeid_to_key.at(owner); };
 	/// returns the node id of a given overlay key, if it is unknown std::out_of_range is thrown
-	inline nodeid_t getNodeId(const OverlayKey& key) const { return nodes.left.at(key); };
+	inline nodeid_t getNodeId(const OverlayKey& key) const { return key_to_nodeid.at(key); };
 	/// returns true if a node with the given key is known
-	inline bool exists(const OverlayKey& key) const { return nodes.left.count(key) > 0; };
+	inline bool exists(const OverlayKey& key) const { return key_to_nodeid.contains(key); };
 
 	//inline uint32_t getNodeDegree(const OverlayKey& key) const { return getR2Kademlia(key).neighborTable.size(); } // requires being a friend of R2Kademlia
 	//inline bool checkSeqNo(const OverlayKey& key, stateseqno_t seqno) const { return seqno <= getR2Kademlia(key).getGLSSeqNo();  };
 
 	/// returns the closest key that is assigned to a node
-	const OverlayKey& getClosestExistingKey(const OverlayKey& key) const;
+	const OverlayKey& getClosestExistingKey(const OverlayKey& key);
 	/// returns the key of a random node (chosen uniformly at random)
-	const OverlayKey& getRandomNodeKey() const;
+	const OverlayKey& getRandomNodeKey();
 	/// returns chooses a key at random and returns the closest existing key.
 	/// note that this is not uniform over the nodes.
-	const OverlayKey& getRandomExistingKey() const { return getClosestExistingKey(OverlayKey::random(getRNG(0))); };
+	const OverlayKey& getRandomExistingKey() { return getClosestExistingKey(OverlayKey::random(getRNG(0))); };
 	/// returns the physical distance between the to nodes with the keys. the keys MUST exist!
 	uint getPhysicalDistance(const OverlayKey& from, const OverlayKey& to) const;
 	/// returns the number of other nodes that have this key in their routing table
