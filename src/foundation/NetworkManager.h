@@ -37,8 +37,10 @@ class NetworkManager: public cSimpleModule, public StatisticSample {
 public:
 	/// Returns the network topology  // TODO: mobilityTopology
 	inline NetworkTopology& getTopology() {
-          if (useMobility) return *mobilityTopology;
-          else return *topology;
+          if (useMobility)
+            return *mobilityTopology;
+          else
+            return *topology;
         }
 
 	/// Returns the network dynamics module

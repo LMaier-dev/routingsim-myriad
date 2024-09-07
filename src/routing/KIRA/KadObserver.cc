@@ -192,7 +192,7 @@ std::set<nodeid_t> KadObserver::sampleNodes(int n) {
 	if (n < 0 or (size_type) n > nodeid_to_key.size())
 		n = nodeid_to_key.size();
 	std::set<nodeid_t> sample{};
-	NetworkTopology& topo = getNetworkManager()->getMobilityTopology();
+	NetworkTopology& topo = getNetworkManager()->getTopology();
 	// use all nodes if n larger than 80% of all nodes (then sampling is not useful anymore)
 	if (n > nodeid_to_key.size() * 0.8) {
 		for (auto& pair : nodeid_to_key)
