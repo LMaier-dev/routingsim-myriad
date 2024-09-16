@@ -25,9 +25,7 @@
 #include <omnetpp.h>
 #include <unordered_map>
 #include <queue>
-#include <functional>
 
-#include "Protocol.h"
 #include "StatisticSample.h"
 #include "KadPackets_m.h"
 #include "NeighborTable.h"

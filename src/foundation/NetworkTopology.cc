@@ -37,6 +37,7 @@ using std::string;
 using std::pair;
 using std::vector;
 
+
 // ============================================================================
 // Network Topology Class
 // ============================================================================
@@ -1160,6 +1161,85 @@ float** NetworkTopology::allocateSPM(unsigned long numberOfNodes, float **spath)
 
 // 	return true;
 // }
+
+
+
+// Function to reconstruct the path
+std::vector<NetworkTopology::Vertex>
+NetworkTopology::reconstruct_path(Vertex start, Vertex goal, Vertex meeting_point, const std::vector<Vertex>& pred_map_start, const std::vector<Vertex>& pred_map_goal) {
+    std::vector<Vertex> path;
+
+    // Traverse from meeting point to start
+    for (Vertex v = meeting_point; v != pred_map_start[v]; v = pred_map_start[v]) {
+        path.push_back(v);
+    }
+    path.push_back(start); // Add the start vertex
+    std::reverse(path.begin(), path.end());
+
+    // Traverse from meeting point to goal, skipping the meeting point
+    for (Vertex v = pred_map_goal[meeting_point]; v != pred_map_goal[v]; v = pred_map_goal[v]) {
+        path.push_back(v);
+    }
+    path.push_back(goal); // Add the goal vertex
+
+    return path;
+}
+
+
+// Bidirectional BFS function, returns path including start and goal vertex
+std::vector<NetworkTopology::Vertex>
+NetworkTopology::bidirectional_bfs(Vertex start, Vertex goal) {
+	const topologyGraph &g = *BGLtopology;
+	// maps that record visited vertices (predecessors)
+	std::vector<Vertex> pred_map_start(num_vertices(g), graph_traits<topologyGraph>::null_vertex());
+	std::vector<Vertex> pred_map_goal(num_vertices(g), graph_traits<topologyGraph>::null_vertex());
+
+	std::queue<Vertex> queue_start, queue_goal;
+	queue_start.push(start);
+	queue_goal.push(goal);
+
+	pred_map_start[start] = start;
+	pred_map_goal[goal] = goal;
+
+	while (not queue_start.empty() and not queue_goal.empty()) {
+		// BFS from start vertex
+		if (not queue_start.empty()) {
+			Vertex u = queue_start.front();
+			queue_start.pop();
+
+			for (auto edge : make_iterator_range(out_edges(u, g))) {
+				Vertex v = target(edge, g);
+				if (pred_map_start[v] == graph_traits<topologyGraph>::null_vertex()) {
+					pred_map_start[v] = u;
+					queue_start.push(v);
+					if (pred_map_goal[v] != graph_traits<topologyGraph>::null_vertex()) {
+						return reconstruct_path(start, goal, v, pred_map_start, pred_map_goal); // Path found
+					}
+				}
+			}
+		}
+
+		// BFS from goal vertex
+		if (not queue_goal.empty()) {
+			Vertex u = queue_goal.front();
+			queue_goal.pop();
+
+			for (auto edge : make_iterator_range(out_edges(u, g))) {
+				Vertex v = target(edge, g);
+				if (pred_map_goal[v] == graph_traits<topologyGraph>::null_vertex()) {
+					pred_map_goal[v] = u;
+					queue_goal.push(v);
+					if (pred_map_start[v] != graph_traits<topologyGraph>::null_vertex()) {
+						return reconstruct_path(start, goal, v, pred_map_start, pred_map_goal); // Path found
+					}
+				}
+			}
+		}
+	}
+
+	return {}; // No path found
+}
+
 
 
 float NetworkTopology::getDistance(nodeid_t from, nodeid_t to) {

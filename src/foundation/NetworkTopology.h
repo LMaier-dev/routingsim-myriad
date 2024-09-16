@@ -20,9 +20,7 @@
 #include <string>
 #include <vector>
 #include <ctime>
-#include <sstream>
 #include <boost/algorithm/string.hpp>
-#include <stdexcept>
 
 #include <boost/unordered_map.hpp>
 #include <boost/unordered_set.hpp>
@@ -84,6 +82,8 @@ protected:
 	typedef graph_traits<topologyGraph>::edge_iterator BGLEdgeIt;
 	typedef graph_traits<topologyGraph>::out_edge_iterator BGLOutEdgeIt;
 	typedef graph_traits<topologyGraph>::in_edge_iterator BGLInEdgeIt;
+	using Vertex = BGLVertexDesc;
+	using Edge = BGLEdgeDesc;
 
 
 	// filters
@@ -113,7 +113,25 @@ protected:
 	typedef graph_traits<FilteredGraph>::vertex_iterator ActiveBGLVertexIt;
 	typedef graph_traits<FilteredGraph>::edge_iterator ActiveBGLEdgeIt;
 	typedef graph_traits<FilteredGraph>::adjacency_iterator ActiveBGLAdjacencyIt;
-	/// our topology as bgl graph
+
+        // Visitor to record the predecessors
+        template <typename PredecessorMap>
+	class bfs_visitor_bidirectional : public default_bfs_visitor {
+	public:
+		bfs_visitor_bidirectional(PredecessorMap& pred_map) : pred_map(pred_map) {}
+
+                template <typename Edge, typename Graph>
+		void tree_edge(Edge e, const Graph& g) const {
+			Vertex u = source(e, g);
+			Vertex v = target(e, g);
+			pred_map[v] = u;
+		}
+
+	private:
+		PredecessorMap& pred_map;
+	};
+
+        /// our topology as bgl graph
 	topologyGraph* BGLtopology;
 
         cModule *networkManager = nullptr;
@@ -133,11 +151,16 @@ protected:
 	 **/
 	float** allocateSPM(unsigned long numberOfNodes, float **spath);
 
-      protected:
+	std::vector<Vertex>
+	reconstruct_path(Vertex start, Vertex goal, Vertex meeting_point,
+			 const std::vector<Vertex> &pred_map_start,
+			 const std::vector<Vertex> &pred_map_goal);
+
+protected:
         /// link between the graph and the omnet network
         std::unordered_map<nodeid_t, cModule *> moduleMap;
 
-      public:
+public:
 	//bool compareSPM();
 	/**
 	 * Constructs an empty network topology.
@@ -280,6 +303,8 @@ protected:
 
 	/// Returns the number of ACTIVE links in the network
 	unsigned long getActiveNumberLinks() const;
+
+	std::vector<Vertex> bidirectional_bfs(Vertex start, Vertex goal);
 
 	/// return the shortest path distance between two nodes
 	/// if not calculated already (or the graph has changed),

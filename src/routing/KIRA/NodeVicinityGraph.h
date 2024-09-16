@@ -1,7 +1,6 @@
 #ifndef __ROUTINGSIM_NodeVicinityGraph_H_
 #define __ROUTINGSIM_NodeVicinityGraph_H_
 #include <unordered_map>
-#include <list>
 
 #include "OverlayKey.h"
 #include "stateseqno.h"
