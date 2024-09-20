@@ -21,6 +21,10 @@
 #include "KadObserver.h"
 #include "NetworkManager.h"
 
+#ifdef R2K_RT_EXPORT
+#include <fstream>
+#endif
+
 namespace routingsim {
 Define_Module(KadObserver);
 

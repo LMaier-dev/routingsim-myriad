@@ -31,8 +31,7 @@ namespace routingsim {
 using json = nlohmann::json;
 
 void KadObserver::exportRoutingTables(std::ofstream file) const {
-    for (auto i = nodes.right.begin(); i != nodes.right.end(); i++) {
-        nodeid_t id = i->first;
+    for (const auto& [id,ignored] : nodeid_to_key) {
         json j;
         j["nodeid"] = id;
 
@@ -63,8 +62,8 @@ void KadObserver::exportRoutingTables(std::ofstream file) const {
 
 void KadObserver::exportOverlayKeyNodeIdMapping(std::ofstream file) const {
     std::map<nodeid_t, std::string> mapping {}; 
-    for (auto i = nodes.right.begin(); i != nodes.right.end(); i++) {
-        mapping[i->first] = i->second.str();
+    for (const auto& [id,key] : nodeid_to_key) {
+        mapping[id] = key.str();
     }
     json j_map(mapping);
     file << j_map << endl;
