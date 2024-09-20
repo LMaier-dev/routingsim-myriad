@@ -60,18 +60,18 @@ The state export functionality allows to dump the contents of all routingtables 
 ### Dependencies
 For the state-export functionality one needs [https://github.com/nlohmann/json](https://github.com/nlohmann/json) version 3.10.5:
 
-- The library is also available in some package managers. In that case you cane install it and skip the rest.
+- The library is also available in some package managers. In that case you can install it and skip the rest.
   - Fedora: [json-devel](https://packages.fedoraproject.org/pkgs/json/json-devel/)
   - Arch (AUR): [nlohman-json-git](https://aur.archlinux.org/packages/nlohmann-json-git)
-  - Debian (sid):[nlohmann-json3-dev](https://packages.debian.org/sid/nlohmann-json3-dev)
+  - Debian (sid):[nlohmann-json3-dev](https://packages.debian.org/sid/nlohmann-json3-dev), e.g., ```apt install nlohmann-json3-dev```
   - Ubuntu (jammy): [nlohmann-json3-dev](https://packages.ubuntu.com/jammy/nlohmann-json3-dev) 
 - [Download](https://github.com/nlohmann/json/releases/download/v3.10.5/include.zip)
-- Extract somewhere
-- Set env var to single_include directory in extracted folder
-```
-export JSON_INCL_DIR=/path/to/extracted/folder/single_include
-```
-- Then run make makefiles
+  - Extract somewhere
+  - Set env var to single_include directory in extracted folder
+  ```
+  export JSON_INCL_DIR=/path/to/extracted/folder/single_include
+  ```
+  - Then run make makefiles
 
 
 ### Feature Flag
@@ -82,4 +82,4 @@ Activate the compiletime flag during compilation: ```make -j8 MODE=release CFLAG
 **.dumpRTState = true
 ```
 
-Hint: Currently it is required to explicitly set the result folder using the cli option: ```--result-dir=`pwd`/../simulations/r2kademlia/results```
+Hint: Currently it is required to explicitly set the result folder using the cli option: ```--result-dir=`pwd`/../simulations/KIRA/results```
