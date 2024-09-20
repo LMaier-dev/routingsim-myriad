@@ -1241,17 +1241,17 @@ NetworkTopology::bidirectional_bfs(Vertex start, Vertex goal) {
 }
 
 
-
+// note that returning 0 typically means that no path has been found
 float NetworkTopology::getDistance(nodeid_t from, nodeid_t to) {
 	time_t start, end;
 
-	if ( spathAvailable and not topologyAltered ) {
-		// return result from calculated spaths
-		return spath[from][to];
-	} else if (shortestPathCalculationMode == "onDemand") {
-		// subtract 1 as path contains sender
-		return getActiveTopologyPath(from, to).size()-1;
-	} else if (shortestPathCalculationMode == "fullDistanceMatrix"){
+        if (shortestPathCalculationMode == fullDistanceMatrix) {
+		// use already calculated matrix if available and valid
+		if ( spathAvailable and not topologyAltered ) {
+			// return result from calculated spaths
+			return spath[from][to];
+		}
+
 		// (re-)calculate shortest paths on ACTIVE graph and store
 		// note that num_vertices() and num_edges() on a filtered graph do return the unfiltered sizes!
 
@@ -1269,7 +1269,7 @@ float NetworkTopology::getDistance(nodeid_t from, nodeid_t to) {
 		}
 		else {
 			EV_DETAIL << memsize/1000000ULL << "Mbytes" << endl;
-	        }
+		}
 		time(&start);
 		// use floyd warshall for dense graphs only
 		if ( (totalNodes*num_edges(*BGLtopology)*log(totalNodes)) < pow(totalNodes, 3) ) {
@@ -1293,6 +1293,17 @@ float NetworkTopology::getDistance(nodeid_t from, nodeid_t to) {
 		topologyAltered = false;
 
 		return spath[from][to];
+	}
+	else if (shortestPathCalculationMode == onDemandDijkstra) {
+		// subtract 1 as path contains sender
+		auto hops = getActiveTopologyPath(from, to).size();
+		return hops > 0 ? hops-1 : 0;
+        }
+        else if (shortestPathCalculationMode == onDemandBidirectionalBFS) {
+		// use bidirectional breadth first search: only works with hops as
+		// metric subtract 1 as path contains sender
+		auto hops= bidirectional_bfs(from, to).size();
+		return hops > 0 ? hops-1 : 0;
 	}
 
 	throw cRuntimeError("Unknown shortest path calculation mode: must never reach here");
@@ -1433,7 +1444,15 @@ bool NetworkTopology::fullTopologyPathFailed(nodeid_t from, nodeid_t to) const {
 
 
 void NetworkTopology::setShortestPathCalculationMode(string mode) {
-	shortestPathCalculationMode = mode;
+	if (mode == "fullDistanceMatrix") {
+		shortestPathCalculationMode= fullDistanceMatrix;
+	} else if (mode == "onDemand") {
+		shortestPathCalculationMode= onDemandDijkstra;
+	} else if (mode == "onDemandBidirectionalBFS") {
+		shortestPathCalculationMode= onDemandBidirectionalBFS;
+	} else {
+		throw cRuntimeError("shortestPathCalculationMode unknown");
+	}
 }
 
 

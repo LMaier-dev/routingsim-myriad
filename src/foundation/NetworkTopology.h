@@ -142,8 +142,13 @@ protected:
 
 	unsigned long spathMatrixSize; // only the number of rows (= number of columns)
 	bool spathAvailable;
-	float **spath; // two dimensional array of floats as distance (float is usually 4 bytes)
-	string shortestPathCalculationMode;
+        float **spath; // two dimensional array of floats as distance (float is usually 4 bytes)
+
+        enum shortestPathCalculationMode_t : uint8_t {
+	  fullDistanceMatrix = 1,
+	  onDemandDijkstra = 2,
+	  onDemandBidirectionalBFS = 3
+	} shortestPathCalculationMode;
 
 	/**
 	 * Allocate Memory for the shortest path matrix
