@@ -90,7 +90,7 @@ protected:
 	template <typename GraphType>
 	class activeNodes {
 	public:
-		activeNodes() : graph(0) {};
+		activeNodes() : graph(nullptr) {};
 		activeNodes( GraphType &g) : graph(&g) {};
 		template <typename VertexType>
 		bool operator() (const VertexType &v) const { return (*graph)[v].active; }
@@ -101,8 +101,8 @@ protected:
 	template <typename GraphType>
 	class activeEdges {
 	public:
-		activeEdges() : graph(0) {};
-		activeEdges( GraphType &g) :graph(&g) {};
+		activeEdges() : graph(nullptr) {};
+		activeEdges( GraphType &g) : graph(&g) {};
 		template <typename EdgeType>
 		bool operator() (const EdgeType &e) const { return (*graph)[e].active; }
 	protected:
@@ -159,7 +159,7 @@ protected:
 	std::vector<Vertex>
 	reconstruct_path(Vertex start, Vertex goal, Vertex meeting_point,
 			 const std::vector<Vertex> &pred_map_start,
-			 const std::vector<Vertex> &pred_map_goal);
+			 const std::vector<Vertex> &pred_map_goal) const;
 
 protected:
         /// link between the graph and the omnet network
@@ -309,7 +309,8 @@ public:
 	/// Returns the number of ACTIVE links in the network
 	unsigned long getActiveNumberLinks() const;
 
-	std::vector<Vertex> bidirectional_bfs(Vertex start, Vertex goal);
+	template <typename GraphType>
+	std::vector<Vertex> bidirectional_bfs(const GraphType &fg, Vertex start, Vertex goal) const;
 
 	/// return the shortest path distance between two nodes
 	/// if not calculated already (or the graph has changed),
@@ -333,6 +334,81 @@ public:
 
 	inline Node *getNodeModule(nodeid_t nid) { return Node::getNode(moduleMap[nid]); }
 };
+
+// Bidirectional BFS function, returns path including start and goal vertex
+// if only the goal vertex is given as result, it means that no path has been found
+template <typename GraphType>
+std::vector<NetworkTopology::Vertex>
+NetworkTopology::bidirectional_bfs(const GraphType &g, Vertex start, Vertex goal) const {
+
+	// handle special case (otherwise an empty vector is returned)
+	if (start == goal or g[start].active == false or g[goal].active == false)
+		return { goal };
+	// maps that record visited vertices (predecessors)
+	std::vector<Vertex> pred_map_start(num_vertices(g), graph_traits<topologyGraph>::null_vertex());
+	std::vector<Vertex> pred_map_goal(num_vertices(g), graph_traits<topologyGraph>::null_vertex());
+
+	std::queue<Vertex> queue_start, queue_goal;
+	queue_start.push(start);
+	queue_goal.push(goal);
+
+	pred_map_start[start] = start;
+	pred_map_goal[goal] = goal;
+
+	auto start_top_level_elements= queue_start.size();
+	auto goal_top_level_elements= queue_goal.size();
+	while (not queue_start.empty() and not queue_goal.empty()) {
+		// BFS from start vertex
+                while (not queue_start.empty() and start_top_level_elements > 0) {
+			// visiting vertex u
+			Vertex u = queue_start.front();
+			// has the vertex been discovered from the goal side already?
+                        if (pred_map_goal[u] != graph_traits<topologyGraph>::null_vertex()) {
+				return reconstruct_path(start, goal, u, pred_map_start, pred_map_goal); // Path found
+			}
+                        queue_start.pop();
+			start_top_level_elements--;
+
+			// add/discover all neighbor nodes of u for the next level
+			for (auto edge : make_iterator_range(out_edges(u, g))) {
+				Vertex v = target(edge, g);
+				// v will be ignored if already discovered
+                                if (pred_map_start[v] == graph_traits<topologyGraph>::null_vertex()) {
+					pred_map_start[v] = u;
+                                        queue_start.push(v);
+				}
+                        }
+                } // end while not finished the top level vertices
+		// remember this for the next rounds
+                start_top_level_elements = queue_start.size();
+
+		// BFS from goal vertex
+		while (not queue_goal.empty() and goal_top_level_elements > 0) {
+			// visiting vertex u
+			Vertex u = queue_goal.front();
+			// has the vertex been discovered from the start side already?
+			if (pred_map_start[u] != graph_traits<topologyGraph>::null_vertex()) {
+				return reconstruct_path(start, goal, u, pred_map_start, pred_map_goal); // Path found
+			}
+                        queue_goal.pop();
+			goal_top_level_elements--;
+
+			// add all neighbor nodes of u for the next level
+			for (auto edge : make_iterator_range(out_edges(u, g))) {
+				Vertex v = target(edge, g);
+				if (pred_map_goal[v] == graph_traits<topologyGraph>::null_vertex()) {
+					pred_map_goal[v] = u;
+                                        queue_goal.push(v);
+				}
+			}
+		} // end while not finished the top level vertices
+
+                // remember number of top elements for the next rounds
+		goal_top_level_elements= queue_goal.size();
+        } // end outer while
+
+	return { goal }; // No path found
+}
 
 } // namespace RoutingSim
 
