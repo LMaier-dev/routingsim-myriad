@@ -41,7 +41,9 @@ NetworkManager::~NetworkManager() {
 	activeEdgesCount = activeNodesCount = partitionCount = nullptr;
 }
 
-NetworkManager::NetworkManager() : mobilityTopology(nullptr) {
+NetworkManager::NetworkManager()
+    : topology(nullptr), dynamics(nullptr),
+      mobilityTopology(nullptr), mobilityDynamics(nullptr) {
 	// TODO: assert that there has not been another NetworkManager instantiated already
 	evaluateStatistics = true;
 	activeEdgesCount = activeNodesCount = partitionCount = nullptr;

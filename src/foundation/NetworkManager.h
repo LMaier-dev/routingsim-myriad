@@ -70,10 +70,10 @@ protected:
 	void sampleStatistics( Statistics& stats );
 
 private:
-	NetworkTopology* topology;
-	NetworkDynamics* dynamics;
-        MobilityTopology* mobilityTopology;
-        MobilityDynamics* mobilityDynamics;
+	NetworkTopology* topology = nullptr;
+	NetworkDynamics* dynamics = nullptr;
+        MobilityTopology* mobilityTopology = nullptr;
+        MobilityDynamics* mobilityDynamics = nullptr;
 
         std::unordered_set<nodeid_t> failedNodes;
         bool useMobility = false;
