@@ -108,7 +108,7 @@ void KadFloodObserver::registerFloodForwarded(uint32_t floodId, const OverlayKey
 }
 
 void KadFloodObserver::recordFloodStatistics() {
-	cModuleType* modType = cModuleType::get("routingsim.routing.r2kademlia.Dummy");
+	cModuleType* modType = cModuleType::get("routingsim.routing.KIRA.Dummy");
     uint32_t i = 0;
     for (auto& flood: floodStates) {
 		cModule* mod = modType->create(("Flood" + std::to_string(i)).c_str(), this);
@@ -160,7 +160,7 @@ cHistogramPtr getDoubleHistogram(const char *name) {
 KadFloodObserver& getKadFloodObserver() {
 	if (floodObserver == NULL) {
 		cModuleType* type = cModuleType::get(
-				"routingsim.routing.r2kademlia.KadFloodObserver");
+				"routingsim.routing.KIRA.KadFloodObserver");
 		cModule* mod = getSimulation()->getModuleByPath("<root>");
 		floodObserver = dynamic_cast<KadFloodObserver*>(type->create("KadFloodObserver", mod));
 	}
