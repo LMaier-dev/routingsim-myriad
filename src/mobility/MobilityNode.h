@@ -1,4 +1,3 @@
-
 //
 // This module inherits from the Node module and provides the functionality of a mobile node.
 // During initialisation, it creates a movement model and an antenna model that belong to itself.
@@ -14,13 +13,12 @@
 
 #include "../foundation/Node.h"
 #include "AntennaBase.h"
-#include "IsotropicAntenna.h"
 #include "MobilityBase.h"
-#include "RandomWaypointMobility.h"
+
 
 namespace routingsim {
 
-    class MobilityNode : public Node {
+class MobilityNode : public Node {
     private:
         MobilityBase *mobility_model;
         AntennaBase *antenna_model;
@@ -29,14 +27,20 @@ namespace routingsim {
         friend class MobilityTopology;
 
     public:
-        // initialises a mobility and antenna model for this MobilityNode
+	// initialises a mobility and antenna model for this MobilityNode
+	virtual void initialize(int stage) override;
+	virtual int numInitStages() const override { return 2; };
         void doBuildInside() override;
-#
+        void preDelete(cComponent *root) override {
+          mobility_model = nullptr;
+	  antenna_model = nullptr;
+	};
+
         // visualises movement and wireless events in the GUI
         void refreshDisplay() const override;
         MobilityBase *getMobilityModel() { return mobility_model; };
         AntennaBase *getAntennaModel() { return antenna_model; };
-    };
+};
 
 }// namespace routingsim
 

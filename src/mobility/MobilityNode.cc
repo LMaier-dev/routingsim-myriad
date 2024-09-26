@@ -1,28 +1,46 @@
-
 #include "MobilityNode.h"
+#include "RandomWaypointMobility.h"
+#include "IsotropicAntenna.h"
 
 namespace routingsim {
 
 Define_Module(MobilityNode);
 
-void MobilityNode::doBuildInside() {
-  Node::doBuildInside();
-  std::string mobilityModelName, antennaModelName;
-  cModuleType *mobilityModelType, *antennaModelType;
-  const std::string mobilityType = par("mobilityModel").stdstringValue();
-  mobilityModelName = "MobilityModel";
-  if (mobilityType == "RandomWaypoint") {
-    mobilityModelType = cModuleType::get("routingsim.mobility.RandomWaypointMobility");
-    this->mobility_model = check_and_cast<RandomWaypointMobility *>(mobilityModelType->create(mobilityModelName.c_str(), getParentModule()));
+void MobilityNode::initialize(int stage) {
+  if (stage == 0) {
+    Node::initialize(stage);
+  } else
+  if (stage == 1)  {
+    Node::initialize(stage);
 
-  } else {
-    throw new cRuntimeError("Unknown mobility model %s", mobilityType.c_str());
+    std::string mobilityModelName, antennaModelName;
+    cModuleType *mobilityModelType, *antennaModelType;
+    const std::string mobilityType = par("mobilityModel").stdstringValue();
+    mobilityModelName = "MobilityModel";
+    if (mobilityType == "RandomWaypoint") {
+      mobilityModelType = cModuleType::get("routingsim.mobility.RandomWaypointMobility");
+      mobility_model = check_and_cast<RandomWaypointMobility *>(mobilityModelType->create(mobilityModelName.c_str(), getParentModule()));
+      mobility_model->finalizeParameters();
+      mobility_model->initialize();
+    }
+    else {
+      throw new cRuntimeError("Unknown mobility model %s", mobilityType.c_str());
+    }
+
+    antennaModelName = "Antenna";
+    antennaModelType = cModuleType::get("routingsim.mobility.IsotropicAntenna");
+    antenna_model = check_and_cast<IsotropicAntenna *>(
+        antennaModelType->create(antennaModelName.c_str(), getParentModule()));
+    antenna_model->finalizeParameters();
+    antenna_model->initialize();
   }
 
-  antennaModelName = "Antenna";
-  antennaModelType = cModuleType::get("routingsim.mobility.IsotropicAntenna");
-  this->antenna_model = check_and_cast<IsotropicAntenna *>(antennaModelType->create(antennaModelName.c_str(), getParentModule()));
 }
+
+
+void MobilityNode::doBuildInside() {
+}
+
 
 void MobilityNode::refreshDisplay() const {
     cDisplayString& ds = getParentModule()->getDisplayString();

@@ -1,7 +1,7 @@
 
 //
-// This class inherits from the NetworkTypology class and is responsible for the creation and management of mobile nodes and their edges.
-// Like NetworkTypology, MobilityTopology is only a simple class and therefore not a OMNeT++ module.
+// This class inherits from the NetworkTopology class and is responsible for the creation and management of mobile nodes and their edges.
+// Like NetworkTopology, MobilityTopology is only a simple class and therefore not an OMNeT++ module.
 // The advantage of this independence is that the overhead is reduced, as MobilityTopology is more of an auxiliary class for NetworkManager.
 // To create the topology, the NetworkManager calls the createTopology() method of this class.
 // It reads the number of nodes to be created, creates a corresponding number of MobilityNodeWrapper modules and passes them to the NetworkManager.
@@ -22,9 +22,10 @@ namespace routingsim {
 class MobilityTopology: public NetworkTopology {
 
 public:
-  MobilityTopology(){ mobilityNodeMods= new std::vector<cModule *>(); };
+  //MobilityTopology() { };
   inline ~MobilityTopology();
   void initialize();
+
   /**
    * @param rng The random number generator to use for mobility.
    */
@@ -46,7 +47,7 @@ public:
   double getDatarate(MobilityNode *fromNode, MobilityNode *toNode);
 
   // Get all MobilityNodeWrappers
-  std::vector<cModule*> getNodeMods() const { return *mobilityNodeMods; }
+  std::vector<cModule*>& getNodeMods() const { return *mobilityNodeMods; }
 
   // initial start the topology creation
   void createTopology();

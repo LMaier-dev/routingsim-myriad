@@ -22,6 +22,7 @@ enum {
   MOBILITY_UPDATE,
 };
 
+
 class MobilityDynamics : public cSimpleModule, public StatisticSample {
 private:
   // The self message periodically sent to itself
@@ -47,7 +48,10 @@ protected:
 public:
   MobilityDynamics()
       : mobilityUpdateMsg(new cMessage("MobilityEvent", MOBILITY_UPDATE)){};
-  virtual void finish() override;
+
+  ~MobilityDynamics();
+  void preDelete(cComponent *root) override;
+
   MobilityTopology *mobilityTopology = nullptr;
   void initialize(int stage) override;
 

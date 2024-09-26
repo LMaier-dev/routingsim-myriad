@@ -5,9 +5,13 @@ namespace routingsim {
 Define_Module(MobilityDynamics);
 
 void
-MobilityDynamics::finish()
+MobilityDynamics::preDelete(cComponent *root)
 {
   cancelAndDelete(mobilityUpdateMsg);
+}
+
+
+MobilityDynamics::~MobilityDynamics() {
   delete mobilityNodeAvgDegree;
   delete mobilityNodeAvgDatarate;
   delete mobilityNodeAvgDistance;
@@ -101,6 +105,8 @@ void MobilityDynamics::sampleStatistics(Statistics &stats) {
   string topologyStatistics = par("topologyStatistics").stdstringValue();
   auto numActiveLinks = mobilityTopology->getActiveNumberLinks();
   auto numActiveNodes = mobilityTopology->getActiveNumberNodes();
+  ASSERT(numActiveNodes > 0);
+  ASSERT(numActiveLinks > 0);
   mobilityNodeAvgDegree->record((2 * numActiveLinks) / numActiveNodes);
 
   // mobilityNodeAvgDatarate
@@ -123,10 +129,10 @@ void MobilityDynamics::sampleStatistics(Statistics &stats) {
   mobilityNodeAvgDatarate->record(avgDatarate);
 
   // mobilityNodeAvgDistance
-  double avgDistance = 0;
-  double numDistance = 1;
-  if (topologyStatistics == "Heavy" && numActiveNodes != 1) {
-    numDistance = (numActiveNodes * (numActiveNodes - 1)) / 2;
+  double avgDistance = 0.0;
+  double numDistance = 1.0;
+  if (topologyStatistics == "Heavy" and numActiveNodes > 1) {
+    numDistance = (numActiveNodes * (numActiveNodes - 1)) / 2.0;
     auto nodeMods = mobilityTopology->getNodeMods();
     for (unsigned int i = 0; i < nodeMods.size(); i++) {
       auto *fromNode =
@@ -140,6 +146,8 @@ void MobilityDynamics::sampleStatistics(Statistics &stats) {
       }
     }
   }
+  ASSERT(numDistance != 0);
   mobilityNodeAvgDistance->record(avgDistance / numDistance);
 }
+
 } // namespace routingsim

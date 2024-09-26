@@ -13,8 +13,16 @@ gates:
 
 submodules:
 	node: MobilityNode {
-		id = nodeId;
+		id = parent.nodeId;
 	};
+
+	mobility_model : MobilityBase {
+		  @dynamic(true);
+	}
+
+	antenna_model : AntennaBase {
+		  @dynamic(true);
+	}
 
 connections:
 	for i = 0..sizeof(toNeighbors)-1 {

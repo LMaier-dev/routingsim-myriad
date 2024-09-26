@@ -10,9 +10,8 @@
 #ifndef ROUTINGSIM_ANTENNABASE_H
 #define ROUTINGSIM_ANTENNABASE_H
 
-#ifndef LOWESTSIGNALSTRENGTH
-#define LOWESTSIGNALSTRENGTH        90
-#endif
+
+constexpr double LOWESTSIGNALSTRENGTH = 90;
 
 #include "../foundation/BaseTypes.h"
 
@@ -48,6 +47,13 @@ public:
   // Calculate achievable datarate at a given distance
   virtual double calcDatarate(double distance) = 0;
 };
+
+
+inline
+double AntennaBase::calcRange() {
+  DB maxPathloss = signalPower + DB(LOWESTSIGNALSTRENGTH);
+  return distance_from_pathloss(maxPathloss);
+}
 
 } // namespace routingsim
 

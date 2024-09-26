@@ -1,24 +1,26 @@
-
 #include "MobilityTopology.h"
 
 namespace routingsim {
 
-MobilityTopology::MobilityTopology(cModule *networkManager) {
-  this->networkManager = networkManager;
-  this->numNodes = networkManager->par("mobilityNodes").intValue();
+MobilityTopology::MobilityTopology(cModule *networkManager)
+  : networkManager(networkManager) {
+  numNodes = networkManager->par("mobilityNodes").intValue();
+  mobilityNodeMods= new std::vector<cModule *>(numNodes, nullptr);
   EV_DEBUG << "MobilityTopology created" << endl;
 }
 
 
 void MobilityTopology::initialize() {
+
   for (cModule *nodeMod : *mobilityNodeMods) {
     if (!nodeMod->initialized())
       nodeMod->callInitialize();
     auto *node = check_and_cast<MobilityNode *>(nodeMod->getSubmodule("node"));
     EV_DEBUG << "MobilityNode " << node->getNodeId() << " created with range "
-             << node->getAntennaModel()->getRange() << "m" << endl;
-    nodeMod->scheduleStart(simTime());
+	     << node->getAntennaModel()->getRange() << "m" << endl;
+    // nodeMod->scheduleStart(simTime());
   }
+
 }
 
 
@@ -76,8 +78,6 @@ void MobilityTopology::createTopology() {
     this->mobilityNodeMods->push_back(node_wrapper);
   }
 
-  setShortestPathCalculationMode("fullDistanceMatrix");
-
   for (cModule *nodeMod : *mobilityNodeMods) {
     nodeMod->finalizeParameters();
     nodeMod->buildInside();
@@ -96,6 +96,7 @@ void MobilityTopology::deleteLink(MobilityNode *fromNode,
   //gateToNode->disconnect();
   //reverseGate->disconnect();
 }
+
 
 void MobilityTopology::createLink(MobilityNode *fromNode,
                                   MobilityNode *toNode) {

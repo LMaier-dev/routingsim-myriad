@@ -29,7 +29,8 @@ NetworkManager *mgr = nullptr;
 
 NetworkManager::~NetworkManager() {
 	delete topology;
-	delete mobilityTopology;
+        delete mobilityTopology;
+	// since mgr == this, do not delete
 	mgr = nullptr;
 	topology = nullptr;
 	mobilityTopology = nullptr;
@@ -55,22 +56,26 @@ void NetworkManager::initialize() {
 	// set singleton variable
 	mgr = this;
 
-	{ // create mobility manager
-		useMobility = par("mobility").boolValue();
-		if (useMobility) {
-			EV << "creating mobility manager" << std::endl;
-			cModule *dynamicsModule = gate("mobilityDynamics")->getPathStartGate()->getOwnerModule();
-			mobilityTopology = new MobilityTopology(this);
-			mobilityTopology->createTopology();
-			mobilityDynamics = dynamic_cast<MobilityDynamics *>(dynamicsModule);
-			mobilityDynamics->mobilityTopology = mobilityTopology;
-			scheduleAt(simTime(), new cMessage{"init mobility", INIT_MOBILITY});
-		}
-	}
+	useMobility = par("mobility").boolValue();
+        if (useMobility) {
+		// create mobility manager
+		EV << "creating mobility manager" << std::endl;
+		cModule *dynamicsModule = gate("mobilityDynamics")->getPathStartGate()->getOwnerModule();
+		mobilityTopology = new MobilityTopology(this);
+                mobilityTopology->createTopology();
+		mobilityTopology->setShortestPathCalculationMode(par("shortestPathCalculationMode").stdstringValue());
+		std::cout << "shortestPathCalculationMode (mobilityTopology): " << par("shortestPathCalculationMode").stdstringValue() << endl;
 
-	// create network topology
+		mobilityDynamics = dynamic_cast<MobilityDynamics *>(dynamicsModule);
+		mobilityDynamics->mobilityTopology = mobilityTopology;
+		scheduleAt(simTime(), new cMessage{"init mobility", INIT_MOBILITY});
+        }
+
+        // "fixed" network topology (links and nodes may still fail dynamically, but nodes do not move)
+	// create fixed network topology (note this may exist in addtion to the mobilityTopology)
 	topology = new NetworkTopology();
-	if (par("topologyFile").stdstringValue().size() != 0)
+
+        if (par("topologyFile").stdstringValue().size() != 0)
 		topology->readTopology(
 			par("topologyFile").stdstringValue(),
 			par("topologyFileType").stdstringValue(),
@@ -80,31 +85,30 @@ void NetworkManager::initialize() {
 			par("compressNodeIDs").boolValue()
 			);
 
-	if (par("topologyFile").stdstringValue().size() != 0) {
+        if (par("topologyFile").stdstringValue().size() != 0) {
 		topology->createNetwork(this);
 	} else {
 		// the network was built from a ned file
 		topology->extractFromNetwork(this);
 	}
 
-	if (par("spathFile").stdstringValue().size() != 0) {
+        if (par("spathFile").stdstringValue().size() != 0) {
 		if (topology->readShortestPathMatrix(par("spathFile").stdstringValue())) {
 			EV_INFO << "successfully read shortest path matrix from " << par("spathFile").stdstringValue() << endl;
 			// 		if (topology->compareSPM())
 			// 			EV << "shortest path matrix matches" << endl;
 			// 		else
 			// 			EV << "shortest path matrix doesn't match!!" << endl;
-
 		} else {
 			EV_ERROR << "failure while reading shortest path matrix from " << par("spathFile").stdstringValue()
 				 << endl;
 		}
 	}
 
-	topology->setShortestPathCalculationMode(par("shortestPathCalculationMode").stdstringValue());
+        topology->setShortestPathCalculationMode(par("shortestPathCalculationMode").stdstringValue());
 	std::cout << "shortestPathCalculationMode: " << par("shortestPathCalculationMode").stdstringValue() << endl;
 
-	// dynamics module connected? yes-> get dynamics module!
+        // dynamics module connected? yes-> get dynamics module!
 	cGate* dynamicsGate = gate("dynamics");
 	if (dynamicsGate->isPathOK()) {
 		cModule *dynamicsModule =
@@ -143,7 +147,7 @@ void NetworkManager::initialize() {
 	if (dynamics != nullptr) {
 		EV << "Using dynamic model: " << dynamics->getModuleType()->getName() << endl;
 		dynamics->manager = this;
-		dynamics->topology = topology;
+		dynamics->topology = useMobility ? mobilityTopology : topology;
 	} else
 		EV << "No dynamic model available." << endl;
 
