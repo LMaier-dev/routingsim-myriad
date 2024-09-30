@@ -22,6 +22,8 @@ class hop_t {
       @existingClass;
 }
 
+
+// additional types can be defined by the protocol module (see Protocol::bind())
 enum PayloadTypes {
     PAYLOAD_INVALID = 0;
     PAYLOAD_HELLO = 1;

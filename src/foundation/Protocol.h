@@ -66,10 +66,10 @@ protected:
 	/// called at initialization time of the Protocol
 	virtual void onInitialize() = 0;
 
-	/// called when a new node is connected
+	/// called when a new node is connected (LinkUp indication)
 	virtual void onConnect( nodeid_t nid ) = 0;
 
-	/// called when a node is disconnected
+	/// called when a node is disconnected (LinkDown indication)
 	virtual void onDisconnect( nodeid_t nid ) = 0;
 
 	/// on message

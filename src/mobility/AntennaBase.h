@@ -11,7 +11,7 @@
 #define ROUTINGSIM_ANTENNABASE_H
 
 
-constexpr double LOWESTSIGNALSTRENGTH = 90;
+constexpr double LOWESTSIGNALSTRENGTH = 90; // in dB
 
 #include "../foundation/BaseTypes.h"
 

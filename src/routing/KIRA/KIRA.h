@@ -122,8 +122,8 @@ private:
 	FwdTablePathID fwdTablePathID;
 
 	/// packet type used for Node::bind()
-	static const int KAD_CTRL_PACKET_TYPE = 5;
-	static const int KAD_DATA_PACKET_TYPE = 6;
+	static constexpr int KAD_CTRL_PACKET_TYPE = 5;
+	static constexpr int KAD_DATA_PACKET_TYPE = 6;
 
 	/** @name config, set by parameters*/
 	//@{

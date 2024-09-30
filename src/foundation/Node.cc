@@ -44,10 +44,13 @@ Node *Node::getNode(cModule *mod) {
   return check_and_cast<Node *>(mod);
 }
 
+
+// get node at other end of link where the gate leads to
 Node *Node::getOtherNode(cGate *gate) {
   ASSERT(gate->getType() == cGate::OUTPUT);
   return check_and_cast<Node *>(gate->getPathEndGate()->getOwnerModule());
 }
+
 
 void Node::initialize(int stage) {
   // we need to be sure that the network manager is also initialized for
@@ -166,7 +169,7 @@ void Node::handleMessage(cMessage *msg) {
 }
 
 void Node::sendToNode(nodeid_t nid, NodePkt *np) {
-  // node not a neighbor ->
+  // node not a neighbor -> drop packet
   if (neighbor_map.count(nid) == 0) {
     EV_WARN << "sendToNode() @Node " << getNodeId() << ": Destination node "
             << nid << " unknown, @msg id=" << np->getId() << endl;
@@ -238,10 +241,11 @@ void Node::sendToNeighbors(NodePkt *np) {
   }
 }
 
+
 void Node::sendNotify(NodePkt *packet, cGate *dg) {
   Enter_Method_Silent("Node::sendNotify");
   take(packet);
-  EV_TRACE << "SendNotify: From gate " << dg->getFullName() << " to fake gate "
+  EV_TRACE << "SendNotify: From gate " << dg->getFullName() << " to directIn gate "
           << dg->getPathEndGate()->getFullName() << endl;
   packet->setDestGateId(dg->getPathEndGate()->getIndex());
   sendDirect(packet, getOtherNode(dg), "directIn");
@@ -251,6 +255,7 @@ void Node::sendNotify(NodePkt *packet, cGate *dg) {
   // << "to " << getOtherNode(dg)->id << endl; cout << "sendNotify from " << id
   // << "to " << getOtherNode(dg)->id << endl;
 }
+
 
 void Node::initNeighbors() {
   if (!hasGate("toNeighbors$o", 0)) return;
@@ -266,6 +271,7 @@ void Node::initNeighbors() {
     send(pkt, outGateBaseId + i);
   }
 }
+
 
 void Node::onHello(NodePkt *pkt) {
   nodeid_t nid = pkt->getHop().from;
@@ -288,7 +294,7 @@ void Node::onHello(NodePkt *pkt) {
   } else {
     nr.out = gate("toNeighbors$o", pkt->getDestGateId());
     //EV_TRACE << "onHello: Node " << id << " received hello from " << nid
-    //        << " on fake gate " << pkt->getDestGateId() << endl;
+    //        << " on directIn gate " << pkt->getDestGateId() << endl;
   }
 
   // announce at modules
@@ -356,6 +362,7 @@ bool Node::enableLink(Node *mod, const char *gatename) {
   return false;
 }
 
+// disables gate and notifies
 void Node::disableGate(cGate *dg) {
   // verify that gate is not already disabled
   if (gateIsDisabled(dg))
