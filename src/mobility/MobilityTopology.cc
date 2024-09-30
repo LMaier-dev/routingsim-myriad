@@ -53,7 +53,7 @@ cGate *MobilityTopology::getGateBetweenNodes(MobilityNode *fromNode,
 
 
 void MobilityTopology::createTopology() {
-  EV_INFO << "Create mobility typology" << endl;
+  EV_INFO << "Create mobility topology" << endl;
   BGLtopology = new topologyGraph(numNodes);
 
   for (BGLVertexIt it = vertices(*BGLtopology).first;

@@ -146,6 +146,17 @@ KadObserver::initialize(int stage) {
 #endif
 }
 
+void KadObserver::preDelete(cComponent *root) {
+#ifndef NDEBUG
+#if DEBUG_LINKFAILURENOTIFICATIONS != 0
+	if (single_selfmsg_debug != nullptr) {
+          cancelAndDelete(single_selfmsg_debug);
+	  single_selfmsg_debug= nullptr;
+	}
+#endif
+#endif
+}
+
 void KadObserver::finish() {
 	for (auto& h : histograms)
 		h->record();
@@ -169,14 +180,6 @@ void KadObserver::finish() {
 	histograms.clear();
 	outVectors.clear();
 	addOutVectors.clear();
-#ifndef NDEBUG
-#if DEBUG_LINKFAILURENOTIFICATIONS != 0
-	if (single_selfmsg_debug != nullptr) {
-          cancelAndDelete(single_selfmsg_debug);
-	  single_selfmsg_debug= nullptr;
-	}
-#endif
-#endif
         ASSERT(observer == this);
 	observer = NULL;
 }

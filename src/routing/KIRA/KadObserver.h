@@ -76,7 +76,8 @@ class KadObserver: public cSimpleModule, public StatisticSample {
 protected:
 	virtual void initialize(int stage) override;
 	virtual int numInitStages() const override { return 2; };
-	virtual void finish() override;
+        virtual void finish() override;
+	virtual void preDelete(cComponent *root) override;
 	virtual void handleMessage(cMessage *msg) override;
 	void recordStatistics();
 	void recordMessageScalars();
@@ -155,7 +156,7 @@ private:
 #endif
 
 #ifndef NDEBUG
-#define DEBUG_LINKFAILURENOTIFICATIONS 1
+//#define DEBUG_LINKFAILURENOTIFICATIONS 1
 #if DEBUG_LINKFAILURENOTIFICATIONS != 0
 	TimerMsg* single_selfmsg_debug= nullptr;
 #endif

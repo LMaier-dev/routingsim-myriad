@@ -1,9 +1,8 @@
-
 //
 // This module is responsible for updating the position of and the links between the nodes
 // MobilityDynamics sends itself a self-message periodically to update the topology.
 // Per update it calls the move() method of each mobile node first to update their positions.
-// If a node has moved, the links of this node to the others are updated according to the new position.
+// After all node positions have been updated, the links of each node to the others are updated according to the new position.
 // This may add or remove links. To do this, the createLink(nodeid\_t, nodeid\_t) or deleteLink(nodeid\_t) method is called.
 // The data rate of the active links is also updated.
 // For this purpose, the method calcDatarate(double distance) is called, which calculates the data rate between two nodes depending on the distance.
@@ -12,19 +11,18 @@
 #ifndef ROUTINGSIM_MOBILITYDYNAMICS_H
 #define ROUTINGSIM_MOBILITYDYNAMICS_H
 
-#include "MobilityBase.h"
 #include "MobilityTopology.h"
 #include "StatisticSample.h"
 
 namespace routingsim {
 
-enum {
-  MOBILITY_UPDATE,
-};
-
 
 class MobilityDynamics : public cSimpleModule, public StatisticSample {
 private:
+  enum mobilityDynamicsMsgType {
+    MOBILITY_UPDATE= 0,
+  };
+
   // The self message periodically sent to itself
   cMessage *mobilityUpdateMsg= nullptr;
 
@@ -47,7 +45,7 @@ protected:
 
 public:
   MobilityDynamics()
-      : mobilityUpdateMsg(new cMessage("MobilityEvent", MOBILITY_UPDATE)){};
+      : mobilityUpdateMsg(new cMessage("MobilityEvent", MOBILITY_UPDATE)) {};
 
   ~MobilityDynamics();
   void preDelete(cComponent *root) override;

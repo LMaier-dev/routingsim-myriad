@@ -23,8 +23,11 @@ MobilityDynamics::initialize(int stage) {
   if (stage == 1) {
     scheduleMobilityUpdate();
     mobilityNodeAvgDegree = new cOutVector("mobilityNodeAvgDegree");
+    take(mobilityNodeAvgDegree);
     mobilityNodeAvgDatarate = new cOutVector("mobilityNodeAvgDatarate");
+    take(mobilityNodeAvgDatarate);
     mobilityNodeAvgDistance = new cOutVector("mobilityNodeAvgDistance");
+    take(mobilityNodeAvgDistance);
     addStatisticSample(this);
   }
 }
@@ -119,9 +122,11 @@ void MobilityDynamics::sampleStatistics(Statistics &stats) {
   string topologyStatistics = par("topologyStatistics").stdstringValue();
   auto numActiveLinks = mobilityTopology->getActiveNumberLinks();
   auto numActiveNodes = mobilityTopology->getActiveNumberNodes();
-  ASSERT(numActiveNodes > 0);
-  ASSERT(numActiveLinks > 0);
-  mobilityNodeAvgDegree->record((2 * numActiveLinks) / numActiveNodes);
+
+  if (numActiveNodes > 0)
+    mobilityNodeAvgDegree->record((2.0 * numActiveLinks) / (double) numActiveNodes);
+  else
+    mobilityNodeAvgDegree->record(0);
 
   // mobilityNodeAvgDatarate
   double avgDatarate = 0;
@@ -134,8 +139,9 @@ void MobilityDynamics::sampleStatistics(Statistics &stats) {
             to_node_wrapper->getSubmodule("node"));
         if (mobilityTopology->isConnected(fromNode->getNodeId(),
                                           toNode->getNodeId())) {
-          avgDatarate += (mobilityTopology->getDatarate(fromNode, toNode) /
-                          numActiveLinks);
+	  if (numActiveLinks > 0)
+	    avgDatarate += (mobilityTopology->getDatarate(fromNode, toNode) /
+			    numActiveLinks);
         }
       }
     }
@@ -160,8 +166,11 @@ void MobilityDynamics::sampleStatistics(Statistics &stats) {
       }
     }
   }
-  ASSERT(numDistance != 0);
-  mobilityNodeAvgDistance->record(avgDistance / numDistance);
+
+  if (numDistance > 0)
+    mobilityNodeAvgDistance->record(avgDistance / numDistance);
+  else
+    mobilityNodeAvgDistance->record(0);
 }
 
 } // namespace routingsim

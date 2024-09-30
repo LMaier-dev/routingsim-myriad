@@ -60,14 +60,20 @@ void NetworkManager::initialize() {
         if (useMobility) {
 		// create mobility manager
 		EV << "creating mobility manager" << std::endl;
-		cModule *dynamicsModule = gate("mobilityDynamics")->getPathStartGate()->getOwnerModule();
 		mobilityTopology = new MobilityTopology(this);
                 mobilityTopology->createTopology();
 		mobilityTopology->setShortestPathCalculationMode(par("shortestPathCalculationMode").stdstringValue());
 		std::cout << "shortestPathCalculationMode (mobilityTopology): " << par("shortestPathCalculationMode").stdstringValue() << endl;
-
-		mobilityDynamics = dynamic_cast<MobilityDynamics *>(dynamicsModule);
-		mobilityDynamics->mobilityTopology = mobilityTopology;
+		cModule *dynamicsModule = gate("mobilityDynamics")->getPathStartGate()->getOwnerModule();
+                mobilityDynamics = dynamic_cast<MobilityDynamics *>(dynamicsModule);
+                if (mobilityDynamics != nullptr) {
+                } else {
+		  EV << "creating MobilityDynamics module" << endl;
+		  cModuleType *type = cModuleType::get("MobilityDynamics");
+		  dynamicsModule = type->create("dynamics", this);
+		  dynamicsModule->finalizeParameters();
+		}
+                mobilityDynamics->mobilityTopology = mobilityTopology;
 		scheduleAt(simTime(), new cMessage{"init mobility", INIT_MOBILITY});
         }
 

@@ -32,6 +32,7 @@ enum PayloadTypes {
 
 packet NodePkt {
     int type @enum(PayloadTypes);
+    int attribute; // bitfield of packet attributes, bits 0..15 reserved for foundation, upper bits for protocol use
     hop_t hop;
     int destGateId = -1;
 }
