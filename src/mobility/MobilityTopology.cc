@@ -89,15 +89,26 @@ void MobilityTopology::deleteLink(MobilityNode *fromNode,
                                   MobilityNode *toNode) {
   if (!isConnected(fromNode->getNodeId(), toNode->getNodeId()))
     return;
+
+  EV_TRACE << "deleteLink " << fromNode->getNodeId() << " -> " << toNode->getNodeId() << endl;
+
   // this disables the link in the underlying boost graph
   disableLink(fromNode->getNodeId(), toNode->getNodeId());
 
+  // TODO: the following code does not work properly and is therefore commented out
+  // unconnected gates cause confusion if reused
+  //if (isConnected(fromNode->getNodeId(), toNode->getNodeId())) {
+  //  disableLink(fromNode->getNodeId(), toNode->getNodeId());
+  //  disableLink(toNode->getNodeId(), fromNode->getNodeId());
+  //  EV_TRACE << "deleted edge " << fromNode->getNodeId() << " <-> " << toNode->getNodeId() << endl;
+  // }
+
   // TODO: track unconnected gates, that were connected once
-  remove_edge(fromNode->getNodeId(), toNode->getNodeId(), *BGLtopology);
-  cGate *gateToNode = getGateBetweenNodes(fromNode, toNode);
-  cGate *reverseGate = gateToNode->getPathEndGate();
-  gateToNode->disconnect();
-  reverseGate->disconnect();
+  //remove_edge(fromNode->getNodeId(), toNode->getNodeId(), *BGLtopology);
+  //cGate *gateToNode = getGateBetweenNodes(fromNode, toNode);
+  //cGate *reverseGate = gateToNode->getPathEndGate();
+  //gateToNode->disconnect();
+  //reverseGate->disconnect();
 }
 
 
@@ -108,13 +119,13 @@ void MobilityTopology::createLink(MobilityNode *fromNode,
   if (isConnected(fromNode->getNodeId(), toNode->getNodeId()))
     return;
 
+  EV_TRACE << "createLink " << fromNode->getNodeId() << " -> " << toNode->getNodeId() << endl;
   cGate *fromOut = fromNode->getOrCreateFirstUnconnectedGate("toNeighbors", 'o',
                                                              false, true);
   cGate *toIn =
       toNode->getOrCreateFirstUnconnectedGate("toNeighbors", 'i', false, true);
   std::string channel_name = "datarateChannel";
-  cDatarateChannel *datarateChannel =
-      cDatarateChannel::create(channel_name.c_str());
+  cDatarateChannel *datarateChannel = cDatarateChannel::create(channel_name.c_str());
   datarateChannel->setDatarate(0);
   fromOut->connectTo(toIn, datarateChannel);
 
@@ -129,6 +140,7 @@ void MobilityTopology::createLink(MobilityNode *fromNode,
   //if (edgeExists(toNode->getNodeId(), fromNode->getNodeId())) {
   //  enableLink(fromNode->getNodeId(), toNode->getNodeId());
   //  enableLink(toNode->getNodeId(), fromNode->getNodeId());
+  //  EV_TRACE << "added edge " << fromNode->getNodeId() << " <-> " << toNode->getNodeId() << endl;
   //}
 }
 

@@ -293,13 +293,13 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 
 	KadPacket_p packet = \
 		std::unique_ptr<KadPacket>(check_and_cast<KadPacket*>(pkt->decapsulate()));
-	/*
+
+        /*
 	  EV_TRACE << "onMessage msgid:" << packet->getId() << " treeId:" << packet->getTreeId()
 	      << " <" << packet->getName() << "> this="
 		 << static_cast<void*>(packet.get()) << " c:" << packet->getCreationTime()
 		 << " isTracked:" << packet->isTracked() << endl;
 	*/
-
 
 
 	// hello packets do not include my key
@@ -322,7 +322,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	// other packets should include the key in the source route
 	packet->advanceProgress(); // increase hop count
 	if (packet->getCurrentHop() != myOverlayKey) {
-		EV_ERROR << "dropping packet, current hop in source route does not match!" << endl;
+	  EV_ERROR << "dropping packet, current hop " << packet->getCurrentHop().shortStr()  << " in source route does not match!" << endl;
 		//TODO how does this happen?
 		countDropped(*packet, packet->getTarget(), erroneousSourceRoute);
 		return;

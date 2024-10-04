@@ -742,6 +742,7 @@ void NetworkTopology::addLink(nodeid_t from, nodeid_t to) {
 }
 
 
+// returns true if edge exists and is active
 bool NetworkTopology::isConnected(nodeid_t node1, nodeid_t node2) const {
 	BGLEdgeDesc e;
 	bool edgeExists;
@@ -749,6 +750,8 @@ bool NetworkTopology::isConnected(nodeid_t node1, nodeid_t node2) const {
         return (edgeExists and (*BGLtopology)[e].active);
 }
 
+
+// returns true if edge exists
 bool NetworkTopology::edgeExists(nodeid_t node1, nodeid_t node2) const {
   BGLEdgeDesc e;
   bool edgeExists;
@@ -971,8 +974,6 @@ void NetworkTopology::disableLink(nodeid_t f, nodeid_t t) {
 
 
 void NetworkTopology::enableLink(nodeid_t f, nodeid_t t) {
-	cModule *from, *to;
-
 	// topology description
 	BGLEdgeDesc e;
 	bool edgeValid;
@@ -995,10 +996,10 @@ void NetworkTopology::enableLink(nodeid_t f, nodeid_t t) {
 	(*BGLtopology)[e].active = true;
 	topologyAltered = true; // requires shortest path recalculation
 
-	from = moduleMap[f];
-	to = moduleMap[t];
+	cModule *from = moduleMap[f];
+	cModule *to = moduleMap[t];
 
-	if (from == nullptr || to == nullptr) {
+	if (from == nullptr or to == nullptr) {
 		EV_WARN << "Could not determine cModule (Node) for " << f << " or " << t
 				<< endl;
 		return;
@@ -1012,7 +1013,7 @@ void NetworkTopology::disableNode(nodeid_t n) {
 	BGLInEdgeIt ie_cur, ie_end;
 
 	// if node already down, return instantly
-	if ( !(*BGLtopology)[n].active ) {
+	if ( not (*BGLtopology)[n].active ) {
 		return;
 	}
 

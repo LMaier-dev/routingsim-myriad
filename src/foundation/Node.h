@@ -71,9 +71,9 @@ protected:
 	virtual void doBuildInside();
 	virtual ~Node();
 	/// Disable link to neighbor mod in gate vector gatename
-	bool disableLink(Node *mod, const char *gatename);
+	bool disableLink(const Node *othernode_mod, const char *gatename);
 	/// Enable link to neighbor mod in gate vector gatename
-	bool enableLink(Node *mod, const char *gatename);
+	bool enableLink(const Node *othernode_mod, const char *gatename);
         /// Set link datarate to neighbor mod
         bool setLinkDatarate(Node *mod, const char *gatename, double datarate);
 	/// sendNotify is called from the context of NetworkManager
@@ -127,7 +127,7 @@ private:
 
 	int minDelay, maxDelay; // in milliseconds
 
-        cGate *findGate(Node* mod, const char *gatename);
+        cGate *findGate(const Node* mod, const char *gatename);
 };
 
 } //namespace
