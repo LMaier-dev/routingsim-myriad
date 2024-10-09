@@ -42,11 +42,25 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 	// it could be that the node has been entered into the vicinity already
 	if (neighborTable.isNeighbor(packet->getSource()))
 	{ // known physical neighbor: check for newer sequence number
+
 		if (auto nodep= vicinity.getNode(packet->getSource()); nodep != nullptr) {
 			if (nodep->stateseqno < packet->getStateSeqNo()) {
 				EV_TRACE << "check for resync" << endl;
-				// already known neighbor, just check for seqno synchronization
+				// already known neighbor, just check for seqno synchronization (also updates lastseen)
 				checkForResync(packet->getSource(), packet->getStateSeqNo());
+                        }
+                        else {
+				// update lastseen nevertheless
+				if (KadContact *contact_p = const_cast<KadContact *>(routingTable.getContact(packet->getSource()));
+				    contact_p != nullptr and contact_p->isPhysicalNeighbor()) {
+					contact_p->updateLastSeen();
+				}
+			}
+                } else {
+			// update lastseen
+			if (KadContact *contact_p = const_cast<KadContact *>(routingTable.getContact(packet->getSource()));
+			    contact_p != nullptr and contact_p->isPhysicalNeighbor()) {
+				contact_p->updateLastSeen();
 			}
 		}
 		return;
@@ -647,7 +661,7 @@ R2Kademlia::sendScheduledRequests(ContactRequestQueue& q) {
 }
 
 
-// check whether we need to resync with physical neighbor
+// check whether we need to resync with physical neighbor, update lastseen
 // normal stateSeqNo not sufficient, because it may have been updated by another message already
 // getSyncPNSeqNo() tells us when we received the last full PN list from this PN
 bool R2Kademlia::checkForResync(const OverlayKey& contact, stateseqno_t newseqno) {

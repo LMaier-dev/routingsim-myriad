@@ -141,7 +141,8 @@ private:
 	/// if activated the node collects path information from passing packets
 	bool pathSnooping;
 	bool sendDataPackets;
-	bool usePathIDs;
+        bool usePathIDs;
+	bool useLinkLayerIndication;
 	short probeTimerId;
 	uint8_t probeStrategy;
 	uint8_t rediscoveryFanOutFactor;
@@ -156,6 +157,8 @@ private:
 	simtime_t pathSetupWaitTime;
 	simtime_t updateWaitTime;
 	simtime_t updateWaitTimeFast;
+	simtime_t minHelloInterval;
+	simtime_t maxHelloInterval;
 	bool detailedRoutingTableStats;
 	linkFailureNotificationType linkFailureNotifications;
 	// send reachability test packets only to nodes with failed links
@@ -330,7 +333,8 @@ private:
 	bool doDataProbe(short timerId);
 	bool doReachabilityTest(short timerId);
 	bool doSendExplorePathPacket(short timerId);
-	bool doPathRefresh(short timerId);
+        bool doPathRefresh(short timerId);
+	bool doCheckPNs(short timerId);
 	//@}
 
 	/** @name private helpers */
@@ -353,6 +357,8 @@ private:
 	/// for a new neighborhoodcontact, installed any known paths within discoveryRadius
 	void vicinityPathIDCompletion(const KadContact& neighborhoodContact);
 
+	/// call when a node is disconnected
+	void nodeDisconnect(nodeid_t nid);
 	/// checks whether a PN requires a resynch and initiates PNDiscReq if so
 	bool checkForResync(const OverlayKey& contact, stateseqno_t newseqno);
 	/**
@@ -413,7 +419,7 @@ private:
 	void onInitialize() override;
 	/// called when a new node is connected
 	void onConnect(nodeid_t nid) override;
-	/// called when a node is disconnected
+	/// called when a node is disconnected (on link layer indication)
 	void onDisconnect(nodeid_t nid) override;
 	/// on message
 	void onMessage(NodePkt_p pkt) override;
@@ -611,8 +617,6 @@ public:
 	static constexpr unsigned long ProbeSelfMinInterval = 250; // ms
 	static constexpr unsigned long notifyLinkFailureWaitTime = 10UL; // ms
 	static constexpr unsigned long RediscoveryNextTryWaitTime = 100UL; // ms
-	static constexpr unsigned long PNHelloMinInterval = 200UL; // ms
-	static constexpr unsigned long PNHelloMaxInterval = 30000UL; // ms
 	static constexpr unsigned long PNDiscoverInitialWaitTime = 1000UL; // µs (1ms)
 	static constexpr unsigned long PNDiscoverWaitTime = 10000UL; // µs (10ms ~ 100 Requests/s)
 	static constexpr unsigned long GetPNInitialWaitTime = 10000UL; // µs

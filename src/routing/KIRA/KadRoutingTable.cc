@@ -1045,6 +1045,7 @@ KadContactList KadRoutingTable::getAllValidContacts(bool noPN) const
 	return result;
 }
 
+
 KadContactList KadRoutingTable::getValidContactsFromBucket(size_t index) const
 {
     KadContactList result{};
@@ -1055,6 +1056,20 @@ KadContactList KadRoutingTable::getValidContactsFromBucket(size_t index) const
         copyValidContacts(bucket.getPNContacts(), result);
     }
     return result;
+}
+
+
+// returns all PNs that have not updated their lastseen for dead period (given in ms)
+// usually 3*maxHelloInterval (expect two messages at least with 1.5 maxHelloInterval)
+void KadRoutingTable::getDeadPNs(uint64_t deadPeriod, std::list<OverlayKey>& resultlist) const
+{
+	for (const auto& bucket : buckets)
+	{
+		for (const auto& contact : bucket.getPNContacts()) {
+		  if ( contact->isPhysicalNeighbor() and contact->getPathLength() == 0 and contact->getAge() > deadPeriod)
+				resultlist.push_back(contact->getKey());
+		}
+	}
 }
 
 

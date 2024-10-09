@@ -12,6 +12,7 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with this program.  If not, see http://www.gnu.org/licenses/.
 //
+#include "BaseTypes.h"
 #include "KIRA.h"
 #include "KadObserver.h"
 
@@ -220,14 +221,14 @@ void R2Kademlia::onSelfMessage(cMessage_p msg)
 bool R2Kademlia::doSendHello(short timerId)
 {
 	ASSERT(timerId >= 0);
-	if (neighborTable.empty())
+        // existing neighbors are not known when LinkLayerIndications are not
+        // used, so in this case we need to send a Hello to all potential underlay neighbors
+	if (useLinkLayerIndication and neighborTable.empty())
 		return false; // node is isolated
-
-	static const simtime_t maxHelloInterval(SimTime(PNHelloMaxInterval,SIMTIME_MS)); // check every 30 seconds
 
 	if (lastPNHelloStateSeqNo.isInvalid() or lastPNHelloStateSeqNo != getLSSeqNo()) {
 		// if local state has changed within the last interval, reset to minInterval
-		randomTimerDuration[timerId]= SimTime(PNHelloMinInterval,SIMTIME_MS);
+		randomTimerDuration[timerId]= minHelloInterval;
 	}
 	else {
 		// exponential backoff double duration until we reached maxDuration
@@ -285,7 +286,7 @@ bool R2Kademlia::doProbeNeighbors(short timerId)
 
 
 
-// Contact Probing: check for contact validity (see also doProbeNeighbors)
+// Contact Probing: check for contact validity (see also doProbeNeighbors), does not check for PNContacts
 // sends at most one probe per call
 // contact probing uses ProbeReq to check for reachability of the contact,
 // this detects any broken links along the current path
@@ -361,6 +362,23 @@ bool R2Kademlia::doSendExplorePathPacket(short timerId)
 	else
 		EV_WARN << "no contact found for path exploration" << endl;
 
+	return false; // do not stop timer
+}
+
+
+bool R2Kademlia::doCheckPNs(short timerId) {
+	ASSERT(timerId >= 0);
+        std::list<OverlayKey> resultlist;
+	// get all PNs that have not sent a Hello or other message for a long time (assume 2 messages within 1.5 maxHelloInterval + additional 100ms)
+        getRoutingTable().getDeadPNs(3 * maxHelloInterval.inUnit(SIMTIME_MS)+100, resultlist);
+        for (auto it = resultlist.cbegin(); it != resultlist.cend(); it++) {
+		if (auto nid = neighborTable.getNodeId(*it); nid != undefined_node) {
+			nodeDisconnect(nid);
+		}
+                else {
+			EV_WARN << "DeadPN " << it->shortStr() << ", but not present in neighbor table" << endl;
+		}
+        }
 	return false; // do not stop timer
 }
 

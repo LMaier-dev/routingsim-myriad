@@ -131,7 +131,7 @@ protected:
 		PredecessorMap& pred_map;
 	};
 
-        /// our topology as bgl graph
+        /// our topology as (directed) bgl graph
 	topologyGraph* BGLtopology;
 
         cModule *networkManager = nullptr;
@@ -147,7 +147,7 @@ protected:
         enum shortestPathCalculationMode_t : uint8_t {
 	  fullDistanceMatrix = 1,
 	  onDemandDijkstra = 2,
-	  onDemandBidirectionalBFS = 3
+	  onDemandBidirectionalBFS = 3 // only useful for identical weights/hops as metric
 	} shortestPathCalculationMode;
 
 	/**

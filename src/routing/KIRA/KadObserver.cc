@@ -625,6 +625,7 @@ void KadObserver::sampleStatistics (Statistics &stats) {
 }
 
 
+#if DEBUG_LINKFAILURENOTIFICATIONS != 0
 bool KadObserver::getFailedContacts() {
 	// iterate over all nodes
 	for (auto [id,ignored] : nodeid_to_key) {
@@ -636,6 +637,7 @@ bool KadObserver::getFailedContacts() {
         }
 	return true;
 }
+#endif
 
 
 KadObserver& getKadObserver() {

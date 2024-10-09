@@ -240,6 +240,8 @@ public:
 	void checkPathToContact(KadContact& contact, const link_t& failed_link);
 	/// do not invalidate valid contacts, but test path validity
 	void checkContacts(const link_t& failedlink);
+	/// return all PNs that have not updated their lastseen for dead period (given in ms)
+        void getDeadPNs(uint64_t deadPeriod, std::list<OverlayKey>& resultlist) const;
 
 	/// invalidate all contacts with paths that contain a failed link otherNodeKey <-> failedNodeKey
 	void invalidateContacts(const link_t& failedLink, age_t failedLinkAge);

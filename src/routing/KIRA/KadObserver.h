@@ -88,9 +88,11 @@ private:
         std::vector<OverlayKey> nodelist;
 	bool nodelist_is_consistent= false;
 
+#if DEBUG_LINKFAILURENOTIFICATIONS != 0
 	// this is for debugging purposes
 	std::unordered_set<link_t> failedLinkSet;
-	//
+#endif
+        //
 	unsigned int deliveredPackets = 0;
 	unsigned int droppedPackets = 0;
 	unsigned int registeredPackets = 0;
@@ -206,10 +208,12 @@ public:
 
 	virtual void sampleStatistics (Statistics &stats) override;
 
-	// this is for debuging purposes
-	void addFailedLink(link_t failedlink) { failedLinkSet.insert(failedlink); } ;
-	void removeFailedLink(const link_t& failedlink) { failedLinkSet.erase(failedlink); }
-	bool getFailedContacts();
+#if DEBUG_LINKFAILURENOTIFICATIONS != 0
+        // this is for debuging purposes
+	void addFailedLink(link_t failedlink) { failedLinkSet.insert(failedlink); };
+	void removeFailedLink(const link_t &failedlink) { failedLinkSet.erase(failedlink); }
+        bool getFailedContacts();
+#endif
 };
 
 KadObserver& getKadObserver();

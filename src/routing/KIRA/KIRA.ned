@@ -26,8 +26,8 @@ simple R2Kademlia extends routingsim.foundation.Protocol
 		@display("i=misc/node");
 		/// number of bits used for accelerated lookup called "b" in research papers.
 		int accelerationFactor = default(1);
-		/// max size of the buckets, called "k" in research papers (k-Buckets)
-		int bucketSize = default(20);
+		/// max size of the buckets, called "k" in research papers (k-Buckets), for KIRA recommended k=40
+		int bucketSize = default(40);
 		/// number of contacts returned by find node response, called "k" in research papers
 		int findNodeNumber = default(bucketSize);
 		/// radius of physical neighborhood discovery (for populating the routing table)
@@ -40,6 +40,7 @@ simple R2Kademlia extends routingsim.foundation.Protocol
 		bool pathSnooping = default(true);
 		bool sendDataPackets = default(true);
 		bool usePathIDs = default(true);
+		bool useLinkLayerIndication = default(true);
 		// enable special extension that also selects paths of equal length to be deterministically "better"
 		// see also exploreInterval
 		bool enableSinglePathDiversity = default(false);
@@ -48,6 +49,10 @@ simple R2Kademlia extends routingsim.foundation.Protocol
 		double probeInterval = default(2s) @unit(s);
 		/// 0=none, 1=random, 2=exiting, 3=bucket_expand, 4=random_suffix, 5=suffix_expand, 6=random_bucket
 		int probeStrategy @enum(ProbeStrategy) = default(3);
+		// minHelloInterval
+		double minHelloInterval = default(200ms) @unit(ms);
+		// maxHelloInterval
+		double maxHelloInterval = default(30000ms) @unit(ms);
 		/// waiting time until PN rediscovery is scheduled
 		double PNRediscoveryWaitTime = default(100ms) @unit(ms);
 		/// waiting time until urgent rediscovery is scheduled

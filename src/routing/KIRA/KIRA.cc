@@ -85,6 +85,7 @@ void R2Kademlia::onInitialize() {
 	pathSnooping = par("pathSnooping").boolValue();
         sendDataPackets = par("sendDataPackets").boolValue();
         usePathIDs = par("usePathIDs").boolValue();
+	useLinkLayerIndication = par("useLinkLayerIndication").boolValue();
 	if (sendDataPackets and not usePathIDs)
 	{
 		EV_WARN << "usePathIDs must be set if sendDataPackets is enabled, changed to usePathIDs=on" << endl;
@@ -121,6 +122,8 @@ void R2Kademlia::onInitialize() {
 	addGratuitousContacts = par("addGratuitousContacts").boolValue();
 	// register this module for statistics
 	getStatistics().addSample(this);
+	minHelloInterval = SimTime(par("minHelloInterval").doubleValue(),SIMTIME_MS);
+	maxHelloInterval = SimTime( par("maxHelloInterval").doubleValue(), SIMTIME_MS);
 	simtime_t probeInterval = (simtime_t) par("probeInterval").doubleValue();
 	simtime_t exploreInterval = (simtime_t) par("exploreInterval").doubleValue();
 
@@ -143,11 +146,14 @@ void R2Kademlia::onInitialize() {
 	// For path exploration
 	if (exploreInterval > 0)
 		addRandomizedTimer(exploreInterval*1.5, exploreInterval, std::bind(&R2Kademlia::doSendExplorePathPacket, this, ph::_1));
+	// resend Hello packets to keep state sequence numbers in synch, note that is includes an exponential backoff (until maxHelloInteral, usually 30s max)
+	PNHelloTimerId= addRandomizedTimer(minHelloInterval, minHelloInterval, std::bind(&R2Kademlia::doSendHello, this, ph::_1));
 
-	// resend Hello packets to keep state sequence numbers in synch, note that is includes an exonential backoff (until 30s max)
-	PNHelloTimerId= addRandomizedTimer(SimTime(225,SIMTIME_MS), SimTime(250,SIMTIME_MS), std::bind(&R2Kademlia::doSendHello, this, ph::_1));
+	// when we do not have link layer indications, we need to regularly check for dead PNs
+	if (not useLinkLayerIndication)
+		addRandomizedTimer(3.5*maxHelloInterval,maxHelloInterval,std::bind(&R2Kademlia::doCheckPNs, this, ph::_1));
 
-	if (usePathIDs) {
+        if (usePathIDs) {
 		// if PathRefreshThreshold is 20s, refresh is scheduled between [10s,30s]
 		addRandomizedTimer(SimTime(PathRefreshThreshold/2,SIMTIME_MS), SimTime(PathRefreshThreshold,SIMTIME_MS), std::bind(&R2Kademlia::doPathRefresh, this, ph::_1));
 		// garbageCollection would happen after 90s + every 10s
@@ -174,12 +180,16 @@ void R2Kademlia::onInitialize() {
 
 // link comes up (treat like a link layer indication "link established"), immediately send a PNHello message
 void R2Kademlia::onConnect( nodeid_t nid ) {
-	// for debugging only
+    // for debugging only
+#if  DEBUG_LINKFAILURENOTIFICATIONS != 0
 	OverlayKey key = getKadObserver().getNodeKey(nid);	
 	getKadObserver().removeFailedLink({myOverlayKey,key});
+#endif
+        if (not useLinkLayerIndication)
+          return;
 
-	// send a hello packet to new neighbor after some very small random delay
-	addOneShotTimer(SimTime(uniform(1000,3000),SIMTIME_US), [this,nid](short int ignored)->bool {
+	// send a hello packet to new neighbor after some random delay (average minHelloInterval)
+	addOneShotTimer(uniform(minHelloInterval/2,1.5*minHelloInterval), [this,nid](short int ignored)->bool {
 		auto packet(makeHelloPacket());
 		sentVolume+= packet->getByteLength();
 		sendToNode(nid, std::move(packet));
@@ -187,8 +197,8 @@ void R2Kademlia::onConnect( nodeid_t nid ) {
 		return true;
 	} );
 	// additionally, reset PNHello timer if this fires too far away in the future
-	if (randomTimerDuration[PNHelloTimerId] > 3*SimTime(PNHelloMinInterval,SIMTIME_MS))
-		resetTimer(PNHelloTimerId, SimTime(PNHelloMinInterval,SIMTIME_MS));
+	if (randomTimerDuration[PNHelloTimerId] > 3*minHelloInterval)
+		resetTimer(PNHelloTimerId, minHelloInterval);
 }
 
 
@@ -196,17 +206,25 @@ void R2Kademlia::onConnect( nodeid_t nid ) {
 void R2Kademlia::onDisconnect( nodeid_t nid ) {
 	//EV_TRACE << "onDisconnect " << nid << endl;
 	// if this node is taken down, the packets arrive after the reset
-	if (neighborTable.empty())
-		return;
+	if (neighborTable.empty() or (useLinkLayerIndication == false))
+          return;
 
+	nodeDisconnect(nid);
+}
+
+
+void R2Kademlia::nodeDisconnect(nodeid_t nid) {
 
 	OverlayKey key = getKadObserver().getNodeKey(nid);
 	ASSERT(not key.isUnspecified());
-    if (neighborTable.getNodeId(key) != nid) return;
+        if (neighborTable.getNodeId(key) != nid)
+		return;
 	//ASSERT(neighborTable.getNodeId(key) == nid );
 
+#if  DEBUG_LINKFAILURENOTIFICATIONS != 0
 	getKadObserver().addFailedLink({myOverlayKey,key});
-	// change in physical neighborhood increases the Sequence Number
+#endif
+        // change in physical neighborhood increases the Sequence Number
 	incLSSeqNo();
 	neighborTable.removeNeighbor(key);
 	ASSERT(neighborTable.getNodeId(key) == undefined_node);
@@ -229,8 +247,8 @@ void R2Kademlia::onDisconnect( nodeid_t nid ) {
 		EV_TRACE << "invalidated " << counter << " contacts" << endl;
 
 	// since an Underlay Neighbor has been changed, we notify our other neighbors if any left
-	if (not neighborTable.empty() and randomTimerDuration[PNHelloTimerId] > SimTime(PNHelloMinInterval,SIMTIME_MS)) {
-		resetTimer(PNHelloTimerId, SimTime(PNHelloMinInterval/2,SIMTIME_MS));
+	if (not neighborTable.empty() and randomTimerDuration[PNHelloTimerId] > minHelloInterval) {
+		resetTimer(PNHelloTimerId, minHelloInterval);
 	}
 
 	// if this option is enabled, we flood a notification in reverse path directions
