@@ -625,19 +625,15 @@ void KadObserver::sampleStatistics (Statistics &stats) {
 }
 
 
-#if DEBUG_LINKFAILURENOTIFICATIONS != 0
 bool KadObserver::getFailedContacts() {
 	// iterate over all nodes
 	for (auto [id,ignored] : nodeid_to_key) {
 		auto& rt = getR2Kademlia(id).getRoutingTable();
-		for (const auto& failedlink : failedLinkSet) {
-			// now check every path for containing failed links and print them
-			rt.getBrokenPaths(failedlink);
-		}
-        }
+		// now check every path for containing failed links and print them
+		rt.getBrokenPaths();
+	}
 	return true;
 }
-#endif
 
 
 KadObserver& getKadObserver() {

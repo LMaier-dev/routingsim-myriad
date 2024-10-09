@@ -180,11 +180,7 @@ void R2Kademlia::onInitialize() {
 
 // link comes up (treat like a link layer indication "link established"), immediately send a PNHello message
 void R2Kademlia::onConnect( nodeid_t nid ) {
-    // for debugging only
-#if  DEBUG_LINKFAILURENOTIFICATIONS != 0
-	OverlayKey key = getKadObserver().getNodeKey(nid);	
-	getKadObserver().removeFailedLink({myOverlayKey,key});
-#endif
+
         if (not useLinkLayerIndication)
           return;
 
@@ -221,9 +217,6 @@ void R2Kademlia::nodeDisconnect(nodeid_t nid) {
 		return;
 	//ASSERT(neighborTable.getNodeId(key) == nid );
 
-#if  DEBUG_LINKFAILURENOTIFICATIONS != 0
-	getKadObserver().addFailedLink({myOverlayKey,key});
-#endif
         // change in physical neighborhood increases the Sequence Number
 	incLSSeqNo();
 	neighborTable.removeNeighbor(key);

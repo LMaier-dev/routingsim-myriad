@@ -1213,11 +1213,11 @@ float NetworkTopology::getDistance(nodeid_t from, nodeid_t to) {
 		FilteredGraph fg(*BGLtopology, activeEdges<topologyGraph>(*BGLtopology), activeNodes<topologyGraph>(*BGLtopology));
 		EV_DETAIL << "Recalculating Shortest Paths at Simtime " << simTime()
 			  << " Required Memory: ";
-		if (auto memsize(totalNodes*totalNodes*sizeof(float)); memsize < 1000000ULL) {
-			EV_DETAIL << memsize/1000ULL << " kbytes" << endl;
+		if (auto memsize(totalNodes*totalNodes*sizeof(float)); memsize < 1'000'000ULL) {
+			EV_DETAIL << memsize/1'000ULL << " kbytes" << endl;
 		}
 		else {
-			EV_DETAIL << memsize/1000000ULL << "Mbytes" << endl;
+			EV_DETAIL << memsize/1'000'000ULL << "Mbytes" << endl;
 		}
 		time(&start);
 		// use floyd warshall for dense graphs only

@@ -611,23 +611,23 @@ public:
 	stateseqno_t getLSSeqNo() const { return lsseqno; }
 
 	// do not probe if information is newer than PathInfoAgeThreshold
-	static constexpr unsigned long PathInfoAgeThreshold = 2000UL; // ms
+	static constexpr unsigned long PathInfoAgeThreshold = 2'000UL; // ms
 	// refresh within [0.5,1.5]*PathRefreshThreshold, garbage collection after 3*PathRefreshThreshold
-	static constexpr unsigned long PathRefreshThreshold = 30000UL; // ms
+	static constexpr unsigned long PathRefreshThreshold = 30'000UL; // ms
 	static constexpr unsigned long ProbeSelfMinInterval = 250; // ms
 	static constexpr unsigned long notifyLinkFailureWaitTime = 10UL; // ms
 	static constexpr unsigned long RediscoveryNextTryWaitTime = 100UL; // ms
-	static constexpr unsigned long PNDiscoverInitialWaitTime = 1000UL; // µs (1ms)
-	static constexpr unsigned long PNDiscoverWaitTime = 10000UL; // µs (10ms ~ 100 Requests/s)
-	static constexpr unsigned long GetPNInitialWaitTime = 10000UL; // µs
-	static constexpr unsigned long GetPNWaitTime = 20000UL; // µs (50 Requests/s)
-	static constexpr unsigned long GetONInitialWaitTime = 20000UL; // µs
-	static constexpr unsigned long GetONWaitTime = 40000UL; // µs (25 Requests/s)
-	static constexpr unsigned long ContactCandidateInitialWaitTime = 40000UL; // µs (40ms)
-	static constexpr unsigned long OnDemandPathProbeReqInitialWaitTime = 100000UL; // µs (100ms)
-	static constexpr unsigned long OnDemandPathProbeReqWaitTime = 100000UL; // µs (100ms ~ 10 Requests/s)
-	static constexpr unsigned long notifyLinkFailurePauseTime = 2500UL; // µs (2.5ms ~ 400 Requests/s)
-	static constexpr unsigned long revPathFloodPauseTime = 1000UL; // µs (1ms ~ 1000 Requests/s)
+	static constexpr unsigned long PNDiscoverInitialWaitTime = 1'000UL; // µs (1ms)
+	static constexpr unsigned long PNDiscoverWaitTime = 10'000UL; // µs (10ms ~ 100 Requests/s)
+	static constexpr unsigned long GetPNInitialWaitTime = 10'000UL; // µs
+	static constexpr unsigned long GetPNWaitTime = 20'000UL; // µs (50 Requests/s)
+	static constexpr unsigned long GetONInitialWaitTime = 20'000UL; // µs
+	static constexpr unsigned long GetONWaitTime = 40'000UL; // µs (25 Requests/s)
+	static constexpr unsigned long ContactCandidateInitialWaitTime = 40'000UL; // µs (40ms)
+	static constexpr unsigned long OnDemandPathProbeReqInitialWaitTime = 100'000UL; // µs (100ms)
+	static constexpr unsigned long OnDemandPathProbeReqWaitTime = 100'000UL; // µs (100ms ~ 10 Requests/s)
+	static constexpr unsigned long notifyLinkFailurePauseTime = 2'500UL; // µs (2.5ms ~ 400 Requests/s)
+	static constexpr unsigned long revPathFloodPauseTime = 1'000UL; // µs (1ms ~ 1000 Requests/s)
 
 	static NotViaList_t emptyNotViaList;
 };

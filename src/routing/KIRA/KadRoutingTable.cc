@@ -1468,35 +1468,15 @@ void KadRoutingTable::checkContacts(const link_t& failedlink)
 }
 
 
-// check for outdated path information
-kad_path KadRoutingTable::checkPathValidityToContact(KadContact& contact, const link_t& failedLink) const
-{
-	// if we find a failed link in the path, send a ProbeReq to check for path validity
-	// if the path has actually failed, we'll get back a segment failure and rediscovery will start
-	const auto& path= contact.getPath();
-	if (path.size() > 0)
-	{
-		if (contact.isContainedinPath(myKey, failedLink))
-		{ // link somewhere in the path
-			if (contact.isValid()) {
-				return path;
-			}
-		}
-	}
-	return {};
-}
-
-
 /** check all contacts with paths that contain a failed link **/
-void KadRoutingTable::getBrokenPaths(const link_t& failedlink) const
+void KadRoutingTable::getBrokenPaths() const
 {
 	// iterate over all buckets and contacts (even PNcontacts, because they may use redirected paths)
 	for (const KadBucket& b : buckets) {
 		for (auto& contact : b.getContacts()) {
 			if (contact->isValid()) {
-				if (auto path= checkPathValidityToContact(*contact, failedlink);
-				    not path.empty()) {
-					EV_TRACE << myKey.shortStr() << ' ' << path << ' ' << contact->getKey().shortStr() << " / " << failedlink << endl;
+				if (not pathToContactIsIntact(*contact)) {
+					EV_TRACE << myKey.shortStr() << ' ' << contact->getPath() << ' ' << contact->getKey().shortStr() << endl;
 				}
 				
 			}
@@ -1504,13 +1484,31 @@ void KadRoutingTable::getBrokenPaths(const link_t& failedlink) const
 
 		for (const auto& contact : b.getPNContacts()) {
 			if (contact->isValid()) {
-				if (auto path= checkPathValidityToContact(*contact, failedlink);
-				    not path.empty()) {
-					EV_TRACE << myKey.shortStr() << ' ' << path << ' ' << contact->getKey().shortStr() << " / " << failedlink << endl;
+				if (not pathToContactIsIntact(*contact)) {
+					EV_TRACE << myKey.shortStr() << ' ' << contact->getPath() << ' ' << contact->getKey().shortStr() << endl;
 				}
 			}
 		} // end for inner loop over all PN contacts
 	} // end for over all buckets
+}
+
+
+// returns false if path to contact contains a broken or inactive link in the underlay and true otherwise
+// simply traverses the path in the underlay and checks the corresponding edge
+bool
+KadRoutingTable::pathToContactIsIntact(const KadContact &contact) const {
+	auto prevkey = myKey;
+	for (auto currentkey : contact.getRawActivePath()) {
+		if (not getKadObserver().underlayLinkExists(prevkey, currentkey)) {
+			return false;
+		}
+		prevkey= currentkey;
+	}
+	// check last hop to destination
+	if (not getKadObserver().underlayLinkExists(prevkey, contact.getKey())) {
+		return false;
+	}
+	return true;
 }
 
 
@@ -1653,20 +1651,20 @@ double KadRoutingTable::getAveragePathLength() const
 double KadRoutingTable::getAveragePathStretch() const
 {
 	uint count = 0;
-	double sum = 0;
+	double sum = 0.0;
 	for (const KadBucket& b : buckets) {
 		for (auto& contact : b.getContacts()) {
 			if (uint phy_distance(getKadObserver().getPhysicalDistance(myKey, contact->getKey())); phy_distance > 0) {
 				if (getNetworkManager()->getFailedNodes().size() > 0) {
 					// in case of failed links or nodes: check path validity of contact path
+					// otherwise we could get negative stretch values (for obsolete/broken paths that are shorter than currently possible)
+                                        if (not pathToContactIsIntact(*contact))
+						continue; // skip this contact
 				}
 
 				sum += (contact->getPathLength()+1.0) / (double) phy_distance;
 				count++;
 			}
-			else
-				EV_WARN << "Physical Distance = " << phy_distance
-					<< ": " << myKey << " to " << contact->getKey().shortStr() << endl;
 		}
 
 		for (auto& contact : b.getPNContacts()) {
@@ -1674,16 +1672,16 @@ double KadRoutingTable::getAveragePathStretch() const
 			if (uint phy_distance(getKadObserver().getPhysicalDistance(myKey, contact->getKey())); phy_distance > 0) {
 				if (getNetworkManager()->getFailedNodes().size() > 0) {
 					// in case of failed links or nodes: check path validity of contact path
+                                        if (not pathToContactIsIntact(*contact))
+						continue; // skip this contact
 				}
 
 				sum += (contact->getPathLength()+1.0) / (double) phy_distance;
 				count++;
 			}
-			else
-				EV_WARN << "Physical Distance = " << phy_distance
-					<< ": " << myKey << " to " << contact->getKey().shortStr() << endl;
 		}
-	}
+        }
+
 	return count == 0 ? 0.0 : sum / count;
 }
 

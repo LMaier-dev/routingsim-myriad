@@ -18,6 +18,7 @@
 
 #include "KIRA.h"
 #include "foundation/NetworkManager.h"
+#include "routing/KIRA/OverlayKey128.h"
 
 using namespace routingsim;
 
@@ -82,17 +83,15 @@ protected:
 	void recordStatistics();
 	void recordMessageScalars();
 	void recordLinkUsage() const;
+
 private:
+	// mapping from Overlay NodeID to Underlay nodeid and vice versa
 	std::unordered_map<OverlayKey, nodeid_t> key_to_nodeid;
 	std::unordered_map<nodeid_t, OverlayKey> nodeid_to_key;
         std::vector<OverlayKey> nodelist;
 	bool nodelist_is_consistent= false;
 
-#if DEBUG_LINKFAILURENOTIFICATIONS != 0
-	// this is for debugging purposes
-	std::unordered_set<link_t> failedLinkSet;
-#endif
-        //
+        // statistic counters
 	unsigned int deliveredPackets = 0;
 	unsigned int droppedPackets = 0;
 	unsigned int registeredPackets = 0;
@@ -177,7 +176,7 @@ public:
 	inline nodeid_t getNodeId(const OverlayKey& key) const { return key_to_nodeid.at(key); };
 	/// returns true if a node with the given key is known
 	inline bool exists(const OverlayKey& key) const { return key_to_nodeid.contains(key); };
-
+	inline bool underlayLinkExists(const OverlayKey& firstnode, const OverlayKey& secondnode);
 	//inline uint32_t getNodeDegree(const OverlayKey& key) const { return getR2Kademlia(key).neighborTable.size(); } // requires being a friend of R2Kademlia
 	//inline bool checkSeqNo(const OverlayKey& key, stateseqno_t seqno) const { return seqno <= getR2Kademlia(key).getGLSSeqNo();  };
 
@@ -208,13 +207,21 @@ public:
 
 	virtual void sampleStatistics (Statistics &stats) override;
 
-#if DEBUG_LINKFAILURENOTIFICATIONS != 0
         // this is for debuging purposes
-	void addFailedLink(link_t failedlink) { failedLinkSet.insert(failedlink); };
-	void removeFailedLink(const link_t &failedlink) { failedLinkSet.erase(failedlink); }
         bool getFailedContacts();
-#endif
 };
+
+// returns true if (directed) edge in underlay topology exists and is active
+inline bool KadObserver::underlayLinkExists(const OverlayKey &firstNode,
+                                            const OverlayKey &secondNode) {
+  auto first_nid = getNodeId(firstNode);
+  auto second_nid = getNodeId(secondNode);
+  if (first_nid != undefined_node and second_nid != undefined_node) {
+	  return getNetworkManager()->getTopology().isConnected(first_nid,second_nid);
+  }
+  else
+	  return false;
+}
 
 KadObserver& getKadObserver();
 

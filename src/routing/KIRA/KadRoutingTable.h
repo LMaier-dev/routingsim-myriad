@@ -231,10 +231,11 @@ public:
 	/// appends two randomly selected contacts per bucket to the given contact list
 	void addRandomGratuitousContacts(KadContactList& contactList) const;
 
-	/// returns path if failedLink is contained in path to contact (for debugging)
-	kad_path checkPathValidityToContact(KadContact& contact, const link_t& failedLink) const;
+	// returns false if path to contact contains a broken or inactive link in the underlay and true otherwise
+	bool pathToContactIsIntact(const KadContact &contact) const;
+
 	/// diagnostic output of paths with failedlink
-	void getBrokenPaths(const link_t& failedlink) const;
+	void getBrokenPaths() const;
 
 	/// if failed link is in contact's path send a ProbeReq to check for path validity
 	void checkPathToContact(KadContact& contact, const link_t& failed_link);
@@ -272,9 +273,9 @@ public:
 	inline bool isInLastBucketAndNew(const OverlayKey& key) const { size_t index(getBucketIndex(key));
 		return  index == buckets.size()-1 and buckets.at(index).getContact(key) == nullptr; }
 
-	/// returns the distance between the two keys
+	/// returns the (XOR) distance between the two keys
 	inline OverlayKey distance(const OverlayKey& a, const OverlayKey& b) const { return a ^ b; }
-	/// returns the distance of the given key to my key
+	/// returns the (XOR) distance of the given key to my key
 	inline OverlayKey distance(const OverlayKey& key) const { return key ^ myKey; }
 
 	// update all contact paths that are affected by improved contact path
@@ -285,7 +286,7 @@ public:
 	kad_path concatViaPath(const kad_path& viaPath, const kad_path& path) const;
 	/// removes duplicates and loops from a path
 	bool simplifyPath(kad_path& path, const OverlayKey& destination) const;
-        inline size_t getBucketCount() const { return buckets.size(); }
+	inline size_t getBucketCount() const { return buckets.size(); }
         KadContactList getValidContactsFromBucket(size_t index) const;
 
 	/** returns the width of a level in the accelerated lookup tree */
