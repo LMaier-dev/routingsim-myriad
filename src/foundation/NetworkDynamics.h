@@ -43,9 +43,9 @@ class NetworkDynamics : public cSimpleModule {
   friend class NetworkManager;
 
 private:
-  cMessage *timer;
-  NetworkTopology *topology;
-  NetworkManager *manager;
+  cMessage *timer = nullptr;
+  NetworkTopology *topology = nullptr;
+  NetworkManager *manager = nullptr;
   virtual void handleMessage(cMessage *msg);
   virtual void initialize(int stage);
   virtual void finish();
