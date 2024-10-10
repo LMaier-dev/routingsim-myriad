@@ -1281,7 +1281,9 @@ void R2Kademlia::sampleStatistics (Statistics &stats) {
 	stats.value("routingTableReplacements", routingTable.getReplacementCount());
 	if (detailedRoutingTableStats) {
 		stats.value("routingTablePathLength", routingTable.getAveragePathLength());
-		stats.value("routingTablePathStretch", routingTable.getAveragePathStretch());
+		auto [rt_stretch, no_faulty_paths] = routingTable.getAveragePathStretch();
+                stats.value("routingTablePathStretch", rt_stretch);
+		stats.value("routingTableFaultyPaths", no_faulty_paths);
 	}
 	unsigned long notifyFirstSegmentSourcesSize(0UL);
 	std::for_each(notifyFirstSegmentSources.cbegin(), notifyFirstSegmentSources.cend(), [&](auto& entry){notifyFirstSegmentSourcesSize+= entry.second.size();});
@@ -1326,7 +1328,9 @@ void R2Kademlia::recordScalars() {
 	recordScalar("routingTableContacts", routingTable.getNumContacts());
 	recordScalar("routingTableBuckets", routingTable.getNumBuckets());
 	recordScalar("routingTablePathLength", routingTable.getAveragePathLength());
-	recordScalar("routingTablePathStretch", routingTable.getAveragePathStretch());
+	auto [rt_stretch, no_faulty_paths] = routingTable.getAveragePathStretch();
+	recordScalar("routingTablePathStretch", rt_stretch);
+	recordScalar("routingTableFaultyPaths", no_faulty_paths);
 	recordScalar("routingTableUpdates", routingTable.getUpdateCount());
 	recordScalar("routingTableReplacements", routingTable.getReplacementCount());
 	recordScalar("discoveredVicinitySize", vicinity.size());

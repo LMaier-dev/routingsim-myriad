@@ -21,8 +21,10 @@
 #include "KadRoutingTable.h"
 #include "KadObserver.h"
 #include <algorithm>
+#include <cstdint>
 #include <cstdlib>
 #include <limits>
+#include <utility>
 #include "RequestQueue.h"
 
 namespace routingsim {
@@ -1647,20 +1649,26 @@ double KadRoutingTable::getAveragePathLength() const
 	return count == 0 ? 0.0 : sum / count;
 }
 
-
-double KadRoutingTable::getAveragePathStretch() const
+/// calculates the average stretch of the known contacts (w/o physical contacts!)
+/// and returns also the number of faulty paths (paths that are considered valid, but contain an inactive or broken underlay link)
+std::pair<double, uint64_t>
+KadRoutingTable::getAveragePathStretch() const
 {
 	uint count = 0;
         double sum = 0.0;
-	auto failed_links_or_nodes_exist = getNetworkManager()->getFailedNodes().size() > 0;
+	uint64_t counted_faulty_paths = 0;
+	auto check_for_faulty_paths = (not getNetworkManager()->getFailedNodes().empty() or getNetworkManager()->useMobilityDynamics());
 	for (const KadBucket& b : buckets) {
 		for (auto& contact : b.getContacts()) {
 			if (uint phy_distance(getKadObserver().getPhysicalDistance(myKey, contact->getKey())); phy_distance > 0) {
-				if (failed_links_or_nodes_exist) {
+				if (check_for_faulty_paths) {
 					// in case of failed links or nodes: check path validity of contact path
 					// otherwise we could get stretch values <1 (for obsolete/broken paths that are shorter than currently possible)
-                                        if (not pathToContactIsIntact(*contact))
+                                        if (not pathToContactIsIntact(*contact)) {
+						if (contact->isValid())
+							counted_faulty_paths++;
 						continue; // skip this contact
+					}
 				}
 
 				sum += (contact->getPathLength()+1.0) / (double) phy_distance;
@@ -1671,10 +1679,13 @@ double KadRoutingTable::getAveragePathStretch() const
 		for (auto& contact : b.getPNContacts()) {
 			// stored paths exclude the destination node
 			if (uint phy_distance(getKadObserver().getPhysicalDistance(myKey, contact->getKey())); phy_distance > 0) {
-				if (failed_links_or_nodes_exist) {
+				if (check_for_faulty_paths) {
 					// in case of failed links or nodes: check path validity of contact path
-                                        if (not pathToContactIsIntact(*contact))
+                                        if (not pathToContactIsIntact(*contact)) {
+						if (contact->isValid())
+							counted_faulty_paths++;
 						continue; // skip this contact
+					}
 				}
 
 				sum += (contact->getPathLength()+1.0) / (double) phy_distance;
@@ -1683,7 +1694,7 @@ double KadRoutingTable::getAveragePathStretch() const
 		}
         }
 
-	return count == 0 ? 0.0 : sum / count;
+	return std::make_pair(count == 0 ? 0.0 : sum / count, counted_faulty_paths);
 }
 
 

@@ -180,10 +180,10 @@ public:
   }
 
   double distance(Coord2D rhs) const {
-    return sqrt(pow(x - rhs.x, 2) + pow(y - rhs.y, 2));
+    return sqrt((x - rhs.x) * (x - rhs.x) + (y - rhs.y) * (y - rhs.y));
   }
 
-  double distance() const { return sqrt(pow(x, 2) + pow(y, 2)); }
+  double distance() const { return sqrt(x*x + y*y); }
 
   Coord2D get_normalized() const {
     if (this->distance() == 0)

@@ -257,8 +257,8 @@ public:
 	inline size_type getDepth() const { return std::min<size_type>(ceil(getNumBuckets() / getLevelWidth()) * accelerationFactor, myKey.getLength()); }
 	/// calculates the average path length of the known contacts (w/o physical contacts!)
 	double getAveragePathLength() const;
-	/// calculates the average stretch of the known contacts (w/o physical contacts!)
-	double getAveragePathStretch() const;
+	/// calculates the average stretch of the known contacts (w/o physical contacts!) and returns number of faulty paths
+	std::pair<double,uint64_t> getAveragePathStretch() const;
 	/// returns how many times paths have been updated
 	inline uint getUpdateCount() const { return updateCount; }
 	/// returns how many times contacts have been replaced

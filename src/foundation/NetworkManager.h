@@ -55,7 +55,9 @@ public:
 	/// Returns a list of currently failed or affected nodes
 	inline const std::unordered_set<nodeid_t>& getFailedNodes() const { return failedNodes; }
 
-	/// Returns the network manager singleton
+	inline bool useMobilityDynamics() const { return useMobility and mobilityDynamics; }
+
+        /// Returns the network manager singleton
 	static inline NetworkManager& getManager() { return *getNetworkManager(); }
 
 	/// Destructor, reset singleton
@@ -75,7 +77,7 @@ private:
         MobilityTopology* mobilityTopology = nullptr;
         MobilityDynamics* mobilityDynamics = nullptr;
 
-        std::unordered_set<nodeid_t> failedNodes;
+	std::unordered_set<nodeid_t> failedNodes; // this is set by DynamicsInfo messages
         bool useMobility = false;
 
 	// Topology Statistics
