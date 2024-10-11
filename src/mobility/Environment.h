@@ -8,7 +8,7 @@
 #ifndef ROUTINGSIM_EVIROMENT_H
 #define ROUTINGSIM_EVIROMENT_H
 
-#include "../foundation/BaseTypes.h"
+#include "BaseTypes.h"
 
 namespace routingsim {
 

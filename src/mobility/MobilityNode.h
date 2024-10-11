@@ -11,7 +11,7 @@
 #ifndef ROUTINGSIM_MOBILITYNODE_H
 #define ROUTINGSIM_MOBILITYNODE_H
 
-#include "../foundation/Node.h"
+#include "Node.h"
 #include "AntennaBase.h"
 #include "MobilityBase.h"
 

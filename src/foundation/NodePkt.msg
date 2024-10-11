@@ -30,9 +30,23 @@ enum PayloadTypes {
     PAYLOAD_GOODBYE = 2;
 }
 
+// NodePkt attributes (symbolic names for bits)
+enum NodePktAttributes {
+     NODEPKT_ATTR_NONE = 0;
+     NODEPKT_ATTR_NO_PROCESSING_DELAY = 1;
+     NODEPKT_ATTR_DO_NOT_COUNT_ON_LINK = 2;
+     NODEPKT_ATTR_BIT_2 = 4;
+     NODEPKT_ATTR_BIT_3 = 8;
+     NODEPKT_ATTR_BIT_4 = 16;
+     NODEPKT_ATTR_BIT_5 = 32;
+     NODEPKT_ATTR_BIT_6 = 64;
+     NODEPKT_ATTR_BIT_7 = 128;
+     NODEPKT_ATTR_BIT_8 = 256;
+}
+
 packet NodePkt {
     int type @enum(PayloadTypes);
-    int attribute; // bitfield of packet attributes, bits 0..15 reserved for foundation, upper bits for protocol use
+    int attributes; // bitfield of packet attributes, bits 0..15 reserved for foundation, upper bits for protocol use
     hop_t hop;
     int destGateId = -1;
 }

@@ -25,7 +25,7 @@ parameters:
     /// protocols to the node uses
     string protocols;
 
-    // minimum and maximum delay in milliseconds
+    // minimum and maximum delay in microseconds
     int nodeMinDelay @unit(us) = default(0us);
     int nodeMaxDelay @unit(us) = default(500us);
 

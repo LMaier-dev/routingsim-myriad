@@ -15,6 +15,8 @@
 
 #include "Node.h"
 #include "NetworkManager.h"
+#include "NodePkt_m.h"
+#include "simtime_t.h"
 
 namespace routingsim {
 
@@ -193,31 +195,34 @@ void Node::sendToNode(nodeid_t nid, NodePkt *np) {
     return;
   }
 
-  // send packet with delay (use µs precision)
-  simtime_t delay = ((double)intuniform(minDelay, maxDelay)) / 1000000.0;
+  // send packet with randomized node processing delay (use µs precision)
+  simtime_t node_processing_delay =
+      (np->getAttributes() & NODEPKT_ATTR_NO_PROCESSING_DELAY) ? SIMTIME_ZERO
+	  : ((double)intuniform(minDelay, maxDelay)) / 1'000'000.0;
   // schedule not before earlier sent message to avoid message reordering!
-  if (simTime() + delay < n.lastsent) {
-    delay = n.lastsent - simTime();
+  if (simTime() + node_processing_delay < n.lastsent) {
+    node_processing_delay = n.lastsent - simTime();
   }
 
   // schedule not before transmission of other message on channel
   cChannel *txChannel = n.out->findTransmissionChannel();
   if (txChannel) {
     simtime_t txFinishTime = txChannel->getTransmissionFinishTime();
-    if (simTime() + delay < txFinishTime) {
-      delay = txFinishTime - simTime();
+    if (simTime() + node_processing_delay < txFinishTime) {
+      node_processing_delay = txFinishTime - simTime();
     }
   }
-  
-  linkusage_map[nid]++;
+
+  if (not(np->getAttributes() & NODEPKT_ATTR_DO_NOT_COUNT_ON_LINK))
+	  linkusage_map[nid]++;
   // EV_TRACE << "sendToNode() @Node " << getNodeId() << ": Destination node "
   //          << nid << " msg:" << np->getName() << " " << n.out->getNextGate()->getFullPath() << endl;
-  sendDelayed(np, delay, n.out);
-  if (txChannel != nullptr) {
-    n.lastsent = simTime() + delay + txChannel->calculateDuration(np);
+  sendDelayed(np, node_processing_delay, n.out);
+  if (txChannel) {
+    n.lastsent = simTime() + node_processing_delay + txChannel->calculateDuration(np);
   }
   else {
-    n.lastsent = simTime() + delay;
+    n.lastsent = simTime() + node_processing_delay;
   }
 }
 

@@ -15,7 +15,7 @@
 #define ROUTINGSIM_MOBILITYMANAGER_H
 
 #include "MobilityNode.h"
-#include "../foundation/NetworkTopology.h"
+#include "NetworkTopology.h"
 
 namespace routingsim {
 

@@ -13,7 +13,7 @@
 
 constexpr double LOWESTSIGNALSTRENGTH = 90; // in dB
 
-#include "../foundation/BaseTypes.h"
+#include "BaseTypes.h"
 
 namespace routingsim {
 
