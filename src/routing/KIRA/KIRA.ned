@@ -35,6 +35,7 @@ simple R2Kademlia extends routingsim.foundation.Protocol
 		int discoveryRadius = default(3);
 		bool proximityRouting = default(true);
 		bool proximityNeighborSelection = default(true);
+		/// note: default hopLimit may be too small for topologies with large diameters (safe to increase)
 		int hopLimit = default(256);
 		/// if activated the node collects path information from passing packets
 		bool pathSnooping = default(true);
@@ -86,6 +87,6 @@ simple R2Kademlia extends routingsim.foundation.Protocol
 		bool addGratuitousContacts = default(true);
 
 		// statistics foo
-		/// if true records avarage path lengths and stretch in routing tables.
+		/// if true records average path lengths and stretch in routing tables (can be costly)
 		bool detailedRoutingTableStats = default(true);
 }

@@ -491,6 +491,7 @@ void R2Kademlia::sendPacket(KadDataPacket_p packet) {
 	ASSERT(packet->getControlInfo() == nullptr);
 	auto nodePkt = std::make_unique<NodePkt>(packet->getName());
 	nodePkt->setType(KAD_DATA_PACKET_TYPE);
+	//nodePkt->setAttributes(nodePkt->getAttributes() | NODEPKT_ATTR_DATA_PLANE_PROCESSING_DELAY);
 	if (packet->getType() == KAD_Data) {
 		getKadObserver().registerPacket(*packet);
 		getStatistics().registerMessage(nodePkt.get());

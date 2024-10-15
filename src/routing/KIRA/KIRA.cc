@@ -772,6 +772,7 @@ void R2Kademlia::resendPacket(KadPacket_p packet) {
 	ASSERT(packet->getControlInfo() != nullptr);
 	NodePkt_p nodePkt = NodePkt_p(check_and_cast<NodePkt *>(packet->removeControlInfo()));
 	nodePkt->setType(KAD_CTRL_PACKET_TYPE);
+	nodePkt->setAttributes(nodePkt->getAttributes() | NODEPKT_ATTR_CONTROL_PLANE_PROCESSING_DELAY);
 	forwardPacket(std::move(packet), std::move(nodePkt));
 }
 
@@ -786,7 +787,8 @@ void R2Kademlia::sendPacket(KadPacket_p packet, simtime_t delay) {
 	}
 	auto packetsize(packet->getByteLength());
 	auto nodePkt = std::make_unique<NodePkt>(packet->getName());
-	nodePkt->setType(KAD_CTRL_PACKET_TYPE);
+        nodePkt->setType(KAD_CTRL_PACKET_TYPE);
+	nodePkt->setAttributes(nodePkt->getAttributes() | NODEPKT_ATTR_CONTROL_PLANE_PROCESSING_DELAY);
 	if (packet->getType() == KAD_FindNodeReq) {
 		const KadFindNodeReq* tmp_packet= check_and_cast<KadFindNodeReq*>(packet.get());
 		// it doesn't make sense to count packets destined to isolated nodes: they cannot be reached

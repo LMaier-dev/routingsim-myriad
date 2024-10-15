@@ -16,7 +16,7 @@
 #include "Node.h"
 #include "NetworkManager.h"
 #include "NodePkt_m.h"
-#include "simtime_t.h"
+#include "simtime.h"
 
 namespace routingsim {
 
@@ -72,8 +72,10 @@ void Node::initialize(int stage) {
 	  else
 		  this->id = par("id").intValue();
 
-          minDelay = par("nodeMinDelay").intValue(); // nodeMinDelay is given in µs
-	  maxDelay = par("nodeMaxDelay").intValue(); // nodeMaxDelay is given in µs
+          minControlPlaneDelay = par("nodeMinControlPlaneDelay").intValue(); // nodeCPMinDelay is given in ns
+	  maxControlPlaneDelay = par("nodeMaxControlPlaneDelay").intValue(); // nodeCPMaxDelay is given in ns
+          minDataPlaneDelay = par("nodeMinDataPlaneDelay").intValue(); // nodeDPMinDelay is given in ns
+	  maxDataPlaneDelay = par("nodeMaxDataPlaneDelay").intValue(); // nodeDPMaxDelay is given in ns
 
           initNeighbors();
   }
@@ -195,10 +197,14 @@ void Node::sendToNode(nodeid_t nid, NodePkt *np) {
     return;
   }
 
-  // send packet with randomized node processing delay (use µs precision)
-  simtime_t node_processing_delay =
-      (np->getAttributes() & NODEPKT_ATTR_NO_PROCESSING_DELAY) ? SIMTIME_ZERO
-	  : ((double)intuniform(minDelay, maxDelay)) / 1'000'000.0;
+  // send packet with randomized node processing delay (use ns precision)
+  simtime_t node_processing_delay = SIMTIME_ZERO;
+  if (maxControlPlaneDelay > 0 and (np->getAttributes() & NODEPKT_ATTR_CONTROL_PLANE_PROCESSING_DELAY))
+          node_processing_delay = SimTime(intuniform(minControlPlaneDelay, maxControlPlaneDelay), SIMTIME_NS);
+  // add data plane processing delay if requested
+  if (maxDataPlaneDelay > 0 and (np->getAttributes() & NODEPKT_ATTR_DATA_PLANE_PROCESSING_DELAY))
+	  node_processing_delay += SimTime(intuniform(minDataPlaneDelay, maxDataPlaneDelay), SIMTIME_NS);
+
   // schedule not before earlier sent message to avoid message reordering!
   if (simTime() + node_processing_delay < n.lastsent) {
     node_processing_delay = n.lastsent - simTime();
