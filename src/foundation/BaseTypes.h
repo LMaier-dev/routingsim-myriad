@@ -267,7 +267,7 @@ public:
 class MHz: public Unit<MHz> {
 public:
   explicit MHz(const double d) : Unit<MHz>(d) {};
-  [[nodiscard]] double toHz() const { return value * 1000; }
+  [[nodiscard]] double toHz() const { return value * 1000 * 1000; }
 };
 
 } // namespace routingsim
