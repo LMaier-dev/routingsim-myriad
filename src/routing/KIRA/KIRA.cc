@@ -16,6 +16,7 @@
 #include <BaseTypes.h>
 #include <boost/type_traits/integral_constant.hpp>
 #include <cstddef>
+#include <memory>
 #include <optional>
 
 #include "Statistics.h"

@@ -76,6 +76,17 @@ void Protocol::sendToNode( nodeid_t nid, NodePkt* pkt, simtime_t delay) {
 		cSimpleModule::sendDelayed(pkt, delay, "toNode$o");
 }
 
+/// sends a packet
+void Protocol::sendLocal(NodePkt* pkt, simtime_t delay) {
+	pkt->getHopForUpdate().to = node().getNodeId();
+	pkt->getHopForUpdate().from = node().getNodeId();
+
+	if (delay == 0)
+		cSimpleModule::send(pkt, "toNode$o");
+	else
+		cSimpleModule::sendDelayed(pkt, delay, "toNode$o");
+}
+
 
 /// sends a packet
 void Protocol::sendToNeighbors( NodePkt* pkt) {

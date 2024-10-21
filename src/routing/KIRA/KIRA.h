@@ -484,10 +484,10 @@ private:
 
     /// replicate the flood packet in respective id range, returns number of replications sent
     uint32_t replicateFloodPacket(std::unique_ptr<KadFloodPacket>& packet);
-    bool sendFloodPacket(std::optional<hop_t> event = std::nullopt); 
+    bool sendFloodPacket(std::optional<hop_t> event = std::nullopt, NodePkt_ps payload = nullptr); 
     uint32_t replicateFloodPacket(KadFloodPacket& packet);
     std::unique_ptr<KadFloodPacket> createReplicationPacket(KadFloodPacket& packet, KadContact_p contact, uint8_t floodPrefixLength);
-    std::unique_ptr<KadFloodPacket> createFloodPacket(KadContact_p contact, uint8_t floodPrefixLength);
+    std::unique_ptr<KadFloodPacket> createFloodPacket(KadContact_p contact, uint8_t floodPrefixLength, NodePkt_ps payload = nullptr);
 
 	void handleFloodPacketDropped(const KadFloodPacket& packet);
 	void handleFloodPacketForwarded(const KadFloodPacket& packet, hop_t takenHop);
@@ -528,7 +528,7 @@ private:
 	bool sendRediscovery(OverlayKey failedcontact, uint8_t maxFanOut, simtime_t rediscoveryWaitTime);
 
 	/// sends a data packet
-	void sendData(const OverlayKey& key);
+	void sendData(const OverlayKey& key, NodePkt_ps payload = nullptr);
 	//@}
 
 	/// schedule rediscovery
@@ -614,6 +614,10 @@ public:
 	//@}
 
 	uint getHopLimitDefault() const { return hopLimit; };
+
+    // Public API
+    bool sendFloodPacket(NodePkt_p pkt); 
+    void sendDataPacket(const OverlayKey& finaldestkey, NodePkt_p payload); 
 
 	/** @name statistics functions used by statistics module */
 	//@{

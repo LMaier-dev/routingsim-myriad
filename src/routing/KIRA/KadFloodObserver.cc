@@ -1,6 +1,7 @@
 #include "KadFloodObserver.h"
 #include "BaseTypes.h"
 #include "NetworkManager.h"
+#include "ccontextswitcher.h"
 #include "chistogram.h"
 #include "cmodule.h"
 #include "csimulation.h"
@@ -37,6 +38,7 @@ void KadFloodObserver::handleMessage(cMessage *msg) {
 }
 
 uint32_t KadFloodObserver::registerFlood(const OverlayKey& source, nodeid_t nid, std::optional<hop_t> event_id) {
+    Enter_Method_Silent("registerFlood()");
     auto floodId = floodStates.size();
     FloodState state = {};
     state.hops = cHistogramPtr(getIntegerHistogram(("hops" + std::to_string(floodId)).c_str()));

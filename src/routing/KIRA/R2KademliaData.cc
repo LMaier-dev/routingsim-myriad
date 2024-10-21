@@ -17,7 +17,10 @@
 #include "KIRA.h"
 #include "KadPacket_m.h"
 #include "KadObserver.h"
+#include "NodePkt_m.h"
 #include "PathIDUtils.h"
+#include "Protocol.h"
+#include "ccontextswitcher.h"
 #include "clog.h"
 #include "KadPackets_m.h"
 
@@ -370,8 +373,14 @@ void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 
 		countReceived(*packet);
 
-        handleIfFitting<KadFloodPacket>(packet);
-		return;
+        if (handleIfFitting<KadFloodPacket>(packet)) { return; }
+        
+        // deliver payload locally
+        if (auto payload = packet->getPayload(); payload != nullptr) {
+            auto pkt = new NodePkt(*payload);
+            sendLocal(pkt);
+        }
+        return;
 	}
 
 	//  own originated packets will possess the right (incoming) DestPathID, see makeDataPacket()
@@ -483,7 +492,7 @@ void R2Kademlia::sendPacket(KadDataPacket_p packet) {
 }
 
 
-void R2Kademlia::sendData(const OverlayKey& finaldestkey) {
+void R2Kademlia::sendData(const OverlayKey& finaldestkey, NodePkt_ps payload) {
 	EV_TRACE << "sendData to " << finaldestkey.shortStr() << endl;
 
 	// find closest contact toward final destination NodeID
@@ -596,6 +605,16 @@ void R2Kademlia::notifySender(uint8_t errorType, KadDataPacket_p origpacket, con
 			 << " via " << contact.getKey().shortStr() << endl;
 		sendPacket(std::move(packet));
 	}
+}
+
+
+void R2Kademlia::sendDataPacket(const OverlayKey& finaldestkey, NodePkt_p pkt) {
+    Enter_Method_Silent("sendDataPacket(...)");
+    EV_TRACE << "Send Data Packet to" << finaldestkey <<  std::endl;
+    const auto payload_ = pkt.release();
+    take(payload_);
+    auto payload = std::shared_ptr<NodePkt>(payload_);
+    return sendData(finaldestkey, payload);
 }
 
 } // end namespace
