@@ -86,6 +86,16 @@ simple R2Kademlia extends routingsim.foundation.Protocol
 		/// add additional randomly selected contacts from various buckets in responses (usually 2 per bucket)
 		bool addGratuitousContacts = default(true);
 
+        /// in which interval a node sends a floodPacket (0s is disabled)
+        double floodInterval = default(0s) @unit(s);
+		/// max stride factor for flooding packets
+		int floodStrideFactor = default(0);
+		/// whether to count trailing non-full buckets as part of the responsibility range
+		bool floodCompleteBucketOpt = default(true);
+
+		/// send flood packet on link failure
+		bool floodOnFailure = default(false);
+
 		// statistics foo
 		/// if true records average path lengths and stretch in routing tables (can be costly)
 		bool detailedRoutingTableStats = default(true);

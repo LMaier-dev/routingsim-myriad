@@ -205,9 +205,9 @@ simtime_t LinkFailure::scheduleDynamics() {
 		else {
 			throw cRuntimeError("Invalid Link Failure model!");
 		}
-		scheduleLinkFailure(source, destination, period, duration);
-		scheduledFailures++;
-	}
+        scheduleLinkFailure(source, destination, period, duration);
+        scheduledFailures++;
+    }
 
 	/// the failure is repeated each occurrence seconds, unless oneFailure is true
 	if (oneFailure) {

@@ -15,41 +15,17 @@
 
 
 #include "KIRA.h"
+#include "KadPacket_m.h"
 #include "KadObserver.h"
+#include "NodePkt_m.h"
 #include "PathIDUtils.h"
+#include "Protocol.h"
+#include "ccontextswitcher.h"
+#include "clog.h"
+#include "KadPackets_m.h"
 
 namespace routingsim {
 
-template<typename T>
-std::unique_ptr<T> R2Kademlia::makeDataPacket(const OverlayKey& dstNodeID, const KadContact* viacontact, const char *name) {
-	// viacontact is the next overlay hop we neeed to reach
-	auto packet = std::make_unique<T>();
-	packet->setName(name);
-	packet->setType(KAD_Data);
-	packet->setPathSrcNodeID(myOverlayKey);
-	packet->setSrcNodeID(myOverlayKey);
-	packet->setDstNodeID(dstNodeID);
-	packet->setHopLimit(hopLimit);
-
-	// since we only forward to known contacts, we also have a PID for them
-	// this PID may only lead to the Node three hops before the contact
-	if ( auto pidentry= fwdTablePathID.NIDPIDTable.find(viacontact->getKey());
-	     pidentry != fwdTablePathID.NIDPIDTable.cend() )
-	{ // pidentry.second is incomingPathID
-		// this will be used to lookup the outgoing PID in forwardDataPacket()
-		packet->setFirstPathID(pidentry->second);
-		// in case that we have a longer path, a second PID for the last path segment needs to be specified
-		if ( auto secondpidentry= fwdTablePathID.NIDPIDTableLastSeg.find(viacontact->getKey());
-		     secondpidentry != fwdTablePathID.NIDPIDTableLastSeg.cend() ) {
-			packet->setSecondPathID(secondpidentry->second);
-		}
-	}
-	else
-	{
-		EV_ERROR << "makeDataPacket() - no PathID found for via destination " << viacontact->getKey().shortStr() << endl;
-	}
-	return packet;
-}
 
 
 
@@ -117,7 +93,7 @@ void R2Kademlia::handleDataPacket(NodePkt_p pkt) {
 	EV_TRACE << "received data packet from "
 	   << packet->getSrcNodeID().shortStr() << " to "
 	   << packet->getDstNodeID().shortStr() << " overlaysrc: " << packet->getPathSrcNodeID().shortStr()
-	   << " HL:" << packet->getHopLimit() << endl;
+	   << " HL:" << packet->getHopLimit() << " Type " << packet->getType() << endl;
 
 	// we should check whether the link via this message travelled is
 	// still active, otherwise we should drop this message as it was affected
@@ -135,6 +111,12 @@ void R2Kademlia::handleDataPacket(NodePkt_p pkt) {
 		return;
 	}
 
+    // we need to check if this is a flood packet
+    if (packet->getType() == KAD_Flood) {
+		EV_TRACE << "handleDataPacket: got FloodPaket" << endl;
+	    auto tPacket = dynamic_cast<KadFloodPacket*>(packet.get());
+        handleFloodPacketForwarded(*tPacket, taken_hop);
+    } 
 	// this should either forward to next hop or deliver locally
 	forwardDataPacket(std::move(packet), std::move(pkt));
 }
@@ -362,7 +344,7 @@ bool R2Kademlia::forwardDataPacketToNextHop(KadDataPacket_p& packet, NodePkt_p& 
 void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 
 	ASSERT(packet != nullptr);
-	ASSERT(packet->getType() == KAD_Data);
+	//ASSERT(packet->getType() == KAD_Data);
 	ASSERT(packet->getControlInfo() == nullptr);
         //ASSERT(packet->hasRemainingHops());
 	ASSERT(nodePkt != nullptr);
@@ -390,7 +372,15 @@ void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 		packet->setControlInfo(nodePkt.release());
 
 		countReceived(*packet);
-		return;
+
+        if (handleIfFitting<KadFloodPacket>(packet)) { return; }
+        
+        // deliver payload locally
+        if (auto payload = packet->getPayload(); payload != nullptr) {
+            auto pkt = new NodePkt(*payload);
+            sendLocal(pkt);
+        }
+        return;
 	}
 
 	//  own originated packets will possess the right (incoming) DestPathID, see makeDataPacket()
@@ -502,7 +492,7 @@ void R2Kademlia::sendPacket(KadDataPacket_p packet) {
 }
 
 
-void R2Kademlia::sendData(const OverlayKey& finaldestkey) {
+void R2Kademlia::sendData(const OverlayKey& finaldestkey, NodePkt_ps payload) {
 	EV_TRACE << "sendData to " << finaldestkey.shortStr() << endl;
 
 	// find closest contact toward final destination NodeID
@@ -565,6 +555,11 @@ void R2Kademlia::countReceived(KadDataPacket& packet) {
 // drops packet and counts dropped packet
 // controlInfo needs to be set properly
 void R2Kademlia::countDropped(KadDataPacket& packet, const OverlayKey& target, uint8_t reason) {
+    // check if this is a flood packet
+    if (auto floodPkt= dynamic_cast<const KadFloodPacket*>(&packet);
+        floodPkt != nullptr) {
+       handleFloodPacketDropped(*floodPkt); 
+    }
 	droppedDataPackets++;
 	getKadObserver().registerPacketDropped(packet, myOverlayKey, target, reason);
 	EV_TRACE << "+DROPPED_DATA+ reason:" << (unsigned int) reason << endl;
@@ -610,6 +605,16 @@ void R2Kademlia::notifySender(uint8_t errorType, KadDataPacket_p origpacket, con
 			 << " via " << contact.getKey().shortStr() << endl;
 		sendPacket(std::move(packet));
 	}
+}
+
+
+void R2Kademlia::sendDataPacket(const OverlayKey& finaldestkey, NodePkt_p pkt) {
+    Enter_Method_Silent("sendDataPacket(...)");
+    EV_TRACE << "Send Data Packet to" << finaldestkey <<  std::endl;
+    const auto payload_ = pkt.release();
+    take(payload_);
+    auto payload = std::shared_ptr<NodePkt>(payload_);
+    return sendData(finaldestkey, payload);
 }
 
 } // end namespace

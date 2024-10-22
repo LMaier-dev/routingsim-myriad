@@ -17,6 +17,8 @@
 #include "NetworkManager.h"
 #include "NodePkt_m.h"
 #include "simtime.h"
+#include "cstringtokenizer.h"
+#include <format>
 
 namespace routingsim {
 
@@ -81,16 +83,21 @@ void Node::initialize(int stage) {
   }
   else {
 	  // create the protocol module dynamically
-	  const char* nodeModules = par("protocols");
-	  cModuleType* protocolType = cModuleType::get(nodeModules);
-	  cModule* protocol = protocolType->create( "protocol0", this->getParentModule() );
-	  protocol->finalizeParameters();
+      auto nodeModules = cStringTokenizer(par("protocols")).asVector();
+      auto i = 0;
+      for (auto& module: nodeModules) {
+	    cModuleType* protocolType = cModuleType::get(module.c_str());
+	    cModule* protocol = protocolType->create( std::format("protocol{}", i).c_str(), this->getParentModule() );
+	    protocol->finalizeParameters();
 
           // connect gates
-	  cGate* in = NULL, *out = NULL;
-	  getOrCreateFirstUnconnectedGatePair("toProtocols", false, true, in, out );
-	  protocol->gate("toNode$o")->connectTo(in);
-	  out->connectTo( protocol->gate("toNode$i") );
+	    cGate* in = NULL, *out = NULL;
+	    getOrCreateFirstUnconnectedGatePair("toProtocols", false, true, in, out );
+	    protocol->gate("toNode$o")->connectTo(in);
+	    out->connectTo( protocol->gate("toNode$i") );
+
+        i++;
+      }
   } // end else
 }
 
@@ -130,8 +137,8 @@ void Node::handleMessage(cMessage *msg) {
   NodePkt *np = check_and_cast<NodePkt *>(msg);
 #endif
 
-  // packet from Protocol? yes-> delegate!
-  if (np->arrivedOn("toProtocols$i")) {
+  // packet from Protocol and not to ourself? yes-> delegate!
+  if (np->arrivedOn("toProtocols$i") and np->getHop().to != this->id) {
     np->getHopForUpdate().from = this->id;
 
     if (np->getHop().to == neighbor_cast)
@@ -436,10 +443,8 @@ Node::gateIsDisabled(const cGate *g) const {
   return false; // gate not found in disabledLinks
 }
 
-
-bool
-Node::setLinkDatarate(Node *mod, const char *gatename, double datarate) {
-  cGate *gate = findGate(mod, gatename);
+bool Node::setLinkDatarate(Node *mod, const char *gatename, double datarate) {
+  cGate *gate = findGateByName(mod, gatename);
   if (gate) {
     cChannel *channel = gate->getTransmissionChannel();
     if (!channel) {
@@ -461,9 +466,7 @@ Node::setLinkDatarate(Node *mod, const char *gatename, double datarate) {
   return false;
 }
 
-
-cGate *
-Node::findGate(const Node *mod, const char *gatename) {
+cGate *Node::findGateByName(Node *mod, const char *gatename) {
   for (int i = 0; i < gateSize(gatename); i++) {
     if (mod == getOtherNode(gate(gatename, i))) {
       return gate(gatename, i);
