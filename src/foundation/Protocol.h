@@ -28,6 +28,7 @@ class Protocol;
 
 namespace routingsim {
 using NodePkt_p = std::unique_ptr<NodePkt>;
+using NodePkt_ps = std::shared_ptr<NodePkt>;
 using cMessage_p = std::unique_ptr<cMessage>;
 
 /**
@@ -55,6 +56,9 @@ protected:
 	inline void sendToNode( nodeid_t nid, NodePkt_p pkt, simtime_t delay= 0){ sendToNode(nid, pkt.release(), delay);};
 	/// sends a packet
 	void sendToNode( nodeid_t nid, NodePkt* pkt, simtime_t delay= 0);
+
+	inline void sendLocal( NodePkt_p pkt, simtime_t delay= 0){ sendLocal(pkt.release(), delay);};
+    void sendLocal(NodePkt* pkt, simtime_t delay = 0);
 
 	/// sends a packet to all neighbors
 	inline void sendToNeighbors( NodePkt_p pkt ){ sendToNeighbors(pkt.release());};

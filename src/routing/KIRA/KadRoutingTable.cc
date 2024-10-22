@@ -19,6 +19,7 @@
  */
 
 #include "KadRoutingTable.h"
+#include "KadContact.h"
 #include "KadObserver.h"
 #include <algorithm>
 #include <cstdint>
@@ -26,6 +27,9 @@
 #include <limits>
 #include <utility>
 #include "RequestQueue.h"
+#include <cstddef>
+#include "OverlayKey128.h"
+#include "KIRA.h"
 
 namespace routingsim {
 
@@ -1058,6 +1062,93 @@ KadContactList KadRoutingTable::getValidContactsFromBucket(size_t index) const
         copyValidContacts(bucket.getPNContacts(), result);
     }
     return result;
+}
+
+std::vector<std::pair<KadContact_p, uint8_t>> KadRoutingTable::getReplicationContacts(
+        const uint8_t floodPrefixLength, uint8_t maxSplit, bool completeBucketOpt) const 
+{
+    // we are at the end. No need to flood further 
+    std::vector<std::pair<KadContact_p, uint8_t>> contacts;
+    if (floodPrefixLength == 112) {
+       return contacts; 
+    }
+    
+    struct range_type_t{
+        OverlayKey start;
+        uint8_t prefixLen;
+        KadContactList::const_iterator firstContact;
+        KadContactList::const_iterator nextContact;
+    };
+
+    // flood to all in deepest bucket
+    // what to do if contacts are invalid? after all we are responsible to inform them
+    // maybe we can deflect to one of our valid contacts?
+    for (auto contact: getValidContactsFromBucket(getNumBuckets() - 1)) {
+            contacts.push_back(std::make_pair(contact, 112));
+    }
+
+    if (getNumBuckets() < 2) {
+        return contacts;
+    }
+
+    auto i = getNumBuckets() - 2;
+    // flood to all in deepest bucket
+    // what to do if contacts are invalid? after all we are responsible to inform them
+    // maybe we can deflect to one of our valid contacts?
+    if (completeBucketOpt) {
+        for (; i >= floodPrefixLength and buckets[i].size() < getSplitSize(); i--) {
+            for (auto contact: getValidContactsFromBucket(i)) {
+                contacts.push_back(std::make_pair(contact, 112));
+            }
+        }
+    }
+    auto maxPrefix = i;
+    
+    // TODO make this work with a higher accelerationFactor
+    //auto startingLevel = floodPrefixLength / accelerationFactor;
+    for (; i >= floodPrefixLength and i < getNumBuckets(); i--) {
+        auto bucket_contacts = getValidContactsFromBucket(i);
+        auto key_cmp = [&](const KadContact_p c1, const KadContact_p c2) -> bool { return c1->getKey() < c2->getKey(); };
+        std::sort(bucket_contacts.begin(), bucket_contacts.end(), key_cmp);
+        auto cmp_fun = [&](const KadContact_p c1, const KadContact_p c2) -> bool { return c1->getPathLength() > c2->getPathLength(); };
+        auto firstId = (myKey & ~(OverlayKey::getMax() >> (i + 1))) ^ (OverlayKey::ONE << (OverlayKeyLength - i - 1));
+
+        std::vector<range_type_t> open_ranges;
+        open_ranges.push_back({firstId, (uint8_t) (i + 1), bucket_contacts.begin(), bucket_contacts.end()});
+        while (!open_ranges.empty()) {
+            auto& range = open_ranges.back();
+            // check whether a split would result in two nonempty ranges
+            const auto middle = range.start ^ (OverlayKey::ONE << (OverlayKeyLength - range.prefixLen - 1));
+            auto separator = std::find_if(range.firstContact, 
+                                          range.nextContact, 
+                                          [&](auto& contact) { return contact->getKey() >= middle; });
+            if (range.prefixLen - i - 1 < maxSplit  
+                and range.prefixLen < maxPrefix
+                and separator != range.firstContact 
+                and separator != range.nextContact) {
+                // split range in two 
+                range.prefixLen++;
+                auto endContact = range.nextContact;
+                range.nextContact = separator;
+                open_ranges.push_back({middle, range.prefixLen, separator, endContact});
+            } else {
+                // add range to output with closest contact
+                auto repl_contact = std::min_element(range.firstContact, 
+                                                     range.nextContact, 
+                                                     cmp_fun);
+                if (repl_contact == bucket_contacts.end()) { 
+                    EV_WARN << "getReplicationContacts() no valid contact for bucket with index = " << i << endl;
+                    continue;
+                }
+                contacts.push_back(std::make_pair(*repl_contact, range.prefixLen));
+                open_ranges.pop_back();
+
+            }
+                
+
+        }
+    }
+    return contacts;
 }
 
 

@@ -62,6 +62,20 @@ public:
 	/// sets the color of the display string of this Node (and its wrapper).
 	void setColor(const char *color);
 
+    template<std::derived_from<Protocol> P>
+    P* getProtocol() {
+        // iter over protocols to find matching 
+        for (int i = 0; i < this->gateSize("toProtocols"); i++) {
+            cGate* gate = this->gate("toProtocols$o", i);
+            ASSERT(gate->isConnected());
+            if (auto proto = dynamic_cast<P *>(gate->getPathEndGate()->getOwnerModule());
+                proto != nullptr) {
+                return proto;
+            }
+        }
+        return nullptr;
+    }
+
 protected:
 	friend class NetworkTopology;
 	virtual void initialize(int stage);
@@ -130,7 +144,7 @@ private:
         int minDataPlaneDelay = 0; // in ns
 	int maxDataPlaneDelay = 0; // in ns
 
-        cGate *findGate(const Node* mod, const char *gatename);
+    cGate *findGateByName(Node* mod, const char *gatename);
 };
 
 } //namespace
