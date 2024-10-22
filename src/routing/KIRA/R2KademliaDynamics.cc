@@ -533,7 +533,7 @@ bool R2Kademlia::sendUpdates()
 		else {
 			EV_TRACE << "skipped invalid/unreachable notify contact " << notifyContact_it->first.shortStr() << endl;
 		}
-	}
+	} // end for
 
 	// the updateQueue map should is now empty again
 	// reset the updateScheduled variable

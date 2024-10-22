@@ -18,7 +18,12 @@
 #include "NodePkt_m.h"
 #include "simtime.h"
 #include "cstringtokenizer.h"
-#include <format>
+#include <version>
+#if __cpp_lib_format
+#include <format> // supported since g++-13 only
+#else
+#include <sstream>
+#endif
 
 namespace routingsim {
 
@@ -87,8 +92,14 @@ void Node::initialize(int stage) {
       auto i = 0;
       for (auto& module: nodeModules) {
 	    cModuleType* protocolType = cModuleType::get(module.c_str());
+#if __cpp_lib_format
 	    cModule* protocol = protocolType->create( std::format("protocol{}", i).c_str(), this->getParentModule() );
-	    protocol->finalizeParameters();
+#else
+	    std::stringstream protocolstr("protocol");
+	    protocolstr << i;
+	    cModule* protocol = protocolType->create(protocolstr.str().c_str(),this->getParentModule());
+#endif
+            protocol->finalizeParameters();
 
           // connect gates
 	    cGate* in = NULL, *out = NULL;
