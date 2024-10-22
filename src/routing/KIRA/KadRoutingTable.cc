@@ -1123,9 +1123,9 @@ std::vector<std::pair<KadContact_p, uint8_t>> KadRoutingTable::getReplicationCon
                                           range.nextContact, 
                                           [&](auto& contact) { return contact->getKey() >= middle; });
             if (range.prefixLen - i - 1 < maxSplit  
-                && range.prefixLen < maxPrefix
-                && separator != range.firstContact 
-                && separator != range.nextContact) {
+                and range.prefixLen < maxPrefix
+                and separator != range.firstContact 
+                and separator != range.nextContact) {
                 // split range in two 
                 range.prefixLen++;
                 auto endContact = range.nextContact;
