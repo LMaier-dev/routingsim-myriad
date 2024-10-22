@@ -140,9 +140,6 @@ void R2Kademlia::onInitialize() {
 	// the advantage is to discover new and better contacts and/or paths
 	addRandomizedTimer(probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doProbeRandomly, this, ph::_1));
 
-	// Reachability Test: check whether other _existing_ nodes can be reached (uses KadObserver)
-	addRandomizedTimer(probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doReachabilityTest, this, ph::_1));
-
 	// For path exploration
 	if (exploreInterval > 0)
 		addRandomizedTimer(exploreInterval*1.5, exploreInterval, std::bind(&R2Kademlia::doSendExplorePathPacket, this, ph::_1));
@@ -166,7 +163,11 @@ void R2Kademlia::onInitialize() {
 	  addRandomizedTimer(getSimulation()->getWarmupPeriod()+probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doDataProbe, this, ph::_1));
 	}
 
-	// expose the following variables in GUI for inspection
+	// Reachability Test: check whether other _existing_ nodes can be reached (uses KadObserver)
+	// this is additional artificial test traffic to evaluate the routing protocol and not necessary for its operation
+        addRandomizedTimer(probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doReachabilityTest, this, ph::_1));
+
+        // expose the following variables in GUI for inspection
 	WATCH(myOverlayKey);
 	WATCH(lsseqno);
 	WATCH(neighborTable);
@@ -1284,7 +1285,8 @@ void R2Kademlia::sampleStatistics (Statistics &stats) {
 	if (detailedRoutingTableStats) {
 		stats.value("routingTablePathLength", routingTable.getAveragePathLength());
 		auto [rt_stretch, no_faulty_paths] = routingTable.getAveragePathStretch();
-                stats.value("routingTablePathStretch", rt_stretch);
+                if (rt_stretch > 0) // it rt_stretch == 0 do not add the value, node has no valid contacts left
+                  stats.value("routingTablePathStretch", rt_stretch);
 		stats.value("routingTableFaultyPaths", no_faulty_paths);
 	}
 	unsigned long notifyFirstSegmentSourcesSize(0UL);

@@ -2,6 +2,7 @@
 #define __ROUTINGSIM_KadPath_H_
 
 #include "OverlayKey.h"
+#include "simtime_t.h"
 #include <sstream>
 
 namespace routingsim {
@@ -43,7 +44,7 @@ public:
 	// constructors
 	KadPath() : path(), lastvalidated(SIMTIME_ZERO), lastPathRefresh(SIMTIME_ZERO), pathHashSum(), state(pathState_t::undefined) { };
 	KadPath(kad_path&& initpath) : path(std::move(initpath)), lastvalidated(SIMTIME_ZERO), lastPathRefresh(SIMTIME_ZERO), pathHashSum(), state(pathState_t::exists) { initpath.clear(); };
-	KadPath(const kad_path& path) : path(path), lastvalidated(SIMTIME_ZERO), lastPathRefresh(SIMTIME_ZERO), pathHashSum(), state(pathState_t::exists) { };
+	KadPath(const kad_path& path, const simtime_t &lastvalidated= SIMTIME_ZERO) : path(path), lastvalidated(lastvalidated), lastPathRefresh(SIMTIME_ZERO), pathHashSum(), state(pathState_t::exists) { };
 	KadPath(const kad_path& path, const OverlayKey& pathHashSum) : path(path), lastvalidated(SIMTIME_ZERO), lastPathRefresh(SIMTIME_ZERO), pathHashSum(pathHashSum), state(pathState_t::exists) { };
 	KadPath(const kad_path& path, const OverlayKey& pathHashSum, const simtime_t &lastvalidated) : path(path), lastvalidated(lastvalidated), lastPathRefresh(SIMTIME_ZERO), pathHashSum(pathHashSum), state(pathState_t::exists) { };
 	KadPath(const kad_path& path, const OverlayKey& pathHashSum, const age_t &age) : path(path), lastvalidated(simTime() - SimTime(age, SIMTIME_MS)), lastPathRefresh(SIMTIME_ZERO), pathHashSum(pathHashSum), state(pathState_t::exists) { };

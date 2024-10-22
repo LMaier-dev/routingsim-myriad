@@ -759,7 +759,7 @@ bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, sta
 	}
 	else { // no space in bucket for inserting the new contact: replace existing one?
 
-		// TODO: do not use PNS in second last bullet if last bucket is not
+		// TODO: do not use PNS in second last bucket if last bucket is not
 		// reasonably filled with contacts -> need to keep all ID-wise neighbors in the 2nd last bucket
 		if (not proximityNeighborSelection) {
 			// EV_DEBUG << "dropping new contact " << *contact << endl;
@@ -1217,7 +1217,7 @@ void KadRoutingTable::getContactsforPathRefresh(std::list<OverlayKey>& result) c
 
 // returns the two oldest entries from each bucket, deepest contacts first and oldest before newer (per bucket)
 // the paths to these contacts have not been validated for a while, so they get validated by probe requests
-// only non PN contacts will be returned
+// PN contacts will be returned only if the have no direct link
 // However, contacts that have recent information <1s will not be selected
 void KadRoutingTable::getOldestValidContacts(std::list<OverlayKey>& result) const
 {
@@ -1227,11 +1227,33 @@ void KadRoutingTable::getOldestValidContacts(std::list<OverlayKey>& result) cons
 	for (auto& bucket : buckets)
 	{
 		KadContact_p oldest(nullptr);
-		KadContact_p secondoldest(nullptr);
+                KadContact_p secondoldest(nullptr);
+
 		for (auto it = bucket.getContacts().cbegin(); it != bucket.getContacts().cend(); it++) {
 			if (*it != nullptr) {
 				auto kadcontactp(it->get());
-				if ( kadcontactp != nullptr and kadcontactp->getPathAge() > R2Kademlia::PathInfoAgeThreshold ) {
+				if ( kadcontactp != nullptr and kadcontactp->getPathLength() > 0 and kadcontactp->getPathAge() > R2Kademlia::PathInfoAgeThreshold ) {
+					if (oldest != nullptr) {
+						// older entry? then replace oldest
+						if (oldest->getPathAge() < kadcontactp->getPathAge()) {
+							secondoldest= oldest; oldest= kadcontactp;
+						}
+						else if (secondoldest != nullptr and secondoldest->getPathAge() < kadcontactp->getPathAge()) {
+							// replace second oldest
+							secondoldest= kadcontactp;
+						}
+					}
+					else { // initialize
+						oldest= kadcontactp;
+					}
+				}
+			}
+		}
+
+                for (auto it = bucket.getPNContacts().cbegin(); it != bucket.getPNContacts().cend(); it++) {
+			if (*it != nullptr) {
+				auto kadcontactp(it->get());
+				if ( kadcontactp != nullptr and kadcontactp->getPathLength() > 0 and kadcontactp->getPathAge() > R2Kademlia::PathInfoAgeThreshold ) {
 					if (oldest != nullptr) {
 						// older entry? then replace oldest
 						if (oldest->getPathAge() < kadcontactp->getPathAge()) {
@@ -1649,7 +1671,7 @@ double KadRoutingTable::getAveragePathLength() const
 	return count == 0 ? 0.0 : sum / count;
 }
 
-/// calculates the average stretch of the known contacts (w/o physical contacts!)
+/// calculates the average stretch of the known contacts
 /// and returns also the number of faulty paths (paths that are considered valid, but contain an inactive or broken underlay link)
 std::pair<double, uint64_t>
 KadRoutingTable::getAveragePathStretch() const
@@ -1671,11 +1693,10 @@ KadRoutingTable::getAveragePathStretch() const
 					}
 				}
 
-				sum += (contact->getPathLength()+1.0) / (double) phy_distance;
+                                sum += (contact->getPathLength()+1.0) / (double) phy_distance;
 				count++;
 			}
 		}
-
 		for (auto& contact : b.getPNContacts()) {
 			// stored paths exclude the destination node
 			if (uint phy_distance(getKadObserver().getPhysicalDistance(myKey, contact->getKey())); phy_distance > 0) {
@@ -1691,10 +1712,10 @@ KadRoutingTable::getAveragePathStretch() const
 				sum += (contact->getPathLength()+1.0) / (double) phy_distance;
 				count++;
 			}
-		}
+                }
         }
-
-	return std::make_pair(count == 0 ? 0.0 : sum / count, counted_faulty_paths);
+	// if count == 0 we cannot divide and say anything meaningful, so return value of 0 should be ignored!
+	return std::make_pair(count == 0 ? 0.0 : sum / (double) count, counted_faulty_paths);
 }
 
 
