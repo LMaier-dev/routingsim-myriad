@@ -14,8 +14,6 @@
 // 
 
 #include "KIRA.h"
-#include "routing/KIRA/OverlayKey128.h"
-#include <unordered_set>
 #include <utility>
 /**
  * @file R2KademliaDynamics.cc
@@ -227,14 +225,14 @@ void R2Kademlia::scheduleUpdate(const KadContact& affectedContact, KadRouteUpdat
 
 	if (action == KAD_Unreachable) {
 		if (not urgentUpdateScheduled) {
-			addRandomizedTimer(updateWaitTimeFast, 0, std::bind(&R2Kademlia::sendUrgentUpdates, this));
+			addOneShotTimer(uniform(updateWaitTimeFast/2,3*updateWaitTimeFast/2), std::bind(&R2Kademlia::sendUrgentUpdates, this));
 			urgentUpdateScheduled= true;
 		}
 	}
 	else
 	if (not updateScheduled)
 	{
-		addRandomizedTimer(updateWaitTime, 0, std::bind(&R2Kademlia::sendUpdates, this));
+		addOneShotTimer(uniform(updateWaitTime/2,3*updateWaitTime/2), std::bind(&R2Kademlia::sendUpdates, this));
 		updateScheduled= true;
 	}
 }
@@ -427,7 +425,7 @@ bool R2Kademlia::sendUrgentUpdates()
 		// need to schedule regular updates if not yet done
 		if (not updateScheduled)
 		{
-			addRandomizedTimer(updateWaitTime, 0, std::bind(&R2Kademlia::sendUpdates, this));
+			addOneShotTimer(uniform(updateWaitTime/2,3*updateWaitTime/2), std::bind(&R2Kademlia::sendUpdates, this));
 			updateScheduled= true;
 		}
 	}
@@ -575,7 +573,7 @@ void R2Kademlia::scheduleRediscovery(const OverlayKey& contactkey, rediscoverQue
 	// start timer for calling rediscoverContacts unless it has been started already
 	if (not rediscoverQ.isScheduled() and not rediscoverQ.empty()) {
 		//EV_TRACE << "addRandomizedTimer(): rediscoveryWaitTime =" << rediscoveryWaitTime << endl;
-		addRandomizedTimer(uniform(rediscoveryWaitTime/2,rediscoveryWaitTime*1.5), 0, std::bind(&R2Kademlia::rediscoverContacts, this, rediscoverQ_type, rediscoveryWaitTime));
+		addOneShotTimer(uniform(rediscoveryWaitTime/2,3*rediscoveryWaitTime/2), std::bind(&R2Kademlia::rediscoverContacts, this, rediscoverQ_type, rediscoveryWaitTime));
 		rediscoverQ.setScheduled();
 	}
 }
@@ -655,10 +653,10 @@ bool R2Kademlia::rediscoverContacts(RediscoveryState::rediscoverQ_type qtype, si
 	// if rediscoveryQ is now empty, next call of this procedure will be scheduled on demand
 	if (not rediscoverQ.empty()) {
 		if (qtype==RediscoveryState::rediscoverQ_type::urgent or qtype==RediscoveryState::rediscoverQ_type::physicalneighbors) {
-			addRandomizedTimer(uniform(rediscoveryWaitTime/4,rediscoveryWaitTime*3/4), 0, std::bind(&R2Kademlia::rediscoverContacts, this, qtype, rediscoveryWaitTime));
+			addOneShotTimer(uniform(rediscoveryWaitTime/4,rediscoveryWaitTime*3/4), std::bind(&R2Kademlia::rediscoverContacts, this, qtype, rediscoveryWaitTime));
 		}
 		else {
-			addRandomizedTimer(uniform(rediscoveryWaitTime/2,rediscoveryWaitTime*1.5), 0, std::bind(&R2Kademlia::rediscoverContacts, this, qtype, rediscoveryWaitTime));
+			addOneShotTimer(uniform(rediscoveryWaitTime/2,3*rediscoveryWaitTime/2), std::bind(&R2Kademlia::rediscoverContacts, this, qtype, rediscoveryWaitTime));
 		}
 		rediscoverQ.setScheduled();
 	}

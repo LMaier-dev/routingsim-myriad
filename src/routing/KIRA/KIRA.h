@@ -29,7 +29,6 @@
 #include <queue>
 
 #include "BaseTypes.h"
-#include "foundation.h"
 #include "Protocol.h"
 #include "StatisticSample.h"
 #include "KadPackets_m.h"
