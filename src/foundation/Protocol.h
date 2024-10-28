@@ -58,7 +58,7 @@ protected:
 	void sendToNode( nodeid_t nid, NodePkt* pkt, simtime_t delay= 0);
 
 	inline void sendLocal( NodePkt_p pkt, simtime_t delay= 0){ sendLocal(pkt.release(), delay);};
-    void sendLocal(NodePkt* pkt, simtime_t delay = 0);
+	void sendLocal(NodePkt* pkt, simtime_t delay = 0);
 
 	/// sends a packet to all neighbors
 	inline void sendToNeighbors( NodePkt_p pkt ){ sendToNeighbors(pkt.release());};
