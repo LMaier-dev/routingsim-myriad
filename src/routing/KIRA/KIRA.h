@@ -293,7 +293,9 @@ private:
 	std::vector<simtime_t> randomTimerDuration;
 	std::vector<simtime_t> fixedTimerDuration;
 	std::vector<TimerMsg *> randomTimerMsg;
-	std::vector<TimerMsg *> fixedTimerMsg;
+        std::vector<TimerMsg *> fixedTimerMsg;
+	static constexpr short oneShotTimerId = std::numeric_limits<short int>::max();
+	static constexpr short fixedTimerIdBase = std::numeric_limits<short int>::max()/2;
 	short PNHelloTimerId= 0;
 	//@}
 
@@ -333,7 +335,7 @@ private:
 	void stopTimer(short timerId);
 	/// stops timer and cancel timer message, starts new timer with new duration
 	void resetTimer(short timerId, simtime_t duration);
-	void stopAllTimers() { for (short timerId= 0; (size_type) timerId < randomTimerMsg.size(); timerId++) { stopTimer(timerId); }; for (short timerIdx= 0; (size_type) timerIdx < fixedTimerMsg.size(); timerIdx++) { stopTimer(-2-timerIdx); } };
+	void stopAllTimers() { for (short timerId= 0; (size_type) timerId < randomTimerMsg.size(); timerId++) { stopTimer(timerId); }; for (short timerIdx= 0; (size_type) timerIdx < fixedTimerMsg.size(); timerIdx++) { stopTimer(fixedTimerIdBase+timerIdx); } };
 
 	/// timer callbacks
 	bool doSendHello(short timerId);

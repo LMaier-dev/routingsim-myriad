@@ -1,12 +1,13 @@
 #ifndef __ROUTINGSIM_TimerMsg_H_
 #define __ROUTINGSIM_TimerMsg_H_
 
-#include "omnetpp.h"
+
+#include "cmessage.h"
 #include <functional>
 
 namespace routingsim {
 
-class TimerMsg : public cMessage {
+class TimerMsg : public omnetpp::cMessage {
 public:
 	// callback function type: should return true if timer should stop
 	using cbfunc_t = std::function<bool(short timerId)>;

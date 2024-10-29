@@ -25,8 +25,11 @@ class Protocol;
 
 #include "BaseTypes.h"
 #include "Node.h"
+#include "ProtocolPacketQueue.h"
+#include <functional>
 
 namespace routingsim {
+
 using NodePkt_p = std::unique_ptr<NodePkt>;
 using NodePkt_ps = std::shared_ptr<NodePkt>;
 using cMessage_p = std::unique_ptr<cMessage>;
@@ -39,15 +42,28 @@ class Protocol: public cSimpleModule {
 	friend class NetworkManager;
 	friend class NetworkTopology;
 
+public:
+	void finish() override;
 	// ------------------------------------------------------ helper methods --
 protected:
-	/// Returns the parent node of the module
+	class ProtocolTimerMsg : public cMessage {
+	public:
+		ProtocolTimerMsg(short timerId, ProtocolPacketQueue* ppq) : cMessage("ProtocolTimerMsg", timerId) {
+			setContextPointer( reinterpret_cast<void *>( ppq ) );
+		};
+
+		ProtocolTimerMsg(const ProtocolTimerMsg& other) = delete;
+		virtual ~ProtocolTimerMsg() { setContextPointer(nullptr); }
+	};
+
+        /// Returns the parent node of the module
 	inline Node& node() {
 		return *parent;
 	}
 
-	/// Bind module to node to receive messages of the given type
-	void bind(int type);
+        /// Bind module to node to receive messages of the given type
+	/// if you want to model protocol processing times, provide a pointer to a ProtocolPacketQueue
+	void bind(int type, std::unique_ptr<ProtocolPacketQueue> pq= nullptr);
 
 	/// Unbind module to node to receive messages of the given type no more
 	void unbind(int type);
@@ -88,9 +104,10 @@ protected:
 	// ------------------------------------------------------------- private --
 private:
 	Node* parent;
-	virtual void initialize(int stage);
-	virtual int numInitStages() const { return 2; };
-	virtual void handleMessage(cMessage *msg);
+	virtual void initialize(int stage) override;
+	virtual int numInitStages() const override { return 2; };
+        virtual void handleMessage(cMessage *msg) override;
+	std::unordered_map<int, std::unique_ptr<ProtocolPacketQueue>> protocolQueues;
 };
 
 /**
@@ -100,7 +117,7 @@ private:
 class LegacyProtocol : public Protocol {
 	/// on message
 	virtual void onMessage( NodePkt_p pkt ) { onMessage(pkt.release()); }
-	/// on message for code that needs unwraped pointers
+	/// on message for code that needs unwrapped pointers
 	virtual void onMessage( NodePkt* pkt ) = 0;
 
 	/// on self message (e.g. timer)

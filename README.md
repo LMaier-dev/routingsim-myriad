@@ -16,9 +16,13 @@ The current version has been tested with OMNeT++ 6.0.3 and OMNeT++ 5.7.
 While OMNeT++ is able to run under Windows, the recommended and
 tested environment is a native Linux installation (e.g., Ubuntu)
 Get OMNeT++ from https://omnetpp.org/ and install it according to
-the manual. You should make sure that
+the manual.
+
+You should make sure that
 `CXXFLAGS=-std=c++20`
-is set in `configure.user` of OMNeT++.
+is set in `configure.user` of OMNeT++
+as well as `CFLAGS_RELEASE='-O3 -DNDEBUG=1'` since we use a lot
+ASSERT() macros for debugging.
 
 Note: you should use at least g++-12 as g++-11 has a compiler bug
 that causes crashes.
