@@ -79,10 +79,10 @@ void Node::initialize(int stage) {
 	  else
 		  this->id = par("id").intValue();
 
-          minControlPlaneDelay = par("nodeMinControlPlaneDelay").intValue(); // nodeCPMinDelay is given in ns
-	  maxControlPlaneDelay = par("nodeMaxControlPlaneDelay").intValue(); // nodeCPMaxDelay is given in ns
-          minDataPlaneDelay = par("nodeMinDataPlaneDelay").intValue(); // nodeDPMinDelay is given in ns
-	  maxDataPlaneDelay = par("nodeMaxDataPlaneDelay").intValue(); // nodeDPMaxDelay is given in ns
+          minNodeControlPlaneDelay = par("nodeMinControlPlaneDelay").intValue(); // nodeCPMinDelay is given in ns
+	  maxNodeControlPlaneDelay = par("nodeMaxControlPlaneDelay").intValue(); // nodeCPMaxDelay is given in ns
+          minNodeDataPlaneDelay = par("nodeMinDataPlaneDelay").intValue(); // nodeDPMinDelay is given in ns
+	  maxNodeDataPlaneDelay = par("nodeMaxDataPlaneDelay").intValue(); // nodeDPMaxDelay is given in ns
 
           initNeighbors();
   }
@@ -217,11 +217,11 @@ void Node::sendToNode(nodeid_t nid, NodePkt *np) {
 
   // send packet with randomized node processing delay (use ns precision)
   simtime_t node_processing_delay = SIMTIME_ZERO;
-  if (maxControlPlaneDelay > 0 and (np->getAttributes() & NODEPKT_ATTR_CONTROL_PLANE_PROCESSING_DELAY))
-          node_processing_delay = SimTime(intuniform(minControlPlaneDelay, maxControlPlaneDelay), SIMTIME_NS);
+  if (maxNodeControlPlaneDelay > 0 and (np->getAttributes() & NODEPKT_ATTR_CONTROL_PLANE_PROCESSING_DELAY))
+          node_processing_delay = SimTime(intuniform(minNodeControlPlaneDelay, maxNodeControlPlaneDelay), SIMTIME_NS);
   // add data plane processing delay if requested
-  if (maxDataPlaneDelay > 0 and (np->getAttributes() & NODEPKT_ATTR_DATA_PLANE_PROCESSING_DELAY))
-	  node_processing_delay += SimTime(intuniform(minDataPlaneDelay, maxDataPlaneDelay), SIMTIME_NS);
+  if (maxNodeDataPlaneDelay > 0 and (np->getAttributes() & NODEPKT_ATTR_DATA_PLANE_PROCESSING_DELAY))
+	  node_processing_delay += SimTime(intuniform(minNodeDataPlaneDelay, maxNodeDataPlaneDelay), SIMTIME_NS);
 
   // schedule not before earlier sent message to avoid message reordering!
   if (simTime() + node_processing_delay < n.lastsent) {

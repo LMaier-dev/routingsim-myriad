@@ -24,6 +24,13 @@ simple R2Kademlia extends routingsim.foundation.Protocol
     parameters:
 		@class(R2Kademlia);
 		@display("i=misc/node");
+		// suggest default average processing delay is 250µs which corresponds to 4000 msgs/s
+		int minKIRAControlPlaneProcessingDelay = default(0ns)  @unit(ns);
+		//int maxKIRAControlPlaneProcessingDelay = default(500000ns)  @unit(ns);
+		int maxKIRAControlPlaneProcessingDelay = default(0ns)  @unit(ns);
+		int minKIRADataPlaneProcessingDelay = default(0ns)  @unit(ns);
+		int maxKIRADataPlaneProcessingDelay = default(0ns)  @unit(ns);
+
 		/// number of bits used for accelerated lookup called "b" in research papers.
 		int accelerationFactor = default(1);
 		/// max size of the buckets, called "k" in research papers (k-Buckets), for KIRA recommended k=40
@@ -86,8 +93,8 @@ simple R2Kademlia extends routingsim.foundation.Protocol
 		/// add additional randomly selected contacts from various buckets in responses (usually 2 per bucket)
 		bool addGratuitousContacts = default(true);
 
-        /// in which interval a node sends a floodPacket (0s is disabled)
-        double floodInterval = default(0s) @unit(s);
+		/// in which interval a node sends a floodPacket (0s is disabled)
+		double floodInterval = default(0s) @unit(s);
 		/// max stride factor for flooding packets
 		int floodStrideFactor = default(0);
 		/// whether to count trailing non-full buckets as part of the responsibility range

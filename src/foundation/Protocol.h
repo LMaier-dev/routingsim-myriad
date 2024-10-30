@@ -43,7 +43,7 @@ class Protocol: public cSimpleModule {
 	friend class NetworkTopology;
 
 public:
-	void finish() override;
+	~Protocol();
 	// ------------------------------------------------------ helper methods --
 protected:
 	class ProtocolTimerMsg : public cMessage {

@@ -29,12 +29,13 @@ void Protocol::initialize(int stage) {
 	// Protocol entity is created at initialization stage 1
 	if (stage == 1) {
 		parent = Node::getOtherNode(gate("toNode$o"));
-		assert(parent!=NULL);
+		ASSERT(parent != nullptr);
 		this->onInitialize();
 	}
 }
 
-void Protocol::finish() {
+
+Protocol::~Protocol() {
 	// cancel any timer msgs that serve the packet queues
 	for (auto it = protocolQueues.begin(); it != protocolQueues.end(); it++) {
 
@@ -49,6 +50,7 @@ void Protocol::finish() {
 
 void Protocol::handleMessage(cMessage *msg) {
 
+	// self message is either internal ProtocolTimerMsg or other protocol specific
 	if (msg->isSelfMessage()) {
 		if (auto pt = dynamic_cast<ProtocolTimerMsg *>(msg); pt) {
 			// if this is a protocol timer message: get next message from the queue
@@ -57,16 +59,21 @@ void Protocol::handleMessage(cMessage *msg) {
                         auto [ts, np] = ppq->popPacket();
                         if (np) { // got next packet to serve
                                 // call function in protocol
-				onMessage(std::move(np));
+                                onMessage(std::move(np));
 				auto finishingTime = simTime() + ppq->getProcessingTime();
-				ppq->setFinishingTime(finishingTime);
-				// calculate processing time for this message and start timer for popping next packet
-                                scheduleAt(finishingTime, pt);
-				ppq->setScheduled(true);
+                                ppq->setFinishingTime(finishingTime);
+                                if (ppq->empty()) { // queue empty now, will not schedule ProtocolTimerMsg
+					ppq->setScheduled(false);
+				}
+				else {
+					// calculate processing time for this message and start timer for popping next packet
+					scheduleAt(finishingTime, pt);
+                                        ppq->setScheduled(true);
+				}
                         }
                         else { // queue is empty now
 				ASSERT(ppq->empty());
-				// unset scheduled state, self message is kept
+                                // unset scheduled state, self message is kept
 				ppq->setScheduled(false);
                         }
 		}

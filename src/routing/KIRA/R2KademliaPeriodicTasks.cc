@@ -45,8 +45,8 @@ R2Kademlia::addRandomizedTimer(simtime_t initialOffset, simtime_t duration, Time
 
         simtime_t scatter = uniform(0, duration);
 	scheduleAt(simTime() + initialOffset - duration/2 + scatter, msg);
-	EV_TRACE << "scheduled timer message (randomized) " << ntimerId << ( (duration != 0) ? " with duration " : " after ")
-		 <<   ((duration != 0) ? duration : initialOffset) <<  endl;
+	// EV_TRACE << "scheduled timer message (randomized) " << ntimerId << ( (duration != 0) ? " with duration " : " after ")
+	// 	 <<   ((duration != 0) ? duration : initialOffset) <<  endl;
 	return ntimerId;
 }
 
@@ -66,8 +66,8 @@ short R2Kademlia::addFixedTimer(simtime_t initialOffset, simtime_t duration, Tim
 	}
 
 	scheduleAt(simTime() + initialOffset, msg);
-	EV_TRACE << "scheduled timer message (fixed) " << ntimerId << ( (duration != 0) ? " with duration " : " after ")
-		 <<   ((duration != 0) ? duration : initialOffset) <<  endl;
+	// EV_TRACE << "scheduled timer message (fixed) " << ntimerId << ( (duration != 0) ? " with duration " : " after ")
+	// 	 <<   ((duration != 0) ? duration : initialOffset) <<  endl;
 	return ntimerId;
 }
 

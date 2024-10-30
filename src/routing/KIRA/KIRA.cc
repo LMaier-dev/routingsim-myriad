@@ -16,9 +16,11 @@
 #include <BaseTypes.h>
 #include <boost/type_traits/integral_constant.hpp>
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <optional>
 
+#include "ProtocolPacketQueue.h"
 #include "Statistics.h"
 #include "KIRA.h"
 #include "KadObserver.h"
@@ -63,9 +65,28 @@ void R2Kademlia::onInitialize() {
 	myOverlayKey = OverlayKey::random(getRNG(0));
 	fwdTablePathID.setOwnNodeID(&myOverlayKey);
 	vicinity.setRoot(myOverlayKey);
-	getKadObserver().registerUp(myOverlayKey, node().getNodeId());
-	bind(KAD_CTRL_PACKET_TYPE);
-	bind(KAD_DATA_PACKET_TYPE);
+        getKadObserver().registerUp(myOverlayKey, node().getNodeId());
+
+	// bind KIRA_CTRL_PACKET_TYPE
+	const uint64_t minCtrlPlaneProcessingDelay = par("minKIRAControlPlaneProcessingDelay").intValue();
+        const uint64_t maxCtrlPlaneProcessingDelay = par("maxKIRAControlPlaneProcessingDelay").intValue();
+	ASSERT(minCtrlPlaneProcessingDelay <= maxCtrlPlaneProcessingDelay);
+        if (maxCtrlPlaneProcessingDelay > 0 and minCtrlPlaneProcessingDelay <= maxCtrlPlaneProcessingDelay) {
+		bind(KAD_CTRL_PACKET_TYPE,
+		     std::make_unique<ProtocolPacketQueue>( [this,minCtrlPlaneProcessingDelay,maxCtrlPlaneProcessingDelay](void){ return uniform(SimTime(minCtrlPlaneProcessingDelay,SIMTIME_NS),SimTime(maxCtrlPlaneProcessingDelay,SIMTIME_NS)); }) );
+        } else {
+		bind(KAD_CTRL_PACKET_TYPE);
+	}
+
+	// bind KIRA_DATA_PACKET_TYPE
+        const uint64_t minDataPlaneProcessingDelay = par("minKIRADataPlaneProcessingDelay").intValue();
+        const uint64_t maxDataPlaneProcessingDelay = par("maxKIRADataPlaneProcessingDelay").intValue();
+        if (maxDataPlaneProcessingDelay > 0 and minDataPlaneProcessingDelay <= maxDataPlaneProcessingDelay ) {
+		bind(KAD_DATA_PACKET_TYPE,
+		     std::make_unique<ProtocolPacketQueue>( [this,minDataPlaneProcessingDelay,maxDataPlaneProcessingDelay](void){ return uniform(SimTime(minDataPlaneProcessingDelay,SIMTIME_NS), SimTime(maxDataPlaneProcessingDelay,SIMTIME_NS)); }) );
+        } else {
+		bind(KAD_DATA_PACKET_TYPE);
+	}
 
 	ASSERT(par("accelerationFactor").intValue() > 0);
 	ASSERT(par("bucketSize").intValue() > 1);

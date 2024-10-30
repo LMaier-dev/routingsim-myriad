@@ -139,10 +139,10 @@ private:
 	/// On goodbye message
 	virtual void onGoodbye( NodePkt* pkt );
 
-        int minControlPlaneDelay = 0; // in ns
-	int maxControlPlaneDelay = 0; // in ns
-        int minDataPlaneDelay = 0; // in ns
-	int maxDataPlaneDelay = 0; // in ns
+        int minNodeControlPlaneDelay = 0; // in ns
+	int maxNodeControlPlaneDelay = 0; // in ns
+        int minNodeDataPlaneDelay = 0; // in ns
+	int maxNodeDataPlaneDelay = 0; // in ns
 
     cGate *findGateByName(Node* mod, const char *gatename);
 };
