@@ -1,7 +1,4 @@
 #include "MobilityTopology.h"
-#include "cmodule.h"
-#include <format>
-#include <string>
 
 namespace routingsim {
 
@@ -104,13 +101,7 @@ void MobilityTopology::deleteLink(MobilityNode *fromNode,
 
   // this disables the link in the underlying boost graph
   disableLink(fromNode->getNodeId(), toNode->getNodeId());
-  std::string fromGateName = std::format("outGateFrom{}To{}", fromNode->getNodeId(), toNode->getNodeId());
-  std::string toGateName = std::format("inGateFrom{}To{}", toNode->getNodeId(), fromNode->getNodeId());
 
-  fromNode->gate(fromGateName.c_str())->disconnect();
-  toNode->gate(toGateName.c_str())->disconnect();
-  fromNode->deleteGate(fromGateName.c_str());
-  toNode->deleteGate(toGateName.c_str());
   // TODO: the following code does not work properly and is therefore commented out
   // unconnected gates cause confusion if reused
   //if (isConnected(fromNode->getNodeId(), toNode->getNodeId())) {
@@ -136,18 +127,14 @@ void MobilityTopology::createLink(MobilityNode *fromNode,
     return;
 
   EV_TRACE << "createLink " << fromNode->getNodeId() << " -> " << toNode->getNodeId() << endl;
-
-  std::string fromGateName = std::format("outGateFrom{}To{}", fromNode->getNodeId(), toNode->getNodeId());
-  std::string toGateName = std::format("inGateFrom{}To{}", toNode->getNodeId(), fromNode->getNodeId());
-
-  cGate* fromGate = fromNode->addGate(fromGateName.c_str(), cGate::OUTPUT);
-  cGate* toGate = toNode->addGate(toGateName.c_str(), cGate::INPUT);
-
+  cGate *fromOut = fromNode->getOrCreateFirstUnconnectedGate("toNeighbors", 'o',
+                                                             false, true);
+  cGate *toIn =
+      toNode->getOrCreateFirstUnconnectedGate("toNeighbors", 'i', false, true);
   std::string channel_name = "datarateChannel";
   cDatarateChannel *datarateChannel = cDatarateChannel::create(channel_name.c_str());
   datarateChannel->setDatarate(0);
-
-  fromGate->connectTo(toGate, datarateChannel);
+  fromOut->connectTo(toIn, datarateChannel);
 
   tie(e, edgeValid) = add_edge(fromNode->getNodeId(), toNode->getNodeId(), *BGLtopology);
   if (edgeValid) {
