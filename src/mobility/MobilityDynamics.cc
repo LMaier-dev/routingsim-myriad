@@ -1,4 +1,5 @@
 #include "MobilityDynamics.h"
+#include "MobilityTopology.h"
 
 namespace routingsim {
 
@@ -29,6 +30,8 @@ MobilityDynamics::initialize(int stage) {
     mobilityNodeAvgDistance = new cOutVector("mobilityNodeAvgDistance");
     take(mobilityNodeAvgDistance);
     addStatisticSample(this);
+    grid = new RegularGrid();
+    mobilityTopology->initializeProximityGrid(grid);
   }
 }
 

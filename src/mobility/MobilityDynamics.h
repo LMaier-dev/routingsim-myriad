@@ -29,6 +29,9 @@ private:
   // the update interval that controls the time between periodic updates
   double updateInterval = 0.1;
 
+  // ProximityGrid
+  RegularGrid* grid;
+
   // updates the position and connection between two specific MobilityNodes
   void updateConnection(MobilityNode *fromNode, MobilityNode *toNode) const;
 

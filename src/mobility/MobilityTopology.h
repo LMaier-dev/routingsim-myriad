@@ -16,6 +16,7 @@
 
 #include "MobilityNode.h"
 #include "NetworkTopology.h"
+#include "RegularGrid.h"
 
 namespace routingsim {
 
@@ -51,6 +52,9 @@ public:
 
   // initial start the topology creation
   void createTopology();
+
+  // initialize the proximity grid
+  void initializeProximityGrid(RegularGrid* grid);
 
 private:
   cModule *networkManager= nullptr;

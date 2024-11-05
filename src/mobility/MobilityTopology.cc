@@ -26,6 +26,13 @@ void MobilityTopology::initialize() {
 
 }
 
+void MobilityTopology::initializeProximityGrid(RegularGrid* grid) {
+    for (cModule *nodeMod : *mobilityNodeMods) {
+      auto *node = check_and_cast<MobilityNode *>(nodeMod->getSubmodule("node"));
+      grid->insert(node);
+    }
+}
+
 
 void MobilityTopology::setDatarate(MobilityNode *fromNode, MobilityNode *toNode,
                                    double datarate) {
