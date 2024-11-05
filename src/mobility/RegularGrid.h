@@ -13,15 +13,24 @@ public:
     // String representation of this cell for debugging
     std::string toString();
 
+    // Checks wether the given point is inside this cell
+    bool isInside(Coord2D point);
+
+    // Inserts the given node into the correct child cell
+    void insert(MobilityNode* node);
+
 private:
     // Upper left and lower right coordinates of this cell
-    Coord2D south_west_coord, north_east_coord;
+    Coord2D north_west_coord, south_east_coord;
 
     // Depth of this cell (0 means leaf cell)
     int depth;
 
     // Child grids of this grid
-    GridCell *south_west, *south_east, *north_west, *north_east;
+    GridCell *north_west, *north_east, *south_east, *south_west;
+
+    // Nodes inside this cell
+    std::vector<MobilityNode*> nodes;
 
 };
 
@@ -30,8 +39,9 @@ class RegularGrid {
 
 public:
 
-    RegularGrid() {
+    RegularGrid(double width, double height, int depth) {
         nodes = std::vector<MobilityNode*>();
+        root_cell = new GridCell(Coord2D(0, height), Coord2D(width, 0), depth);
     };
 
     // Inserts the given MobilityNode into the correct grid cell
@@ -44,7 +54,11 @@ public:
     std::vector<MobilityNode*> getNodesNear(MobilityNode* node);
 
 private:
+    // TODO Remove when not needed anymore
     std::vector<MobilityNode*> nodes;
+
+    // Grid cell spanning the whole grid (contains up to `depth` levels of children cells)
+    GridCell* root_cell;
 
 };
 

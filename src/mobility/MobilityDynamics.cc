@@ -31,7 +31,8 @@ MobilityDynamics::initialize(int stage) {
     mobilityNodeAvgDistance = new cOutVector("mobilityNodeAvgDistance");
     take(mobilityNodeAvgDistance);
     addStatisticSample(this);
-    grid = new RegularGrid();
+    // TODO depth aus parameter
+    grid = new RegularGrid(par("borderX"), par("borderY"), 2);
     mobilityTopology->initializeProximityGrid(grid);
   }
 }
