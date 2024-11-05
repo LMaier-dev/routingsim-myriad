@@ -57,10 +57,13 @@ void MobilityDynamics::updateMobility() {
   for (cModule *node_wrapper : mobilityTopology->getNodeMods()) {
     auto *from_node =
       check_and_cast<MobilityNode *>(node_wrapper->getSubmodule("node"));
-    for (cModule *to_node_wrapper : mobilityTopology->getNodeMods()) {
-      auto *to_node =
-          check_and_cast<MobilityNode *>(to_node_wrapper->getSubmodule("node"));
-
+    for (MobilityNode *to_node : grid->getNodesNear(from_node)) {
+      EV_DEBUG
+        << "update "
+        << grid->getNodesNear(from_node).size()
+        << "/"
+        << mobilityTopology->getNodeMods().size()
+        << endl;
       if (from_node != to_node)
         updateConnection(from_node, to_node);
     }
