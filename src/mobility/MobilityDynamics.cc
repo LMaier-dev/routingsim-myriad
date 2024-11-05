@@ -1,4 +1,5 @@
 #include "MobilityDynamics.h"
+#include "BaseTypes.h"
 #include "MobilityTopology.h"
 
 namespace routingsim {
@@ -50,7 +51,9 @@ void MobilityDynamics::updateMobility() {
   for (cModule *node_wrapper : mobilityTopology->getNodeMods()) {
     auto *node =
         check_and_cast<MobilityNode *>(node_wrapper->getSubmodule("node"));
+    Coord2D oldPosition = node->getMobilityModel()->getPosition();
     updateMobilityNode(node);
+    grid->update(node, oldPosition);
   }
 
   // now update connectivity for all nodes in a second step to avoid asymmetry
