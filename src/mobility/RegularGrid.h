@@ -80,7 +80,7 @@ public:
     void update(MobilityNode* node, Coord2D oldPosition);
 
     // Returns nodes that may be in antenna range of the given node
-    std::vector<MobilityNode*> getNodesNear(MobilityNode* node);
+    std::unordered_set<MobilityNode*> getNodesNear(MobilityNode* node);
 
 private:
     // Bounds of the grid

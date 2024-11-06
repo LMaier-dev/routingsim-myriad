@@ -25,7 +25,7 @@ void RegularGrid::update(MobilityNode* node, Coord2D oldPosition) {
     }
 }
 
-std::vector<MobilityNode*> RegularGrid::getNodesNear(MobilityNode* node) {
+std::unordered_set<MobilityNode*> RegularGrid::getNodesNear(MobilityNode* node) {
     EV_DEBUG << "Return Nodes near " << node->getNodeId() << endl;
 
     Coord2D node_pos = node->getMobilityModel()->getPosition();
@@ -44,14 +44,14 @@ std::vector<MobilityNode*> RegularGrid::getNodesNear(MobilityNode* node) {
     GridCell* south_east_cell = root_cell->findCell(south_east_bound);
 
     // Iterate through all leaf cells in node_range
-    std::vector<MobilityNode*> near_nodes = std::vector<MobilityNode*>();
+    std::unordered_set<MobilityNode*> near_nodes = std::unordered_set<MobilityNode*>();
     GridCell* current_cell = north_west_cell;
     do {
         GridCell* row_start = current_cell;
         do {
             // Add nodes of current cell to near_nodes
             for (MobilityNode* n : current_cell->getNodes()) {
-                near_nodes.emplace_back(n);
+                near_nodes.emplace(n);
             }
 
             current_cell = current_cell->getEastCell();
