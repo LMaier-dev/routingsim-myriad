@@ -1,6 +1,7 @@
 #include "MobilityDynamics.h"
 #include "BaseTypes.h"
 #include "MobilityTopology.h"
+#include <unordered_set>
 
 namespace routingsim {
 
@@ -48,6 +49,14 @@ MobilityDynamics::handleMessage(cMessage *msg) {
 
 
 void MobilityDynamics::updateMobility() {
+  // Map Node to set of oldNodes (nodes that are in range before the position update)
+  std::map<MobilityNode*, std::unordered_set<MobilityNode*>> oldNodesMapping = std::map<MobilityNode*, std::unordered_set<MobilityNode*>>();
+  for (cModule *node_wrapper : mobilityTopology->getNodeMods()) {
+    auto *node =
+        check_and_cast<MobilityNode *>(node_wrapper->getSubmodule("node"));
+    oldNodesMapping[node] = grid->getNodesNear(node);
+  }
+
   // first update all positions
   for (cModule *node_wrapper : mobilityTopology->getNodeMods()) {
     auto *node =
@@ -61,15 +70,23 @@ void MobilityDynamics::updateMobility() {
   for (cModule *node_wrapper : mobilityTopology->getNodeMods()) {
     auto *from_node =
       check_and_cast<MobilityNode *>(node_wrapper->getSubmodule("node"));
-    for (MobilityNode *to_node : grid->getNodesNear(from_node)) {
-      EV_DEBUG
-        << "update "
-        << grid->getNodesNear(from_node).size()
-        << "/"
-        << mobilityTopology->getNodeMods().size()
-        << endl;
-      if (from_node != to_node)
+    std::unordered_set<MobilityNode*> nearNodes = grid->getNodesNear(from_node);
+    for (MobilityNode *to_node : nearNodes) {
+      // Calculate set difference of oldNodes\nearNodes
+      oldNodesMapping[from_node].erase(to_node);
+
+      if (from_node != to_node) {
+        //int i =grid->getNodesNear(from_node).size();
+        //int j =mobilityTopology->getNodeMods().size();
+        //EV_DEBUG << "Update connections to nodes " << i << "/" << j << endl;
         updateConnection(from_node, to_node);
+      }
+    }
+
+    for (MobilityNode* old_node : oldNodesMapping[from_node]) {
+      if (from_node != old_node) {
+        updateConnection(from_node, old_node);
+      }
     }
   }
 }
