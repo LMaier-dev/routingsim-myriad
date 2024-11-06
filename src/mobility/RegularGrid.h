@@ -13,11 +13,17 @@ public:
     // String representation of this cell for debugging
     std::string toString();
 
+    // String represenation of the bounds of this cell for debugging
+    std::string printBounds();
+
     // Checks wether the given point is inside this cell
     bool isInside(Coord2D point);
 
     // Inserts the given node into the correct child cell
     void insert(MobilityNode* node);
+
+    // Removes the given node from this node
+    void remove(MobilityNode* node, Coord2D oldPosition);
 
     // Returns the Leaf Cell with the given coordinates
     GridCell* findCell(Coord2D point);

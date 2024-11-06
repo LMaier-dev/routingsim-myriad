@@ -2,6 +2,7 @@
 #include "clog.h"
 #include "MobilityNode.h"
 #include "simkerneldefs.h"
+#include <cassert>
 #include <string>
 #include <vector>
 
@@ -12,8 +13,15 @@ void RegularGrid::insert(MobilityNode* node) {
 }
 
 void RegularGrid::update(MobilityNode* node, Coord2D oldPosition) {
-    EV_DEBUG << "Update Node " << node->getNodeId() << "from " << oldPosition.toString() << " to " << node->getMobilityModel()->getPosition().toString() << endl;
-    // TODO implement
+    GridCell* oldCell = root_cell->findCell(oldPosition);
+    GridCell* newCell = root_cell->findCell(node->getMobilityModel()->getPosition());
+    if (newCell != oldCell) {
+        EV_DEBUG << "Node " << node->getNodeId() << " moved from " << oldCell->printBounds() << " to " << newCell->printBounds() << endl;
+        EV_DEBUG << root_cell->toString() << endl;
+        oldCell->remove(node, oldPosition);
+        newCell->insert(node);
+        EV_DEBUG << root_cell->toString() << endl;
+    }
 }
 
 std::vector<MobilityNode*> RegularGrid::getNodesNear(MobilityNode* node) {
@@ -75,7 +83,11 @@ void GridCell::insert(MobilityNode* node) {
     cell->nodes.emplace(node);
 }
 
-    ASSERT(false); // We only reach this point if the given nodes is outside of this cell
+void GridCell::remove(MobilityNode* node, Coord2D oldPosition) {
+    GridCell* cell = findCell(oldPosition);
+    if (auto iter = cell->nodes.find(node); iter != cell->nodes.end()) {
+        cell->nodes.erase(iter); // removes an element pointed to by iter
+    }
 }
 
 std::string GridCell::toString() {
@@ -90,9 +102,21 @@ std::string GridCell::toString() {
         repr += north_east->toString() + "\n";
         repr += south_west->toString() + "\n";
         repr += south_east->toString() + "\n";
+    } else {
+        for (int i = 0; i < 8 - depth; i++) {
+            repr += "  ";
+        }
+        for (MobilityNode* n : nodes) {
+            repr += std::to_string(n->getNodeId()) + " ";
+        }
+        repr += "\n";
     }
 
     return repr;
+}
+
+std::string GridCell::printBounds() {
+    return north_west_coord.toString() + " " + south_east_coord.toString();
 }
 
 }
