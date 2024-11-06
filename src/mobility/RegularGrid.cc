@@ -4,6 +4,7 @@
 #include "simkerneldefs.h"
 #include <cassert>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 namespace routingsim {
@@ -34,6 +35,7 @@ GridCell::GridCell(Coord2D a, Coord2D b, int depth) {
     north_west_coord = a;
     south_east_coord = b;
     this->depth = depth;
+    east_cell = south_cell = nullptr;
 
     Coord2D middle = (a + b) / 2.0;
 
@@ -47,6 +49,40 @@ GridCell::GridCell(Coord2D a, Coord2D b, int depth) {
         // Leaf cell
         nodes = std::unordered_set<MobilityNode*>();
     }
+}
+
+void GridCell::initializeCellNeighbors(bool isRoot) {
+    // Initialize east_cell, south_cell
+
+    if (depth == 0) {
+        // In Leaf cell
+        return;
+    }
+
+    if (not isRoot) {
+        // Not in root cell
+        if (east_cell != nullptr) {
+            // Not on east bound
+            north_east->east_cell = east_cell->north_west;
+            south_east->east_cell = east_cell->south_west;
+        }
+        if (south_cell != nullptr) {
+            // Not on south bound
+            south_west->south_cell = south_cell->north_west;
+            south_east->south_cell = south_cell->north_east;
+        }
+    }
+    // Connect child cells
+    north_west->east_cell = north_east;
+    north_west->south_cell = south_west;
+    north_east->south_cell = south_east;
+    south_west->east_cell = south_east;
+
+    // Recursivly initialize child cells
+    north_west->initializeCellNeighbors(false);
+    north_east->initializeCellNeighbors(false);
+    south_west->initializeCellNeighbors(false);
+    south_east->initializeCellNeighbors(false);
 }
 
 bool GridCell::isInside(Coord2D point) {
@@ -97,6 +133,10 @@ std::string GridCell::toString() {
     }
     repr += std::to_string(depth) + " " + north_west_coord.toString()  + " " + south_east_coord.toString();
     repr += "\n";
+    if (east_cell != nullptr && south_cell != nullptr) {
+        repr += "East Cell: " + east_cell->printBounds() + " South Cell: " + south_cell->printBounds();
+        repr += "\n";
+    }
     if (depth > 0) {
         repr += north_west->toString() + "\n";
         repr += north_east->toString() + "\n";

@@ -10,6 +10,9 @@ public:
     // Recurcivly create GridCell
     GridCell(Coord2D a, Coord2D b, int depth);
 
+    // Recursivly set east_cell,south_cell in top down order
+    void initializeCellNeighbors(bool isRoot);
+
     // String representation of this cell for debugging
     std::string toString();
 
@@ -38,6 +41,9 @@ private:
     // Child grids of this grid
     GridCell *north_west, *north_east, *south_east, *south_west;
 
+    // Neighbor cells
+    GridCell *east_cell, *south_cell;
+
     // Nodes inside this cell
     std::unordered_set<MobilityNode*> nodes;
 
@@ -51,6 +57,7 @@ public:
     RegularGrid(double width, double height, int depth) {
         nodes = std::vector<MobilityNode*>();
         root_cell = new GridCell(Coord2D(0, height), Coord2D(width, 0), depth);
+        root_cell->initializeCellNeighbors(true);
     };
 
     // Inserts the given MobilityNode into the correct grid cell
