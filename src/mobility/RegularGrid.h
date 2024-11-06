@@ -19,6 +19,9 @@ public:
     // Inserts the given node into the correct child cell
     void insert(MobilityNode* node);
 
+    // Returns the Leaf Cell with the given coordinates
+    GridCell* findCell(Coord2D point);
+
 private:
     // Upper left and lower right coordinates of this cell
     Coord2D north_west_coord, south_east_coord;
@@ -30,7 +33,7 @@ private:
     GridCell *north_west, *north_east, *south_east, *south_west;
 
     // Nodes inside this cell
-    std::vector<MobilityNode*> nodes;
+    std::unordered_set<MobilityNode*> nodes;
 
 };
 

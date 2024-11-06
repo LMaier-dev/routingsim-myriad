@@ -37,7 +37,7 @@ GridCell::GridCell(Coord2D a, Coord2D b, int depth) {
         south_east = new GridCell(middle, b, depth-1);
     } else {
         // Leaf cell
-        nodes = std::vector<MobilityNode*>();
+        nodes = std::unordered_set<MobilityNode*>();
     }
 }
 
@@ -48,21 +48,32 @@ bool GridCell::isInside(Coord2D point) {
         && point.y <= north_west_coord.y;
 }
 
-void GridCell::insert(MobilityNode* node) {
-    Coord2D pos = node->getMobilityModel()->getPosition();
+GridCell* GridCell::findCell(Coord2D point) {
     if (depth == 0) {
         // No more child nodes
-        ASSERT(isInside(pos));
-        EV_DEBUG << "Insert node " << pos.toString() << " into cell " << this->north_west_coord.toString() << " " << this->south_east_coord.toString() << endl;
-        nodes.emplace_back(node);
-        return;
+        ASSERT(isInside(point));
+        return this;
     }
 
     // Find correct child cell
-    if (north_west->isInside(pos)) {north_west->insert(node); return;}
-    if (north_east->isInside(pos)) {north_east->insert(node); return;}
-    if (south_east->isInside(pos)) {south_east->insert(node); return;}
-    if (south_west->isInside(pos)) {south_west->insert(node); return;}
+    if (north_west->isInside(point)) return north_west->findCell(point);
+    if (north_east->isInside(point)) return north_east->findCell(point);
+    if (south_east->isInside(point)) return south_east->findCell(point);
+    if (south_west->isInside(point)) return south_west->findCell(point);
+
+    ASSERT(false); // We only reach this if the given point is outside of this cell
+    return nullptr;
+}
+
+void GridCell::insert(MobilityNode* node) {
+    Coord2D pos = node->getMobilityModel()->getPosition();
+    GridCell* cell = findCell(pos);
+    ASSERT(cell != nullptr); // Assert that a cell was found
+
+    EV_DEBUG << "Insert node " << pos.toString() << " into cell " << cell->north_west_coord.toString() << " " << cell->south_east_coord.toString() << endl;
+
+    cell->nodes.emplace(node);
+}
 
     ASSERT(false); // We only reach this point if the given nodes is outside of this cell
 }
