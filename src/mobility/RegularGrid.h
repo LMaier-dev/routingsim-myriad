@@ -19,6 +19,15 @@ public:
     // String represenation of the bounds of this cell for debugging
     std::string printBounds();
 
+    // Returns the coordinate of the south east bound of this cell
+    Coord2D getSouthEastBound();
+
+    // Returns the cell to the east
+    GridCell* getEastCell();
+
+    // Returns the cell to the south
+    GridCell* getSouthCell();
+
     // Checks wether the given point is inside this cell
     bool isInside(Coord2D point);
 
@@ -30,6 +39,9 @@ public:
 
     // Returns the Leaf Cell with the given coordinates
     GridCell* findCell(Coord2D point);
+
+    // Return the nodes of this cell (only works on leaf cells)
+    std::unordered_set<MobilityNode*> getNodes();
 
 private:
     // Upper left and lower right coordinates of this cell
@@ -55,7 +67,8 @@ class RegularGrid {
 public:
 
     RegularGrid(double width, double height, int depth) {
-        nodes = std::vector<MobilityNode*>();
+        this->width = width;
+        this->height = height;
         root_cell = new GridCell(Coord2D(0, height), Coord2D(width, 0), depth);
         root_cell->initializeCellNeighbors(true);
     };
@@ -70,8 +83,8 @@ public:
     std::vector<MobilityNode*> getNodesNear(MobilityNode* node);
 
 private:
-    // TODO Remove when not needed anymore
-    std::vector<MobilityNode*> nodes;
+    // Bounds of the grid
+    double width, height;
 
     // Grid cell spanning the whole grid (contains up to `depth` levels of children cells)
     GridCell* root_cell;
