@@ -58,7 +58,7 @@ std::unordered_set<MobilityNode*> RegularGrid::getNodesNear(MobilityNode* node) 
         } while (current_cell != nullptr && current_cell->getSouthEastBound().x <= south_east_cell->getSouthEastBound().x);
 
         current_cell = row_start->getSouthCell();
-    } while (current_cell != nullptr && current_cell->getSouthEastBound().y <= south_east_cell->getSouthEastBound().y);
+    } while (current_cell != nullptr && current_cell->getSouthEastBound().y >= south_east_cell->getSouthEastBound().y);
 
     return near_nodes;
 }
