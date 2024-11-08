@@ -70,11 +70,12 @@ simple R2Kademlia extends routingsim.foundation.Protocol
 		/// waiting time until rediscovery is scheduled
 		double slowRediscoveryWaitTime = default(2000ms) @unit(ms);
 		/// waiting time until scheduled urgent routing updates are sent
-		double updateWaitTimeFast = default(250ms) @unit(ms);
+		double updateHoldTimeFast = default(250ms) @unit(ms);
 		/// waiting time until scheduled routing updates are sent
-		double updateWaitTime = default(500ms) @unit(ms);
-		/// waiting time until path setup messages are sent
-		double pathSetupWaitTime = default(100ms) @unit(ms);
+		double updateHoldTime = default(500ms) @unit(ms);
+		/// hold time until path setup messages are sent
+		double pathSetupHoldTime = default(100ms) @unit(ms);
+
 		/// maxFanOut for rediscovery
 		int rediscoveryFanOutFactor = default(2);
 		/// rediscoveryMaxNotification

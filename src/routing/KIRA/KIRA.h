@@ -161,9 +161,9 @@ private:
 	simtime_t urgentRediscoveryWaitTime;
 	simtime_t regularRediscoveryWaitTime;
 	simtime_t slowRediscoveryWaitTime;
-	simtime_t pathSetupWaitTime;
-	simtime_t updateWaitTime;
-	simtime_t updateWaitTimeFast;
+	simtime_t pathSetupHoldTime;
+	simtime_t updateHoldTime;
+	simtime_t updateHoldTimeFast;
 	simtime_t minHelloInterval;
 	simtime_t maxHelloInterval;
 	bool detailedRoutingTableStats;

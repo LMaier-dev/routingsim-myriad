@@ -180,7 +180,7 @@ void R2Kademlia::schedulePathSetup(const OverlayKey& contactkey)
 
 	if (not pathSetupScheduled)
 	{
-		addFixedTimer(uniform(pathSetupWaitTime/2,3*pathSetupWaitTime/2), SimTime(10, SIMTIME_MS) , std::bind(&R2Kademlia::sendScheduledPathSetups, this, ph::_1));
+		addFixedTimer(uniform(pathSetupHoldTime/2,3*pathSetupHoldTime/2), SimTime(10, SIMTIME_MS) , std::bind(&R2Kademlia::sendScheduledPathSetups, this, ph::_1));
 		pathSetupScheduled= true;
 	}
 }

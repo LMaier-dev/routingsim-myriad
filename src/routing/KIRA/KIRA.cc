@@ -124,9 +124,9 @@ void R2Kademlia::onInitialize() {
 	urgentRediscoveryWaitTime = (simtime_t) (par("urgentRediscoveryWaitTime").doubleValue() * 0.001); // given in ms
 	regularRediscoveryWaitTime = (simtime_t) (par("regularRediscoveryWaitTime").doubleValue() * 0.001); // given in ms
 	slowRediscoveryWaitTime = (simtime_t) (par("slowRediscoveryWaitTime").doubleValue() * 0.001); // given in ms
-	updateWaitTime = (simtime_t) (par("updateWaitTime").doubleValue() * 0.001);  // given in ms
-	updateWaitTimeFast = (simtime_t) (par("updateWaitTimeFast").doubleValue() * 0.001);
-	pathSetupWaitTime = (simtime_t) (par("pathSetupWaitTime").doubleValue() * 0.001);  // given in ms
+	updateHoldTime = (simtime_t) (par("updateHoldTime").doubleValue() * 0.001);  // given in ms
+	updateHoldTimeFast = (simtime_t) (par("updateHoldTimeFast").doubleValue() * 0.001);
+	pathSetupHoldTime = (simtime_t) (par("pathSetupHoldTime").doubleValue() * 0.001);  // given in ms
 	rediscoveryFanOutFactor = (uint) par("rediscoveryFanOutFactor").intValue();
 	rediscoveryMaxNotification = (uint) par("rediscoveryMaxNotification").intValue();
 	updateMaxNotification = (uint) par("updateMaxNotification").intValue();

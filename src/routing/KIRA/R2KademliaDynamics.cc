@@ -225,14 +225,14 @@ void R2Kademlia::scheduleUpdate(const KadContact& affectedContact, KadRouteUpdat
 
 	if (action == KAD_Unreachable) {
 		if (not urgentUpdateScheduled) {
-			addOneShotTimer(uniform(updateWaitTimeFast/2,3*updateWaitTimeFast/2), std::bind(&R2Kademlia::sendUrgentUpdates, this));
+			addOneShotTimer(uniform(updateHoldTimeFast/2,3*updateHoldTimeFast/2), std::bind(&R2Kademlia::sendUrgentUpdates, this));
 			urgentUpdateScheduled= true;
 		}
 	}
 	else
 	if (not updateScheduled)
 	{
-		addOneShotTimer(uniform(updateWaitTime/2,3*updateWaitTime/2), std::bind(&R2Kademlia::sendUpdates, this));
+		addOneShotTimer(uniform(updateHoldTime/2,3*updateHoldTime/2), std::bind(&R2Kademlia::sendUpdates, this));
 		updateScheduled= true;
 	}
 }
@@ -425,7 +425,7 @@ bool R2Kademlia::sendUrgentUpdates()
 		// need to schedule regular updates if not yet done
 		if (not updateScheduled)
 		{
-			addOneShotTimer(uniform(updateWaitTime/2,3*updateWaitTime/2), std::bind(&R2Kademlia::sendUpdates, this));
+			addOneShotTimer(uniform(updateHoldTime/2,3*updateHoldTime/2), std::bind(&R2Kademlia::sendUpdates, this));
 			updateScheduled= true;
 		}
 	}
