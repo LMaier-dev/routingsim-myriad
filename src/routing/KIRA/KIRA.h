@@ -574,7 +574,7 @@ private:
 	/// schedule a PathSetup
 	void schedulePathSetup(const OverlayKey& contactkey);
 	/// send all queue (valid) path setups
-	bool sendScheduledPathSetups();
+	bool sendScheduledPathSetups(short timerId);
 	/// perform garbage collection of unused PathIDs
 	bool doGarbageCollectPathIDs(short timerId);
 

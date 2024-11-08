@@ -26,8 +26,10 @@
 #include "KadObserver.h"
 
 #include "FwdTable.h"
-#include "OverlayKey128.h"
+#include "simtime.h"
 #include "simtime_t.h"
+
+
 
 namespace routingsim {
 
@@ -68,12 +70,14 @@ void R2Kademlia::onInitialize() {
         getKadObserver().registerUp(myOverlayKey, node().getNodeId());
 
 	// bind KIRA_CTRL_PACKET_TYPE
+	// interval bounds for random delay per control message
 	const uint64_t minCtrlPlaneProcessingDelay = par("minKIRAControlPlaneProcessingDelay").intValue();
         const uint64_t maxCtrlPlaneProcessingDelay = par("maxKIRAControlPlaneProcessingDelay").intValue();
-	ASSERT(minCtrlPlaneProcessingDelay <= maxCtrlPlaneProcessingDelay);
+	const simtime_t maxCPWaitTime = SimTime(par("KIRAControlPlaneProcessingQueueDelayLimit").intValue(), omnetpp::SIMTIME_MS);
+        ASSERT(minCtrlPlaneProcessingDelay <= maxCtrlPlaneProcessingDelay);
         if (maxCtrlPlaneProcessingDelay > 0 and minCtrlPlaneProcessingDelay <= maxCtrlPlaneProcessingDelay) {
 		bind(KAD_CTRL_PACKET_TYPE,
-		     std::make_unique<ProtocolPacketQueue>( [this,minCtrlPlaneProcessingDelay,maxCtrlPlaneProcessingDelay](void){ return uniform(SimTime(minCtrlPlaneProcessingDelay,SIMTIME_NS),SimTime(maxCtrlPlaneProcessingDelay,SIMTIME_NS)); }) );
+		     std::make_unique<ProtocolPacketQueue>( [this,minCtrlPlaneProcessingDelay,maxCtrlPlaneProcessingDelay](void){ return uniform(SimTime(minCtrlPlaneProcessingDelay,SIMTIME_NS),SimTime(maxCtrlPlaneProcessingDelay,SIMTIME_NS)); }, maxCPWaitTime) );
         } else {
 		bind(KAD_CTRL_PACKET_TYPE);
 	}
@@ -370,9 +374,19 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	}
 
 	// other packets should include the key in the source route
-	packet->advanceProgress(); // increase hop count
-	if (packet->getCurrentHop() != myOverlayKey) {
-	  EV_ERROR << "dropping packet, current hop " << packet->getCurrentHop().shortStr()  << " in source route does not match!" << endl;
+
+	// check for hop limit (last resort), normally KIRA is loop free
+        if (packet->getHopLimit() == 0) {
+		EV_ERROR << "Hoplimit reached @Node " << myOverlayKey.shortStr() << " source route=" << std::make_pair(packet->getSrcPath(),packet->getActiveVector()) << endl;
+		// will simply drop this packet
+		return;
+	}
+	else {
+		packet->advanceProgress(); // increase hop count
+	}
+
+        if (packet->getCurrentHop() != myOverlayKey) {
+		EV_ERROR << "dropping packet, current hop " << packet->getCurrentHop().shortStr()  << " in source route does not match!" << endl;
 		//TODO how does this happen?
 		countDropped(*packet, packet->getTarget(), erroneousSourceRoute);
 		return;
@@ -1341,6 +1355,11 @@ void R2Kademlia::sampleStatistics (Statistics &stats) {
 	stats.value("fwdTableUsedPrecalc", numUsedPrecalcEntries);
 	stats.value("fwdTableUpdates", fwdTablePathID.getNumUpdates());
 	stats.value("floodQueueMaxLength", FloodQueue.getMaxLength());
+	stats.value("notifyQueueMaxLength", NotifyQueue.getMaxLength());
+        if (getBoundProtocolPacketQueue(KAD_CTRL_PACKET_TYPE)) {
+		stats.value("CPoverloadDiscard", getBoundProtocolPacketQueue(KAD_CTRL_PACKET_TYPE)->getOverloadDiscardedPackets());
+                stats.value("CPmaxSojournTime", getBoundProtocolPacketQueue(KAD_CTRL_PACKET_TYPE)->getMaxSojournTime().dbl());
+	}
 	stats.value("notifyQueueMaxLength", NotifyQueue.getMaxLength());
     stats.value("floodPacketReplications", floodPacketReplications);
 }

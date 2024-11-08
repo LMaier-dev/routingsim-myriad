@@ -24,6 +24,28 @@ std::ostream& operator<<(std::ostream& os, const kad_path& p)
 	return os;
 }
 
+// print a path using abbreviated key ids and marked overlay hops
+std::ostream &operator<<(std::ostream &os,
+                         std::pair<const kad_path &, const std::vector<bool>&> path_and_active) {
+	auto [p,a]= path_and_active;
+	os << '<';
+	if (p.size() == 0)
+		 os << '-';
+        else {
+		ASSERT(p.size() == a.size());
+		auto a_it= a.cbegin();
+                for (const auto &key : p) {
+			if (a_it != a.cend()) {
+				os << (*a_it ? " *" : " ") << key.shortStr();
+				a_it++;
+			}
+		}
+		os << ' ';
+	}
+	os << '>';
+	return os;
+}
+
 
 // some paths exclude source and target nodes, e.g., those stored for KadContacts
 bool containsUndirectedLink(const OverlayKey& source, const OverlayKey& target, const kad_path& path, const link_t link)

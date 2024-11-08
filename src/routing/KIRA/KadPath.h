@@ -186,6 +186,8 @@ OverlayKey HashSum(const OverlayKey& seed, const kad_path& path, const OverlayKe
 
 std::ostream& operator<<(std::ostream& os, const kad_path& c);
 
+std::ostream &operator<<(std::ostream &os, std::pair<const kad_path &, const std::vector<bool>&> path_and_active);
+
 std::ostream& operator<<(std::ostream& os, const link_t& l);
 
 inline

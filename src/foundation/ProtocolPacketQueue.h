@@ -23,8 +23,8 @@ using NodePkt_p = std::unique_ptr<NodePkt>;
  */
 class ProtocolPacketQueue {
 public:
-	ProtocolPacketQueue(std::function<simtime_t(void)> processingTimeFunc)
-		: processingTimeFunc(processingTimeFunc){};
+	ProtocolPacketQueue(std::function<simtime_t(void)> processingTimeFunc, simtime_t maxWaitTimeSpec= SimTime(1000, omnetpp::SIMTIME_MS))
+		: processingTimeFunc(processingTimeFunc), maxWaitTime(maxWaitTimeSpec) {};
 	/// returns true if packet was added and false, if it was not
         bool addPacket(NodePkt_p p);
 	/// returns the first packet (including timestamp) and removes it from the queue
@@ -52,7 +52,8 @@ private:
 	std::unique_ptr<cMessage> timerSelfMsg = nullptr;
         simtime_t finishingTimeCurrentlyServedPacket = SIMTIME_ZERO;
         unsigned int overloadDiscardedPackets = 0UL;
-	simtime_t maxSojournTime = 0UL;
+        simtime_t maxSojournTime = 0UL;
+	simtime_t maxWaitTime = SimTime(1000, omnetpp::SIMTIME_MS);
 };
 
 
@@ -92,7 +93,7 @@ ProtocolPacketQueue::popPacket() {
 inline
 bool
 ProtocolPacketQueue::enqueue_condition() {
-	if (not packetQueue.empty() and (simTime() - packetQueue.front().first) > SimTime(1000, omnetpp::SIMTIME_MS))
+	if (not packetQueue.empty() and (simTime() - packetQueue.front().first) > maxWaitTime)
 		return false;
         else
 		return true;

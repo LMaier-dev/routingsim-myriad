@@ -150,6 +150,18 @@ void Protocol::bind(int type, std::unique_ptr<ProtocolPacketQueue> pq) {
 }
 
 
+/// Return ProtocolPacketQueue for given type
+const ProtocolPacketQueue *
+Protocol::getBoundProtocolPacketQueue(int type) const {
+  if (auto it = protocolQueues.find(type); it != protocolQueues.cend()) {
+	  return it->second ? it->second.get() : nullptr;
+  }
+  else {
+	  return nullptr;
+  }
+}
+
+
 /// Unbind module to node to receive messages of the given type no more
 void Protocol::unbind(int type) {
 	node().unbind(type, this);

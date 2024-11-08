@@ -26,7 +26,6 @@ class Protocol;
 #include "BaseTypes.h"
 #include "Node.h"
 #include "ProtocolPacketQueue.h"
-#include <functional>
 
 namespace routingsim {
 
@@ -67,6 +66,8 @@ protected:
 
 	/// Unbind module to node to receive messages of the given type no more
 	void unbind(int type);
+	/// get protocol packet queue
+        const ProtocolPacketQueue* getBoundProtocolPacketQueue(int type) const;
 
 	/// sends a packet
 	inline void sendToNode( nodeid_t nid, NodePkt_p pkt, simtime_t delay= 0){ sendToNode(nid, pkt.release(), delay);};
@@ -107,7 +108,7 @@ private:
 	virtual void initialize(int stage) override;
 	virtual int numInitStages() const override { return 2; };
         virtual void handleMessage(cMessage *msg) override;
-	std::unordered_map<int, std::unique_ptr<ProtocolPacketQueue>> protocolQueues;
+        std::unordered_map<int, std::unique_ptr<ProtocolPacketQueue>> protocolQueues;
 };
 
 /**

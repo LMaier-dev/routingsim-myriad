@@ -30,7 +30,7 @@ simple R2Kademlia extends routingsim.foundation.Protocol
 		int maxKIRAControlPlaneProcessingDelay = default(0ns)  @unit(ns);
 		int minKIRADataPlaneProcessingDelay = default(0ns)  @unit(ns);
 		int maxKIRADataPlaneProcessingDelay = default(0ns)  @unit(ns);
-
+		int KIRAControlPlaneProcessingQueueDelayLimit = default(1000ms) @unit(ms);
 		/// number of bits used for accelerated lookup called "b" in research papers.
 		int accelerationFactor = default(1);
 		/// max size of the buckets, called "k" in research papers (k-Buckets), for KIRA recommended k=40
