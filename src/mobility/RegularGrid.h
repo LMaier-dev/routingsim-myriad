@@ -1,6 +1,6 @@
 #include "BaseTypes.h"
 #include "MobilityNode.h"
-#include <vector>
+#include <unordered_set>
 
 namespace routingsim {
 
@@ -69,6 +69,7 @@ public:
     RegularGrid(double width, double height, int depth) {
         this->width = width;
         this->height = height;
+        max_range = 0;
         root_cell = new GridCell(Coord2D(0, height), Coord2D(width, 0), depth);
         root_cell->initializeCellNeighbors(true);
     };
@@ -86,8 +87,13 @@ private:
     // Bounds of the grid
     double width, height;
 
+    // Maximum antenna range
+    double max_range;
+
     // Grid cell spanning the whole grid (contains up to `depth` levels of children cells)
     GridCell* root_cell;
+
+    std::map<MobilityNode*, std::unordered_set<MobilityNode*>> near_nodes_cache;
 
 };
 

@@ -5,15 +5,16 @@
 #include <cassert>
 #include <string>
 #include <unordered_set>
-#include <vector>
 
 namespace routingsim {
 
 void RegularGrid::insert(MobilityNode* node) {
+    max_range = std::max(max_range, node->getAntennaModel()->getRange());
     root_cell->insert(node);
 }
 
 void RegularGrid::update(MobilityNode* node, Coord2D oldPosition) {
+    near_nodes_cache.erase(node);
     GridCell* oldCell = root_cell->findCell(oldPosition);
     GridCell* newCell = root_cell->findCell(node->getMobilityModel()->getPosition());
     if (newCell != oldCell) {
@@ -27,17 +28,20 @@ void RegularGrid::update(MobilityNode* node, Coord2D oldPosition) {
 
 std::unordered_set<MobilityNode*> RegularGrid::getNodesNear(MobilityNode* node) {
     EV_DEBUG << "Return Nodes near " << node->getNodeId() << endl;
+    if (near_nodes_cache.contains(node)) {
+        return near_nodes_cache[node];
+    }
 
     Coord2D node_pos = node->getMobilityModel()->getPosition();
-    int node_range = node->getAntennaModel()->getRange();
+    GridCell* node_cell = root_cell->findCell(node_pos);
 
     Coord2D north_west_bound = Coord2D(
-        std::max(0.0, node_pos.x - node_range),
-        std::min(height, node_pos.y + node_range)
+        std::max(0.0, node_pos.x - max_range),
+        std::min(height, node_pos.y + max_range)
     );
     Coord2D south_east_bound = Coord2D(
-        std::min(width, node_pos.x + node_range),
-        std::max(0.0, node_pos.y - node_range)
+        std::min(width, node_pos.x + max_range),
+        std::max(0.0, node_pos.y - max_range)
     );
 
     GridCell* north_west_cell = root_cell->findCell(north_west_bound);
@@ -59,6 +63,11 @@ std::unordered_set<MobilityNode*> RegularGrid::getNodesNear(MobilityNode* node) 
 
         current_cell = row_start->getSouthCell();
     } while (current_cell != nullptr && current_cell->getSouthEastBound().y >= south_east_cell->getSouthEastBound().y);
+
+    // Cache near nodes
+    for (MobilityNode* gridNode : node_cell->getNodes()) {
+        near_nodes_cache[gridNode] = near_nodes;
+    }
 
     return near_nodes;
 }
@@ -204,7 +213,7 @@ std::string GridCell::toString() {
 }
 
 std::string GridCell::printBounds() {
-    return north_west_coord.toString() + " " + south_east_coord.toString();
+    return north_west_coord.toString() + " " + south_east_coord.toString() + " depth: " + std::to_string(depth);
 }
 
 }
