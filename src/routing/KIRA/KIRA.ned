@@ -24,6 +24,7 @@ simple R2Kademlia extends routingsim.foundation.Protocol
     parameters:
 		@class(R2Kademlia);
 		@display("i=misc/node");
+		// for modeling Control Plane processing delay (disabled if maxKIRAControlPlaneProcessingDelay == 0)
 		// suggest default average processing delay is 250µs which corresponds to 4000 msgs/s
 		int minKIRAControlPlaneProcessingDelay = default(0ns)  @unit(ns);
 		//int maxKIRAControlPlaneProcessingDelay = default(500000ns)  @unit(ns);
@@ -94,10 +95,6 @@ simple R2Kademlia extends routingsim.foundation.Protocol
 		/// add additional randomly selected contacts from various buckets in responses (usually 2 per bucket)
 		bool addGratuitousContacts = default(true);
 
-		// for modeling Control Plane processing delay (disabled if maxKIRAControlPlaneProcessingDelay == 0)
-		minKIRAControlPlaneProcessingDelay = default(0) @unit(ns);
-		maxKIRAControlPlaneProcessingDelay = default(0) @unit(ns);
-		KIRAControlPlaneProcessingQueueDelayLimit = default(1000) @unit(ms);
 		/// in which interval a node sends a floodPacket (0s is disabled)
 		double floodInterval = default(0s) @unit(s);
 		/// max stride factor for flooding packets
