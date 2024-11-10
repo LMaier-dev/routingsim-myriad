@@ -66,6 +66,12 @@ namespace routingsim {
         void updatePosition();
 
         double getUpdateInterval() const;
+
+        // Returns the duration in s until this node leaves the given rectangle
+        // (if this time is currently unkown, returns the earliest
+        // time when this information may be reevaluated)
+        // It can be assumed that the rectangle encloses the current position
+        double getLeaveDuration(Coord2D a, Coord2D b) { return 1.0E-3; }
     };
 
 };

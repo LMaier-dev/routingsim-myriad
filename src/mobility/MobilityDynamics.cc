@@ -1,6 +1,7 @@
 #include "MobilityDynamics.h"
 #include "BaseTypes.h"
 #include "MobilityTopology.h"
+#include "csimulation.h"
 #include <unordered_set>
 
 namespace routingsim {
@@ -63,7 +64,7 @@ void MobilityDynamics::updateMobility() {
         check_and_cast<MobilityNode *>(node_wrapper->getSubmodule("node"));
     Coord2D oldPosition = node->getMobilityModel()->getPosition();
     updateMobilityNode(node);
-    grid->update(node, oldPosition);
+    grid->update(node, oldPosition, simTime().dbl());
   }
 
   // now update connectivity for all nodes in a second step to avoid asymmetry
@@ -80,12 +81,15 @@ void MobilityDynamics::updateMobility() {
         //int j =mobilityTopology->getNodeMods().size();
         //EV_DEBUG << "Update connections to nodes " << i << "/" << j << endl;
         updateConnection(from_node, to_node);
+        updateConnection(to_node, from_node);
       }
     }
 
+    // Update removed nodes
     for (MobilityNode* old_node : oldNodesMapping[from_node]) {
       if (from_node != old_node) {
         updateConnection(from_node, old_node);
+        updateConnection(old_node, from_node);
       }
     }
   }
@@ -120,10 +124,10 @@ MobilityDynamics::updateConnection(MobilityNode *fromNode,
     if (newDatarate > 0) {
       if (not mobilityTopology->isConnected(fromNode->getNodeId(),
 					    toNode->getNodeId())) {
-	EV_TRACE << "Create link from node " << fromNode->getNodeId()
-		 << " to node " << toNode->getNodeId() << " with datarate "
-		 << newDatarate << "bps" << endl;
-	mobilityTopology->createLink(fromNode, toNode);
+      	EV_TRACE << "Create link from node " << fromNode->getNodeId()
+      		 << " to node " << toNode->getNodeId() << " with datarate "
+      		 << newDatarate << "bps" << endl;
+	      mobilityTopology->createLink(fromNode, toNode);
       }
       mobilityTopology->setDatarate(fromNode, toNode, newDatarate);
       return;

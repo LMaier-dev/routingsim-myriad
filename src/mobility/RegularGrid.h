@@ -19,6 +19,9 @@ public:
     // String represenation of the bounds of this cell for debugging
     std::string printBounds();
 
+    // Returns the coordinate of the west bound of this cell
+    Coord2D getNorthWestBound();
+
     // Returns the coordinate of the south east bound of this cell
     Coord2D getSouthEastBound();
 
@@ -70,6 +73,8 @@ public:
         this->width = width;
         this->height = height;
         max_range = 0;
+        next_update = -1; // Update on first call
+        updates_to_do = 0;
         root_cell = new GridCell(Coord2D(0, height), Coord2D(width, 0), depth);
         root_cell->initializeCellNeighbors(true);
     };
@@ -78,7 +83,7 @@ public:
     void insert(MobilityNode* node);
 
     // Updates the node inside the grid when the nodes position got changed
-    void update(MobilityNode* node, Coord2D oldPosition);
+    void update(MobilityNode* node, Coord2D oldPosition, double currentTime);
 
     // Returns nodes that may be in antenna range of the given node
     std::unordered_set<MobilityNode*> getNodesNear(MobilityNode* node);
@@ -92,6 +97,18 @@ private:
 
     // Grid cell spanning the whole grid (contains up to `depth` levels of children cells)
     GridCell* root_cell;
+
+    // Number of nodes inside the grid
+    int number_of_nodes;
+
+    // Number of updates that need to be done in the current update cycle
+    int updates_to_do;
+
+    // Time at which the near nodes cache should be updated
+    double next_update;
+
+    // Current guess when near nodes cache should be updated
+    double next_update_guess;
 
     std::map<MobilityNode*, std::unordered_set<MobilityNode*>> near_nodes_cache;
 

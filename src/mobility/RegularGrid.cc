@@ -11,10 +11,13 @@ namespace routingsim {
 void RegularGrid::insert(MobilityNode* node) {
     max_range = std::max(max_range, node->getAntennaModel()->getRange());
     root_cell->insert(node);
+    number_of_nodes++;
 }
 
-void RegularGrid::update(MobilityNode* node, Coord2D oldPosition) {
-    near_nodes_cache.erase(node);
+void RegularGrid::update(MobilityNode* node, Coord2D oldPosition, double currentTime) {
+    if (currentTime < next_update && updates_to_do == 0)
+        return;
+
     GridCell* oldCell = root_cell->findCell(oldPosition);
     GridCell* newCell = root_cell->findCell(node->getMobilityModel()->getPosition());
     if (newCell != oldCell) {
@@ -23,6 +26,25 @@ void RegularGrid::update(MobilityNode* node, Coord2D oldPosition) {
         oldCell->remove(node, oldPosition);
         newCell->insert(node);
         EV_DEBUG << root_cell->toString() << endl;
+    }
+
+    if (currentTime >= next_update && updates_to_do == 0) {
+        // Update is due
+        updates_to_do = number_of_nodes;
+        next_update_guess = node->getMobilityModel()->getLeaveDuration(newCell->getNorthWestBound(), newCell->getSouthEastBound());
+        near_nodes_cache.erase(node);
+    }
+    next_update_guess = std::min(
+        next_update_guess,
+        node->getMobilityModel()->getLeaveDuration(newCell->getNorthWestBound(), newCell->getSouthEastBound())
+    );
+
+    updates_to_do--;
+
+    if (updates_to_do == 0) {
+        // Update done
+        next_update = next_update_guess;
+        EV_DEBUG << "Next Grid updates in " << next_update - currentTime << "s" << endl;
     }
 }
 
@@ -124,6 +146,10 @@ void GridCell::initializeCellNeighbors(bool isRoot) {
     north_east->initializeCellNeighbors(false);
     south_west->initializeCellNeighbors(false);
     south_east->initializeCellNeighbors(false);
+}
+
+Coord2D GridCell::getNorthWestBound() {
+    return north_west_coord;
 }
 
 Coord2D GridCell::getSouthEastBound() {

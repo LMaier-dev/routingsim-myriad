@@ -63,6 +63,11 @@ namespace routingsim {
       public:
         // Initialize the mobility model.
         void initialize() override;
+
+        // Returns the duration in s until this node leaves the given rectangle
+        // Or the time this node reaches its current target
+        // It can be assumed that the rectangle encloses the current position
+        double getLeaveDuration(Coord2D a, Coord2D b);
     };
 }
 

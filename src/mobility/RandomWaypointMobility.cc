@@ -1,5 +1,6 @@
 
 #include "RandomWaypointMobility.h"
+#include "BaseTypes.h"
 
 namespace routingsim {
 
@@ -67,5 +68,72 @@ void RandomWaypointMobility::setTargetSpeed() {
 void RandomWaypointMobility::setTargetNextPeriod() {
   nextChange = simTime() + timeToNextPeriod;
 }
+
+double RandomWaypointMobility::getLeaveDuration(Coord2D topLeft, Coord2D bottomRight) {
+  if ( topLeft.x < targetPosition.x
+    && topLeft.y > targetPosition.y
+    && targetPosition.x < bottomRight.x
+    && targetPosition.y > bottomRight.y) {
+      // Current target is in given rectangle
+      return timeToNextPeriod;
+    }
+  
+  if (Coord2D::ZERO == velocity) {
+    // We have to redetermine the leave duration after the wait time is over
+    return timeToNextPeriod;
+  }
+
+  // Calcuate the time when we leave the given rectangle
+  // Determine relevant rectangle side
+  if (velocity.x == 0) {
+    // Top/Bottom intersection
+    if (velocity.y > 0) {
+      // Top intersection
+      return (topLeft.y - lastPosition.y) / velocity.y;
+    } else {
+      // Bottom intersection
+      return (lastPosition.y - bottomRight.y) / velocity.y;
+    }
+  }
+
+  if (velocity.y == 0) {
+    // Left/Right intersection
+    if (velocity.x > 0) {
+      // Right intersection
+      return (bottomRight.x - lastPosition.x) / velocity.x;
+    } else {
+      // Left intersection
+      return (lastPosition.x - bottomRight.x) / velocity.x;
+    }
+  }
+
+  if (velocity.y > 0) {
+    // Top/Left/Right intersection
+    double top = (topLeft.y - lastPosition.y) / velocity.y;
+    if (velocity.x > 0) {
+      // Top/Right intersection
+      double right = (bottomRight.x - lastPosition.x) / velocity.x;
+      return std::min(top, right);
+    } else {
+      // Top/Left intersection
+      double left = (lastPosition.x - topLeft.x) / velocity.x;
+      return std::min(top, left);
+    }
+  } else {
+  // if (velocity.y < 0) {
+    // Bottom/Left/Right intersection
+    double bottom = (lastPosition.y - bottomRight.y) / velocity.y;
+    if (velocity.x > 0) {
+      // Bottom/Right intersection
+      double right = (bottomRight.x - lastPosition.x) / velocity.x;
+      return std::min(bottom, right);
+    } else {
+      // Bottom/Left intersection
+      double left = (lastPosition.x - topLeft.x) / velocity.x;
+      return std::min(bottom, left);
+    }
+  }
+}
+
 
 }; // namespace routingsim
