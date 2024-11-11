@@ -77,6 +77,7 @@ ProtocolPacketQueue::popPacket() {
   if (not packetQueue.empty()) {
 	  auto return_val = std::make_pair( packetQueue.front().first, std::move(packetQueue.front().second));
           auto sojournTime = simTime() - return_val.first;
+	  ASSERT(sojournTime >= SIMTIME_ZERO);
           if (sojournTime > maxSojournTime)
 		  maxSojournTime= sojournTime;
           //EV_TRACE << "popPacket(): waited " << sojournTime << "s"; 
