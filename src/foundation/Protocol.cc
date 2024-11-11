@@ -18,6 +18,7 @@
 #include "ProtocolPacketQueue.h"
 #include "checkandcast.h"
 #include "clog.h"
+#include "csimulation.h"
 
 namespace routingsim {
 
@@ -57,11 +58,13 @@ void Protocol::handleMessage(cMessage *msg) {
 			auto ppq= reinterpret_cast<ProtocolPacketQueue*>(pt->getContextPointer());
                         ASSERT(ppq != nullptr);
                         auto [ts, np] = ppq->popPacket();
+			EV_TRACE << "Packet was enqueued @" << ts << ", waited " << simTime()-ts << "s " << endl;
                         if (np) { // got next packet to serve
                                 // call function in protocol
                                 onMessage(std::move(np));
 				auto finishingTime = simTime() + ppq->getProcessingTime();
                                 ppq->setFinishingTime(finishingTime);
+				EV_TRACE << "packet processing will be finished at " << finishingTime << endl;
                                 if (ppq->empty()) { // queue empty now, will not schedule ProtocolTimerMsg
 					ppq->setScheduled(false);
 				}
@@ -101,7 +104,7 @@ void Protocol::handleMessage(cMessage *msg) {
 		break;
         }
 
-	if (protocolQueues.empty()) { // direct callback
+	if (protocolQueues.empty()) { // direct callback if processing delay is not modelled
 		onMessage(std::unique_ptr<NodePkt>(np));
 		return;
 	}
@@ -114,7 +117,9 @@ void Protocol::handleMessage(cMessage *msg) {
 
 			if (ppq->isBusy()) { // waiting packets present or packet currently being served
 				// add this packet to the queue
-				ppq->addPacket(std::unique_ptr<NodePkt>(np));
+				auto added = ppq->addPacket(std::unique_ptr<NodePkt>(np));
+                                if (not added) // if discarded just return
+					return;
 
                                 if (not ppq->isScheduled()) { // no timer scheduled yet
 					auto timermsg = ppq->getTimerMsg();
@@ -131,12 +136,16 @@ void Protocol::handleMessage(cMessage *msg) {
                         else { // queue is empty and no packet being served
 				// set finishing time of this packet
 				auto finishingTime = simTime() + ppq->getProcessingTime();
-				ppq->setFinishingTime(finishingTime);
+                                ppq->setFinishingTime(finishingTime);
+				EV_TRACE << "packet processing will be finished at " << finishingTime << endl;
 				// start serving this packet immediately
                                 onMessage(std::unique_ptr<NodePkt>(np));
 				return;
 			}
                 }
+        }
+	else {
+		onMessage(std::unique_ptr<NodePkt>(np));
 	}
 }
 
