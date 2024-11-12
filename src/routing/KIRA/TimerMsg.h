@@ -17,7 +17,7 @@ public:
 	};
 
         TimerMsg(const TimerMsg& other) = delete;
-	virtual ~TimerMsg() { delete static_cast<cbfunc_t*>(getContextPointer()); setContextPointer(nullptr); }
+        virtual ~TimerMsg() { delete static_cast<cbfunc_t*>(getContextPointer()); setContextPointer(nullptr); }
 };
 
 } // namespace routingsim

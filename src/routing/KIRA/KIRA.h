@@ -331,8 +331,8 @@ private:
 	short addRandomizedTimer(simtime_t initialOffset, simtime_t duration, TimerMsg::cbfunc_t callback);
 	short addFixedTimer(simtime_t initialOffset, simtime_t duration, TimerMsg::cbfunc_t callback);
 	inline void addOneShotTimer(simtime_t delay, TimerMsg::cbfunc_t callback) override;
-	/// stops timer and cancels timer message
-	void stopTimer(short timerId);
+	/// stops timer and cancels timer message (and may delete it!)
+	void stopTimer(short timerId,  bool delete_timermsg= true);
 	/// stops timer and cancel timer message, starts new timer with new duration
 	void resetTimer(short timerId, simtime_t duration);
 	void stopAllTimers() { for (short timerId= 0; (size_type) timerId < randomTimerMsg.size(); timerId++) { stopTimer(timerId); }; for (short timerIdx= 0; (size_type) timerIdx < fixedTimerMsg.size(); timerIdx++) { stopTimer(fixedTimerIdBase+timerIdx); } };

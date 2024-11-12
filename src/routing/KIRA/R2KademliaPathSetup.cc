@@ -186,6 +186,7 @@ void R2Kademlia::schedulePathSetup(const OverlayKey& contactkey)
 }
 
 
+// return true to stop the timer
 bool R2Kademlia::sendScheduledPathSetups(short timerid) {
 	// traverse list of scheduled contact keys for path setup
 	// recheck status and set to rediscover
@@ -205,14 +206,15 @@ bool R2Kademlia::sendScheduledPathSetups(short timerid) {
 		}
                 pathSetupQueue.pop_front();
                 if (not pathSetupQueue.empty())
-			return true;
+			return false;
 	}
 
         // stop fixedTimer
-        stopTimer(timerid);
+        // note that the timermsg MUST not be deleted, because this is called from within onSelfMessage
+        stopTimer(timerid, false);
 	// next call of this procedure will be scheduled on demand
 	pathSetupScheduled= false;
-	return false;
+	return true;
 }
 
 

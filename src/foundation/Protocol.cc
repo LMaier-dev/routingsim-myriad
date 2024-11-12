@@ -19,6 +19,7 @@
 #include "checkandcast.h"
 #include "clog.h"
 #include "csimulation.h"
+#include <memory>
 
 namespace routingsim {
 
@@ -58,13 +59,13 @@ void Protocol::handleMessage(cMessage *msg) {
 			auto ppq= reinterpret_cast<ProtocolPacketQueue*>(pt->getContextPointer());
                         ASSERT(ppq != nullptr);
                         auto [ts, np] = ppq->popPacket();
-			EV_TRACE << "Packet was enqueued @" << ts << ", waited " << simTime()-ts << "s " << endl;
+			//EV_TRACE << "Packet was enqueued @" << ts << ", waited " << simTime()-ts << "s " << endl;
                         if (np) { // got next packet to serve
                                 // call function in protocol
                                 onMessage(std::move(np));
 				auto finishingTime = simTime() + ppq->getProcessingTime();
                                 ppq->setFinishingTime(finishingTime);
-				EV_TRACE << "packet processing will be finished at " << finishingTime << endl;
+				//EV_TRACE << "packet processing will be finished at " << finishingTime << endl;
                                 if (ppq->empty()) { // queue empty now, will not schedule ProtocolTimerMsg
 					ppq->setScheduled(false);
 				}
@@ -81,7 +82,7 @@ void Protocol::handleMessage(cMessage *msg) {
                         }
 		}
 		else { // other self message, just propagate
-			onSelfMessage(std::unique_ptr<cMessage>(msg));
+                        onSelfMessage(std::unique_ptr<cMessage>(msg));
 		}
 		return;
 	} // endif if selfMsg
@@ -133,11 +134,11 @@ void Protocol::handleMessage(cMessage *msg) {
 					ppq->setScheduled(true);
                                 }
                         }
-                        else { // queue is empty and no packet being served
+                        else { // queue is empty and no packet being served, so start serving immediately
 				// set finishing time of this packet
 				auto finishingTime = simTime() + ppq->getProcessingTime();
                                 ppq->setFinishingTime(finishingTime);
-				EV_TRACE << "packet processing will be finished at " << finishingTime << endl;
+				//EV_TRACE << "packet processing will be finished at " << finishingTime << endl;
 				// start serving this packet immediately
                                 onMessage(std::unique_ptr<NodePkt>(np));
 				return;

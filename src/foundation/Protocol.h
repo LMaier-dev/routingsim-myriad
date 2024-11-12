@@ -123,7 +123,7 @@ class LegacyProtocol : public Protocol {
 
 	/// on self message (e.g. timer)
 	virtual void onSelfMessage( cMessage_p msg ) { onSelfMessage(msg.release()); }
-	/// on self message (e.g. timer) for code that needs unwraped pointers
+	/// on self message (e.g. timer) for code that needs unwrapped pointers
 	virtual void onSelfMessage( cMessage* msg ) { delete msg; }
 };
 

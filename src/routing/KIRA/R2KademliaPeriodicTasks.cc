@@ -56,7 +56,7 @@ R2Kademlia::addRandomizedTimer(simtime_t initialOffset, simtime_t duration, Time
 short R2Kademlia::addFixedTimer(simtime_t initialOffset, simtime_t duration, TimerMsg::cbfunc_t callback) {
 	ASSERT(fixedTimerDuration.size() == fixedTimerMsg.size());
 	ASSERT(fixedTimerDuration.size() < (size_type) std::numeric_limits<short int>::max()-1-fixedTimerIdBase);
-	ASSERT(duration >= omnetpp::SimTime::ZERO);
+        ASSERT(duration >= omnetpp::SimTime::ZERO);
 	// for fixed timers the timerId starts at fixedTimerIdBase
 	short int ntimerId((duration == omnetpp::SimTime::ZERO) ? oneShotTimerId :  fixedTimerIdBase+fixedTimerDuration.size());
 	auto msg= new TimerMsg(ntimerId, callback);
@@ -66,13 +66,15 @@ short R2Kademlia::addFixedTimer(simtime_t initialOffset, simtime_t duration, Tim
 	}
 
 	scheduleAt(simTime() + initialOffset, msg);
-	// EV_TRACE << "scheduled timer message (fixed) " << ntimerId << ( (duration != 0) ? " with duration " : " after ")
-	// 	 <<   ((duration != 0) ? duration : initialOffset) <<  endl;
+        // EV_TRACE << "scheduled timer message (fixed) " << ntimerId << " TimerIdx=" << ntimerId - fixedTimerIdBase
+	// 	 << ( (duration != 0) ? " with duration " : " after ")
+	//  	 <<   ((duration != 0) ? duration : initialOffset) <<  endl;
 	return ntimerId;
 }
 
 
-void R2Kademlia::stopTimer(short timerId)
+// delete_timermsg should not be set in case this is called from within onMessage() that is a unique_ptr
+void R2Kademlia::stopTimer(short timerId, bool delete_timermsg)
 {
 	// handle randomized periodic timers
 	if (timerId >= 0 and timerId < fixedTimerIdBase and (size_type) timerId < randomTimerMsg.size()) {
@@ -82,7 +84,8 @@ void R2Kademlia::stopTimer(short timerId)
 		// cancel potentially scheduled message (nothing happens if it was not)
 		if (timermsg != nullptr) {
 		  cancelEvent(timermsg);
-                  delete timermsg;
+                  if (delete_timermsg)
+			  delete timermsg;
 		}
 	}
 	else // handle fixed timers
@@ -94,7 +97,8 @@ void R2Kademlia::stopTimer(short timerId)
 			// cancel potentially scheduled message (nothing happens if it was not)
 			if (timermsg != nullptr) {
 				cancelEvent(timermsg);
-				delete timermsg;
+				if (delete_timermsg)
+					delete timermsg;
 			}
 		}
         }
@@ -184,7 +188,7 @@ void R2Kademlia::onSelfMessage(cMessage_p msg)
                         msg->setContextPointer(nullptr);
                         if (stop_timer) {
 				if (timerId >= 0 and timerId < fixedTimerIdBase and (size_type) timerId < randomTimerMsg.size()) {
-					randomTimerMsg[timerId]= nullptr;
+					randomTimerMsg[timerId] = nullptr;
 					randomTimerDuration[timerId]= omnetpp::SimTime::ZERO;
 				}
 				else
@@ -193,7 +197,7 @@ void R2Kademlia::onSelfMessage(cMessage_p msg)
 						fixedTimerMsg[timerIdx]= nullptr;
 						fixedTimerDuration[timerIdx]= omnetpp::SimTime::ZERO;
 					}
-				}
+                                }
                         }
 			return;
 		}
@@ -204,7 +208,7 @@ void R2Kademlia::onSelfMessage(cMessage_p msg)
 	{ // these timers draw their next time period randomly from the interval
 	  // [randomTimerDuration[timerId]/2, randomTimerDuration[timerId]/2*3]
 		ASSERT((size_t)timerId < randomTimerDuration.size());
-		ASSERT(randomTimerMsg[timerId] == msg.get());
+		ASSERT(randomTimerMsg.at(timerId) == msg.get());
 		if (randomTimerDuration[timerId] > omnetpp::SimTime::ZERO)
 		{
 			simtime_t time = uniform(randomTimerDuration[timerId]/2, randomTimerDuration[timerId]/2*3);
@@ -217,12 +221,12 @@ void R2Kademlia::onSelfMessage(cMessage_p msg)
 		if (not (timerIdx < fixedTimerDuration.size()))
 			EV_ERROR << "TimerIdx= " << timerIdx << " TimerId=" << timerId << endl;
 		ASSERT(timerIdx < fixedTimerDuration.size());
-		ASSERT(fixedTimerMsg[timerIdx] == msg.get());
+		ASSERT(fixedTimerMsg.at(timerIdx) == msg.get());
 		if (fixedTimerDuration[timerIdx] > omnetpp::SimTime::ZERO)
 		{
-			scheduleAt(simTime() + fixedTimerDuration[timerIdx], msg.release());
+			scheduleAt(simTime() + fixedTimerDuration.at(timerIdx), msg.release());
 		}
-	}
+        }
 }
 
 
