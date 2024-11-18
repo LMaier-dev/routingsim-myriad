@@ -1,6 +1,7 @@
 #include "RegularGrid.h"
 #include "clog.h"
 #include "MobilityNode.h"
+#include "mobility/MobilityBase.h"
 #include "simkerneldefs.h"
 #include <cassert>
 #include <string>
@@ -31,12 +32,12 @@ void RegularGrid::update(MobilityNode* node, Coord2D oldPosition, double current
     if (currentTime >= next_update && updates_to_do == 0) {
         // Update is due
         updates_to_do = number_of_nodes;
-        next_update_guess = node->getMobilityModel()->getLeaveDuration(newCell->getNorthWestBound(), newCell->getSouthEastBound());
+        next_update_guess = getNextCellChange(node, newCell);
         near_nodes_cache.erase(node);
     }
     next_update_guess = std::min(
         next_update_guess,
-        node->getMobilityModel()->getLeaveDuration(newCell->getNorthWestBound(), newCell->getSouthEastBound())
+        getNextCellChange(node, newCell)
     );
 
     updates_to_do--;
@@ -46,6 +47,29 @@ void RegularGrid::update(MobilityNode* node, Coord2D oldPosition, double current
         next_update = next_update_guess;
         EV_DEBUG << "Next Grid updates in " << next_update - currentTime << "s" << endl;
     }
+}
+
+double RegularGrid::getNextCellChange(MobilityNode* node, GridCell* nodeCell) {
+    MobilityBase* mobilityModel = node->getMobilityModel();
+    Coord2D node_pos = mobilityModel->getPosition();
+
+    // Bounding Box around node transmission range
+    Coord2D north_west_bound = Coord2D(
+        std::max(0.0, node_pos.x - max_range),
+        std::min(height, node_pos.y + max_range)
+    );
+    GridCell* north_west_cell = root_cell->findCell(north_west_bound);
+    Coord2D south_east_bound = Coord2D(
+        std::min(width, node_pos.x + max_range),
+        std::max(0.0, node_pos.y - max_range)
+    );
+    GridCell* south_east_cell = root_cell->findCell(south_east_bound);
+
+    // Calcuate durations in which no cell changes occure
+    double nodeLeaveDuration = mobilityModel->getLeaveDuration(node_pos, nodeCell->getNorthWestBound(), nodeCell->getSouthEastBound());
+    double radiusNorthWestLeaveDuration = mobilityModel->getLeaveDuration(north_west_bound, north_west_cell->getNorthWestBound(), north_west_cell->getSouthEastBound());
+    double radiusSouthEastLeaveDuration = mobilityModel->getLeaveDuration(south_east_bound, south_east_cell->getNorthWestBound(), south_east_cell->getSouthEastBound());
+    return std::min(nodeLeaveDuration, std::min(radiusNorthWestLeaveDuration, radiusSouthEastLeaveDuration));
 }
 
 std::unordered_set<MobilityNode*> RegularGrid::getNodesNear(MobilityNode* node) {

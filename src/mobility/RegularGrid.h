@@ -112,6 +112,9 @@ private:
 
     std::map<MobilityNode*, std::unordered_set<MobilityNode*>> near_nodes_cache;
 
+    // Calculate the time until the cell cache needs to be erased
+    double getNextCellChange(MobilityNode* node, GridCell* newCell);
+
 };
 
 }
