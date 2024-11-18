@@ -13,21 +13,12 @@
 // along with this program.  If not, see http://www.gnu.org/licenses/.
 //
 
-#include <BaseTypes.h>
-#include <boost/type_traits/integral_constant.hpp>
-#include <cstddef>
-#include <cstdint>
-#include <memory>
-#include <optional>
-
 #include "ProtocolPacketQueue.h"
 #include "Statistics.h"
 #include "KIRA.h"
 #include "KadObserver.h"
-
 #include "FwdTable.h"
 #include "simtime.h"
-#include "simtime_t.h"
 
 
 
@@ -71,13 +62,13 @@ void R2Kademlia::onInitialize() {
 
 	// bind KIRA_CTRL_PACKET_TYPE
 	// interval bounds for random delay per control message
-	const uint64_t minCtrlPlaneProcessingDelay = par("minKIRAControlPlaneProcessingDelay").intValue();
-        const uint64_t maxCtrlPlaneProcessingDelay = par("maxKIRAControlPlaneProcessingDelay").intValue();
+	const uint64_t minCtrlPlaneProcessingDelay = par("minKIRAControlPlaneProcessingDelay").intValue(); // in ns
+        const uint64_t maxCtrlPlaneProcessingDelay = par("maxKIRAControlPlaneProcessingDelay").intValue(); // in ns
 	const simtime_t maxCPWaitTime = SimTime(par("KIRAControlPlaneProcessingQueueDelayLimit").intValue(), omnetpp::SIMTIME_MS);
         ASSERT(minCtrlPlaneProcessingDelay <= maxCtrlPlaneProcessingDelay);
         if (maxCtrlPlaneProcessingDelay > 0 and minCtrlPlaneProcessingDelay <= maxCtrlPlaneProcessingDelay) {
 		bind(KAD_CTRL_PACKET_TYPE,
-		     std::make_unique<ProtocolPacketQueue>( [this,minCtrlPlaneProcessingDelay,maxCtrlPlaneProcessingDelay](void){ return uniform(SimTime(minCtrlPlaneProcessingDelay,SIMTIME_NS),SimTime(maxCtrlPlaneProcessingDelay,SIMTIME_NS)); }, maxCPWaitTime) );
+		     std::make_unique<ProtocolPacketQueue>( [this,minCtrlPlaneProcessingDelay,maxCtrlPlaneProcessingDelay](void){ return uniform(SimTime(minCtrlPlaneProcessingDelay,SIMTIME_NS),SimTime(maxCtrlPlaneProcessingDelay,SIMTIME_NS)); }, maxCPWaitTime.inUnit(SIMTIME_NS)/maxCtrlPlaneProcessingDelay ));
         } else {
 		bind(KAD_CTRL_PACKET_TYPE);
 	}
@@ -87,7 +78,7 @@ void R2Kademlia::onInitialize() {
         const uint64_t maxDataPlaneProcessingDelay = par("maxKIRADataPlaneProcessingDelay").intValue();
         if (maxDataPlaneProcessingDelay > 0 and minDataPlaneProcessingDelay <= maxDataPlaneProcessingDelay ) {
 		bind(KAD_DATA_PACKET_TYPE,
-		     std::make_unique<ProtocolPacketQueue>( [this,minDataPlaneProcessingDelay,maxDataPlaneProcessingDelay](void){ return uniform(SimTime(minDataPlaneProcessingDelay,SIMTIME_NS), SimTime(maxDataPlaneProcessingDelay,SIMTIME_NS)); }) );
+		     std::make_unique<ProtocolPacketQueue>( [this,minDataPlaneProcessingDelay,maxDataPlaneProcessingDelay](void){ return uniform(SimTime(minDataPlaneProcessingDelay,SIMTIME_NS), SimTime(maxDataPlaneProcessingDelay,SIMTIME_NS)); }, SimTime(10, SIMTIME_MS).inUnit(SIMTIME_NS)/maxDataPlaneProcessingDelay) );
         } else {
 		bind(KAD_DATA_PACKET_TYPE);
 	}
@@ -1628,4 +1619,42 @@ void R2Kademlia::returnToSender(uint8_t errorType, KadPacket_p packet, const Ove
 	else // we sent this packet!
 		handleAnswer(std::move(answer));
 }
+
+
+// note: the ppq is empty afterwards as the queue has no iterator
+// void
+// R2Kademlia::inspectQueue(ProtocolPacketQueue& ppq) const {
+//   unsigned int fwd_packets = 0UL;
+//   unsigned int local_packets = 0UL;
+//   unsigned int overlay_packets = 0UL;
+//   std::queue< std::pair<simtime_t, NodePkt_p> >& tmpq= ppq.getRawQueue();
+//   while (not tmpq.empty()) {
+//     NodePkt* np= tmpq.front().second.get();
+//     if (np) {
+//       const auto pp= dynamic_cast<KadPacket*>(np->getEncapsulatedPacket());
+//       if (pp) {
+//         EV_TRACE << "Queued Message: " << pp->getName();
+//         if (pp->hasRemainingHops()) {
+//           fwd_packets++;
+// 	  EV_TRACE << " fwd src route" << endl;
+//         }
+//         else {
+//           if (pp->getTarget() == myOverlayKey) {
+// 	    EV_TRACE << " local" << endl;
+//             local_packets++;
+//           }
+//           else {
+// 	    EV_TRACE << " fwd overlay" << endl;
+//             overlay_packets++;
+// 	  }
+//         }
+//       }
+//     }
+//     tmpq.pop();
+//   }
+//   EV_TRACE << "inspect queue=" << " fwd: " << fwd_packets << " local: " << local_packets << " overlay: " << overlay_packets << endl;
+// }
+
+
+
 } // namespace

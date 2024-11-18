@@ -102,6 +102,8 @@ protected:
 	/// reset state of Protocol to initial state (Node Failure)
 	virtual void reset() = 0;
 
+	// just for debugging
+	virtual void inspectQueue(ProtocolPacketQueue& ppq) const {};
 	// ------------------------------------------------------------- private --
 private:
 	Node* parent;

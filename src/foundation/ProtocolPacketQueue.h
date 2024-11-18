@@ -2,11 +2,8 @@
 #define __ROUTINGSIM_ProtocolPacketQueue_H
 
 #include "NodePkt_m.h"
-#include "cmessage.h"
 #include "csimulation.h"
-#include "distrib.h"
 #include "simtime.h"
-#include "simtime_t.h"
 #include <memory>
 #include <queue>
 #include <utility>
@@ -23,8 +20,8 @@ using NodePkt_p = std::unique_ptr<NodePkt>;
  */
 class ProtocolPacketQueue {
 public:
-	ProtocolPacketQueue(std::function<simtime_t(void)> processingTimeFunc, simtime_t maxWaitTimeSpec= SimTime(1000, omnetpp::SIMTIME_MS))
-		: processingTimeFunc(processingTimeFunc), maxWaitTime(maxWaitTimeSpec) {};
+	ProtocolPacketQueue(std::function<simtime_t(void)> processingTimeFunc, size_t maxQueueLengthSpec)
+		: processingTimeFunc(processingTimeFunc), maxQueueLength(maxQueueLengthSpec) { ASSERT(maxQueueLength>0); };
 	/// returns true if packet was added and false, if it was not
         bool addPacket(NodePkt_p p);
 	/// returns the first packet (including timestamp) and removes it from the queue
@@ -37,13 +34,15 @@ public:
 	/// returns true if packets waiting for being served or current packet not yet finished
         bool isBusy() const {return not packetQueue.empty() or simTime() <= finishingTimeCurrentlyServedPacket;};
 	bool empty() const { return packetQueue.empty(); }
-        void setScheduled(bool state) { scheduled = state; }
+	size_t size() const { return packetQueue.size(); }
+	void setScheduled(bool state) { scheduled = state; }
         bool isScheduled() const { return scheduled; }
 	// timerSelfMsg is typically a ProtocolTimerMsg
         void setTimerMsg(cMessage* setTimerSelfMsg) { timerSelfMsg.reset(setTimerSelfMsg); }
 	cMessage* getTimerMsg() const { return timerSelfMsg.get(); }
 	unsigned int getOverloadDiscardedPackets() const { return overloadDiscardedPackets; }
-	simtime_t getMaxSojournTime() const { return maxSojournTime; }
+        simtime_t getMaxSojournTime() const { return maxSojournTime; }
+	//std::queue< std::pair<simtime_t, NodePkt_p> >& getRawQueue() { return packetQueue; } // only for debugging
 private:
 	std::queue< std::pair<simtime_t, NodePkt_p> > packetQueue;
 	std::function<simtime_t(void)> processingTimeFunc;
@@ -53,7 +52,7 @@ private:
         simtime_t finishingTimeCurrentlyServedPacket = SIMTIME_ZERO;
         unsigned int overloadDiscardedPackets = 0UL;
         simtime_t maxSojournTime = 0UL;
-	simtime_t maxWaitTime = SimTime(1000, omnetpp::SIMTIME_MS);
+	size_t maxQueueLength = 10000;
 };
 
 
@@ -94,7 +93,7 @@ ProtocolPacketQueue::popPacket() {
 inline
 bool
 ProtocolPacketQueue::enqueue_condition() {
-	if (not packetQueue.empty() and (simTime() - packetQueue.front().first) > maxWaitTime)
+	if (not packetQueue.empty() and packetQueue.size() >= maxQueueLength)
 		return false;
         else
 		return true;

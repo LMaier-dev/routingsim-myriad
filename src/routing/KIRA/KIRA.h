@@ -336,7 +336,7 @@ private:
 	/// stops timer and cancel timer message, starts new timer with new duration
 	void resetTimer(short timerId, simtime_t duration);
 	void stopAllTimers() { for (short timerId= 0; (size_type) timerId < randomTimerMsg.size(); timerId++) { stopTimer(timerId); }; for (short timerIdx= 0; (size_type) timerIdx < fixedTimerMsg.size(); timerIdx++) { stopTimer(fixedTimerIdBase+timerIdx); } };
-
+	//void inspectQueue(ProtocolPacketQueue& ppq) const;
 	/// timer callbacks
 	bool doSendHello(short timerId);
 	bool doProbeRandomly(short timerId);

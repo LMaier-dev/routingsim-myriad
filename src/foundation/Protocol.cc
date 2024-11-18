@@ -17,8 +17,6 @@
 #include "NodePkt_m.h"
 #include "ProtocolPacketQueue.h"
 #include "checkandcast.h"
-#include "clog.h"
-#include "csimulation.h"
 #include <memory>
 
 namespace routingsim {
@@ -61,7 +59,7 @@ void Protocol::handleMessage(cMessage *msg) {
                         auto [ts, np] = ppq->popPacket();
 			//EV_TRACE << "Packet was enqueued @" << ts << ", waited " << simTime()-ts << "s " << endl;
                         if (np) { // got next packet to serve
-                                // call function in protocol
+				// call function in protocol
                                 onMessage(std::move(np));
 				auto finishingTime = simTime() + ppq->getProcessingTime();
                                 ppq->setFinishingTime(finishingTime);
