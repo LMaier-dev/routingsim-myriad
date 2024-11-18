@@ -47,11 +47,12 @@ int MobilityBase::reflect(double min, double max, double &coordinate,
                           double &speed) {
   double size = max - min;
   double value = coordinate - min;
-  int sign = 1 - fmod(floor(value / size), 2) * 2;
-  ASSERT(sign == 1 || sign == -1);
-  coordinate = fmod(sign * value, size) + min;
-  speed = sign * speed;
-  return sign;
+  double correction = -fmod(value, size);
+
+  coordinate += 2*correction; // subtract the amount twice (first to reach the border, second to reflect the overlap)
+  speed = -speed;
+  ASSERT(min <= coordinate && coordinate <= max);
+  return -1;
 }
 
 } // namespace routingsim
