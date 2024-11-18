@@ -86,12 +86,12 @@ public:
 		k.clear();
 	};
         explicit KadContact(const OverlayKey& key): key(key), lastseen(SIMTIME_ZERO), active_path(), proposed_path(), state(State::undefined), nodeDegree(0), rds_p(nullptr) {};
-        KadContact(const OverlayKey& myOverlayKey, const OverlayKey& key, const KadPath& opath, stateseqno_t seqno= stateseqno_t::invalidSeqNo) :
-		key(key), lastseen(SIMTIME_ZERO), active_path(opath), seqno(seqno),
+	KadContact(const OverlayKey& myOverlayKey, const OverlayKey& key, const KadPath& opath, stateseqno_t seqno= stateseqno_t::invalidSeqNo, simtime_t lastseen=SIMTIME_ZERO) :
+		key(key), lastseen(lastseen), active_path(opath), seqno(seqno),
 		state(State::valid), physicalNeighbor(active_path.isPhysicalNeighborPath() == true), nodeDegree(0), rds_p(nullptr) // simply path.empty() doesn't work correctly!
 		{};
-        KadContact(const OverlayKey& myOverlayKey, const OverlayKey& key, KadPath&& opath, stateseqno_t seqno= stateseqno_t::invalidSeqNo) :
-		key(key), lastseen(SIMTIME_ZERO), active_path(std::move(opath)), seqno(seqno),
+	KadContact(const OverlayKey& myOverlayKey, const OverlayKey& key, KadPath&& opath, stateseqno_t seqno= stateseqno_t::invalidSeqNo, simtime_t lastseen=SIMTIME_ZERO) :
+		key(key), lastseen(lastseen), active_path(std::move(opath)), seqno(seqno),
 		state(State::valid), physicalNeighbor(active_path.isPhysicalNeighborPath() == true), nodeDegree(0), rds_p(nullptr) // simply path.empty() doesn't work correctly!
 		{};
         KadContact& operator=(const KadContact &other); // copy assignment

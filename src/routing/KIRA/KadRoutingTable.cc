@@ -19,6 +19,7 @@
  */
 
 #include "KadRoutingTable.h"
+#include "KadContact.h"
 #include "KadObserver.h"
 #include <algorithm>
 #include <cstdint>
@@ -26,6 +27,9 @@
 #include <limits>
 #include <utility>
 #include "RequestQueue.h"
+#include <cstddef>
+#include "OverlayKey128.h"
+#include "KIRA.h"
 
 namespace routingsim {
 
@@ -759,7 +763,7 @@ bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, sta
 	}
 	else { // no space in bucket for inserting the new contact: replace existing one?
 
-		// TODO: do not use PNS in second last bullet if last bucket is not
+		// TODO: do not use PNS in second last bucket if last bucket is not
 		// reasonably filled with contacts -> need to keep all ID-wise neighbors in the 2nd last bucket
 		if (not proximityNeighborSelection) {
 			// EV_DEBUG << "dropping new contact " << *contact << endl;
@@ -1060,6 +1064,93 @@ KadContactList KadRoutingTable::getValidContactsFromBucket(size_t index) const
     return result;
 }
 
+std::vector<std::pair<KadContact_p, uint8_t>> KadRoutingTable::getReplicationContacts(
+        const uint8_t floodPrefixLength, uint8_t maxSplit, bool completeBucketOpt) const 
+{
+    // we are at the end. No need to flood further 
+    std::vector<std::pair<KadContact_p, uint8_t>> contacts;
+    if (floodPrefixLength == 112) {
+       return contacts; 
+    }
+    
+    struct range_type_t{
+        OverlayKey start;
+        uint8_t prefixLen;
+        KadContactList::const_iterator firstContact;
+        KadContactList::const_iterator nextContact;
+    };
+
+    // flood to all in deepest bucket
+    // what to do if contacts are invalid? after all we are responsible to inform them
+    // maybe we can deflect to one of our valid contacts?
+    for (auto contact: getValidContactsFromBucket(getNumBuckets() - 1)) {
+            contacts.push_back(std::make_pair(contact, 112));
+    }
+
+    if (getNumBuckets() < 2) {
+        return contacts;
+    }
+
+    auto i = getNumBuckets() - 2;
+    // flood to all in deepest bucket
+    // what to do if contacts are invalid? after all we are responsible to inform them
+    // maybe we can deflect to one of our valid contacts?
+    if (completeBucketOpt) {
+        for (; i >= floodPrefixLength and buckets[i].size() < getSplitSize(); i--) {
+            for (auto contact: getValidContactsFromBucket(i)) {
+                contacts.push_back(std::make_pair(contact, 112));
+            }
+        }
+    }
+    auto maxPrefix = i;
+    
+    // TODO make this work with a higher accelerationFactor
+    //auto startingLevel = floodPrefixLength / accelerationFactor;
+    for (; i >= floodPrefixLength and i < getNumBuckets(); i--) {
+        auto bucket_contacts = getValidContactsFromBucket(i);
+        auto key_cmp = [&](const KadContact_p c1, const KadContact_p c2) -> bool { return c1->getKey() < c2->getKey(); };
+        std::sort(bucket_contacts.begin(), bucket_contacts.end(), key_cmp);
+        auto cmp_fun = [&](const KadContact_p c1, const KadContact_p c2) -> bool { return c1->getPathLength() > c2->getPathLength(); };
+        auto firstId = (myKey & ~(OverlayKey::getMax() >> (i + 1))) ^ (OverlayKey::ONE << (OverlayKeyLength - i - 1));
+
+        std::vector<range_type_t> open_ranges;
+        open_ranges.push_back({firstId, (uint8_t) (i + 1), bucket_contacts.begin(), bucket_contacts.end()});
+        while (!open_ranges.empty()) {
+            auto& range = open_ranges.back();
+            // check whether a split would result in two nonempty ranges
+            const auto middle = range.start ^ (OverlayKey::ONE << (OverlayKeyLength - range.prefixLen - 1));
+            auto separator = std::find_if(range.firstContact, 
+                                          range.nextContact, 
+                                          [&](auto& contact) { return contact->getKey() >= middle; });
+            if (range.prefixLen - i - 1 < maxSplit  
+                and range.prefixLen < maxPrefix
+                and separator != range.firstContact 
+                and separator != range.nextContact) {
+                // split range in two 
+                range.prefixLen++;
+                auto endContact = range.nextContact;
+                range.nextContact = separator;
+                open_ranges.push_back({middle, range.prefixLen, separator, endContact});
+            } else {
+                // add range to output with closest contact
+                auto repl_contact = std::min_element(range.firstContact, 
+                                                     range.nextContact, 
+                                                     cmp_fun);
+                if (repl_contact == bucket_contacts.end()) { 
+                    EV_WARN << "getReplicationContacts() no valid contact for bucket with index = " << i << endl;
+                    continue;
+                }
+                contacts.push_back(std::make_pair(*repl_contact, range.prefixLen));
+                open_ranges.pop_back();
+
+            }
+                
+
+        }
+    }
+    return contacts;
+}
+
 
 // returns all PNs that have not updated their lastseen for dead period (given in ms)
 // usually 3*maxHelloInterval (expect two messages at least with 1.5 maxHelloInterval)
@@ -1217,7 +1308,7 @@ void KadRoutingTable::getContactsforPathRefresh(std::list<OverlayKey>& result) c
 
 // returns the two oldest entries from each bucket, deepest contacts first and oldest before newer (per bucket)
 // the paths to these contacts have not been validated for a while, so they get validated by probe requests
-// only non PN contacts will be returned
+// PN contacts will be returned only if the have no direct link
 // However, contacts that have recent information <1s will not be selected
 void KadRoutingTable::getOldestValidContacts(std::list<OverlayKey>& result) const
 {
@@ -1227,11 +1318,33 @@ void KadRoutingTable::getOldestValidContacts(std::list<OverlayKey>& result) cons
 	for (auto& bucket : buckets)
 	{
 		KadContact_p oldest(nullptr);
-		KadContact_p secondoldest(nullptr);
+                KadContact_p secondoldest(nullptr);
+
 		for (auto it = bucket.getContacts().cbegin(); it != bucket.getContacts().cend(); it++) {
 			if (*it != nullptr) {
 				auto kadcontactp(it->get());
-				if ( kadcontactp != nullptr and kadcontactp->getPathAge() > R2Kademlia::PathInfoAgeThreshold ) {
+				if ( kadcontactp != nullptr and kadcontactp->getPathLength() > 0 and kadcontactp->getPathAge() > R2Kademlia::PathInfoAgeThreshold ) {
+					if (oldest != nullptr) {
+						// older entry? then replace oldest
+						if (oldest->getPathAge() < kadcontactp->getPathAge()) {
+							secondoldest= oldest; oldest= kadcontactp;
+						}
+						else if (secondoldest != nullptr and secondoldest->getPathAge() < kadcontactp->getPathAge()) {
+							// replace second oldest
+							secondoldest= kadcontactp;
+						}
+					}
+					else { // initialize
+						oldest= kadcontactp;
+					}
+				}
+			}
+		}
+
+                for (auto it = bucket.getPNContacts().cbegin(); it != bucket.getPNContacts().cend(); it++) {
+			if (*it != nullptr) {
+				auto kadcontactp(it->get());
+				if ( kadcontactp != nullptr and kadcontactp->getPathLength() > 0 and kadcontactp->getPathAge() > R2Kademlia::PathInfoAgeThreshold ) {
 					if (oldest != nullptr) {
 						// older entry? then replace oldest
 						if (oldest->getPathAge() < kadcontactp->getPathAge()) {
@@ -1649,7 +1762,7 @@ double KadRoutingTable::getAveragePathLength() const
 	return count == 0 ? 0.0 : sum / count;
 }
 
-/// calculates the average stretch of the known contacts (w/o physical contacts!)
+/// calculates the average stretch of the known contacts
 /// and returns also the number of faulty paths (paths that are considered valid, but contain an inactive or broken underlay link)
 std::pair<double, uint64_t>
 KadRoutingTable::getAveragePathStretch() const
@@ -1671,11 +1784,10 @@ KadRoutingTable::getAveragePathStretch() const
 					}
 				}
 
-				sum += (contact->getPathLength()+1.0) / (double) phy_distance;
+                                sum += (contact->getPathLength()+1.0) / (double) phy_distance;
 				count++;
 			}
 		}
-
 		for (auto& contact : b.getPNContacts()) {
 			// stored paths exclude the destination node
 			if (uint phy_distance(getKadObserver().getPhysicalDistance(myKey, contact->getKey())); phy_distance > 0) {
@@ -1691,10 +1803,10 @@ KadRoutingTable::getAveragePathStretch() const
 				sum += (contact->getPathLength()+1.0) / (double) phy_distance;
 				count++;
 			}
-		}
+                }
         }
-
-	return std::make_pair(count == 0 ? 0.0 : sum / count, counted_faulty_paths);
+	// if count == 0 we cannot divide and say anything meaningful, so return value of 0 should be ignored!
+	return std::make_pair(count == 0 ? 0.0 : sum / (double) count, counted_faulty_paths);
 }
 
 

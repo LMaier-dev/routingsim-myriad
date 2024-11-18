@@ -101,6 +101,7 @@ private:
 	unsigned int registeredDataPackets = 0;
 
 	// scalars, histograms and vectors
+	// this is mainly per packet statistics
 	enum dataType : uint8_t {hopCount=0, distance=1, prefixDist=2, overlayHops=3,
 		stretchMul=4, stretchAdd=5, prefixPerHop=6, distanceLeft=7,
 		prefixDistLeft=8, hopCountDropped=9, overlayHopsDropped=10,

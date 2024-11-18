@@ -25,7 +25,7 @@ parameters:
     @class(LinkFailure);
 
     /// number of links that should be failed
-    int numLinksFail = 3;
+    int numLinksFail = default(3);
 
     /// fraction of links that fail at the beginning of each interval
    double linkFraction = default(0.01);

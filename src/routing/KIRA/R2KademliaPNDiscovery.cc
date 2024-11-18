@@ -322,10 +322,10 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadPNDiscReq> packet) {
 
 	EV_TRACE << "neighbor table: "<< neighborTable << endl;
 
-	// Update PNsyncSeqNo if suitable
+	// Update syncPNSeqNo if suitable
 	if (KadContact* contact_p= const_cast<KadContact*>(routingTable.getContact(packet->getSource())); contact_p != nullptr) {
 
-		// if we got a list of PNs, set PNsyncSeqNo to avoid too frequent resync
+		// if we got a list of PNs, set syncPNSeqNo to avoid too frequent resync
 		if (packet->getPhyNeighborArraySize() > 0) {
 			if (packet->getStateSeqNo() > contact_p->getSyncPNSeqNo())
 				contact_p->setSyncPNSeqNo(packet->getStateSeqNo());

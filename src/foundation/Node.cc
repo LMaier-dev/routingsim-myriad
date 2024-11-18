@@ -16,7 +16,14 @@
 #include "Node.h"
 #include "NetworkManager.h"
 #include "NodePkt_m.h"
-#include "simtime_t.h"
+#include "simtime.h"
+#include "cstringtokenizer.h"
+#include <version>
+#if __cpp_lib_format
+#include <format> // supported since g++-13 only
+#else
+#include <sstream>
+#endif
 
 namespace routingsim {
 
@@ -72,23 +79,36 @@ void Node::initialize(int stage) {
 	  else
 		  this->id = par("id").intValue();
 
-          minDelay = par("nodeMinDelay").intValue(); // nodeMinDelay is given in µs
-	  maxDelay = par("nodeMaxDelay").intValue(); // nodeMaxDelay is given in µs
+          minNodeControlPlaneDelay = par("nodeMinControlPlaneDelay").intValue(); // nodeCPMinDelay is given in ns
+	  maxNodeControlPlaneDelay = par("nodeMaxControlPlaneDelay").intValue(); // nodeCPMaxDelay is given in ns
+          minNodeDataPlaneDelay = par("nodeMinDataPlaneDelay").intValue(); // nodeDPMinDelay is given in ns
+	  maxNodeDataPlaneDelay = par("nodeMaxDataPlaneDelay").intValue(); // nodeDPMaxDelay is given in ns
 
           initNeighbors();
   }
   else {
 	  // create the protocol module dynamically
-	  const char* nodeModules = par("protocols");
-	  cModuleType* protocolType = cModuleType::get(nodeModules);
-	  cModule* protocol = protocolType->create( "protocol0", this->getParentModule() );
-	  protocol->finalizeParameters();
+      auto nodeModules = cStringTokenizer(par("protocols")).asVector();
+      auto i = 0;
+      for (auto& module: nodeModules) {
+	    cModuleType* protocolType = cModuleType::get(module.c_str());
+#if __cpp_lib_format
+	    cModule* protocol = protocolType->create( std::format("protocol{}", i).c_str(), this->getParentModule() );
+#else
+	    std::stringstream protocolstr("protocol");
+	    protocolstr << i;
+	    cModule* protocol = protocolType->create(protocolstr.str().c_str(),this->getParentModule());
+#endif
+            protocol->finalizeParameters();
 
           // connect gates
-	  cGate* in = NULL, *out = NULL;
-	  getOrCreateFirstUnconnectedGatePair("toProtocols", false, true, in, out );
-	  protocol->gate("toNode$o")->connectTo(in);
-	  out->connectTo( protocol->gate("toNode$i") );
+	    cGate* in = NULL, *out = NULL;
+	    getOrCreateFirstUnconnectedGatePair("toProtocols", false, true, in, out );
+	    protocol->gate("toNode$o")->connectTo(in);
+	    out->connectTo( protocol->gate("toNode$i") );
+
+        i++;
+      }
   } // end else
 }
 
@@ -128,8 +148,8 @@ void Node::handleMessage(cMessage *msg) {
   NodePkt *np = check_and_cast<NodePkt *>(msg);
 #endif
 
-  // packet from Protocol? yes-> delegate!
-  if (np->arrivedOn("toProtocols$i")) {
+  // packet from Protocol and not to ourself? yes-> delegate!
+  if (np->arrivedOn("toProtocols$i") and np->getHop().to != this->id) {
     np->getHopForUpdate().from = this->id;
 
     if (np->getHop().to == neighbor_cast)
@@ -195,10 +215,14 @@ void Node::sendToNode(nodeid_t nid, NodePkt *np) {
     return;
   }
 
-  // send packet with randomized node processing delay (use µs precision)
-  simtime_t node_processing_delay =
-      (np->getAttributes() & NODEPKT_ATTR_NO_PROCESSING_DELAY) ? SIMTIME_ZERO
-	  : ((double)intuniform(minDelay, maxDelay)) / 1'000'000.0;
+  // send packet with randomized node processing delay (use ns precision)
+  simtime_t node_processing_delay = SIMTIME_ZERO;
+  if (maxNodeControlPlaneDelay > 0 and (np->getAttributes() & NODEPKT_ATTR_CONTROL_PLANE_PROCESSING_DELAY))
+          node_processing_delay = SimTime(intuniform(minNodeControlPlaneDelay, maxNodeControlPlaneDelay), SIMTIME_NS);
+  // add data plane processing delay if requested
+  if (maxNodeDataPlaneDelay > 0 and (np->getAttributes() & NODEPKT_ATTR_DATA_PLANE_PROCESSING_DELAY))
+	  node_processing_delay += SimTime(intuniform(minNodeDataPlaneDelay, maxNodeDataPlaneDelay), SIMTIME_NS);
+
   // schedule not before earlier sent message to avoid message reordering!
   if (simTime() + node_processing_delay < n.lastsent) {
     node_processing_delay = n.lastsent - simTime();
@@ -430,10 +454,8 @@ Node::gateIsDisabled(const cGate *g) const {
   return false; // gate not found in disabledLinks
 }
 
-
-bool
-Node::setLinkDatarate(Node *mod, const char *gatename, double datarate) {
-  cGate *gate = findGate(mod, gatename);
+bool Node::setLinkDatarate(Node *mod, const char *gatename, double datarate) {
+  cGate *gate = findGateByName(mod, gatename);
   if (gate) {
     cChannel *channel = gate->getTransmissionChannel();
     if (!channel) {
@@ -455,9 +477,7 @@ Node::setLinkDatarate(Node *mod, const char *gatename, double datarate) {
   return false;
 }
 
-
-cGate *
-Node::findGate(const Node *mod, const char *gatename) {
+cGate *Node::findGateByName(Node *mod, const char *gatename) {
   for (int i = 0; i < gateSize(gatename); i++) {
     if (mod == getOtherNode(gate(gatename, i))) {
       return gate(gatename, i);

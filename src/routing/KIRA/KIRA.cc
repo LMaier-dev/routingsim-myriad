@@ -13,17 +13,14 @@
 // along with this program.  If not, see http://www.gnu.org/licenses/.
 //
 
-#include <BaseTypes.h>
-#include <boost/type_traits/integral_constant.hpp>
-#include <cstddef>
-
+#include "ProtocolPacketQueue.h"
 #include "Statistics.h"
 #include "KIRA.h"
 #include "KadObserver.h"
-
 #include "FwdTable.h"
-#include "OverlayKey128.h"
-#include "simtime_t.h"
+#include "simtime.h"
+
+
 
 namespace routingsim {
 
@@ -61,9 +58,30 @@ void R2Kademlia::onInitialize() {
 	myOverlayKey = OverlayKey::random(getRNG(0));
 	fwdTablePathID.setOwnNodeID(&myOverlayKey);
 	vicinity.setRoot(myOverlayKey);
-	getKadObserver().registerUp(myOverlayKey, node().getNodeId());
-	bind(KAD_CTRL_PACKET_TYPE);
-	bind(KAD_DATA_PACKET_TYPE);
+        getKadObserver().registerUp(myOverlayKey, node().getNodeId());
+
+	// bind KIRA_CTRL_PACKET_TYPE
+	// interval bounds for random delay per control message
+	const uint64_t minCtrlPlaneProcessingDelay = par("minKIRAControlPlaneProcessingDelay").intValue(); // in ns
+        const uint64_t maxCtrlPlaneProcessingDelay = par("maxKIRAControlPlaneProcessingDelay").intValue(); // in ns
+	const simtime_t maxCPWaitTime = SimTime(par("KIRAControlPlaneProcessingQueueDelayLimit").intValue(), omnetpp::SIMTIME_MS);
+        ASSERT(minCtrlPlaneProcessingDelay <= maxCtrlPlaneProcessingDelay);
+        if (maxCtrlPlaneProcessingDelay > 0 and minCtrlPlaneProcessingDelay <= maxCtrlPlaneProcessingDelay) {
+		bind(KAD_CTRL_PACKET_TYPE,
+		     std::make_unique<ProtocolPacketQueue>( [this,minCtrlPlaneProcessingDelay,maxCtrlPlaneProcessingDelay](void){ return uniform(SimTime(minCtrlPlaneProcessingDelay,SIMTIME_NS),SimTime(maxCtrlPlaneProcessingDelay,SIMTIME_NS)); }, maxCPWaitTime.inUnit(SIMTIME_NS)/maxCtrlPlaneProcessingDelay ));
+        } else {
+		bind(KAD_CTRL_PACKET_TYPE);
+	}
+
+	// bind KIRA_DATA_PACKET_TYPE
+        const uint64_t minDataPlaneProcessingDelay = par("minKIRADataPlaneProcessingDelay").intValue();
+        const uint64_t maxDataPlaneProcessingDelay = par("maxKIRADataPlaneProcessingDelay").intValue();
+        if (maxDataPlaneProcessingDelay > 0 and minDataPlaneProcessingDelay <= maxDataPlaneProcessingDelay ) {
+		bind(KAD_DATA_PACKET_TYPE,
+		     std::make_unique<ProtocolPacketQueue>( [this,minDataPlaneProcessingDelay,maxDataPlaneProcessingDelay](void){ return uniform(SimTime(minDataPlaneProcessingDelay,SIMTIME_NS), SimTime(maxDataPlaneProcessingDelay,SIMTIME_NS)); }, SimTime(10, SIMTIME_MS).inUnit(SIMTIME_NS)/maxDataPlaneProcessingDelay) );
+        } else {
+		bind(KAD_DATA_PACKET_TYPE);
+	}
 
 	ASSERT(par("accelerationFactor").intValue() > 0);
 	ASSERT(par("bucketSize").intValue() > 1);
@@ -97,9 +115,9 @@ void R2Kademlia::onInitialize() {
 	urgentRediscoveryWaitTime = (simtime_t) (par("urgentRediscoveryWaitTime").doubleValue() * 0.001); // given in ms
 	regularRediscoveryWaitTime = (simtime_t) (par("regularRediscoveryWaitTime").doubleValue() * 0.001); // given in ms
 	slowRediscoveryWaitTime = (simtime_t) (par("slowRediscoveryWaitTime").doubleValue() * 0.001); // given in ms
-	updateWaitTime = (simtime_t) (par("updateWaitTime").doubleValue() * 0.001);  // given in ms
-	updateWaitTimeFast = (simtime_t) (par("updateWaitTimeFast").doubleValue() * 0.001);
-	pathSetupWaitTime = (simtime_t) (par("pathSetupWaitTime").doubleValue() * 0.001);  // given in ms
+	updateHoldTime = (simtime_t) (par("updateHoldTime").doubleValue() * 0.001);  // given in ms
+	updateHoldTimeFast = (simtime_t) (par("updateHoldTimeFast").doubleValue() * 0.001);
+	pathSetupHoldTime = (simtime_t) (par("pathSetupHoldTime").doubleValue() * 0.001);  // given in ms
 	rediscoveryFanOutFactor = (uint) par("rediscoveryFanOutFactor").intValue();
 	rediscoveryMaxNotification = (uint) par("rediscoveryMaxNotification").intValue();
 	updateMaxNotification = (uint) par("updateMaxNotification").intValue();
@@ -120,12 +138,17 @@ void R2Kademlia::onInitialize() {
         };
 	failureFocussedProbing = par("failureFocussedProbing").boolValue();
 	addGratuitousContacts = par("addGratuitousContacts").boolValue();
+	floodStrideFactor = par("floodStrideFactor").intValue();
+	floodCompleteBucketOpt = par("floodCompleteBucketOpt").boolValue();
+	floodOnFailure = par("floodOnFailure").boolValue();
+
 	// register this module for statistics
 	getStatistics().addSample(this);
 	minHelloInterval = SimTime(par("minHelloInterval").doubleValue(),SIMTIME_MS);
 	maxHelloInterval = SimTime( par("maxHelloInterval").doubleValue(), SIMTIME_MS);
 	simtime_t probeInterval = (simtime_t) par("probeInterval").doubleValue();
 	simtime_t exploreInterval = (simtime_t) par("exploreInterval").doubleValue();
+	simtime_t floodInterval = (simtime_t) par("floodInterval").doubleValue();
 
 	// doProbeSelf is required for joining (will do exponential backoff)
 	// calculation for first timer is: initialOffset - duration/2 + random([0..duration])
@@ -139,9 +162,6 @@ void R2Kademlia::onInitialize() {
 	// regularly send FindNodeReq to _randomly_ chosen IDs, i.e., key-IDs but not node-IDs
 	// the advantage is to discover new and better contacts and/or paths
 	addRandomizedTimer(probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doProbeRandomly, this, ph::_1));
-
-	// Reachability Test: check whether other _existing_ nodes can be reached (uses KadObserver)
-	addRandomizedTimer(probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doReachabilityTest, this, ph::_1));
 
 	// For path exploration
 	if (exploreInterval > 0)
@@ -165,8 +185,15 @@ void R2Kademlia::onInitialize() {
 	  EV << "will send data packets after " << getSimulation()->getWarmupPeriod() << endl;
 	  addRandomizedTimer(getSimulation()->getWarmupPeriod()+probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doDataProbe, this, ph::_1));
 	}
+    if (floodInterval > 0) {
+	    addRandomizedTimer(floodInterval*1.5, floodInterval, [this](short i){return sendFloodPacket();});
+    }
 
-	// expose the following variables in GUI for inspection
+	// Reachability Test: check whether other _existing_ nodes can be reached (uses KadObserver)
+	// this is additional artificial test traffic to evaluate the routing protocol and not necessary for its operation
+        addRandomizedTimer(probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doReachabilityTest, this, ph::_1));
+
+        // expose the following variables in GUI for inspection
 	WATCH(myOverlayKey);
 	WATCH(lsseqno);
 	WATCH(neighborTable);
@@ -268,6 +295,13 @@ void R2Kademlia::nodeDisconnect(nodeid_t nid) {
 	// send UpdateRouteReq w/ failed link to ID-wise closest Nodes
 	// we can rely on routingTable.getContact(key) != nullptr, because of earlier setContactInvalid() call
 	scheduleUpdate(*(routingTable.getContact(key)), KAD_Unreachable);
+
+    if (floodOnFailure) {
+        // send "LSA" after short delay
+        addOneShotTimer(SimTime(uniform(1000,3000),SIMTIME_US), [this,nid](short i) {
+                return sendFloodPacket(std::make_optional(hop_t(nid,node().getNodeId())));
+            });
+    }
 }
 
 
@@ -331,9 +365,19 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	}
 
 	// other packets should include the key in the source route
-	packet->advanceProgress(); // increase hop count
-	if (packet->getCurrentHop() != myOverlayKey) {
-	  EV_ERROR << "dropping packet, current hop " << packet->getCurrentHop().shortStr()  << " in source route does not match!" << endl;
+
+	// check for hop limit (last resort), normally KIRA is loop free
+        if (packet->getHopLimit() == 0) {
+		EV_ERROR << "Hoplimit reached @Node " << myOverlayKey.shortStr() << " source route=" << std::make_pair(packet->getSrcPath(),packet->getActiveVector()) << endl;
+		// will simply drop this packet
+		return;
+	}
+	else {
+		packet->advanceProgress(); // increase hop count
+	}
+
+        if (packet->getCurrentHop() != myOverlayKey) {
+		EV_ERROR << "dropping packet, current hop " << packet->getCurrentHop().shortStr()  << " in source route does not match!" << endl;
 		//TODO how does this happen?
 		countDropped(*packet, packet->getTarget(), erroneousSourceRoute);
 		return;
@@ -772,6 +816,7 @@ void R2Kademlia::resendPacket(KadPacket_p packet) {
 	ASSERT(packet->getControlInfo() != nullptr);
 	NodePkt_p nodePkt = NodePkt_p(check_and_cast<NodePkt *>(packet->removeControlInfo()));
 	nodePkt->setType(KAD_CTRL_PACKET_TYPE);
+	nodePkt->setAttributes(nodePkt->getAttributes() | NODEPKT_ATTR_CONTROL_PLANE_PROCESSING_DELAY);
 	forwardPacket(std::move(packet), std::move(nodePkt));
 }
 
@@ -786,7 +831,8 @@ void R2Kademlia::sendPacket(KadPacket_p packet, simtime_t delay) {
 	}
 	auto packetsize(packet->getByteLength());
 	auto nodePkt = std::make_unique<NodePkt>(packet->getName());
-	nodePkt->setType(KAD_CTRL_PACKET_TYPE);
+        nodePkt->setType(KAD_CTRL_PACKET_TYPE);
+	nodePkt->setAttributes(nodePkt->getAttributes() | NODEPKT_ATTR_CONTROL_PLANE_PROCESSING_DELAY);
 	if (packet->getType() == KAD_FindNodeReq) {
 		const KadFindNodeReq* tmp_packet= check_and_cast<KadFindNodeReq*>(packet.get());
 		// it doesn't make sense to count packets destined to isolated nodes: they cannot be reached
@@ -1282,7 +1328,8 @@ void R2Kademlia::sampleStatistics (Statistics &stats) {
 	if (detailedRoutingTableStats) {
 		stats.value("routingTablePathLength", routingTable.getAveragePathLength());
 		auto [rt_stretch, no_faulty_paths] = routingTable.getAveragePathStretch();
-                stats.value("routingTablePathStretch", rt_stretch);
+                if (rt_stretch > 0) // it rt_stretch == 0 do not add the value, node has no valid contacts left
+                  stats.value("routingTablePathStretch", rt_stretch);
 		stats.value("routingTableFaultyPaths", no_faulty_paths);
 	}
 	unsigned long notifyFirstSegmentSourcesSize(0UL);
@@ -1300,6 +1347,12 @@ void R2Kademlia::sampleStatistics (Statistics &stats) {
 	stats.value("fwdTableUpdates", fwdTablePathID.getNumUpdates());
 	stats.value("floodQueueMaxLength", FloodQueue.getMaxLength());
 	stats.value("notifyQueueMaxLength", NotifyQueue.getMaxLength());
+        if (getBoundProtocolPacketQueue(KAD_CTRL_PACKET_TYPE)) {
+		stats.value("CPoverloadDiscard", getBoundProtocolPacketQueue(KAD_CTRL_PACKET_TYPE)->getOverloadDiscardedPackets());
+                stats.value("CPmaxSojournTime", getBoundProtocolPacketQueue(KAD_CTRL_PACKET_TYPE)->getMaxSojournTime().dbl());
+	}
+	stats.value("notifyQueueMaxLength", NotifyQueue.getMaxLength());
+    stats.value("floodPacketReplications", floodPacketReplications);
 }
 
 
@@ -1349,6 +1402,11 @@ void R2Kademlia::recordScalars() {
 	auto [numPrecalcEntries, numUsedPrecalcEntries]= fwdTablePathID.getNumUsedPrecalcEntries();
 	recordScalar("fwdTablePrecalc", numPrecalcEntries);
 	recordScalar("fwdTableUsedPrecalc", numUsedPrecalcEntries);
+
+	recordScalar("floodPacketsReceived", floodPacketsReceived);
+    recordScalar("floodPacketReplications", floodPacketReplications);
+    recordScalar("floodPacketAvgReplications", floodPacketReplications / (double) floodPacketsReceived);
+    recordScalar("floodPacketMaxReplications", floodPacketMaxReplications);
 
 	// EV_TRACE << (shortenedlaterpaths * 100.0) / (double) laterpaths << "% "
 	// 	 << shortenedlaterpaths << "/" << laterpaths << " of later paths shortened. "
@@ -1563,20 +1621,40 @@ void R2Kademlia::returnToSender(uint8_t errorType, KadPacket_p packet, const Ove
 }
 
 
+// note: the ppq is empty afterwards as the queue has no iterator
+// void
+// R2Kademlia::inspectQueue(ProtocolPacketQueue& ppq) const {
+//   unsigned int fwd_packets = 0UL;
+//   unsigned int local_packets = 0UL;
+//   unsigned int overlay_packets = 0UL;
+//   std::queue< std::pair<simtime_t, NodePkt_p> >& tmpq= ppq.getRawQueue();
+//   while (not tmpq.empty()) {
+//     NodePkt* np= tmpq.front().second.get();
+//     if (np) {
+//       const auto pp= dynamic_cast<KadPacket*>(np->getEncapsulatedPacket());
+//       if (pp) {
+//         EV_TRACE << "Queued Message: " << pp->getName();
+//         if (pp->hasRemainingHops()) {
+//           fwd_packets++;
+// 	  EV_TRACE << " fwd src route" << endl;
+//         }
+//         else {
+//           if (pp->getTarget() == myOverlayKey) {
+// 	    EV_TRACE << " local" << endl;
+//             local_packets++;
+//           }
+//           else {
+// 	    EV_TRACE << " fwd overlay" << endl;
+//             overlay_packets++;
+// 	  }
+//         }
+//       }
+//     }
+//     tmpq.pop();
+//   }
+//   EV_TRACE << "inspect queue=" << " fwd: " << fwd_packets << " local: " << local_packets << " overlay: " << overlay_packets << endl;
+// }
 
-template<typename T> bool R2Kademlia::handleIfFitting(KadPacket_p& packet) {
-	ASSERT(packet); // no nullptr here!
-	KadPacket *raw_ptr = packet.get();
-	//EV_TRACE << "handleIfFitting raw_ptr " << static_cast<void*>(raw_ptr) << endl;
-	std::unique_ptr<T> tPacket(dynamic_cast<T*>(raw_ptr));
-	// if cast failed we get nullptr -> skip the rest, return false
-	if (not tPacket) return false;
-	// invalidate the original unique_ptr
-	(void) packet.release();
-	//EV_TRACE << "handleIfFitting tPacket " << static_cast<void*>(tPacket.get()) << endl;
-	// delegate responsibility to handlePacket method
-	handlePacket(std::move(tPacket));
-	return true;
-}
+
 
 } // namespace

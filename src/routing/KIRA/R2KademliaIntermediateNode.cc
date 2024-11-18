@@ -13,6 +13,7 @@
 // along with this program.  If not, see http://www.gnu.org/licenses/.
 // 
 #include "KIRA.h"
+#include "KadPacket_m.h"
 
 namespace routingsim {
 
@@ -148,4 +149,20 @@ R2Kademlia::intermediateNodeProcessing(KadPacket& packet) {
 	return false;
 }
 
+bool R2Kademlia::intermediateNodeProcessing(const KadDataPacket& packet) {
+
+	// special actions while forwarding packets
+	switch (packet.getType()) {
+
+	case KAD_Flood:
+	{
+		if (auto floodPkt= static_cast<const KadFloodPacket*>(&packet);
+		    floodPkt != nullptr) {
+
+        }
+	}
+		break;
+	} // end switch
+	return false;
+}
 } // end namespace

@@ -2,6 +2,7 @@
 //#include "KadRoutingTable.h"
 //#include "FwdTable.h"
 #include "PathIDUtils.h"
+#include "simtime.h"
 
 /*********************************************************
  * This file contains PathSetup and PathTeardown related code from the 
@@ -179,13 +180,14 @@ void R2Kademlia::schedulePathSetup(const OverlayKey& contactkey)
 
 	if (not pathSetupScheduled)
 	{
-		addRandomizedTimer(pathSetupWaitTime, 0, std::bind(&R2Kademlia::sendScheduledPathSetups, this));
+		addFixedTimer(uniform(pathSetupHoldTime/2,3*pathSetupHoldTime/2), SimTime(10, SIMTIME_MS) , std::bind(&R2Kademlia::sendScheduledPathSetups, this, ph::_1));
 		pathSetupScheduled= true;
 	}
 }
 
 
-bool R2Kademlia::sendScheduledPathSetups() {
+// return true to stop the timer
+bool R2Kademlia::sendScheduledPathSetups(short timerid) {
 	// traverse list of scheduled contact keys for path setup
 	// recheck status and set to rediscover
 	EV_TRACE << "sendScheduledPathSetups() called, Queued: " << pathSetupQueue.size() << endl;
@@ -202,12 +204,17 @@ bool R2Kademlia::sendScheduledPathSetups() {
 				sendPathSetup(rt_contact);
 			}
 		}
-		pathSetupQueue.pop_front();
+                pathSetupQueue.pop_front();
+                if (not pathSetupQueue.empty())
+			return false;
 	}
 
+        // stop fixedTimer
+        // note that the timermsg MUST not be deleted, because this is called from within onSelfMessage
+        stopTimer(timerid, false);
 	// next call of this procedure will be scheduled on demand
 	pathSetupScheduled= false;
-	return false;
+	return true;
 }
 
 

@@ -14,6 +14,8 @@
 // 
 @property[castFunction](type=bool; usage=class; desc="If false: Do not specialize the fromAnyPtr<T>(any_ptr) function for this class. Useful for preventing compile errors if the function already exists, e.g. in hand-written form, or generated for another type (think aliased typedefs).");
 
+import foundation.NodePkt;
+
 cplusplus {{
 #include "BaseTypes.h"
 #include "OverlayKey.h"
@@ -57,9 +59,9 @@ enum KadPDUType {
 	KAD_PathSetupRsp = 	0x84;
 
 	KAD_PathTeardownReq = 	0x85;
-	KAD_PathTeardownRsp = 	0x86;
 
 	KAD_Data = 		0x10;
+	KAD_Flood = 	0x11;
 }
 
 class OverlayKey extends cObject {
@@ -145,6 +147,8 @@ class PathID {
  @existingClass;
 }
 
+class NodePkt_ps { @existingClass; } // that's a container
+
 // a fast path Data packet
 packet KadDataPacket {
 	@customize(true);
@@ -155,4 +159,5 @@ packet KadDataPacket {
 	OverlayKey srcNodeID = OverlayKey::UNSPECIFIED_KEY; // inner header
 	uint8_t type enum(KadPDUType);
 	uint16_t hopLimit = 255;
+    NodePkt_ps payload = nullptr;
 }

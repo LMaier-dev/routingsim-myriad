@@ -24,6 +24,14 @@ simple R2Kademlia extends routingsim.foundation.Protocol
     parameters:
 		@class(R2Kademlia);
 		@display("i=misc/node");
+		// for modeling Control Plane processing delay (disabled if maxKIRAControlPlaneProcessingDelay == 0)
+		// suggest default average processing delay is 250µs which corresponds to 4000 msgs/s
+		int minKIRAControlPlaneProcessingDelay = default(0ns)  @unit(ns);
+		//int maxKIRAControlPlaneProcessingDelay = default(500000ns)  @unit(ns);
+		int maxKIRAControlPlaneProcessingDelay = default(0ns)  @unit(ns);
+		int minKIRADataPlaneProcessingDelay = default(0ns)  @unit(ns);
+		int maxKIRADataPlaneProcessingDelay = default(0ns)  @unit(ns);
+		int KIRAControlPlaneProcessingQueueDelayLimit = default(1000ms) @unit(ms);
 		/// number of bits used for accelerated lookup called "b" in research papers.
 		int accelerationFactor = default(1);
 		/// max size of the buckets, called "k" in research papers (k-Buckets), for KIRA recommended k=40
@@ -35,6 +43,7 @@ simple R2Kademlia extends routingsim.foundation.Protocol
 		int discoveryRadius = default(3);
 		bool proximityRouting = default(true);
 		bool proximityNeighborSelection = default(true);
+		/// note: default hopLimit may be too small for topologies with large diameters (safe to increase)
 		int hopLimit = default(256);
 		/// if activated the node collects path information from passing packets
 		bool pathSnooping = default(true);
@@ -62,11 +71,12 @@ simple R2Kademlia extends routingsim.foundation.Protocol
 		/// waiting time until rediscovery is scheduled
 		double slowRediscoveryWaitTime = default(2000ms) @unit(ms);
 		/// waiting time until scheduled urgent routing updates are sent
-		double updateWaitTimeFast = default(250ms) @unit(ms);
+		double updateHoldTimeFast = default(250ms) @unit(ms);
 		/// waiting time until scheduled routing updates are sent
-		double updateWaitTime = default(500ms) @unit(ms);
-		/// waiting time until path setup messages are sent
-		double pathSetupWaitTime = default(100ms) @unit(ms);
+		double updateHoldTime = default(500ms) @unit(ms);
+		/// hold time until path setup messages are sent
+		double pathSetupHoldTime = default(100ms) @unit(ms);
+
 		/// maxFanOut for rediscovery
 		int rediscoveryFanOutFactor = default(2);
 		/// rediscoveryMaxNotification
@@ -85,7 +95,17 @@ simple R2Kademlia extends routingsim.foundation.Protocol
 		/// add additional randomly selected contacts from various buckets in responses (usually 2 per bucket)
 		bool addGratuitousContacts = default(true);
 
+		/// in which interval a node sends a floodPacket (0s is disabled)
+		double floodInterval = default(0s) @unit(s);
+		/// max stride factor for flooding packets
+		int floodStrideFactor = default(0);
+		/// whether to count trailing non-full buckets as part of the responsibility range
+		bool floodCompleteBucketOpt = default(true);
+
+		/// send flood packet on link failure
+		bool floodOnFailure = default(false);
+
 		// statistics foo
-		/// if true records avarage path lengths and stretch in routing tables.
+		/// if true records average path lengths and stretch in routing tables (can be costly)
 		bool detailedRoutingTableStats = default(true);
 }

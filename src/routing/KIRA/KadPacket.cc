@@ -14,6 +14,7 @@
 // 
 
 #include "KadPacket.h"
+#include <cstddef>
 
 namespace routingsim {
 Register_Class(KadPacket);
@@ -176,6 +177,15 @@ bool KadPacket::setSimplifiedReturnPathFrom(const KadPacket& other) {
 	addBitLength(OverlayKey::getLength()*index);
 
 	return index < otherPathLen;
+}
+
+
+std::vector<bool>
+KadPacket::getActiveVector() const {
+  std::vector<bool> active_vector(getActiveArraySize());
+  for (size_t i = 0; i < getActiveArraySize(); i++)
+    active_vector[i] = getActive(i);
+  return active_vector;
 }
 
 

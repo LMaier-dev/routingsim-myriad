@@ -25,9 +25,12 @@ parameters:
     /// protocols to the node uses
     string protocols;
 
-    // minimum and maximum delay in microseconds
-    int nodeMinDelay @unit(us) = default(0us);
-    int nodeMaxDelay @unit(us) = default(500us);
+    // minimum and maximum processing delay for control packets in nanoseconds
+    int nodeMinControlPlaneDelay @unit(ns) = default(0ns);
+    int nodeMaxControlPlaneDelay @unit(ns) = default(500000ns);
+    // minimum and maximum processing delay for data packets in nanoseconds
+    int nodeMinDataPlaneDelay @unit(ns) = default(0ns);
+    int nodeMaxDataPlaneDelay @unit(ns) = default(0ns);
 
 gates:
     input directIn @directIn;

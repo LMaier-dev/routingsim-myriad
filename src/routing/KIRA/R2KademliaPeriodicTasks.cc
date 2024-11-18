@@ -15,6 +15,8 @@
 #include "BaseTypes.h"
 #include "KIRA.h"
 #include "KadObserver.h"
+#include "cexception.h"
+#include "routing/KIRA/KadTypes.h"
 
 
 namespace routingsim {
@@ -24,27 +26,27 @@ namespace routingsim {
 // note: the first timer will fire in the interval now+[initialoffset - duration/2, initialoffset + duration/2]
 // therefore initialoffset must be at least duration/2!
 // if duration is 0, this is a one shot timer, consider using addOneShotTimer() instead
-	short R2Kademlia::addRandomizedTimer(simtime_t initialOffset, simtime_t duration, TimerMsg::cbfunc_t callback) {
+short
+R2Kademlia::addRandomizedTimer(simtime_t initialOffset, simtime_t duration, TimerMsg::cbfunc_t callback) {
 	ASSERT(randomTimerDuration.size() == randomTimerMsg.size());
-	ASSERT(randomTimerDuration.size() < (size_type) std::numeric_limits<short int>::max());
+	ASSERT(randomTimerDuration.size() < (size_type) fixedTimerIdBase-1);
 	ASSERT(duration >= omnetpp::SimTime::ZERO);
 
 	if (duration/2 > initialOffset)
 		throw cRuntimeError("initialOffset %s too small for duration %s",initialOffset.str().c_str(),duration.str().c_str());
 
-	if (duration > omnetpp::SimTime::ZERO)
-		randomTimerDuration.push_back(duration);
-
-	short int ntimerId(duration == omnetpp::SimTime::ZERO ? -1 : randomTimerDuration.size()-1);
+	short int ntimerId(duration == omnetpp::SimTime::ZERO ? oneShotTimerId : randomTimerDuration.size());
 	auto msg= new TimerMsg(ntimerId, callback);
 
-	if (duration > omnetpp::SimTime::ZERO)
+	if (duration > omnetpp::SimTime::ZERO) {
+		randomTimerDuration.push_back(duration);
 		randomTimerMsg.push_back(msg);
+	}
 
-	simtime_t scatter = uniform(0, duration);
+        simtime_t scatter = uniform(0, duration);
 	scheduleAt(simTime() + initialOffset - duration/2 + scatter, msg);
-	//EV_TRACE << "scheduled timer message " << msg << ( (duration != 0) ? " with duration " : " after ")
-	//	 <<   ((duration != 0) ? duration : initialOffset) <<  endl;
+	// EV_TRACE << "scheduled timer message (randomized) " << ntimerId << ( (duration != 0) ? " with duration " : " after ")
+	// 	 <<   ((duration != 0) ? duration : initialOffset) <<  endl;
 	return ntimerId;
 }
 
@@ -53,46 +55,55 @@ namespace routingsim {
 // if duration is 0, this is a one shot timer, consider using addOneShotTimer() instead
 short R2Kademlia::addFixedTimer(simtime_t initialOffset, simtime_t duration, TimerMsg::cbfunc_t callback) {
 	ASSERT(fixedTimerDuration.size() == fixedTimerMsg.size());
-	ASSERT(fixedTimerDuration.size() < (size_type) std::numeric_limits<short int>::max());
-	ASSERT(duration >= omnetpp::SimTime::ZERO);
-	if (duration > omnetpp::SimTime::ZERO)
-		fixedTimerDuration.push_back(duration);
-	// for fixed timers the timerId is negative and starts at -2
-	short int ntimerId((duration == omnetpp::SimTime::ZERO) ? -1 : -1-fixedTimerDuration.size());
+	ASSERT(fixedTimerDuration.size() < (size_type) std::numeric_limits<short int>::max()-1-fixedTimerIdBase);
+        ASSERT(duration >= omnetpp::SimTime::ZERO);
+	// for fixed timers the timerId starts at fixedTimerIdBase
+	short int ntimerId((duration == omnetpp::SimTime::ZERO) ? oneShotTimerId :  fixedTimerIdBase+fixedTimerDuration.size());
 	auto msg= new TimerMsg(ntimerId, callback);
-
-	if (duration > omnetpp::SimTime::ZERO)
-		fixedTimerMsg.push_back(msg);
+	if (duration > omnetpp::SimTime::ZERO) {
+		fixedTimerDuration.push_back(duration);
+                fixedTimerMsg.push_back(msg);
+	}
 
 	scheduleAt(simTime() + initialOffset, msg);
-	//EV_TRACE << "scheduled timer message (fixed) " << msg << ( (duration != 0) ? " with duration " : " after ")
-	//	 <<   ((duration != 0) ? duration : initialOffset) <<  endl;
+        // EV_TRACE << "scheduled timer message (fixed) " << ntimerId << " TimerIdx=" << ntimerId - fixedTimerIdBase
+	// 	 << ( (duration != 0) ? " with duration " : " after ")
+	//  	 <<   ((duration != 0) ? duration : initialOffset) <<  endl;
 	return ntimerId;
 }
 
 
-void R2Kademlia::stopTimer(short timerId)
+// delete_timermsg should not be set in case this is called from within onMessage() that is a unique_ptr
+void R2Kademlia::stopTimer(short timerId, bool delete_timermsg)
 {
-	if (timerId >= 0 and (size_type) timerId < randomTimerMsg.size()) {
+	// handle randomized periodic timers
+	if (timerId >= 0 and timerId < fixedTimerIdBase and (size_type) timerId < randomTimerMsg.size()) {
 		TimerMsg* timermsg(randomTimerMsg[timerId]);
 		randomTimerMsg[timerId]= nullptr;
+		randomTimerDuration[timerId]= omnetpp::SimTime::ZERO;
 		// cancel potentially scheduled message (nothing happens if it was not)
 		if (timermsg != nullptr) {
 		  cancelEvent(timermsg);
-                  delete timermsg;
+                  if (delete_timermsg)
+			  delete timermsg;
 		}
 	}
-	else
-	if (timerId < 0) {
-		if (size_type timerIdx= -2-timerId; timerIdx < fixedTimerMsg.size()) {
+	else // handle fixed timers
+	if (timerId >= fixedTimerIdBase and timerId < oneShotTimerId) {
+		if (size_type timerIdx= timerId-fixedTimerIdBase; timerIdx < fixedTimerMsg.size()) {
 			TimerMsg* timermsg(fixedTimerMsg[timerIdx]);
-			fixedTimerMsg[timerIdx]= nullptr;
+                        fixedTimerMsg[timerIdx] = nullptr;
+			fixedTimerDuration[timerIdx] = omnetpp::SimTime::ZERO;
 			// cancel potentially scheduled message (nothing happens if it was not)
 			if (timermsg != nullptr) {
-			  cancelEvent(timermsg);
-                          delete timermsg;
+				cancelEvent(timermsg);
+				if (delete_timermsg)
+					delete timermsg;
 			}
 		}
+        }
+        else {
+		throw cRuntimeError("stopTimer(): invalid timerId %d", timerId);
 	}
 }
 
@@ -102,7 +113,7 @@ void R2Kademlia::resetTimer(short timerId, simtime_t duration)
 {
 	//EV_TRACE << "resetTimer() called: timerId=" << timerId << " duration " << duration.str() << endl;
 	// periodic timer
-	if (timerId >= 0 and (size_type) timerId < randomTimerMsg.size()) {
+	if (timerId >= 0 and timerId < fixedTimerIdBase and (size_type) timerId < randomTimerMsg.size()) {
 		TimerMsg* timermsg(randomTimerMsg[timerId]);
 		if (timermsg == nullptr)
 			return;
@@ -120,8 +131,9 @@ void R2Kademlia::resetTimer(short timerId, simtime_t duration)
 			delete timermsg;
 		}
 	}
-	else  // one shot timer
-	if (size_type timerIdx= -2-timerId; timerIdx < fixedTimerMsg.size()) {
+	else  // fixed timer
+	if (timerId >= fixedTimerIdBase and timerId < oneShotTimerId)
+		if (auto timerIdx= timerId-fixedTimerIdBase; (size_type) timerIdx < fixedTimerMsg.size()) {
 		TimerMsg* timermsg(fixedTimerMsg[timerIdx]);
 
 		// cancel potentially scheduled message (nothing happens if it was not)
@@ -160,9 +172,9 @@ void R2Kademlia::onSelfMessage(cMessage_p msg)
 	}
 
 	// handle timer
-	// timerId == -1 is a one shot timer
-	// timerId >= 0: randomized timer
-	// timerId <= -2: fixed timer
+	// timerId == oneShotTimerId is a one shot timer
+	// timerId >= 0 and < fixedTimerIdBase: randomized timer
+	// timerId >= fixedTimerIdBase < oneShotTimerId: fixed timer
 	short timerId = msg->getKind();
 
 	if (auto timerCallback(static_cast<TimerMsg::cbfunc_t *>(msg->getContextPointer()));
@@ -171,48 +183,50 @@ void R2Kademlia::onSelfMessage(cMessage_p msg)
 		bool stop_timer= (*timerCallback)(timerId);
 
 		// delete the callback function for one shot messages or if the callback returns true
-		if (timerId == -1  or stop_timer) {
+		if (timerId == oneShotTimerId  or stop_timer) {
 			delete timerCallback;
                         msg->setContextPointer(nullptr);
                         if (stop_timer) {
-			  if (timerId >= 0 and (size_type) timerId < randomTimerMsg.size()) {
-                            randomTimerMsg[timerId]= nullptr;
-			    randomTimerDuration[timerId]= omnetpp::SimTime::ZERO;
-                          }
-			  else
-			  if (timerId < 0) {
-                            if (size_type timerIdx = -2 - timerId; timerIdx < fixedTimerMsg.size()) {
-                              fixedTimerMsg[timerIdx]= nullptr;
-			      fixedTimerDuration[timerIdx]= omnetpp::SimTime::ZERO;
-                            }
-                          }
+				if (timerId >= 0 and timerId < fixedTimerIdBase and (size_type) timerId < randomTimerMsg.size()) {
+					randomTimerMsg[timerId] = nullptr;
+					randomTimerDuration[timerId]= omnetpp::SimTime::ZERO;
+				}
+				else
+				if (timerId >= fixedTimerIdBase and timerId < oneShotTimerId) {
+					if (size_type timerIdx = timerId - fixedTimerIdBase; timerIdx < fixedTimerMsg.size()) {
+						fixedTimerMsg[timerIdx]= nullptr;
+						fixedTimerDuration[timerIdx]= omnetpp::SimTime::ZERO;
+					}
+                                }
                         }
 			return;
 		}
 	}
 
 	// reschedule timer message if duration > 0, otherwise it was a one shot timer
-	if (timerId  >= 0)
+	if (timerId  >= 0 and timerId < fixedTimerIdBase)
 	{ // these timers draw their next time period randomly from the interval
 	  // [randomTimerDuration[timerId]/2, randomTimerDuration[timerId]/2*3]
 		ASSERT((size_t)timerId < randomTimerDuration.size());
-		ASSERT(randomTimerMsg[timerId] == msg.get());
+		ASSERT(randomTimerMsg.at(timerId) == msg.get());
 		if (randomTimerDuration[timerId] > omnetpp::SimTime::ZERO)
 		{
 			simtime_t time = uniform(randomTimerDuration[timerId]/2, randomTimerDuration[timerId]/2*3);
 			scheduleAt(simTime() + time, msg.release());
 		}
 	}
-	else if (timerId < -1)
+	else if (timerId >= fixedTimerIdBase and timerId < oneShotTimerId)
 	{
-		size_type timerIdx= -2-timerId;
+		size_type timerIdx = timerId - fixedTimerIdBase;
+		if (not (timerIdx < fixedTimerDuration.size()))
+			EV_ERROR << "TimerIdx= " << timerIdx << " TimerId=" << timerId << endl;
 		ASSERT(timerIdx < fixedTimerDuration.size());
-		ASSERT(fixedTimerMsg[timerIdx] == msg.get());
+		ASSERT(fixedTimerMsg.at(timerIdx) == msg.get());
 		if (fixedTimerDuration[timerIdx] > omnetpp::SimTime::ZERO)
 		{
-			scheduleAt(simTime() + fixedTimerDuration[timerIdx], msg.release());
+			scheduleAt(simTime() + fixedTimerDuration.at(timerIdx), msg.release());
 		}
-	}
+        }
 }
 
 
@@ -220,7 +234,7 @@ void R2Kademlia::onSelfMessage(cMessage_p msg)
 // periodically send a Hello packet to keep state seq no in synch
 bool R2Kademlia::doSendHello(short timerId)
 {
-	ASSERT(timerId >= 0);
+	ASSERT(timerId >= 0 and timerId < fixedTimerIdBase);
         // existing neighbors are not known when LinkLayerIndications are not
         // used, so in this case we need to send a Hello to all potential underlay neighbors
 	if (useLinkLayerIndication and neighborTable.empty())
@@ -254,7 +268,7 @@ bool R2Kademlia::doSendHello(short timerId)
 // this detects any broken links along the current path
 bool R2Kademlia::doProbeNeighbors(short timerId)
 {
-	ASSERT(timerId >= 0);
+	ASSERT(timerId >= 0 and timerId < fixedTimerIdBase);
 	if (neighborTable.empty())
 		return false; // node is isolated
 
@@ -292,7 +306,7 @@ bool R2Kademlia::doProbeNeighbors(short timerId)
 // this detects any broken links along the current path
 bool R2Kademlia::doProbeContacts(short timerId)
 {
-	ASSERT(timerId >= 0);
+	ASSERT(timerId >= 0 and timerId < fixedTimerIdBase);
 	if (neighborTable.empty())
 		return false; // node is isolated
 
@@ -337,7 +351,7 @@ bool R2Kademlia::doProbeContacts(short timerId)
 
 bool R2Kademlia::doSendExplorePathPacket(short timerId)
 {
-	ASSERT(timerId >= 0);
+	ASSERT(timerId >= 0 and timerId < fixedTimerIdBase);
 	if (neighborTable.empty())
 		return false; // node is isolated
 
@@ -367,7 +381,7 @@ bool R2Kademlia::doSendExplorePathPacket(short timerId)
 
 
 bool R2Kademlia::doCheckPNs(short timerId) {
-	ASSERT(timerId >= 0);
+	ASSERT(timerId >= 0 and timerId < fixedTimerIdBase);
         std::list<OverlayKey> resultlist;
 	// get all PNs that have not sent a Hello or other message for a long time (assume 2 messages within 1.5 maxHelloInterval + additional 100ms)
         getRoutingTable().getDeadPNs(3 * maxHelloInterval.inUnit(SIMTIME_MS)+100, resultlist);
@@ -385,7 +399,7 @@ bool R2Kademlia::doCheckPNs(short timerId) {
 
 bool R2Kademlia::doProbeRandomly(short timerId)
 {
-	ASSERT(timerId >= 0);
+	ASSERT(timerId >= 0 and timerId < fixedTimerIdBase);
 	if (neighborTable.empty()) return false; // we are isolated
 	OverlayKey probeKey;
 	bool exact = false;
@@ -430,7 +444,7 @@ bool R2Kademlia::doProbeRandomly(short timerId)
 
 bool R2Kademlia::doProbeSelf(short timerId)
 {
-	ASSERT(timerId >= 0);
+	ASSERT(timerId >= 0 and timerId < fixedTimerIdBase);
 	static const simtime_t maxDuration(SimTime(300,SIMTIME_S)); // check every 5 minutes
 
 	// exponential backoff double duration until we reached maxDuration
@@ -449,7 +463,7 @@ bool R2Kademlia::doProbeSelf(short timerId)
 
 bool R2Kademlia::doReachabilityTest(short timerId)
 {
-	ASSERT(timerId >= 0);
+	ASSERT(timerId >= 0 and timerId < fixedTimerIdBase);
         if (neighborTable.empty())
           return false; // we are isolated
 	const OverlayKey* key(nullptr);
@@ -531,7 +545,7 @@ bool R2Kademlia::doPathRefresh(short timerId)
 
 bool R2Kademlia::doGarbageCollectPathIDs(short timerId)
 {
-	ASSERT(timerId < 0); // assume fixed timer
+	ASSERT(timerId >= fixedTimerIdBase and timerId < oneShotTimerId); // assume fixed timer
 	EV_TRACE << "PathID garbage collection called" << endl;
         fwdTablePathID.garbageCollect(notifyFirstSegmentSources,
                                       3 * R2Kademlia::PathRefreshThreshold);

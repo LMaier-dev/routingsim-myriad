@@ -25,9 +25,12 @@ class Protocol;
 
 #include "BaseTypes.h"
 #include "Node.h"
+#include "ProtocolPacketQueue.h"
 
 namespace routingsim {
+
 using NodePkt_p = std::unique_ptr<NodePkt>;
+using NodePkt_ps = std::shared_ptr<NodePkt>;
 using cMessage_p = std::unique_ptr<cMessage>;
 
 /**
@@ -38,23 +41,41 @@ class Protocol: public cSimpleModule {
 	friend class NetworkManager;
 	friend class NetworkTopology;
 
+public:
+	~Protocol();
 	// ------------------------------------------------------ helper methods --
 protected:
-	/// Returns the parent node of the module
+	class ProtocolTimerMsg : public cMessage {
+	public:
+		ProtocolTimerMsg(short timerId, ProtocolPacketQueue* ppq) : cMessage("ProtocolTimerMsg", timerId) {
+			setContextPointer( reinterpret_cast<void *>( ppq ) );
+		};
+
+		ProtocolTimerMsg(const ProtocolTimerMsg& other) = delete;
+		virtual ~ProtocolTimerMsg() { setContextPointer(nullptr); }
+	};
+
+        /// Returns the parent node of the module
 	inline Node& node() {
 		return *parent;
 	}
 
-	/// Bind module to node to receive messages of the given type
-	void bind(int type);
+        /// Bind module to node to receive messages of the given type
+	/// if you want to model protocol processing times, provide a pointer to a ProtocolPacketQueue
+	void bind(int type, std::unique_ptr<ProtocolPacketQueue> pq= nullptr);
 
 	/// Unbind module to node to receive messages of the given type no more
 	void unbind(int type);
+	/// get protocol packet queue
+        const ProtocolPacketQueue* getBoundProtocolPacketQueue(int type) const;
 
 	/// sends a packet
 	inline void sendToNode( nodeid_t nid, NodePkt_p pkt, simtime_t delay= 0){ sendToNode(nid, pkt.release(), delay);};
 	/// sends a packet
 	void sendToNode( nodeid_t nid, NodePkt* pkt, simtime_t delay= 0);
+
+	inline void sendLocal( NodePkt_p pkt, simtime_t delay= 0){ sendLocal(pkt.release(), delay);};
+	void sendLocal(NodePkt* pkt, simtime_t delay = 0);
 
 	/// sends a packet to all neighbors
 	inline void sendToNeighbors( NodePkt_p pkt ){ sendToNeighbors(pkt.release());};
@@ -81,12 +102,15 @@ protected:
 	/// reset state of Protocol to initial state (Node Failure)
 	virtual void reset() = 0;
 
+	// just for debugging
+	virtual void inspectQueue(ProtocolPacketQueue& ppq) const {};
 	// ------------------------------------------------------------- private --
 private:
 	Node* parent;
-	virtual void initialize(int stage);
-	virtual int numInitStages() const { return 2; };
-	virtual void handleMessage(cMessage *msg);
+	virtual void initialize(int stage) override;
+	virtual int numInitStages() const override { return 2; };
+        virtual void handleMessage(cMessage *msg) override;
+        std::unordered_map<int, std::unique_ptr<ProtocolPacketQueue>> protocolQueues;
 };
 
 /**
@@ -96,12 +120,12 @@ private:
 class LegacyProtocol : public Protocol {
 	/// on message
 	virtual void onMessage( NodePkt_p pkt ) { onMessage(pkt.release()); }
-	/// on message for code that needs unwraped pointers
+	/// on message for code that needs unwrapped pointers
 	virtual void onMessage( NodePkt* pkt ) = 0;
 
 	/// on self message (e.g. timer)
 	virtual void onSelfMessage( cMessage_p msg ) { onSelfMessage(msg.release()); }
-	/// on self message (e.g. timer) for code that needs unwraped pointers
+	/// on self message (e.g. timer) for code that needs unwrapped pointers
 	virtual void onSelfMessage( cMessage* msg ) { delete msg; }
 };
 

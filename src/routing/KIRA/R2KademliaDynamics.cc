@@ -14,7 +14,6 @@
 // 
 
 #include "KIRA.h"
-#include <unordered_set>
 #include <utility>
 /**
  * @file R2KademliaDynamics.cc
@@ -66,12 +65,14 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadUpdateRouteReq> packet) {
 			continue;
 		}
 
-		/* 
-		EV_TRACE << "reported path to contact " << contactkey.shortStr() << " <";
-		for (const auto& k : path)
-			EV_TRACE << k.shortStr() << ' ';
-		EV_TRACE << '>' << endl;
-		*/
+                /*
+                EV_TRACE << "reported path to contact " << contactkey.shortStr()
+                << " <"; for (const auto& k : path) EV_TRACE << k.shortStr() <<
+                ' '; EV_TRACE << '>' << endl;
+                */
+		// forward further depending on updatePropagateStrategy
+		// updatePropagateStrategy 0=none, 1=KAD_Unreachable, 2=KAD_Announce, 3=KAD_Change, 4 =KAD_Announce+KAD_Change, 5=all
+
 		switch (action) {
 			case KAD_Announce:
 				EV_TRACE << "UpdateRouteReq Announce for contact " << contactkey.shortStr() << endl;
@@ -188,7 +189,7 @@ void R2Kademlia::scheduleUpdate(const KadContact& affectedContact, KadRouteUpdat
 				// need to create new entry
 				// in case of KAD_Unreachable we want to report also the failed link
 				updateQueue[notifyContact->getKey()]= { { (action == KAD_Unreachable) ?
-						KadContact(myOverlayKey, affectedContact.getKey(),{{ myOverlayKey }}, affectedContact.getStateSeqNo()) :
+						KadContact(myOverlayKey, affectedContact.getKey(),{{ myOverlayKey },affectedContact.getActivePath().getLastValidated()}, affectedContact.getStateSeqNo(), affectedContact.getLastSeen()) :
 									  affectedContact, action } };
 			}
 			else
@@ -196,7 +197,7 @@ void R2Kademlia::scheduleUpdate(const KadContact& affectedContact, KadRouteUpdat
 				// in case of KAD_Unreachable we want to report also the failed link
 				std::pair<KadContact, KadRouteUpdateAction> newelem=
 					{ (action == KAD_Unreachable) ?
-					  KadContact(myOverlayKey, affectedContact.getKey(), { { myOverlayKey } }, affectedContact.getStateSeqNo()) :
+					  KadContact(myOverlayKey, affectedContact.getKey(), { { myOverlayKey },affectedContact.getActivePath().getLastValidated() }, affectedContact.getStateSeqNo(),affectedContact.getLastSeen()) :
 					  affectedContact,
 					  action };
 				// entry exists, so we need to append this update to the list (or replace an existing action)
@@ -208,9 +209,7 @@ void R2Kademlia::scheduleUpdate(const KadContact& affectedContact, KadRouteUpdat
 					if (existelem->second == KAD_Change or existelem->second == KAD_Announce)
 						*existelem= newelem;
 					else {
-						existelem++; // required, because of .base() returning the next element
-						// in the worst case the iterator is now at .rend()
-						// insert before the found entry
+						// insert after the found entry
 						entry->second.insert(existelem.base(),newelem);
 					}
 				}
@@ -226,14 +225,14 @@ void R2Kademlia::scheduleUpdate(const KadContact& affectedContact, KadRouteUpdat
 
 	if (action == KAD_Unreachable) {
 		if (not urgentUpdateScheduled) {
-			addRandomizedTimer(updateWaitTimeFast, 0, std::bind(&R2Kademlia::sendUrgentUpdates, this));
+			addOneShotTimer(uniform(updateHoldTimeFast/2,3*updateHoldTimeFast/2), std::bind(&R2Kademlia::sendUrgentUpdates, this));
 			urgentUpdateScheduled= true;
 		}
 	}
 	else
 	if (not updateScheduled)
 	{
-		addRandomizedTimer(updateWaitTime, 0, std::bind(&R2Kademlia::sendUpdates, this));
+		addOneShotTimer(uniform(updateHoldTime/2,3*updateHoldTime/2), std::bind(&R2Kademlia::sendUpdates, this));
 		updateScheduled= true;
 	}
 }
@@ -299,27 +298,80 @@ bool R2Kademlia::sendUrgentUpdates()
 	      notifyContact_it != updateQueue.end();
 	      notifyContact_it= updateQueue.erase(notifyContact_it) )
 	{
+		// notify contact either directly (if path valid) or via closest contact
 		KadContact_p notify_target= routingTable.getContact(notifyContact_it->first);
-		if (notify_target and notify_target->isValid())
-		{ // only notify contacts that we have a path to (i.e., that are valid)
+                if (notify_target == nullptr or not notify_target->isValid()) {
+                  // try the closest valid contact that is valid
+                  auto notify_contact_list = routingTable.getClosestContacts(notifyContact_it->first, 1, true);
+                  if (not notify_contact_list.empty()) {
+                    notify_target = notify_contact_list.front();
+		    EV_TRACE << "using closest valid contact " << notify_target->getKey().shortStr() << " as contact " << notifyContact_it->first.shortStr() << " not available" << endl;
+		  }
+                  else
+		    notify_target = nullptr;
+		}
+
+                if (notify_target)
+		{
 			// Extract urgent updates first
 			auto& updatelist(notifyContact_it->second);
-			UpdateList_t urgentupdatelist;
-
+                        UpdateList_t urgentupdatelist;
+                        OverlayKey last_considered_contact;
+			bool select_update= false;
+			//EV_TRACE << "UpdateList for " << notify_target->getKey().shortStr();
 			for (auto affectedcontact_it= updatelist.begin(); affectedcontact_it != updatelist.end(); /* see loop */ )
 			{ // affectedcontactentry is std::pair<KadContact, KadRouteUpdateAction>
+				// auto action = affectedcontact_it->second;
+				auto& affectedContactQueued = affectedcontact_it->first;
+				// EV_TRACE << ' ' <<
+				// 	((action == KAD_Announce) ? 'A' :
+				// 	 ((action == KAD_Withdraw) ? 'W' :
+				// 	  ((action == KAD_Change) ? 'C' :
+				// 	   ((action == KAD_Unreachable) ? 'U' : '?'))))
+				// 	 << ' ' << affectedContact << "; ";
+				bool delete_update= false;
+				// Unreachable info should be always reported, potential updates after that
 				// only queue this if contact still exists and state seq fits
-				if (KadContact_p affcontactnow= routingTable.getContact(affectedcontact_it->first.getKey());
-				    affcontactnow != nullptr
-				    and (affcontactnow->isValid() or (affectedcontact_it->second == KAD_Unreachable))
-				    and affcontactnow->getStateSeqNo() == affectedcontact_it->first.getStateSeqNo()
-				    and affcontactnow->getLastSeen() == affectedcontact_it->first.getLastSeen() )
-					urgentupdatelist.push_back(*affectedcontact_it);
-				else
-					EV_TRACE << "sendUrgentUpdates() - dismiss obsolete " << affectedcontact_it->first << endl;
+                                if (KadContact_p affcontactnow = routingTable.getContact(affectedContactQueued.getKey());
+                                    affcontactnow) {
+					if (affectedcontact_it->second == KAD_Unreachable) { // Unreachable is always urgent
+						select_update = true;
+						delete_update = true;
+						last_considered_contact = affectedContactQueued.getKey();
+                                        } else if ( // subsequent valid update for unreachable?
+						affectedContactQueued.getKey() == last_considered_contact and
+						affcontactnow->isValid() and
+						affcontactnow->getStateSeqNo() == affectedContactQueued.getStateSeqNo() and
+						affcontactnow ->getPath() == affectedContactQueued.getPath()) {
+						select_update = true;
+						delete_update = true;
+						last_considered_contact= OverlayKey::UNSPECIFIED_KEY;
+                                        } else if ( // valid update -> not urgent, keep for ordinary updates
+						affcontactnow->isValid() and
+						affcontactnow->getStateSeqNo() == affectedContactQueued.getStateSeqNo() and
+						affcontactnow ->getPath() == affectedContactQueued.getPath()) {
+						select_update = true;
+						delete_update = false;
+						last_considered_contact= OverlayKey::UNSPECIFIED_KEY;
+                                        } else { // not valid anymore -> delete
+						delete_update = true;
+                                                last_considered_contact = OverlayKey::UNSPECIFIED_KEY;
+						EV_TRACE << "sendUrgentUpdates() - dismiss obsolete " << affectedContactQueued << endl;
+                                        }
 
-				affectedcontact_it= updatelist.erase(affectedcontact_it);
+                                        if (select_update) {
+						urgentupdatelist.push_back(*affectedcontact_it);
+					}
+                                }
+
+                                if (delete_update) {
+					affectedcontact_it = updatelist.erase(affectedcontact_it);
+                                }
+                                else {
+				  affectedcontact_it++;
+				}
 			}
+			//EV_TRACE << endl;
 			EV_TRACE << "sendUrgentUpdates() - found urgent updates:" << urgentupdatelist.size() << endl;
 
 			if (not urgentupdatelist.empty()) {
@@ -334,7 +386,7 @@ bool R2Kademlia::sendUrgentUpdates()
 				packet->setNodeDegreeArraySize(urgentupdatelist.size());
 				packet->setActionArraySize(urgentupdatelist.size());
 
-				EV_TRACE << "UrgentUpdateRoute packet to " << notifyContact_it->first.shortStr() << " w/ ";
+				EV_TRACE << "UrgentUpdateRoute packet to " << notify_target->getKey().shortStr() << " w/ ";
 
 				// now construct the routing information by the information from urgentupdatelist
 				std::size_t i= 0;
@@ -363,13 +415,19 @@ bool R2Kademlia::sendUrgentUpdates()
 			} // end if something to send
 		} // if contact to be notified is valid
 		else {
-			EV_TRACE << "skipped invalid notify contact " << notifyContact_it->first.shortStr() << endl;
+			EV_TRACE << "skipped invalid/unreachable notify contact " << notifyContact_it->first.shortStr() << endl;
 		}
 	}
 
 	// non urgent entries still there
 	if (updateQueue.size() > 0) {
 		EV_TRACE << "left non-urgent updates: " << updateQueue.size() << endl;
+		// need to schedule regular updates if not yet done
+		if (not updateScheduled)
+		{
+			addOneShotTimer(uniform(updateHoldTime/2,3*updateHoldTime/2), std::bind(&R2Kademlia::sendUpdates, this));
+			updateScheduled= true;
+		}
 	}
 
         urgentUpdateScheduled = false;
@@ -389,23 +447,35 @@ bool R2Kademlia::sendUpdates()
 	      notifyContact_it= updateQueue.erase(notifyContact_it) )
 	{
 		KadContact_p notify_target= routingTable.getContact(notifyContact_it->first);
-		if (notify_target and notify_target->isValid())
+                if (notify_target == nullptr or not notify_target->isValid()) {
+                  // try the closest valid contact that is valid
+                  auto notify_contact_list = routingTable.getClosestContacts(notifyContact_it->first, 1, true);
+                  if (not notify_contact_list.empty()) {
+                    notify_target = notify_contact_list.front();
+		    EV_TRACE << "using closest contact " << notify_target->getKey().shortStr() << " as contact " << notifyContact_it->first.shortStr() << " not available" << endl;
+		  }
+                  else
+		    notify_target = nullptr;
+		}
+
+                if (notify_target)
 		{ // only notify contacts that we have a validated path to (i.e., that are valid)
 			// UpdateRouteReqs are not expecting an answer, so no RPC call
 			auto packet = makePacket<KadUpdateRouteReq>(notify_target, "UpdateRouteReq");
 			packet->setDstNodeID(notify_target->getKey());
-			EV_TRACE << "UpdateRoute packet to " << notifyContact_it->first.shortStr() << " w/ ";
+			EV_TRACE << "UpdateRoute packet to " << notify_target->getKey().shortStr() << " w/ ";
 			auto& updatelist(notifyContact_it->second);
 			// sanitize list first, i.e., remove obsolete entries
 			for (auto affcontact_it= updatelist.begin(); affcontact_it != updatelist.end(); /* see loop */)
 			{
-				if (KadContact_p affcontactnow= routingTable.getContact(affcontact_it->first.getKey()); affcontactnow != nullptr)
+				if (KadContact_p affcontactnow = routingTable.getContact(affcontact_it->first.getKey());
+				    affcontactnow)
 				{
 					if ( (affcontactnow->isNotValid() and (affcontact_it->second != KAD_Unreachable))
 					     or
 					     (affcontactnow->getStateSeqNo() > affcontact_it->first.getStateSeqNo()
 					      or
-					      affcontactnow->getLastSeen() > affcontact_it->first.getLastSeen()) )
+					      affcontactnow->getPath() != affcontact_it->first.getPath()) )
 					{ // current state for contact is newer, there should be another update for this
 						EV_TRACE << "(obsolete " << affcontact_it->first
 							 << ((affcontactnow->getStateSeqNo() > affcontact_it->first.getStateSeqNo()) ? " seq)" : ")")
@@ -461,9 +531,9 @@ bool R2Kademlia::sendUpdates()
 			};
 		} // if contact to be notified is valid
 		else {
-			EV_TRACE << "skipped invalid notify contact " << notifyContact_it->first.shortStr() << endl;
+			EV_TRACE << "skipped invalid/unreachable notify contact " << notifyContact_it->first.shortStr() << endl;
 		}
-	}
+	} // end for
 
 	// the updateQueue map should is now empty again
 	// reset the updateScheduled variable
@@ -503,7 +573,7 @@ void R2Kademlia::scheduleRediscovery(const OverlayKey& contactkey, rediscoverQue
 	// start timer for calling rediscoverContacts unless it has been started already
 	if (not rediscoverQ.isScheduled() and not rediscoverQ.empty()) {
 		//EV_TRACE << "addRandomizedTimer(): rediscoveryWaitTime =" << rediscoveryWaitTime << endl;
-		addRandomizedTimer(uniform(rediscoveryWaitTime/2,rediscoveryWaitTime*1.5), 0, std::bind(&R2Kademlia::rediscoverContacts, this, rediscoverQ_type, rediscoveryWaitTime));
+		addOneShotTimer(uniform(rediscoveryWaitTime/2,3*rediscoveryWaitTime/2), std::bind(&R2Kademlia::rediscoverContacts, this, rediscoverQ_type, rediscoveryWaitTime));
 		rediscoverQ.setScheduled();
 	}
 }
@@ -583,10 +653,10 @@ bool R2Kademlia::rediscoverContacts(RediscoveryState::rediscoverQ_type qtype, si
 	// if rediscoveryQ is now empty, next call of this procedure will be scheduled on demand
 	if (not rediscoverQ.empty()) {
 		if (qtype==RediscoveryState::rediscoverQ_type::urgent or qtype==RediscoveryState::rediscoverQ_type::physicalneighbors) {
-			addRandomizedTimer(uniform(rediscoveryWaitTime/4,rediscoveryWaitTime*3/4), 0, std::bind(&R2Kademlia::rediscoverContacts, this, qtype, rediscoveryWaitTime));
+			addOneShotTimer(uniform(rediscoveryWaitTime/4,rediscoveryWaitTime*3/4), std::bind(&R2Kademlia::rediscoverContacts, this, qtype, rediscoveryWaitTime));
 		}
 		else {
-			addRandomizedTimer(uniform(rediscoveryWaitTime/2,rediscoveryWaitTime*1.5), 0, std::bind(&R2Kademlia::rediscoverContacts, this, qtype, rediscoveryWaitTime));
+			addOneShotTimer(uniform(rediscoveryWaitTime/2,3*rediscoveryWaitTime/2), std::bind(&R2Kademlia::rediscoverContacts, this, qtype, rediscoveryWaitTime));
 		}
 		rediscoverQ.setScheduled();
 	}

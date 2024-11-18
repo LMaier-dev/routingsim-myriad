@@ -49,6 +49,7 @@ public:
 	/// sets the first key in the source route to the specified key.
 	/// If the source route is empty, this initializes it.
 	void setSource(const OverlayKey & source);
+    using KadPacket_Base::appendRoute;
 	/// appends the specified path to the source route
 	void appendRoute(const kad_path& path);
 	/// appends the specified path to the source route, including target
@@ -71,7 +72,9 @@ public:
 	void setReturnPathFrom(const KadPacket& other);
 	/// same as setReturnPathFrom, but shortens the path if possible (returns true if it was)
 	bool setSimplifiedReturnPathFrom(const KadPacket& other);
-	//@}
+        /// get active as vector
+	std::vector<bool> getActiveVector() const;
+        //@}
 
 	/** @name inline utility functions */
 	//@{
@@ -138,9 +141,10 @@ public:
 	//@{
 	// --- inline track
 	inline void countOverlayHop() { overlayHops++; }
-	inline uint16_t getOverlayHops() { return overlayHops; }
+	inline void setOverlayHops(uint16_t overlayHopCount) { overlayHops = overlayHopCount; }
+	inline uint16_t getOverlayHops() const  { return overlayHops; }
 	inline void markTracked() { tracked = true; }
-	inline bool isTracked() { return tracked; }
+	inline bool isTracked() const { return tracked; }
 private:
 	uint16_t overlayHops = 1;
 	bool tracked = false;
