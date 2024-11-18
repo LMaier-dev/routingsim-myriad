@@ -3,6 +3,7 @@
 
 #include <cmath>
 #include <iostream>
+#include <numbers>
 #include <omnetpp.h>
 #include <vector>
 
@@ -171,11 +172,11 @@ public:
     return {x / d, y / d};
   }
 
-  bool operator==(Coord2D &rhs) const {
+  bool operator==(Coord2D const &rhs) const {
     return this->x == rhs.x && this->y == rhs.y;
   }
 
-  bool operator!=(Coord2D &rhs) const {
+  bool operator!=(Coord2D const &rhs) const {
     return this->x != rhs.x || this->y != rhs.y;
   }
 
@@ -216,6 +217,10 @@ public:
   void setFromVector(Coord2D vector) {
     Coord2D vector_normalized = vector.get_normalized();
     radius = atan2(vector_normalized.y, vector_normalized.x);
+  }
+
+  Coord2D toVector() const {
+    return Coord2D(sin(radius * 180/std::numbers::pi), cos(radius * 180/std::numbers::pi));
   }
 
   Rad2D operator=(double d) {

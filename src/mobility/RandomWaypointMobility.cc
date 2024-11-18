@@ -8,7 +8,7 @@ Define_Module(RandomWaypointMobility);
 
 void RandomWaypointMobility::initialize() {
   MobilityBase::initialize();
-  waitTime = par("waitTime").doubleValue();
+  defaultWaitTime = par("waitTime").doubleValue();
   maxSpeed = par("maxSpeed").doubleValue();
   minSpeed = par("minSpeed").doubleValue();
   setNextTarget();
@@ -28,6 +28,16 @@ void RandomWaypointMobility::move() {
   } else if (now > lastUpdate) {
     ASSERT(nextChange == -1 || now < nextChange);
     lastPosition += velocity * (now - lastUpdate).dbl();
+
+    Coord2D direction = targetPosition - lastPosition;
+    if (direction.get_normalized() != heading.toVector()) {
+      // Missed target by overshooting
+      lastPosition = targetPosition;
+      // Calculate the time we still need to wait at the target
+      waitTime = defaultWaitTime - (direction.distance() / speed);
+    } else {
+      waitTime = defaultWaitTime;
+    }
     lastUpdate = now;
   }
 }
@@ -36,6 +46,7 @@ void RandomWaypointMobility::setNextTarget() {
   setTargetPosition();
   setTargetSpeed();
   setTargetVelocity();
+  setHeading();
   setTargetNextPeriod();
   waitNextPeriod = !waitNextPeriod;
 }
@@ -59,6 +70,10 @@ void RandomWaypointMobility::setTargetVelocity() {
     velocity = (direction/distance) * speed;
     timeToNextPeriod = distance / speed;
   }
+}
+
+void RandomWaypointMobility::setHeading() {
+  heading.setFromVector(velocity);
 }
 
 void RandomWaypointMobility::setTargetSpeed() {

@@ -43,6 +43,9 @@ namespace routingsim {
       // determine velocity vector with speed and targetPosition
       void setTargetVelocity();
 
+      // determine heading based on targetPosition
+      void setHeading();
+
     protected:
         // The minimum speed of the node in m/s.
         double minSpeed = 0.0;
@@ -51,6 +54,9 @@ namespace routingsim {
         double maxSpeed = 0.0;
 
         // The constant wait time of the node in seconds.
+        double defaultWaitTime = 0.0;
+
+        // The wait time of the node in seconds. (may be lower than defaultWaitTime if node missed the target)
         double waitTime = 0.0;
 
         // Set the next target position and velocity of the node.
