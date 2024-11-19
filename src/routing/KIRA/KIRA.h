@@ -16,6 +16,7 @@
 #ifndef __ROUTINGSIM_KIRA_H_
 #define __ROUTINGSIM_KIRA_H_
 
+#include <string>
 #ifndef NDEBUG
 #define _DEBUG_ONLY(X) X
 #else
@@ -315,7 +316,7 @@ private:
 	std::unique_ptr<T> makeDataPacket(const OverlayKey& dstNodeID, const KadContact* viacontact, const char *name);
 	/// crafts a packet of type T, sets the route and nonce according to original
 	template<typename T>
-	std::unique_ptr<T> makeAnswer(const KadPacket& original);
+	std::unique_ptr<T> makeAnswer(const KadPacket& original, const char* packetName= nullptr);
 	/// specialized version, calls also makeAnswer
 	std::unique_ptr<KadPathSetupRsp> makeAnswerKadPathSetupRsp(const KadPathSetupReq& original);
 
@@ -459,7 +460,7 @@ private:
 	virtual void handlePacket(std::unique_ptr<KadProbeReq> packet);
 	virtual void handlePacket(std::unique_ptr<KadPathSetupReq> packet);
 	virtual void handlePacket(std::unique_ptr<KadPathTeardownReq> packet);
-	virtual void handlePacket(std::unique_ptr<KadPNDiscReq> packet);
+	virtual void handlePacket(std::unique_ptr<KadULNDiscReq> packet);
 	virtual void handlePacket(std::unique_ptr<KadQueryRouteReq> packet);
 	virtual void handlePacket(std::unique_ptr<KadUpdateRouteReq> packet);
 	virtual void handlePacket(std::unique_ptr<KadFindNodeReq> packet);
@@ -517,7 +518,7 @@ private:
 	simtime_t sendGetPhysicalNeighbors(const KadContact& contact, RequestQueueElementActionType action= unset);
 	/// sends a "get overlay neighbors" call to the contact
 	simtime_t sendGetOverlayNeighbors(const KadContact& contact, RequestQueueElementActionType action);
-	/// sends a PNDisc Request to the Physical Neighbor
+	/// sends a ULNDisc Request to the Physical Neighbor
 	simtime_t sendDiscoveryReq(const KadContact& contact, RequestQueueElementActionType action);
 	/// sends a Probe Request to the contact
 	simtime_t sendOnDemandPathProbe(KeyRequestQueue::value_type keyactionpair, RequestQueueElementActionType unused_arg);
@@ -539,7 +540,7 @@ private:
 	void scheduleSlowRediscovery(const OverlayKey& contactkey) override { scheduleRediscovery(contactkey, slowRediscoverQueue, slowRediscoveryWaitTime); };
 
 	ContactRequestQueue::iterator scheduleRequest(ContactRequestQueue& q, KadContact&& tmpcontact);
-	/// schedule sending PNDiscReq
+	/// schedule sending ULNDiscReq
 	void schedulePNDiscReq(KadContact&& tmpcontact) { scheduleRequest(PNDiscoverQueue, std::move(tmpcontact)); };
 	void scheduleGetPNReq(KadContact&& tmpcontact) { scheduleRequest(GetPNQueue, std::move(tmpcontact)); };
 	void scheduleGetONReq(const KadContact& tmpcontact);
@@ -811,9 +812,12 @@ std::unique_ptr<T> R2Kademlia::makeDataPacket(const OverlayKey& dstNodeID, const
 
 
 template<typename T>
-std::unique_ptr<T> R2Kademlia::makeAnswer(const KadPacket& original) {
+std::unique_ptr<T> R2Kademlia::makeAnswer(const KadPacket& original, const char* packetName) {
 	auto answer = std::make_unique<T>();
-	answer->setName((std::string(original.getName()) + std::string("Answer")).c_str());
+        if (packetName)
+		answer->setName(packetName);
+	else
+		answer->setName((std::string(original.getName()+std::string("Answer"))).c_str());
 	answer->setSimplifiedReturnPathFrom(original);
 	ASSERT(answer->getSource() == myOverlayKey);
 	answer->setNonce(original.getNonce());

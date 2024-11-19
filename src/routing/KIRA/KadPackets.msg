@@ -119,16 +119,16 @@ packet KadError extends KadAnswer {
 
 
 // HELLO
-// compare PNHello
+// compare ULNHello
 packet KadHello extends KadPacket {
-	type = KAD_PNHello;
+	type = KAD_ULNHello;
 	nodeid_t sourceId;
 }
 
 
-// PNDiscReq
-packet KadPNDiscReq extends KadRTableReq {
-	type = KAD_PNDiscReq;
+// ULNDiscReq
+packet KadULNDiscReq extends KadRTableReq {
+	type = KAD_ULNDiscReq;
 	nodeid_t sourceId;
 	OverlayKey phyNeighbor[];
 	stateseqno_t phyNeighborSeqNo[];
@@ -136,9 +136,9 @@ packet KadPNDiscReq extends KadRTableReq {
 	nodedegree_t phyNeighborDegree[];
 }
 
-// PNDiscRsp
-packet KadPNDiscRsp extends KadRTableRsp {
-	type = KAD_PNDiscRsp;
+// ULNDiscRsp
+packet KadULNDiscRsp extends KadRTableRsp {
+	type = KAD_ULNDiscRsp;
 }
 
 

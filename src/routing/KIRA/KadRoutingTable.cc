@@ -175,7 +175,7 @@ size_type KadRoutingTable::getBucketIndex(const OverlayKey& key) const
 }
 
 
-/// this should be called by PNDiscReq and PNDiscRsp only!
+/// this should be called by ULNDiscReq and ULNDiscRsp only!
 void KadRoutingTable::addPNContact(const OverlayKey& key, stateseqno_t stateseqno, uint32_t nodeDegree)
 {
 #ifndef NDEBUG

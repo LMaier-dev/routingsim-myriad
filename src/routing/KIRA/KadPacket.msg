@@ -39,9 +39,9 @@ using link_t = std::pair<routingsim::OverlayKey,routingsim::OverlayKey>;
 namespace routingsim;
 
 enum KadPDUType {
-	KAD_PNHello = 		0x01;
-	KAD_PNDiscReq = 	0x03;
-	KAD_PNDiscRsp = 	0x04;
+	KAD_ULNHello = 		0x01;
+	KAD_ULNDiscReq = 	0x03;
+	KAD_ULNDiscRsp = 	0x04;
 
 	KAD_FindNodeReq = 	0x09;
 	KAD_FindNodeRsp = 	0x0a;

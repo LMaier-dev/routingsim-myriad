@@ -230,7 +230,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadPathTeardownReq> packet) {
 std::unique_ptr<KadPathSetupRsp>
 R2Kademlia::makeAnswerKadPathSetupRsp(const KadPathSetupReq& original)
 {
-	auto responsepacket= makeAnswer<KadPathSetupRsp>(original);
+	auto responsepacket= makeAnswer<KadPathSetupRsp>(original,"PathSetupRsp");
 	// copy complete(!) source path from KadPathSetupReq
 	// the PathSetupReq usually returns much earlier and does not reach the target
 	responsepacket->setFwdSourcePathArraySize(original.getRouteArraySize());

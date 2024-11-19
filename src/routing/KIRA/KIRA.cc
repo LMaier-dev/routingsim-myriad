@@ -383,7 +383,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		return;
 	}
 	// must process PNDiscReq to set the neighbor table entry first
-	if (handleIfFitting<KadPNDiscReq>(packet))
+	if (handleIfFitting<KadULNDiscReq>(packet))
 		return;
 
 	// check for presence of carried "not via" information
@@ -413,7 +413,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		//TODO optimization use isPathInteresting
 
 
-		if (packet->getType() != KAD_PNDiscRsp) {
+		if (packet->getType() != KAD_ULNDiscRsp) {
 			// for packets from physical neighbors: check need for resynchronization:
 			// in case the packet indicates a newer state seq no, resynch with neighbor
 			if (neighborTable.isNeighbor(packet->getSource()))
@@ -421,7 +421,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 
 			// evaluate return path for routing table (packet came to us this way, so path was recently working)
 			// Trusted Path Info (no need to check)
-			// for PNDiscRsp no need to add path here
+			// for ULNDiscRsp no need to add path here
 			routingTable.addPath(packet->getSource(), packet->reversePath(packet->getIntermediatePath()), packet->getStateSeqNo(), 0, packet->getSrcNodeDegree(), true);
 		}
 
@@ -513,7 +513,7 @@ void R2Kademlia::handlePacket(KadAnswer_p packet) {
 /// note: this method is also called when packets originate from this node
 void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt, simtime_t delay) {
 	// we do not route hello packets!
-	ASSERT(packet->getType() != KAD_PNHello);
+	ASSERT(packet->getType() != KAD_ULNHello);
 	ASSERT(packet->hasRemainingHops());
 	ASSERT(packet->getControlInfo() == nullptr);
 
@@ -997,7 +997,7 @@ void R2Kademlia::sendFindNode(const OverlayKey& destkey, bool exact, bool track)
 			EV_ERROR << "I'm the next hop for the destination. Will not send anything." << endl;
 			return;
 		}
-		auto packet = makePacket<KadFindNodeReq>(contact, "FindNode");
+		auto packet = makePacket<KadFindNodeReq>(contact, "FindNodeReq");
 		packet->setDstNodeID(destkey);
 		packet->setExact(exact);
 		if (track)
@@ -1034,7 +1034,7 @@ void R2Kademlia::sendFindNodeVia(const OverlayKey& destkey, KadContact_p viacont
 		EV_ERROR << "I'm the next hop for the destination. Will not send anything." << endl;
 		return;
 	}
-	auto packet = makePacket<KadFindNodeReq>(*viacontact_p, "FindNode");
+	auto packet = makePacket<KadFindNodeReq>(*viacontact_p, "FindNodeReq");
 	packet->setDstNodeID(destkey);
 	packet->setExact(exact);
 	if (track)
@@ -1206,7 +1206,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 	// or we cannot get closer to the destination and report what we have
 
 	// answer request
-	auto answer = makeAnswer<KadFindNodeRsp>(*packet);
+	auto answer = makeAnswer<KadFindNodeRsp>(*packet, "FindNodeRsp");
 	if (packet->isTracked()) {
 		EV_TRACE << "packet was tracked, setTracked for answer" << endl;
 		answer->markTracked();
@@ -1603,7 +1603,7 @@ void R2Kademlia::countDropped(KadPacket& packet, const OverlayKey& target, uint8
 
 
 void R2Kademlia::returnToSender(uint8_t errorType, KadPacket_p packet, const OverlayKey& failedNextHopNodeID) {
-	KadError_p answer = makeAnswer<KadError>(*packet);
+	KadError_p answer = makeAnswer<KadError>(*packet, "Error");
 	answer->setErrorType(errorType);
 
 	EV_TRACE << "returnToSender() - error: " << (unsigned int) errorType << " - return path:";

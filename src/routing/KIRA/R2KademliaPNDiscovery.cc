@@ -12,7 +12,7 @@ namespace routingsim {
 NodePkt_p R2Kademlia::makeHelloPacket()
 {
 	KadHello_p hello = std::make_unique<KadHello>();
-	hello->setName("KadHello");
+	hello->setName("ULNHello");
 	hello->setSource(myOverlayKey);
 	hello->setHopLimit(hopLimit);
 	hello->setSourceId(node().getNodeId());
@@ -66,7 +66,7 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 		return;
 	}
 	else
-	{ // new physical neighbor, first contact: either wait for PNDiscReq or send one
+	{ // new physical neighbor, first contact: either wait for ULNDiscReq or send one
 
                 // connected or reconnected to first neighbor reset join timer
                 if (neighborTable.empty()) {
@@ -86,7 +86,7 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 			vicinityPathIDCompletion(neighborcontact);
 		}
 
-		// use this deterministic strategy to save redundant PNDiscReq/Rsp exchanges
+		// use this deterministic strategy to save redundant ULNDiscReq/Rsp exchanges
 		// do not use full ID, otherwise large IDs will always "loose", use mod 2^32 comparison
 		// small collision chance: but just in case, full nodeID will be a tie breaker
 		uint32_t ownModID(myOverlayKey.getBitRange(0,32));
@@ -96,7 +96,7 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 		if ( (delta < 0x80000000UL and delta != 0 ) or
 		     ((delta == 0 or delta == 0x80000000UL) and myOverlayKey < packet->getSourceId())
 			) {
-			// schedule PNDiscReq
+			// schedule ULNDiscReq
 			schedulePNDiscReq({myOverlayKey, packet->getSource(), {}, stateseqno_t::invalidSeqNo});
 		}
 	}
@@ -196,16 +196,16 @@ simtime_t R2Kademlia::sendGetOverlayNeighbors(const KadContact& contact, Request
 }
 
 
-// Send PNDiscReq
+// Send ULNDiscReq
 // the 2nd parameter is currently ignored (only required by unified interface)
 // @returns a delay value for the next call of this method
 simtime_t R2Kademlia::sendDiscoveryReq(const KadContact& contact, RequestQueueElementActionType _unused_arg)
 {
-	EV_TRACE << "sending PNDiscReq to " << contact << " mySSeq#: " << getLSSeqNo();
+	EV_TRACE << "sending ULNDiscReq to " << contact << " mySSeq#: " << getLSSeqNo();
 
 	// need to brute force the path as the contact may be known via a detour before
 	KadContact pncontact(myOverlayKey, contact.getKey(),kad_path());
-	auto req = makePacket<KadPNDiscReq>(&pncontact, "KadPNDiscReq");
+	auto req = makePacket<KadULNDiscReq>(&pncontact, "KadULNDiscReq");
 	req->setSourceId(node().getNodeId());
 	req->setNeighborhood(1); // get only physical neighbors (1 hop away)
 	req->setContactsOnly(false);
@@ -238,7 +238,7 @@ simtime_t R2Kademlia::sendDiscoveryReq(const KadContact& contact, RequestQueueEl
 	// we rate limit the requests
 	simtime_t delay(0);
 
-	// default (see R2Kademlia.h): 10000µs is 10ms, so the rate limit is 100 PNDiscReqs/s
+	// default (see R2Kademlia.h): 10000µs is 10ms, so the rate limit is 100 ULNDiscReqs/s
 	static const simtime_t mindelay(SimTime(PNDiscoverWaitTime,SIMTIME_US));
 	if  ( simTime() < LastPNDiscReq ) {
 		// last was scheduled in future, schedule it mindelay behind that
@@ -267,9 +267,9 @@ simtime_t R2Kademlia::sendDiscoveryReq(const KadContact& contact, RequestQueueEl
 }
 
 
-// handle PNDiscReq
-void R2Kademlia::handlePacket(std::unique_ptr<KadPNDiscReq> packet) {
-	EV_TRACE << "received PNDiscReq from " << packet->getSource().shortStr()
+// handle ULNDiscReq
+void R2Kademlia::handlePacket(std::unique_ptr<KadULNDiscReq> packet) {
+	EV_TRACE << "received ULNDiscReq from " << packet->getSource().shortStr()
 		 << " SSeq#" <<  packet->getStateSeqNo()
 		 << " w/ " << packet->getPhyNeighborArraySize() << " neighbors" << endl;
 
@@ -339,7 +339,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadPNDiscReq> packet) {
 	// TODO currently only getting physical neighbors is implemented
 	ASSERT(packet->getNeighborhood() == 1);
 	ASSERT(not packet->getContactsOnly());
-	auto response = makeAnswer<KadPNDiscRsp>(*packet);
+	auto response = makeAnswer<KadULNDiscRsp>(*packet, "ULNDiscRsp");
 	auto neighbors = neighborTable.getTable();
 
 	response->setContactArraySize(neighbors.size());
@@ -388,7 +388,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadQueryRouteReq> packet)
 
 	//  packet->getContactsOnly() not implemented yet
 	ASSERT(not packet->getContactsOnly());
-	auto response = makeAnswer<KadQueryRouteRsp>(*packet);
+	auto response = makeAnswer<KadQueryRouteRsp>(*packet, "QueryRouteRsp");
 
 	// need to check for the number of overlay neighbors that need to be returned
 	KadContactList ovlyneighbors;
@@ -476,12 +476,12 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadQueryRouteReq> packet)
 bool R2Kademlia::handlePNDiscResponse(KadPacket_p answer, RPCState& rpcState)
 {
 	if (rpcState.status != RPC_SUCCESS) return true;
-	auto response = safe_packet_cast<KadPNDiscRsp>(answer);
-	EV_TRACE << "PNDiscRsp from " << response->getSource().shortStr() << " received " << response->getContactArraySize()
+	auto response = safe_packet_cast<KadULNDiscRsp>(answer);
+	EV_TRACE << response->getName() << " from " << response->getSource().shortStr() << " received " << response->getContactArraySize()
 		 << " neighbors SSeq#" << response->getStateSeqNo() << endl;
 
 	if (response->getRouteArraySize() != 2)
-		EV_ERROR << "PNDiscRsp not received via direct link" << endl;
+	  EV_ERROR << response->getName() << " not received via direct link" << endl;
 
 	// update sequence number or restore direct link
 	vicinity.updateNodeStateSeqNo(response->getSource(), response->getStateSeqNo());
@@ -518,7 +518,7 @@ bool R2Kademlia::handleQueryRouteResponse(KadPacket_p answer, RPCState& rpcState
 }
 
 
-/// schedule sending PNDiscReq for contacts, because meanwhile more neighbors will be discovered
+/// schedule sending ULNDiscReq for contacts, because meanwhile more neighbors will be discovered
 /// also record expected new seqno, so if state had been updated meanwhile we can avoid resync
 /// this will avoid triggering frequent resynchronizations
 /// note that the given contact is a temporary contact that does not need to actually exist in the routing table
@@ -631,7 +631,7 @@ R2Kademlia::sendScheduledRequests(ContactRequestQueue& q) {
 				EV_ERROR << q.getDescription() << " cannot be sent, because contact " << tmpcontact.getKey().shortStr() << " not in neighbor table anymore" << endl;
 			}
 			else {
-				// send the request (PNDiscReq, QueryRouteReq(PN), QueryRouteReq(ON))
+				// send the request (ULNDiscReq, QueryRouteReq(PN), QueryRouteReq(ON))
 				// e.g., see R2Kademlia::sendDiscoveryReq(KadContact_p contact)
 				delay_next_call= q.sendrequestcall(*rt_contact, getOverlayNeighborsSource ? get_OverlayNeighborsSource : unset);
 			}
