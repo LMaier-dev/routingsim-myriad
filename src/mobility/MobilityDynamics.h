@@ -42,6 +42,7 @@ private:
   cOutVector *mobilityNodeAvgDegree= nullptr;
   cOutVector *mobilityNodeAvgDatarate= nullptr;
   cOutVector *mobilityNodeAvgDistance= nullptr;
+  cHistogram *accelerationQuotient= nullptr;
 
 protected:
   void sampleStatistics(Statistics &stats) override;
@@ -52,6 +53,8 @@ public:
 
   ~MobilityDynamics();
   void preDelete(cComponent *root) override;
+
+  void finish() override;
 
   MobilityTopology *mobilityTopology = nullptr;
   void initialize(int stage) override;

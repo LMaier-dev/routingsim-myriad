@@ -15,12 +15,17 @@ MobilityDynamics::preDelete(cComponent *root)
   delete mobilityNodeAvgDegree;
   delete mobilityNodeAvgDatarate;
   delete mobilityNodeAvgDistance;
+  delete accelerationQuotient;
 }
 
 
 MobilityDynamics::~MobilityDynamics() {
 }
 
+void MobilityDynamics::finish() {
+  // Record Acceleration Statistic
+  accelerationQuotient->record();
+}
 
 void
 MobilityDynamics::initialize(int stage) {
@@ -33,8 +38,11 @@ MobilityDynamics::initialize(int stage) {
     mobilityNodeAvgDistance = new cOutVector("mobilityNodeAvgDistance");
     take(mobilityNodeAvgDistance);
     addStatisticSample(this);
+
     grid = new RegularGrid(par("borderX"), par("borderY"), par("gridDepth"));
     mobilityTopology->initializeProximityGrid(grid);
+    accelerationQuotient = new cHistogram("accelerationQuotient");
+    take(accelerationQuotient);
   }
 }
 
@@ -76,9 +84,10 @@ void MobilityDynamics::updateMobility() {
       oldNodesMapping[from_node].erase(to_node);
 
       if (from_node != to_node) {
-        //int i =grid->getNodesNear(from_node).size();
-        //int j =mobilityTopology->getNodeMods().size();
-        //EV_DEBUG << "Update connections to nodes " << i << "/" << j << endl;
+        int i =grid->getNodesNear(from_node).size();
+        int j =mobilityTopology->getNodeMods().size();
+        accelerationQuotient->collect(i/(double)j);
+
         updateConnection(from_node, to_node);
         updateConnection(to_node, from_node);
       }
