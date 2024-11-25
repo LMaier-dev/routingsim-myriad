@@ -8,6 +8,7 @@ simple MobilityDynamics {
         double borderX @unit(m) = default(1000m);
         double borderY @unit(m) = default(600m);
         int gridDepth;
+        bool useGrid;
 
     gates:
         output toManager;

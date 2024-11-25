@@ -1,7 +1,9 @@
 #include "MobilityDynamics.h"
 #include "BaseTypes.h"
 #include "MobilityTopology.h"
+#include "checkandcast.h"
 #include "csimulation.h"
+#include "mobility/MobilityNode.h"
 #include <unordered_set>
 
 namespace routingsim {
@@ -39,10 +41,12 @@ MobilityDynamics::initialize(int stage) {
     take(mobilityNodeAvgDistance);
     addStatisticSample(this);
 
-    grid = new RegularGrid(par("borderX"), par("borderY"), par("gridDepth"));
-    mobilityTopology->initializeProximityGrid(grid);
-    accelerationQuotient = new cHistogram("accelerationQuotient");
-    take(accelerationQuotient);
+    if (par("useGrid").boolValue()) {
+      grid = new RegularGrid(par("borderX"), par("borderY"), par("gridDepth"));
+      mobilityTopology->initializeProximityGrid(grid);
+      accelerationQuotient = new cHistogram("accelerationQuotient");
+      take(accelerationQuotient);
+    }
   }
 }
 
@@ -59,10 +63,12 @@ MobilityDynamics::handleMessage(cMessage *msg) {
 void MobilityDynamics::updateMobility() {
   // Map Node to set of oldNodes (nodes that are in range before the position update)
   std::map<MobilityNode*, std::unordered_set<MobilityNode*>> oldNodesMapping = std::map<MobilityNode*, std::unordered_set<MobilityNode*>>();
-  for (cModule *node_wrapper : mobilityTopology->getNodeMods()) {
-    auto *node =
-        check_and_cast<MobilityNode *>(node_wrapper->getSubmodule("node"));
-    oldNodesMapping[node] = grid->getNodesNear(node);
+  if (grid) {
+    for (cModule *node_wrapper : mobilityTopology->getNodeMods()) {
+      auto *node =
+          check_and_cast<MobilityNode *>(node_wrapper->getSubmodule("node"));
+      oldNodesMapping[node] = grid->getNodesNear(node);
+    }
   }
 
   // first update all positions
@@ -71,33 +77,50 @@ void MobilityDynamics::updateMobility() {
         check_and_cast<MobilityNode *>(node_wrapper->getSubmodule("node"));
     Coord2D oldPosition = node->getMobilityModel()->getPosition();
     updateMobilityNode(node);
-    grid->update(node, oldPosition, simTime().dbl());
+    if (grid)
+      grid->update(node, oldPosition, simTime().dbl());
   }
 
   // now update connectivity for all nodes in a second step to avoid asymmetry
   for (cModule *node_wrapper : mobilityTopology->getNodeMods()) {
     auto *from_node =
       check_and_cast<MobilityNode *>(node_wrapper->getSubmodule("node"));
-    std::unordered_set<MobilityNode*> nearNodes = grid->getNodesNear(from_node);
-    for (MobilityNode *to_node : nearNodes) {
-      // Calculate set difference of oldNodes\nearNodes
-      oldNodesMapping[from_node].erase(to_node);
 
-      if (from_node != to_node) {
-        int i =grid->getNodesNear(from_node).size();
-        int j =mobilityTopology->getNodeMods().size();
-        accelerationQuotient->collect(i/(double)j);
+    if (grid) {
+      // Only update near nodes
+      std::unordered_set<MobilityNode*> nearNodes = grid->getNodesNear(from_node);
+      for (MobilityNode *to_node : nearNodes) {
+        // Calculate set difference of oldNodes\nearNodes
+        oldNodesMapping[from_node].erase(to_node);
 
-        updateConnection(from_node, to_node);
-        updateConnection(to_node, from_node);
+        if (from_node != to_node) {
+          int i =grid->getNodesNear(from_node).size();
+          int j =mobilityTopology->getNodeMods().size();
+          accelerationQuotient->collect(i/(double)j);
+
+          updateConnection(from_node, to_node);
+          updateConnection(to_node, from_node);
+        }
+      }
+    } else {
+      // Update all nodes
+      for (cModule *to_node_wrapper : mobilityTopology->getNodeMods()) {
+        auto *to_node =
+          check_and_cast<MobilityNode *>(to_node_wrapper->getSubmodule("node"));
+
+        if (from_node != to_node) {
+          updateConnection(from_node, to_node);
+        }
       }
     }
 
-    // Update removed nodes
-    for (MobilityNode* old_node : oldNodesMapping[from_node]) {
-      if (from_node != old_node) {
-        updateConnection(from_node, old_node);
-        updateConnection(old_node, from_node);
+    if (grid) {
+      // Update removed nodes
+      for (MobilityNode* old_node : oldNodesMapping[from_node]) {
+        if (from_node != old_node) {
+          updateConnection(from_node, old_node);
+          updateConnection(old_node, from_node);
+        }
       }
     }
   }
