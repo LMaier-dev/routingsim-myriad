@@ -461,6 +461,7 @@ bool R2Kademlia::doProbeSelf(short timerId)
 }
 
 
+// this is for testing/evaluation only and not required by R²/Kad
 bool R2Kademlia::doReachabilityTest(short timerId)
 {
 	ASSERT(timerId >= 0 and timerId < fixedTimerIdBase);

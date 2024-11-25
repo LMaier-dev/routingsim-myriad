@@ -270,6 +270,7 @@ private:
 	uint succeededRediscovery = 0;
 	uint droppedRediscovery = 0;
 	uint forwardedRediscovery = 0;
+	uint retriesRediscovery = 0;
 	uint inconsistentPathHit = 0;
 	uint sentRouteUpdates = 0;
 	uint receivedRouteUpdates = 0;

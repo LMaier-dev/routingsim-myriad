@@ -18,8 +18,6 @@
 #include "KIRA.h"
 #include "KadObserver.h"
 #include "FwdTable.h"
-#include "simtime.h"
-
 
 
 namespace routingsim {
@@ -832,6 +830,8 @@ void R2Kademlia::sendPacket(KadPacket_p packet, simtime_t delay) {
 	auto packetsize(packet->getByteLength());
 	auto nodePkt = std::make_unique<NodePkt>(packet->getName());
         nodePkt->setType(KAD_CTRL_PACKET_TYPE);
+        if (packet->isTracked()) // test packets for statistics will not be counted for link usage
+		nodePkt->setAttributes(nodePkt->getAttributes() | NODEPKT_ATTR_DO_NOT_COUNT_ON_LINK);
 	nodePkt->setAttributes(nodePkt->getAttributes() | NODEPKT_ATTR_CONTROL_PLANE_PROCESSING_DELAY);
 	if (packet->getType() == KAD_FindNodeReq) {
 		const KadFindNodeReq* tmp_packet= check_and_cast<KadFindNodeReq*>(packet.get());
@@ -1051,6 +1051,7 @@ void R2Kademlia::sendFindNodeVia(const OverlayKey& destkey, KadContact_p viacont
 }
 
 
+// handle incoming FindNodeReq
 void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 	const OverlayKey& query = packet->getDstNodeID(); // get the destination ID
 	bool is_rediscovery= packet->getRediscovery();
@@ -1218,7 +1219,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 
         fillRTableRsp(*answer, contacts);
 	countReceived(*packet);
-	if (is_rediscovery)
+	if (is_rediscovery) // rediscovery request successfully arrived at the destination
 		succeededRediscovery++;
 
 	EV_TRACE << "KadFindNodeReq query for " << query.shortStr() << " answering with list size " << contacts.size() << " Tracked: " << (answer->isTracked() ? 'T' : 'F') << endl;
@@ -1235,7 +1236,6 @@ bool R2Kademlia::handleFindNodeResponse(KadPacket_p answer_, RPCState& rpcState)
 		ASSERT(answer->getContactArraySize() == answer->getPathArraySize());
 		EV_TRACE << "received FindNodeRsp for " << findnodereq->getDstNodeID().shortStr();
 		EV_TRACE << " from " << answer->getSource().shortStr() << " with " << answer->getContactArraySize() << " contacts" << endl;
-
 		readRTableRsp(*answer);
 	}
 
@@ -1251,12 +1251,14 @@ bool R2Kademlia::handleFindNodeResponse(KadPacket_p answer_, RPCState& rpcState)
 				// fanout set to one, because each failed rediscovery request
 				// should only trigger a single new retry
 				//ASSERT(contactp->getRDS().rediscoverQtype != RediscoveryState::rediscoverQ_type::undefined);
-				simtime_t rediscoveryWaitTime((contactp->getRDS().rediscoverQtype == RediscoveryState::rediscoverQ_type::urgent) ? urgentRediscoveryWaitTime :
-							      (contactp->getRDS().rediscoverQtype == RediscoveryState::rediscoverQ_type::regular) ? regularRediscoveryWaitTime : slowRediscoveryWaitTime);
+                                simtime_t rediscoveryWaitTime(
+                                    (contactp->getRDS().rediscoverQtype == RediscoveryState::rediscoverQ_type::physicalneighbors) ? PNRediscoveryWaitTime :
+				    (contactp->getRDS().rediscoverQtype == RediscoveryState::rediscoverQ_type::urgent) ? urgentRediscoveryWaitTime :
+				    (contactp->getRDS().rediscoverQtype == RediscoveryState::rediscoverQ_type::regular) ? regularRediscoveryWaitTime : slowRediscoveryWaitTime);
 
 				addOneShotTimer(SimTime(RediscoveryNextTryWaitTime,SIMTIME_MS), std::bind(&R2Kademlia::sendRediscovery, this, contactp->getKey(), 1, rediscoveryWaitTime));
 				//sendRediscovery(contactp->getKey(), 1, rediscoverQ, rediscoveryWaitTime);
-			}
+                        }
 		}
 	}
 	return true;
@@ -1351,7 +1353,6 @@ void R2Kademlia::sampleStatistics (Statistics &stats) {
 		stats.value("CPoverloadDiscard", getBoundProtocolPacketQueue(KAD_CTRL_PACKET_TYPE)->getOverloadDiscardedPackets());
                 stats.value("CPmaxSojournTime", getBoundProtocolPacketQueue(KAD_CTRL_PACKET_TYPE)->getMaxSojournTime().dbl());
 	}
-	stats.value("notifyQueueMaxLength", NotifyQueue.getMaxLength());
     stats.value("floodPacketReplications", floodPacketReplications);
 }
 
@@ -1378,6 +1379,7 @@ void R2Kademlia::recordScalars() {
 	recordScalar("rediscoverySuccess", succeededRediscovery);
 	recordScalar("rediscoveryFailed", droppedRediscovery);
 	recordScalar("rediscoveryForwarded", forwardedRediscovery);
+	recordScalar("rediscoveryRetries", retriesRediscovery);
 	recordScalar("routingTableContacts", routingTable.getNumContacts());
 	recordScalar("routingTableBuckets", routingTable.getNumBuckets());
 	recordScalar("routingTablePathLength", routingTable.getAveragePathLength());
