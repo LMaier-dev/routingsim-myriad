@@ -85,6 +85,9 @@ private:
 	cOutVector *activeNodesCount;
 	cOutVector *activeEdgesCount;
 	cOutVector *partitionCount;
+
+	time_t startTime;
+	time_t stopTime;
 };
 
 /// Returns the network Manager singleton

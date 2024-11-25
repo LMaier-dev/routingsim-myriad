@@ -162,6 +162,8 @@ void NetworkManager::initialize() {
 	activeEdgesCount = new cOutVector("activeEdgesCount");
 	partitionCount = new cOutVector("partitionCount");
 	addStatisticSample(this);
+
+	startTime = time(NULL);
 }
 
 
@@ -222,6 +224,13 @@ void NetworkManager::handleMessage(cMessage *msg) {
 }
 
 void NetworkManager::finish() {
+	stopTime = time(NULL);
+
+	recordScalar("simStartTime", startTime, "s");
+	recordScalar("simStopTime", stopTime, "s");
+	recordScalar("simDuration", stopTime - startTime, "s");
+
+	recordScalar("simSpeed", simTime().dbl() / (stopTime - startTime), "simsec/sec");
 }
 
 void NetworkManager::sampleStatistics(Statistics &stats) {
