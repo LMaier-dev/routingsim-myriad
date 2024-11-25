@@ -844,9 +844,12 @@ void R2Kademlia::sendPacket(KadPacket_p packet, simtime_t delay) {
 		}
 	}
 	// EV_TRACE << "sendPacket(): " << packet->getName() << ", " << (int) packet->getType() << endl;
-	sentPackets++;
-	sentVolume+= packetsize;
 
+        // reachability test packets should not be counted
+	if (not packet->isTracked()) {
+		sentPackets++;
+		sentVolume+= packetsize;
+	}
 	forwardPacket(std::move(packet), std::move(nodePkt), delay);
 }
 
@@ -1575,9 +1578,11 @@ void R2Kademlia::readRTableRsp(const KadRTableRsp& packet) {
 
 void R2Kademlia::countReceived(KadPacket& packet) {
 	//EV_TRACE << "countReceived: tracked=" << packet.isTracked() << endl;
-	receivedPackets++;
-	receivedVolume+= packet.getByteLength();
-
+        // reachability test packets should not be counted
+        if (not packet.isTracked()) {
+		receivedPackets++;
+		receivedVolume+= packet.getByteLength();
+	}
 	// registerPacketDelivered will also count first packet stretch
 	getKadObserver().registerPacketDelivered(packet);
 	ASSERT(packet.getControlInfo() != nullptr);
