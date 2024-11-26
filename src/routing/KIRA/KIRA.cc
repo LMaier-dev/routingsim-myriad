@@ -303,8 +303,8 @@ void R2Kademlia::nodeDisconnect(nodeid_t nid) {
 }
 
 
-// called on reception of a NodePkt for this protocol, i.e., an R2/Kad packet
-// START HERE: this is the main entry point into R2/Kad protocol logic
+/// called on reception of a NodePkt for this protocol, i.e., an R2/Kad packet
+/// START HERE: this is the main entry point into R2/Kad protocol logic
 void R2Kademlia::onMessage( NodePkt_p pkt ) {
 
 	ASSERT(pkt->getType() == KAD_CTRL_PACKET_TYPE || pkt->getType() == KAD_DATA_PACKET_TYPE);
@@ -407,11 +407,11 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 
 		packet->setControlInfo(pkt.release());
 
-		// learn route from packet
+                // learn route from packet
+                // (unless it is a reachability test packet that should not be used for improving information)
 		//TODO optimization use isPathInteresting
 
-
-		if (packet->getType() != KAD_ULNDiscRsp) {
+		if (packet->getType() != KAD_ULNDiscRsp and not packet->isTracked()) {
 			// for packets from physical neighbors: check need for resynchronization:
 			// in case the packet indicates a newer state seq no, resynch with neighbor
 			if (neighborTable.isNeighbor(packet->getSource()))
@@ -542,7 +542,7 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt, simtime_t 
 
 	if (nid != undefined_node) {
 
-		if (not packetorigin) {
+		if (not (packetorigin or packet->isTracked())) {
 			forwardedPackets++;
 			//EV_TRACE << "forwardPacket(): Node" << node().getNodeId() << " " << packet->getName() << " nonce=" << packet->getNonce() << " progress:" << packet->getProgress() << " route:" << packet->getSrcPath() << " delay:" << delay << endl;
 			forwardedVolume+= packet->getByteLength();
@@ -635,7 +635,7 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt, simtime_t 
 					packet->addNotViaLink({nextHop,myOverlayKey}, 0);
 					EV_TRACE << "forwardPacket(): forwarding to next hop (" << nid << ")" << endl;
 
-					if (not packetorigin) {
+					if (not (packetorigin or packet->isTracked())) {
 						forwardedPackets++;
 						//EV_TRACE << "forwardPacket(): Node" << node().getNodeId() << " " << packet->getName() << " nonce=" << packet->getNonce() << " progress:" << packet->getProgress() << " route:" << packet->getSrcPath() << endl;
 						forwardedVolume+= packet->getByteLength();
@@ -745,7 +745,7 @@ void R2Kademlia::reroutePacket(const OverlayKey& finaldest, KadPacket_p packet, 
 			if (nid != undefined_node) {
 				EV_TRACE << "reroutePacket(): " << packet->getName() << " dest " << packet->getTarget().shortStr()
 					 << " next hop: " << nextHop.shortStr() << " (" << nid << ')' << endl;
-				if (not packetorigin) {
+				if (not (packetorigin or packet->isTracked())) {
 					forwardedPackets++;
 					//EV_TRACE << "forwardPacket(): Node" << node().getNodeId() << " " << packet->getName() << " nonce=" << packet->getNonce() << " progress:" << packet->getProgress() << " route:" << packet->getSrcPath() << endl;
 					forwardedVolume+= packet->getByteLength();
