@@ -25,8 +25,10 @@ MobilityDynamics::~MobilityDynamics() {
 }
 
 void MobilityDynamics::finish() {
-  // Record Acceleration Statistic
-  accelerationQuotient->record();
+  if (accelerationQuotient) {
+    // Record Acceleration Statistic
+    accelerationQuotient->record();
+  }
 }
 
 void

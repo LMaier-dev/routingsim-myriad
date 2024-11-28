@@ -30,7 +30,7 @@ private:
   double updateInterval = 0.1;
 
   // ProximityGrid
-  RegularGrid* grid;
+  RegularGrid* grid= nullptr;
 
   // updates the position and connection between two specific MobilityNodes
   void updateConnection(MobilityNode *fromNode, MobilityNode *toNode) const;
