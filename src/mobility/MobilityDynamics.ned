@@ -9,6 +9,7 @@ simple MobilityDynamics {
         double borderY @unit(m) = default(600m);
         int gridDepth = default(1);
         bool useGrid;
+        bool useNearNodesCache;
 
     gates:
         output toManager;

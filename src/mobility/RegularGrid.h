@@ -69,9 +69,10 @@ class RegularGrid {
 
 public:
 
-    RegularGrid(double width, double height, int depth) {
+    RegularGrid(double width, double height, int depth, bool useCache = false) {
         this->width = width;
         this->height = height;
+        this->useCache = useCache;
         max_range = 0;
         next_update = -1; // Update on first call
         updates_to_do = 0;
@@ -94,6 +95,9 @@ private:
 
     // Maximum antenna range
     double max_range;
+
+    // Wether or not to cache near nodes until some node switches cells
+    bool useCache;
 
     // Grid cell spanning the whole grid (contains up to `depth` levels of children cells)
     GridCell* root_cell;

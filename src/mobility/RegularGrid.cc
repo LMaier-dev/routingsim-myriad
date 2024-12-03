@@ -74,7 +74,7 @@ double RegularGrid::getNextCellChange(MobilityNode* node, GridCell* nodeCell) {
 
 std::unordered_set<MobilityNode*> RegularGrid::getNodesNear(MobilityNode* node) {
     EV_DEBUG << "Return Nodes near " << node->getNodeId() << endl;
-    if (near_nodes_cache.contains(node)) {
+    if (useCache and near_nodes_cache.contains(node)) {
         return near_nodes_cache[node];
     }
 
