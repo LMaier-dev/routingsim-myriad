@@ -69,10 +69,15 @@ class RegularGrid {
 
 public:
 
-    RegularGrid(double width, double height, int depth, bool useCache = false) {
+    RegularGrid(double width,
+                double height,
+                int depth,
+                bool useCache = false,
+                bool sparseUpdates = false) {
         this->width = width;
         this->height = height;
         this->useCache = useCache;
+        this->sparseUpdates = sparseUpdates;
         max_range = 0;
         next_update = -1; // Update on first call
         updates_to_do = 0;
@@ -98,6 +103,8 @@ private:
 
     // Wether or not to cache near nodes until some node switches cells
     bool useCache;
+    // Wether or not to shortcut the grid cell node position update
+    bool sparseUpdates;
 
     // Grid cell spanning the whole grid (contains up to `depth` levels of children cells)
     GridCell* root_cell;

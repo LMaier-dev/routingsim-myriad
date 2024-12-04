@@ -10,6 +10,7 @@ simple MobilityDynamics {
         int gridDepth = default(1);
         bool useGrid;
         bool useNearNodesCache;
+        bool useSparseGridCellUpdates;
 
     gates:
         output toManager;

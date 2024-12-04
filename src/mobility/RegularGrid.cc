@@ -16,7 +16,8 @@ void RegularGrid::insert(MobilityNode* node) {
 }
 
 void RegularGrid::update(MobilityNode* node, Coord2D oldPosition, double currentTime) {
-    if (currentTime < next_update && updates_to_do == 0)
+    // FIXME: ggf. hier problem das nicht immer richtig geupdated wird?
+    if (sparseUpdates and currentTime < next_update && updates_to_do == 0)
         return;
 
     GridCell* oldCell = root_cell->findCell(oldPosition);
@@ -74,6 +75,7 @@ double RegularGrid::getNextCellChange(MobilityNode* node, GridCell* nodeCell) {
 
 std::unordered_set<MobilityNode*> RegularGrid::getNodesNear(MobilityNode* node) {
     EV_DEBUG << "Return Nodes near " << node->getNodeId() << endl;
+    // FIXME: ggf. hier Fehler durch caching?
     if (useCache and near_nodes_cache.contains(node)) {
         return near_nodes_cache[node];
     }

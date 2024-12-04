@@ -44,7 +44,13 @@ MobilityDynamics::initialize(int stage) {
     addStatisticSample(this);
 
     if (par("useGrid").boolValue()) {
-      grid = new RegularGrid(par("borderX"), par("borderY"), par("gridDepth"), par("useNearNodesCache"));
+      grid = new RegularGrid(
+        par("borderX"),
+        par("borderY"),
+        par("gridDepth"),
+        par("useNearNodesCache"),
+        par("useSparseGridCellUpdates")
+      );
       mobilityTopology->initializeProximityGrid(grid);
       accelerationQuotient = new cHistogram("accelerationQuotient");
       take(accelerationQuotient);
