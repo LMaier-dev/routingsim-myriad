@@ -117,6 +117,12 @@ std::unordered_set<MobilityNode*> RegularGrid::getNodesNear(MobilityNode* node) 
         near_nodes_cache[gridNode] = near_nodes;
     }
 
+    EV_DEBUG << "Near nodes of " << node->getNodeId() << ": ";
+    for (MobilityNode* n : near_nodes) {
+        EV_DEBUG << n->getNodeId() << ", ";
+    }
+    EV_DEBUG << endl;
+
     return near_nodes;
 }
 

@@ -122,15 +122,23 @@ void MobilityDynamics::updateMobility() {
       }
     }
 
+  }
+
+  for (cModule *node_wrapper : mobilityTopology->getNodeMods()) {
+    auto *from_node =
+      check_and_cast<MobilityNode *>(node_wrapper->getSubmodule("node"));
     if (grid) {
       // Update removed nodes
+      EV_DEBUG << "old near nodes of: " << from_node->getNodeId();
       for (MobilityNode* old_node : oldNodesMapping[from_node]) {
+        EV_DEBUG << old_node->getNodeId() << ", ";
         if (from_node != old_node) {
           updateConnection(from_node, old_node);
           updateConnection(old_node, from_node);
         }
       }
-    }
+      EV_DEBUG << endl;
+   }
   }
 }
 
