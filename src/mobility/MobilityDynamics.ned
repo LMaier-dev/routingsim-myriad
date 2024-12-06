@@ -8,9 +8,9 @@ simple MobilityDynamics {
         double borderX @unit(m) = default(1000m);
         double borderY @unit(m) = default(600m);
         int gridDepth = default(1);
-        bool useGrid;
-        bool useNearNodesCache;
-        bool useSparseGridCellUpdates;
+        bool useGrid = default(false);
+        bool useNearNodesCache = default(true);
+        bool useSparseGridCellUpdates = default(false);
 
     gates:
         output toManager;
