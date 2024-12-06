@@ -96,7 +96,8 @@ std::unordered_set<MobilityNode*> RegularGrid::getNodesNear(MobilityNode* node) 
     GridCell* south_east_cell = root_cell->findCell(south_east_bound);
 
     // Iterate through all leaf cells in node_range
-    std::unordered_set<MobilityNode*> near_nodes = std::unordered_set<MobilityNode*>();
+    // ggf. mit linked list in nodes arbeiten, damit zusammenführen eventluell schneller geht
+    std::unordered_set<MobilityNode*> near_nodes{};
     GridCell* current_cell = north_west_cell;
     do {
         GridCell* row_start = current_cell;

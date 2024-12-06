@@ -70,7 +70,7 @@ MobilityDynamics::handleMessage(cMessage *msg) {
 
 void MobilityDynamics::updateMobility() {
   // Map Node to set of oldNodes (nodes that are in range before the position update)
-  std::map<MobilityNode*, std::unordered_set<MobilityNode*>> oldNodesMapping = std::map<MobilityNode*, std::unordered_set<MobilityNode*>>();
+  std::map<MobilityNode*, std::unordered_set<MobilityNode*>> oldNodesMapping{};
   if (grid) {
     for (cModule *node_wrapper : mobilityTopology->getNodeMods()) {
       auto *node =
@@ -99,10 +99,10 @@ void MobilityDynamics::updateMobility() {
       std::unordered_set<MobilityNode*> nearNodes = grid->getNodesNear(from_node);
       for (MobilityNode *to_node : nearNodes) {
         // Calculate set difference of oldNodes\nearNodes
-        oldNodesMapping[from_node].erase(to_node);
+        //oldNodesMapping[from_node].erase(to_node);
 
         if (from_node != to_node) {
-          int i =grid->getNodesNear(from_node).size();
+          int i =nearNodes.size();
           int j =mobilityTopology->getNodeMods().size();
           accelerationQuotient->collect(i/(double)j);
 
