@@ -118,6 +118,7 @@ void MobilityDynamics::updateMobility() {
 
         if (from_node != to_node) {
           updateConnection(from_node, to_node);
+          updateConnection(to_node, from_node);
         }
       }
     }
