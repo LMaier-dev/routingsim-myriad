@@ -12,7 +12,7 @@ namespace routingsim {
 NodePkt_p R2Kademlia::makeHelloPacket()
 {
 	KadHello_p hello = std::make_unique<KadHello>();
-	hello->setName("ULNHello");
+	hello->setName(PDUNames.at(KAD_ULNHello));
 	hello->setSource(myOverlayKey);
 	hello->setHopLimit(hopLimit);
 	hello->setSourceId(node().getNodeId());
@@ -94,7 +94,7 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 		uint32_t delta((uint32_t) (otherModID-ownModID));
 
 		if ( (delta < 0x80000000UL and delta != 0 ) or
-		     ((delta == 0 or delta == 0x80000000UL) and myOverlayKey < packet->getSourceId())
+		     ((delta == 0 or delta == 0x80000000UL) and myOverlayKey < packet->getSource())
 			) {
 			// schedule ULNDiscReq
 			schedulePNDiscReq({myOverlayKey, packet->getSource(), {}, stateseqno_t::invalidSeqNo});
@@ -110,7 +110,7 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 simtime_t R2Kademlia::sendGetPhysicalNeighbors(const KadContact& contact, RequestQueueElementActionType action)
 {
 	EV_TRACE << "sending query route request (PN" << ((action & RequestQueueElementActions::get_OverlayNeighborsSource) ? "+ON)" : ")") << " to " << contact << endl;
-	auto req = makePacket<KadQueryRouteReq>(contact, "KadQueryRouteReq");
+	auto req = makePacket<KadQueryRouteReq>(contact, "QueryRouteReq");
 	req->setNeighborhood(1); // get only physical neighbors (1 hop away)
 	req->setContactsOnly(false);
 	req->setOverlayNeighbors(false);
@@ -162,7 +162,7 @@ simtime_t R2Kademlia::sendGetPhysicalNeighbors(const KadContact& contact, Reques
 simtime_t R2Kademlia::sendGetOverlayNeighbors(const KadContact& contact, RequestQueueElementActionType action)
 {
 	EV_TRACE << "sending query route request (ON) to " << contact << endl;
-	auto req = makePacket<KadQueryRouteReq>(contact, "KadQueryRouteReq");
+	auto req = makePacket<KadQueryRouteReq>(contact, "QueryRouteReq");
 	req->setNeighborhood(0); // no physical neighbors
 	req->setOverlayNeighborsSource( (action & RequestQueueElementActions::get_OverlayNeighborsSource) != 0 ); // get known overlay neighbors for my ID
 	req->setContactsOnly(false); // get also the routes
@@ -205,7 +205,7 @@ simtime_t R2Kademlia::sendDiscoveryReq(const KadContact& contact, RequestQueueEl
 
 	// need to brute force the path as the contact may be known via a detour before
 	KadContact pncontact(myOverlayKey, contact.getKey(),kad_path());
-	auto req = makePacket<KadULNDiscReq>(&pncontact, "KadULNDiscReq");
+	auto req = makePacket<KadULNDiscReq>(&pncontact);
 	req->setSourceId(node().getNodeId());
 	req->setNeighborhood(1); // get only physical neighbors (1 hop away)
 	req->setContactsOnly(false);
@@ -339,7 +339,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadULNDiscReq> packet) {
 	// TODO currently only getting physical neighbors is implemented
 	ASSERT(packet->getNeighborhood() == 1);
 	ASSERT(not packet->getContactsOnly());
-	auto response = makeAnswer<KadULNDiscRsp>(*packet, "ULNDiscRsp");
+	auto response = makeAnswer<KadULNDiscRsp>(*packet);
 	auto neighbors = neighborTable.getTable();
 
 	response->setContactArraySize(neighbors.size());
@@ -388,7 +388,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadQueryRouteReq> packet)
 
 	//  packet->getContactsOnly() not implemented yet
 	ASSERT(not packet->getContactsOnly());
-	auto response = makeAnswer<KadQueryRouteRsp>(*packet, "QueryRouteRsp");
+	auto response = makeAnswer<KadQueryRouteRsp>(*packet);
 
 	// need to check for the number of overlay neighbors that need to be returned
 	KadContactList ovlyneighbors;

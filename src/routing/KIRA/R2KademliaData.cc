@@ -588,7 +588,7 @@ void R2Kademlia::notifySender(uint8_t errorType, KadDataPacket_p origpacket, con
 		packet->setErrorType(errorType);
 		packet->setFailedNextHopNodeID(failedNextHopNodeID);
 		packet->setOrigDstNodeID(origpacket->getDstNodeID());
-		packet->setName("KadErrorInd");
+		packet->setName(PDUNames.at(KAD_Error));
 		packet->setDstNodeID(origpacket->getPathSrcNodeID());
 		packet->setSource(myOverlayKey);
 		packet->setHopLimit(hopLimit);

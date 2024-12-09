@@ -16,18 +16,14 @@
 #ifndef __ROUTINGSIM_KIRA_H_
 #define __ROUTINGSIM_KIRA_H_
 
-#include <string>
 #ifndef NDEBUG
 #define _DEBUG_ONLY(X) X
 #else
 #define _DEBUG_ONLY(X)
 #endif
 
-#include <cstdint>
 #include <omnetpp.h>
 #include <optional>
-#include <unordered_map>
-#include <queue>
 
 #include "BaseTypes.h"
 #include "Protocol.h"
@@ -79,6 +75,7 @@ enum linkFailureNotificationType : uint8_t {
 	lfn_flood_and_directPID= 2, // flood LFNs to the direct neighbors and send to first segment sources directly via PID
 	lfn_full= 3 // flood LFNs to the direct neighbors and notify all first segments source, even via overlay
 };
+
 
 // OverlayKey length 112 bit (16 bit prefix will be prepended to make it an IPv6 address)
 constexpr uint8_t OverlayKeyLength= 112;
@@ -168,6 +165,7 @@ private:
 	simtime_t minHelloInterval;
 	simtime_t maxHelloInterval;
 	bool detailedRoutingTableStats;
+        bool detailedKIRAMessageStats;
 	linkFailureNotificationType linkFailureNotifications;
 	// send reachability test packets only to nodes with failed links
 	bool failureFocussedProbing;
@@ -279,11 +277,23 @@ private:
 	uint receivedPathSetup = 0;
 	uint forwardedPathSetup = 0;
 	uint forwardedPathTeardown = 0;
-	uint receivedPathTeardown = 0;
+        uint receivedPathTeardown = 0;
+
+        struct msg_stats {
+		unsigned long sentCount = 0UL;
+		unsigned long receivedCount = 0UL;
+		unsigned long forwardedCount = 0UL;
+		unsigned long droppedCount = 0UL;
+		unsigned long sentVolume = 0UL;
+		unsigned long receivedVolume = 0UL;
+		unsigned long forwardedVolume = 0UL;
+        };
+	// per message type statistics
+        std::unordered_map<uint8_t, msg_stats> msgStats;
 
 	uint floodPacketsReceived = 0;
-    uint floodPacketReplications = 0;
-    uint floodPacketMaxReplications = 0;
+	uint floodPacketReplications = 0;
+	uint floodPacketMaxReplications = 0;
 	//@}
 
 	unsigned long laterpaths = 0;
@@ -358,6 +368,10 @@ private:
 	void countReceived(KadPacket& packet);
 	/// does statistics on dropped packet
 	void countDropped(KadPacket& packet, const OverlayKey& target, uint8_t reason);
+	/// count sent packets (use times=p >1 for broadcast to p neighbors)
+        void countSent(KadPacket& packet, unsigned int times= 1);
+	/// count forwarded
+        void countFwd(KadPacket& packet);
 	/// does statistics on received data packet
 	void countReceived(KadDataPacket& packet);
 	/// does statistics on received flood packet
@@ -769,7 +783,10 @@ R2Kademlia::addIncomingIFtoPIDEntry(const OverlayKey& incomingULN, PathID incomi
 template<typename T>
 std::unique_ptr<T> R2Kademlia::makePacket(const KadContact* contact, const char *name, bool append_route) {
 	auto packet = std::make_unique<T>();
-	packet->setName(name);
+        if (name)
+		packet->setName(name);
+        else
+		packet->setName(PDUNames.at(packet->getType()));
 	// TODO optimization: do this in one pass
 	packet->setSource(myOverlayKey);
 	packet->setHopLimit(hopLimit);
@@ -818,7 +835,7 @@ std::unique_ptr<T> R2Kademlia::makeAnswer(const KadPacket& original, const char*
         if (packetName)
 		answer->setName(packetName);
 	else
-		answer->setName((std::string(original.getName()+std::string("Answer"))).c_str());
+		answer->setName(PDUNames.at(answer->getType()));
 	answer->setSimplifiedReturnPathFrom(original);
 	ASSERT(answer->getSource() == myOverlayKey);
 	answer->setNonce(original.getNonce());
@@ -882,5 +899,8 @@ template<typename T> bool R2Kademlia::handleIfFitting(KadDataPacket_p& packet) {
 }
 
 } //namespace
-  //
+
+
+
+
 #endif // __ROUTINGSIM_R2Kademlia_H_

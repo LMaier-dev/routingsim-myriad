@@ -253,9 +253,8 @@ bool R2Kademlia::doSendHello(short timerId)
 	}
 
 	auto hellopkt(makeHelloPacket());
-	sentVolume+= neighborTable.size() * hellopkt->getByteLength();
+	countSent(*(static_cast<KadHello*>(hellopkt->getEncapsulatedPacket())), neighborTable.size());
 	sendToNeighbors(std::move(hellopkt));
-	sentPackets+= neighborTable.size();
         lastPNHelloStateSeqNo = getLSSeqNo();
 
 	return false;

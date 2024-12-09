@@ -18,6 +18,7 @@
 #include "KIRA.h"
 #include "KadObserver.h"
 #include "FwdTable.h"
+#include <utility>
 
 
 namespace routingsim {
@@ -109,6 +110,7 @@ void R2Kademlia::onInitialize() {
 	}
 	probeStrategy = (uint) par("probeStrategy").intValue();
 	detailedRoutingTableStats = par("detailedRoutingTableStats").boolValue();
+	detailedKIRAMessageStats = par("detailedKIRAMessageStats").boolValue();
 	PNRediscoveryWaitTime = (simtime_t) (par("PNRediscoveryWaitTime").doubleValue() * 0.001); // given in ms
 	urgentRediscoveryWaitTime = (simtime_t) (par("urgentRediscoveryWaitTime").doubleValue() * 0.001); // given in ms
 	regularRediscoveryWaitTime = (simtime_t) (par("regularRediscoveryWaitTime").doubleValue() * 0.001); // given in ms
@@ -212,10 +214,9 @@ void R2Kademlia::onConnect( nodeid_t nid ) {
 	// send a hello packet to new neighbor after some random delay (average minHelloInterval)
 	addOneShotTimer(uniform(minHelloInterval/2,1.5*minHelloInterval), [this,nid](short int ignored)->bool {
 		auto packet(makeHelloPacket());
-		sentVolume+= packet->getByteLength();
+		countSent(*(static_cast<KadHello*>(packet->getEncapsulatedPacket())));
 		sendToNode(nid, std::move(packet));
-                sentPackets++;
-		return true;
+                return true;
 	} );
 	// additionally, reset PNHello timer if this fires too far away in the future
 	if (randomTimerDuration[PNHelloTimerId] > 3*minHelloInterval)
@@ -404,7 +405,6 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	}
 	else { // no hops left, packet is addressed to me
 
-
 		packet->setControlInfo(pkt.release());
 
                 // learn route from packet
@@ -543,9 +543,8 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt, simtime_t 
 	if (nid != undefined_node) {
 
 		if (not (packetorigin or packet->isTracked())) {
-			forwardedPackets++;
 			//EV_TRACE << "forwardPacket(): Node" << node().getNodeId() << " " << packet->getName() << " nonce=" << packet->getNonce() << " progress:" << packet->getProgress() << " route:" << packet->getSrcPath() << " delay:" << delay << endl;
-			forwardedVolume+= packet->getByteLength();
+			countFwd(*packet);
 		}
 
 		nodePkt->encapsulate(packet.release());
@@ -636,9 +635,8 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt, simtime_t 
 					EV_TRACE << "forwardPacket(): forwarding to next hop (" << nid << ")" << endl;
 
 					if (not (packetorigin or packet->isTracked())) {
-						forwardedPackets++;
 						//EV_TRACE << "forwardPacket(): Node" << node().getNodeId() << " " << packet->getName() << " nonce=" << packet->getNonce() << " progress:" << packet->getProgress() << " route:" << packet->getSrcPath() << endl;
-						forwardedVolume+= packet->getByteLength();
+						countFwd(*packet);
 					}
 
 					nodePkt->encapsulate(packet.release());
@@ -746,9 +744,8 @@ void R2Kademlia::reroutePacket(const OverlayKey& finaldest, KadPacket_p packet, 
 				EV_TRACE << "reroutePacket(): " << packet->getName() << " dest " << packet->getTarget().shortStr()
 					 << " next hop: " << nextHop.shortStr() << " (" << nid << ')' << endl;
 				if (not (packetorigin or packet->isTracked())) {
-					forwardedPackets++;
 					//EV_TRACE << "forwardPacket(): Node" << node().getNodeId() << " " << packet->getName() << " nonce=" << packet->getNonce() << " progress:" << packet->getProgress() << " route:" << packet->getSrcPath() << endl;
-					forwardedVolume+= packet->getByteLength();
+					countFwd(*packet);
 				}
 				nodePkt->encapsulate(packet.release());
 				sendToNode(nid, std::move(nodePkt), delay);
@@ -827,7 +824,6 @@ void R2Kademlia::sendPacket(KadPacket_p packet, simtime_t delay) {
 		EV_ERROR << "sendPacket: not sending packet destined to myself" << endl;
 		return;
 	}
-	auto packetsize(packet->getByteLength());
 	auto nodePkt = std::make_unique<NodePkt>(packet->getName());
         nodePkt->setType(KAD_CTRL_PACKET_TYPE);
         if (packet->isTracked()) // test packets for statistics will not be counted for link usage
@@ -847,8 +843,7 @@ void R2Kademlia::sendPacket(KadPacket_p packet, simtime_t delay) {
 
         // reachability test packets should not be counted
 	if (not packet->isTracked()) {
-		sentPackets++;
-		sentVolume+= packetsize;
+		countSent(*packet);
 	}
 	forwardPacket(std::move(packet), std::move(nodePkt), delay);
 }
@@ -1210,7 +1205,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 	// or we cannot get closer to the destination and report what we have
 
 	// answer request
-	auto answer = makeAnswer<KadFindNodeRsp>(*packet, "FindNodeRsp");
+	auto answer = makeAnswer<KadFindNodeRsp>(*packet);
 	if (packet->isTracked()) {
 		EV_TRACE << "packet was tracked, setTracked for answer" << endl;
 		answer->markTracked();
@@ -1314,8 +1309,18 @@ void R2Kademlia::sampleStatistics (Statistics &stats) {
 	stats.value("receivedPackets", receivedPackets);
 	stats.value("sentVolume", sentVolume);
 	stats.value("receivedVolume", receivedVolume);
-	stats.value("forwardedVolume", forwardedVolume);
-
+        stats.value("forwardedVolume", forwardedVolume);
+	if (detailedKIRAMessageStats) {
+		for (auto msgtype : msgStats) {
+			stats.value(msgStatsNames.getName(msgtype.first,msg_stats_subtype::msg_stat_sentCount), msgtype.second.sentCount);
+			stats.value(msgStatsNames.getName(msgtype.first,msg_stats_subtype::msg_stat_forwardedCount), msgtype.second.forwardedCount);
+			stats.value(msgStatsNames.getName(msgtype.first,msg_stats_subtype::msg_stat_receivedCount), msgtype.second.receivedCount);
+			stats.value(msgStatsNames.getName(msgtype.first,msg_stats_subtype::msg_stat_droppedCount), msgtype.second.droppedCount);
+			stats.value(msgStatsNames.getName(msgtype.first,msg_stats_subtype::msg_stat_sentVolume), msgtype.second.sentVolume);
+			stats.value(msgStatsNames.getName(msgtype.first,msg_stats_subtype::msg_stat_forwardedVolume), msgtype.second.forwardedVolume);
+			stats.value(msgStatsNames.getName(msgtype.first,msg_stats_subtype::msg_stat_receivedVolume), msgtype.second.receivedVolume);
+		}
+	}
 	if (sendDataPackets) {
 		stats.value("forwardedDataPackets", forwardedDataPackets);
 		stats.value("sentDataPackets", sentDataPackets);
@@ -1576,12 +1581,40 @@ void R2Kademlia::readRTableRsp(const KadRTableRsp& packet) {
 }
 
 
+// parameter times is used for counting broadcast packets like ULNHello
+void R2Kademlia::countSent(KadPacket &packet, unsigned int times) {
+	if (times == 1) {
+		msgStats[packet.getType()].sentCount++;
+		msgStats[packet.getType()].sentVolume += packet.getByteLength();
+		sentVolume += packet.getByteLength();
+		sentPackets++;
+        } else {
+		msgStats[packet.getType()].sentCount += times;
+		msgStats[packet.getType()].sentVolume += packet.getByteLength()*times;
+		sentVolume += packet.getByteLength()*times;
+		sentPackets += times;
+	}
+}
+
+
+void R2Kademlia::countFwd(KadPacket &packet) {
+        if (not packet.isTracked()) {
+		msgStats[packet.getType()].forwardedCount++;
+		msgStats[packet.getType()].forwardedVolume += packet.getByteLength();
+		forwardedVolume += packet.getByteLength();
+                forwardedPackets++;
+	}
+}
+
+
 void R2Kademlia::countReceived(KadPacket& packet) {
 	//EV_TRACE << "countReceived: tracked=" << packet.isTracked() << endl;
         // reachability test packets should not be counted
         if (not packet.isTracked()) {
+		msgStats[packet.getType()].receivedCount++;
+		msgStats[packet.getType()].receivedVolume += packet.getByteLength();
+		receivedVolume += packet.getByteLength();
 		receivedPackets++;
-		receivedVolume+= packet.getByteLength();
 	}
 	// registerPacketDelivered will also count first packet stretch
 	getKadObserver().registerPacketDelivered(packet);
@@ -1595,8 +1628,12 @@ void R2Kademlia::countReceived(KadPacket& packet) {
 
 void R2Kademlia::countDropped(KadPacket& packet, const OverlayKey& target, uint8_t reason) {
 	discardedPackets++; // note that this is different from droppedPackets in KadObserver
-	if (packet.isTracked())
-		EV_TRACE << "+DROPPED+ nonce:" << packet.getNonce() << " reason:" << (unsigned int) reason << endl;
+	if (packet.isTracked()) {
+          EV_TRACE << "+DROPPED+ nonce:" << packet.getNonce()
+                   << " reason:" << (unsigned int)reason << endl;
+        } else {
+		msgStats[packet.getType()].droppedCount++;
+	}
 
 	getKadObserver().registerPacketDropped(packet, myOverlayKey, target, reason);
 	nodeid_t nid = undefined_node;
@@ -1610,7 +1647,7 @@ void R2Kademlia::countDropped(KadPacket& packet, const OverlayKey& target, uint8
 
 
 void R2Kademlia::returnToSender(uint8_t errorType, KadPacket_p packet, const OverlayKey& failedNextHopNodeID) {
-	KadError_p answer = makeAnswer<KadError>(*packet, "Error");
+	KadError_p answer = makeAnswer<KadError>(*packet);
 	answer->setErrorType(errorType);
 
 	EV_TRACE << "returnToSender() - error: " << (unsigned int) errorType << " - return path:";

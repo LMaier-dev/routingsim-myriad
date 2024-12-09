@@ -105,7 +105,9 @@ simple R2Kademlia extends routingsim.foundation.Protocol
 		/// send flood packet on link failure
 		bool floodOnFailure = default(false);
 
-		// statistics foo
+		// statistics
 		/// if true records average path lengths and stretch in routing tables (can be costly)
 		bool detailedRoutingTableStats = default(true);
+		/// if true records per KIRA message type statistics over all nodes
+		bool detailedKIRAMessageStats = default(false);
 }

@@ -38,31 +38,34 @@ using link_t = std::pair<routingsim::OverlayKey,routingsim::OverlayKey>;
 // the following will be defined in namespace routingsim
 namespace routingsim;
 
+// in case you add new PDU types here, please also add them in KadPacket.cc PDUNames
 enum KadPDUType {
-	KAD_ULNHello = 		0x01;
-	KAD_ULNDiscReq = 	0x03;
-	KAD_ULNDiscRsp = 	0x04;
+	KAD_ULNHello   = 0;
+	KAD_ULNDiscReq = 1;
+	KAD_ULNDiscRsp = 2;
 
-	KAD_FindNodeReq = 	0x09;
-	KAD_FindNodeRsp = 	0x0a;
-	KAD_QueryRouteReq = 	0x0b;
-	KAD_QueryRouteRsp = 	0x0c;
-	KAD_UpdateRouteReq = 	0x0d;
+	KAD_FindNodeReq = 3;
+	KAD_FindNodeRsp = 4;
+	KAD_QueryRouteReq = 5;
+	KAD_QueryRouteRsp = 6;
+	KAD_UpdateRouteReq = 7;
 
-	KAD_Error =		0x71;
-	KAD_RevPathFlood =	0x73;
-	KAD_LinkFailureNotify =	0x75;
-	KAD_ProbeReq = 		0x81;
-	KAD_ProbeRsp = 		0x82;
+	KAD_Error = 8;
+	KAD_RevPathFlood = 9;
+	KAD_LinkFailureNotify = 10;
+	KAD_ProbeReq = 11;
+	KAD_ProbeRsp = 12;
 
-	KAD_PathSetupReq = 	0x83;
-	KAD_PathSetupRsp = 	0x84;
+	KAD_PathSetupReq = 13;
+	KAD_PathSetupRsp = 14;
 
-	KAD_PathTeardownReq = 	0x85;
+	KAD_PathTeardownReq = 15;
 
-	KAD_Data = 		0x10;
-	KAD_Flood = 	0x11;
-}
+	KAD_Data = 16;
+	KAD_Flood = 17;
+	// count is only a helper, but required
+	count = 18;
+};
 
 class OverlayKey extends cObject {
  @existingClass;

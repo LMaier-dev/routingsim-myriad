@@ -18,6 +18,7 @@
 #include "NetworkManager.h"
 
 #include <boost/lexical_cast.hpp>
+#include <boost/type_traits/integral_constant.hpp>
 #include <string>
 #include <omnetpp.h>
 #include <cmath>
@@ -66,16 +67,16 @@ public:
 	static constexpr unsigned short qvaluenumber = 10;
 	static const double qvalues[qvaluenumber];
 
-	int n;
-	double avg; // note: this contains the sum of all samples until record is called
-	double min; // min average over sample set
-	double max; // max average over sample set
-	double lastvalue;
-	double lastavg;
-	double lastmin;
-	double lastmax;
+	int n= 0;
+	double avg= 0.0; // note: this contains the sum of all samples until record is called
+	double min= INFINITY; // min average over sample set
+	double max= -INFINITY; // max average over sample set
+	double lastvalue= 0.0;
+	double lastavg= 0.0;
+	double lastmin= INFINITY;
+	double lastmax= -INFINITY;
 	simtime_t lastLog;
-	bool first;
+	bool first= true;
 	cOutVector* avgVec; // Average over sample set
 	cOutVector* avgVecDiffQuot; // Difference Quotient
 	cOutVector* minVec;
@@ -85,7 +86,7 @@ public:
 	cHistogram* histogramAbs; // histogram of actual values from sample set, collected during the last sampling interval
 
 	cOutVector* quantileVec[qvaluenumber]; // a vector of various quantiles (see qvalues)
-	int f;
+	int f= 0;
 
 	double eqTrigger;
 	string eqTriggerName;
@@ -94,26 +95,23 @@ public:
 public:
 	// in case the Value can also take negative values, please set the lower_bound accordingly, e.g., NAN
 	Value(const char* name, size_t size, double lower_bound= 0.0) :
-		n(0), avg(0), min(INFINITY), max(-INFINITY), lastavg(0), lastmin(0),
-		lastmax(0) {
+		n(0), avg(0), min(INFINITY), max(-INFINITY), lastavg(0), lastmin(INFINITY),
+		lastmax(-INFINITY) {
 		f=0;
-		avgVec = new cOutVector((string(name) + string("Avg")).c_str());
-		minVec = new cOutVector((string(name) + string("Min")).c_str());
-		maxVec = new cOutVector((string(name) + string("Max")).c_str());
-		avgVecDiffQuot = new cOutVector(
-				(string(name) + string("AvgDiffQuot")).c_str());
-		minVecDiffQuot = new cOutVector(
-				(string(name) + string("MinDiffQuot")).c_str());
-		maxVecDiffQuot = new cOutVector(
-				(string(name) + string("MaxDiffQuot")).c_str());
+		avgVec = new cOutVector((string(name) + "Avg").c_str());
+		minVec = new cOutVector((string(name) + "Min").c_str());
+		maxVec = new cOutVector((string(name) + "Max").c_str());
+		avgVecDiffQuot = new cOutVector((string(name) + "AvgDiffQuot").c_str());
+		minVecDiffQuot = new cOutVector((string(name) + "MinDiffQuot").c_str());
+		maxVecDiffQuot = new cOutVector((string(name) + "MaxDiffQuot").c_str());
 		histogramAbs = getDensityHistogram(name, "Density", size, lower_bound);
 
 		// initialize quantile vectors
 		for (unsigned int i= 0; i < qvaluenumber; i++)
 		{
-			quantileVec[i]= new cOutVector((string(name)+ string("Q") + std::to_string((int) (qvalues[i]*100.0))).c_str());
+			quantileVec[i]= new cOutVector((string(name)+ "Q" + std::to_string((int) (qvalues[i]*100.0))).c_str());
 		}
-		eqTriggerName = (string(name) + string("Trigger"));
+		eqTriggerName = (string(name) + "Trigger");
 		eqTrigger = INFINITY;
 		lastLog = simTime();
 		first = true;
@@ -222,7 +220,8 @@ public:
 
 	// this records the values and resets them for beginning a new sampling interval
 	void record(cSimpleModule* module) {
-		ASSERT(n != 0);
+		if (n == 0) // only useful in case there are haven been values added
+			return;
 		double value = avg / n; // value is now the average value
 		//EV_STATICCONTEXT;
 		//EV_TRACE << "Value::record(" << avgVec->getName() << "), n=" << n << " avg=" << avg << " value: " << value << endl;
@@ -398,7 +397,7 @@ void Statistics::handleMessage(cMessage *msg) {
 void Statistics::value(const char* name, double value, bool average, double lower_bound) {
 	ASSERT(not std::isnan(value));
 
-	if (values.count(name) == 0) // create a new object first
+	if (not values.contains(name)) // create a new object first
 		values.insert(std::make_pair(name, new Value(name, samples.size(), lower_bound)));
 	values[name]->add(value, average);
 }
@@ -419,7 +418,7 @@ void Statistics::registerMessage( cMessage* msg ) {
 }
 
 void Statistics::dropMessage( cMessage* msg, nodeid_t dstNode ) {
-	if (msgs.count(msg)==0) return;
+	if (not msgs.contains(msg)) return;
 
 	if (!msg->getContextPointer())
 	{
@@ -443,7 +442,7 @@ void Statistics::dropMessage( cMessage* msg, nodeid_t dstNode ) {
 const char* stretchStr="stretch";
 
 void Statistics::deliveredMessage( cMessage* msg, int hop_count ) {
-	if (msgs.count(msg) == 0) return;
+	if (not msgs.contains(msg)) return;
 	hopCount->collect(hop_count);
 	// the context pointer is set in registerMessage
 	if (!msg->getContextPointer())
@@ -491,12 +490,12 @@ inline Statistics *createStats( const char* name = STATS_MAIN ) {
 }
 
 Statistics& getStatistics( const char* name ) {
-	if (name != nullptr) {
-		if (statsMap.count(name)==0)
+	if (name) {
+		if (not statsMap.contains(name))
 			statsMap.insert(std::make_pair(name, createStats(name)));
 		return *statsMap[name];
 	}
-	if (name == nullptr && stats == nullptr) {
+	if (name == nullptr and stats == nullptr) {
 		stats = dynamic_cast<Statistics*>(
 			getSimulation()->findModuleByPath(STATS_MAIN));
 		if (stats == nullptr)

@@ -9,7 +9,7 @@ void R2Kademlia::scheduleOnDemandPathProbeReq(KeyRequestQueue& q, const KadConta
 	// we create a new ID by shifting the OverlayKey 8 bits to the left and using the action field for the lower 8 bit
 	// therefore, we get different entries for different actions
 	auto it= std::lower_bound(q.begin(), q.end(), tmpcontact,
-				  [&](const auto& lhs, const auto& rhs) -> bool { return ((lhs.first << 8) | lhs.second) < ((rhs.getKey() << 8) | action); });
+				  [&](const auto& lhs, const auto& rhs) -> bool { return ((lhs.first.toUInt() << 8) | lhs.second) < ((rhs.getKey().toUInt() << 8) | action); });
 	if (it != q.end() and *it == std::make_pair(tmpcontact.getKey(),action)) {
 		// entry exists already
 		return;
@@ -204,12 +204,12 @@ void R2Kademlia::sendPathProbeToContact(const KadContact& contact, RequestQueueE
 	std::unique_ptr<KadProbeReq> probereq(nullptr);
 	// if action says so and proposed path is present, we probe for this
 	if ( (action & probeProposedPath) and contact.proposedPathDefined()) {
-		probereq= makePacket<KadProbeReq>(contact, "KadProbeReq", false);
+		probereq= makePacket<KadProbeReq>(contact, "ProbeReq", false);
 		probereq->appendRoute(contact.getRawProposedPath(), contact.getKey());
 		EV_TRACE << " (Proposed Path): " << contact.getRawProposedPath();
 	}
 	else {
-		probereq= makePacket<KadProbeReq>(contact, "KadProbeReq");
+		probereq= makePacket<KadProbeReq>(contact, "ProbeReq");
 		EV_TRACE << " (Active Path): " << contact.getRawActivePath();
 	}
 

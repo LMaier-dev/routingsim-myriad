@@ -14,10 +14,36 @@
 // 
 
 #include "KadPacket.h"
-#include <cstddef>
+#include "routing/KIRA/KadPacket_m.h"
+#include <cstdint>
+#include <sys/types.h>
+#include <unordered_map>
 
 namespace routingsim {
 Register_Class(KadPacket);
+
+std::unordered_map<uint8_t, const char *const> PDUNames = {
+    {KAD_ULNHello, "ULNHello"},
+    {KAD_ULNDiscReq, "ULNDiscReq"},
+    {KAD_ULNDiscRsp, "ULNDiscRsp"},
+    {KAD_FindNodeReq, "FindNodeReq"},
+    {KAD_FindNodeRsp, "FindNodeRsp"},
+    {KAD_QueryRouteReq, "QueryRouteReq"},
+    {KAD_QueryRouteRsp, "QueryRouteRsp"},
+    {KAD_UpdateRouteReq, "UpdateRouteReq"},
+    {KAD_Error, "Error"},
+    {KAD_RevPathFlood, "RevPathFlood"},
+    {KAD_LinkFailureNotify, "LinkFailureNotify"},
+    {KAD_ProbeReq, "ProbeReq"},
+    {KAD_ProbeRsp, "ProbeRsp"},
+    {KAD_PathSetupReq, "KAD_PathSetupReq"},
+    {KAD_PathSetupRsp, "PathSetupRsp"},
+    {KAD_PathTeardownReq, "PathTeardownReq"},
+    {KAD_Data, "Data"},
+    {KAD_Flood, "Flood"},
+    {count,"NotAMsg-Count"}
+};
+
 
 void KadPacket::setSource(const OverlayKey & source) {
 	if (route_arraysize == 0)
