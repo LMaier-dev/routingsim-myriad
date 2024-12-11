@@ -33,9 +33,7 @@ NodePkt_p R2Kademlia::makeHelloPacket()
 // in case the link was temporarily down: rediscover neighbor
 void R2Kademlia::handlePacket(KadHello_p packet) {
 	EV << "received hello packet from " << packet->getSource().shortStr() << " SSeq#" << packet->getStateSeqNo() << endl;
-
-	receivedPackets++;
-	receivedVolume+= packet->getByteLength();
+	countReceived(*packet);
 
 	KadContact neighborcontact(myOverlayKey, packet->getSource(), kad_path());
 
@@ -273,8 +271,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadULNDiscReq> packet) {
 		 << " SSeq#" <<  packet->getStateSeqNo()
 		 << " w/ " << packet->getPhyNeighborArraySize() << " neighbors" << endl;
 
-	receivedPackets++;
-	receivedVolume+= packet->getByteLength();
+	countReceived(*packet);
 
 	// since this is a physical neighbor try to add it to our neighbortable
 	neighborTable.addNeighbor(packet->getSource(), packet->getSourceId());

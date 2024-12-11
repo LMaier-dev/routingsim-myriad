@@ -1210,9 +1210,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 		EV_TRACE << "packet was tracked, setTracked for answer" << endl;
 		answer->markTracked();
         }
-        else { // do not count received reachability tests
-          countReceived(*packet);
-	}
+	countReceived(*packet);
 
 	// add valid randomly chosen contacts from all other buckets to improve connectivity
         if (addGratuitousContacts)
@@ -1617,14 +1615,15 @@ void R2Kademlia::countReceived(KadPacket& packet) {
 		msgStats[packet.getType()].receivedVolume += packet.getByteLength();
 		receivedVolume += packet.getByteLength();
 		receivedPackets++;
+        }
+	else {
+		// registerPacketDelivered will also count first packet stretch
+		getKadObserver().registerPacketDelivered(packet);
+		ASSERT(packet.getControlInfo() != nullptr);
+		getStatistics().deliveredMessage(
+			check_and_cast<cMessage *>(packet.getControlInfo()),
+			packet.getProgress());
 	}
-	// registerPacketDelivered will also count first packet stretch
-	getKadObserver().registerPacketDelivered(packet);
-	ASSERT(packet.getControlInfo() != nullptr);
-        getStatistics().deliveredMessage(
-            check_and_cast<cMessage *>(packet.getControlInfo()),
-            packet.getProgress()
-        );
 }
 
 
