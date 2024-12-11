@@ -36,7 +36,7 @@ std::unordered_map<uint8_t, const char *const> PDUNames = {
     {KAD_LinkFailureNotify, "LinkFailureNotify"},
     {KAD_ProbeReq, "ProbeReq"},
     {KAD_ProbeRsp, "ProbeRsp"},
-    {KAD_PathSetupReq, "KAD_PathSetupReq"},
+    {KAD_PathSetupReq, "PathSetupReq"},
     {KAD_PathSetupRsp, "PathSetupRsp"},
     {KAD_PathTeardownReq, "PathTeardownReq"},
     {KAD_Data, "Data"},

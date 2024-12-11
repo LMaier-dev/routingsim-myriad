@@ -424,7 +424,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		}
 
 
-		// these types may forward packets, so they count themselves
+		// these types may forward packets via overlay, so they count themselves
 		if (handleIfFitting<KadFindNodeReq>(packet)) return;
 		if (handleIfFitting<KadUpdateRouteReq>(packet)) return;
 		if (handleIfFitting<KadLinkFailureNotify>(packet)) return;
@@ -1209,6 +1209,9 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 	if (packet->isTracked()) {
 		EV_TRACE << "packet was tracked, setTracked for answer" << endl;
 		answer->markTracked();
+        }
+        else { // do not count received reachability tests
+          countReceived(*packet);
 	}
 
 	// add valid randomly chosen contacts from all other buckets to improve connectivity
@@ -1216,7 +1219,6 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 	  routingTable.addRandomGratuitousContacts(contacts);
 
         fillRTableRsp(*answer, contacts);
-	countReceived(*packet);
 	if (is_rediscovery) // rediscovery request successfully arrived at the destination
 		succeededRediscovery++;
 
