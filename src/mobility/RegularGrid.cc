@@ -108,10 +108,10 @@ std::unordered_set<MobilityNode*> RegularGrid::getNodesNear(MobilityNode* node) 
             }
 
             current_cell = current_cell->getEastCell();
-        } while (current_cell != nullptr && current_cell->getSouthEastBound().x <= south_east_cell->getSouthEastBound().x);
+        } while (current_cell->getSouthEastBound().x < south_east_cell->getSouthEastBound().x);
 
         current_cell = row_start->getSouthCell();
-    } while (current_cell != nullptr && current_cell->getSouthEastBound().y >= south_east_cell->getSouthEastBound().y);
+    } while (current_cell->getSouthEastBound().y > south_east_cell->getSouthEastBound().y);
 
     // Cache near nodes
     for (MobilityNode* gridNode : node_cell->getNodes()) {
@@ -226,7 +226,7 @@ void GridCell::insert(MobilityNode* node) {
     GridCell* cell = findCell(pos);
     ASSERT(cell != nullptr); // Assert that a cell was found
 
-    EV_DEBUG << "Insert node " << pos.toString() << " into cell " << cell->north_west_coord.toString() << " " << cell->south_east_coord.toString() << endl;
+    EV_DEBUG << "Insert node " << pos.toString() << " into cell " << cell->printBounds() << endl;
 
     cell->nodes.emplace(node);
 }
