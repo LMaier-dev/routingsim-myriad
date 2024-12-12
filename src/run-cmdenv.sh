@@ -1,6 +1,6 @@
 #!/bin/bash
 # argument is the configuration name, e.g., LinkFailureRandom, you can also add the run number with -r
-opp_run -j4 ./RoutingSim ../simulations/KIRA/eval.ini -c $* -u Cmdenv --cmdenv-redirect-output=true
+nohup opp_runall -j4 ./RoutingSim ../simulations/KIRA/eval.ini -c $* -u Cmdenv --cmdenv-redirect-output=true > nohupRoutingSimOut.txt &
 # over view of runs
 #./RoutingSim ../simulations/KIRA/eval.ini -u Cmdenv -c $* -q runs
 # Full debug output (slow)
