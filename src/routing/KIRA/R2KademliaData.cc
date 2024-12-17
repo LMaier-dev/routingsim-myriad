@@ -15,14 +15,8 @@
 
 
 #include "KIRA.h"
-#include "KadPacket_m.h"
 #include "KadObserver.h"
 #include "NodePkt_m.h"
-#include "PathIDUtils.h"
-#include "Protocol.h"
-#include "ccontextswitcher.h"
-#include "clog.h"
-#include "KadPackets_m.h"
 
 namespace routingsim {
 
@@ -480,7 +474,8 @@ void R2Kademlia::sendPacket(KadDataPacket_p packet) {
 	//ASSERT(packet->getSource() == myOverlayKey);
 	ASSERT(packet->getControlInfo() == nullptr);
 	auto nodePkt = std::make_unique<NodePkt>(packet->getName());
-	nodePkt->setType(KAD_DATA_PACKET_TYPE);
+        nodePkt->setType(KAD_DATA_PACKET_TYPE);
+	nodePkt->setAttributes(nodePkt->getAttributes() | NODEPKT_ATTR_DO_NOT_COUNT_ON_LINK);
 	//nodePkt->setAttributes(nodePkt->getAttributes() | NODEPKT_ATTR_DATA_PLANE_PROCESSING_DELAY);
 	if (packet->getType() == KAD_Data) {
 		getKadObserver().registerPacket(*packet);
@@ -593,7 +588,7 @@ void R2Kademlia::notifySender(uint8_t errorType, KadDataPacket_p origpacket, con
 		packet->setErrorType(errorType);
 		packet->setFailedNextHopNodeID(failedNextHopNodeID);
 		packet->setOrigDstNodeID(origpacket->getDstNodeID());
-		packet->setName("KadErrorInd");
+		packet->setName(PDUNames.at(KAD_Error));
 		packet->setDstNodeID(origpacket->getPathSrcNodeID());
 		packet->setSource(myOverlayKey);
 		packet->setHopLimit(hopLimit);

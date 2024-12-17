@@ -36,8 +36,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadUpdateRouteReq> packet) {
 	ASSERT(packet->getContactArraySize() == packet->getActionArraySize());
 
 	receivedRouteUpdates++;
-	receivedPackets++;
-	receivedVolume+= packet->getByteLength();
+        countReceived(*packet);
 
 	// path to origin of this KadUpdateRouteReq (excluding myself)
 	kad_path source_path= packet->reversePath(packet->getSrcPath(0, packet->getRouteArraySize()-1));
@@ -376,7 +375,7 @@ bool R2Kademlia::sendUrgentUpdates()
 
 			if (not urgentupdatelist.empty()) {
 				// UpdateRouteReqs are not expecting an answer, so no RPC call
-				auto packet = makePacket<KadUpdateRouteReq>(notify_target, "UpdateRouteReqURG");
+				auto packet = makePacket<KadUpdateRouteReq>(notify_target);
 				packet->setDstNodeID(notify_target->getKey());
 				// write down all routing notifications for a specific contact
 				packet->setContactArraySize(urgentupdatelist.size());
@@ -461,7 +460,7 @@ bool R2Kademlia::sendUpdates()
                 if (notify_target)
 		{ // only notify contacts that we have a validated path to (i.e., that are valid)
 			// UpdateRouteReqs are not expecting an answer, so no RPC call
-			auto packet = makePacket<KadUpdateRouteReq>(notify_target, "UpdateRouteReq");
+			auto packet = makePacket<KadUpdateRouteReq>(notify_target);
 			packet->setDstNodeID(notify_target->getKey());
 			EV_TRACE << "UpdateRoute packet to " << notify_target->getKey().shortStr() << " w/ ";
 			auto& updatelist(notifyContact_it->second);
@@ -707,7 +706,7 @@ bool R2Kademlia::sendRediscovery(OverlayKey failedcontactkey, uint8_t maxFanOut,
 					EV_ERROR << "I'm the next hop for the destination. Will not send anything." << endl;
 					return false;
 				}
-				auto packet = makePacket<KadFindNodeReq>(contact, "FindNode");
+				auto packet = makePacket<KadFindNodeReq>(contact);
 				packet->setDstNodeID(failedcontact->getKey());
 				packet->setExact(true);
 				packet->setRediscovery(true);
@@ -852,7 +851,7 @@ R2Kademlia::sendLinkFailureNotifications(NotViaListAbsTime_t* notvialist_p, std:
 		// normaly we flood only directly to our underlay neighbors
 		ASSERT(contactp->getPathLength() == 0);
 
-		auto packet = makePacket<KadRevPathFlood>(contactp, "LinkFailureNotificationFlood");
+		auto packet = makePacket<KadRevPathFlood>(contactp);
 		packet->setPIDListArraySize(filteredPIDList.size());
 
 		auto pidcit(filteredPIDList.cbegin());
@@ -920,8 +919,6 @@ R2Kademlia::notifyAffectedPathUsers(const OverlayKey& nexthop_key) {
 
 // this is a non-RPC flooding message, forwarded hop-by-hop in the underlay
 void R2Kademlia::handlePacket(std::unique_ptr<KadRevPathFlood> packet) {
-	receivedPackets++;
-	receivedVolume+= packet->getByteLength();
 
 #ifndef NDEBUG
         EV_TRACE << "received KadRevPathFlood from " << packet->getSource().shortStr() << " not via ";
@@ -931,6 +928,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadRevPathFlood> packet) {
 																				     }
 		EV_TRACE << endl;
 #endif
+	countReceived(*packet);
 	ASSERT(packet->getNotVia());
 	// NotVia information has been processed before this method is called
 	// Therefore, only the PIDs have to be looked up and it has to be figured out
@@ -1033,7 +1031,7 @@ R2Kademlia::doNotifyFirstSegmentSources(std::unordered_set<PathID>* upstreamPIDs
 		{ // use a direct path with PIDs
 			if (neighborTable.isNeighbor(pid_it->second.first)) {
 				auto notify_packet = std::make_unique<KadLinkFailureNotify>();
-				notify_packet->setName("LinkFailureNotifyDirect");
+				notify_packet->setName(PDUNames.at(KAD_LinkFailureNotify));
 				notify_packet->setSource(myOverlayKey);
 				notify_packet->setHopLimit(hopLimit);
 				notify_packet->setStateSeqNo(getLSSeqNo());
@@ -1110,8 +1108,8 @@ R2Kademlia::doNotifyFirstSegmentSources(std::unordered_set<PathID>* upstreamPIDs
 // non-RPC notification message that is forwarded via the normal overlay routing
 // no need for reliability of this message
 void R2Kademlia::handlePacket(std::unique_ptr<KadLinkFailureNotify> packet) {
-	receivedPackets++;
-	receivedVolume+= packet->getByteLength();
+
+	countReceived(*packet);
 
 	// when this method is called either we are an overlay hop or the final recipient
 	const OverlayKey& target = packet->getDstNodeID(); // get the destination ID

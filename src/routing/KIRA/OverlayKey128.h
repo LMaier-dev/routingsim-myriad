@@ -78,7 +78,7 @@ public:
 	 *
 	 * @param num The integer to initialize this key with
 	 */
-	OverlayKey( overlaykey_t num );
+	explicit OverlayKey( overlaykey_t num );
 
         /**
 	 * Constructs overlay key out of two 64bit integer words
@@ -372,6 +372,8 @@ public:
 	uint32_t getBitRange(uint32_t p, uint32_t n) const;
 
 	double toDouble() const;
+	// return 128-bit unsigned int (avoids implicit conversions)
+        overlaykey_t toUInt() const { return key; }
 
 	inline bool getBit(uint32_t p) const
 	{
@@ -793,21 +795,21 @@ bool OverlayKey::operator!=(const OverlayKey& compKey) const
 inline
 OverlayKey OverlayKey::operator^ (const OverlayKey& rhs) const
 {
-	return key ^ rhs.key;
+	return OverlayKey(key ^ rhs.key);
 }
 
 // bitwise or
 inline
 OverlayKey OverlayKey::operator| (const OverlayKey& rhs) const
 {
-	return key | rhs.key;
+	return OverlayKey(key | rhs.key);
 }
 
 // bitwise and
 inline
 OverlayKey OverlayKey::operator& (const OverlayKey& rhs) const
 {
-	return key & rhs.key;
+	return OverlayKey(key & rhs.key);
 }
 
 // complement

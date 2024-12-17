@@ -12,8 +12,6 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with this program.  If not, see http://www.gnu.org/licenses/.
 // 
-
-
 #ifndef __ROUTINGSIM_KadPacket_H_
 #define __ROUTINGSIM_KadPacket_H_
 
@@ -22,6 +20,18 @@
 #include "KadContact.h"
 
 namespace routingsim {
+
+template<typename T, size_t count = size_t(T::count)>
+constexpr std::array <T, count> all_values = []<typename E = T>() {
+    std::array<E, count> arr;
+    typename std::underlying_type_t<E> i = 0;
+    for (auto& elem : arr) {
+        elem = static_cast<E>(i++);
+    }
+    return arr;
+}();
+
+extern std::unordered_map<uint8_t, const char *const> PDUNames;
 
 class KadPacket : public KadPacket_Base
 {

@@ -22,11 +22,8 @@
 #define _DEBUG_ONLY(X)
 #endif
 
-#include <cstdint>
 #include <omnetpp.h>
 #include <optional>
-#include <unordered_map>
-#include <queue>
 
 #include "BaseTypes.h"
 #include "Protocol.h"
@@ -78,6 +75,7 @@ enum linkFailureNotificationType : uint8_t {
 	lfn_flood_and_directPID= 2, // flood LFNs to the direct neighbors and send to first segment sources directly via PID
 	lfn_full= 3 // flood LFNs to the direct neighbors and notify all first segments source, even via overlay
 };
+
 
 // OverlayKey length 112 bit (16 bit prefix will be prepended to make it an IPv6 address)
 constexpr uint8_t OverlayKeyLength= 112;
@@ -167,6 +165,7 @@ private:
 	simtime_t minHelloInterval;
 	simtime_t maxHelloInterval;
 	bool detailedRoutingTableStats;
+        bool detailedKIRAMessageStats;
 	linkFailureNotificationType linkFailureNotifications;
 	// send reachability test packets only to nodes with failed links
 	bool failureFocussedProbing;
@@ -269,6 +268,7 @@ private:
 	uint succeededRediscovery = 0;
 	uint droppedRediscovery = 0;
 	uint forwardedRediscovery = 0;
+	uint retriesRediscovery = 0;
 	uint inconsistentPathHit = 0;
 	uint sentRouteUpdates = 0;
 	uint receivedRouteUpdates = 0;
@@ -277,11 +277,23 @@ private:
 	uint receivedPathSetup = 0;
 	uint forwardedPathSetup = 0;
 	uint forwardedPathTeardown = 0;
-	uint receivedPathTeardown = 0;
+        uint receivedPathTeardown = 0;
+
+        struct msg_stats {
+		unsigned long sentCount = 0UL;
+		unsigned long receivedCount = 0UL;
+		unsigned long forwardedCount = 0UL;
+		unsigned long droppedCount = 0UL;
+		unsigned long sentVolume = 0UL;
+		unsigned long receivedVolume = 0UL;
+		unsigned long forwardedVolume = 0UL;
+        };
+	// per message type statistics
+        std::unordered_map<uint8_t, msg_stats> msgStats;
 
 	uint floodPacketsReceived = 0;
-    uint floodPacketReplications = 0;
-    uint floodPacketMaxReplications = 0;
+	uint floodPacketReplications = 0;
+	uint floodPacketMaxReplications = 0;
 	//@}
 
 	unsigned long laterpaths = 0;
@@ -315,7 +327,7 @@ private:
 	std::unique_ptr<T> makeDataPacket(const OverlayKey& dstNodeID, const KadContact* viacontact, const char *name);
 	/// crafts a packet of type T, sets the route and nonce according to original
 	template<typename T>
-	std::unique_ptr<T> makeAnswer(const KadPacket& original);
+	std::unique_ptr<T> makeAnswer(const KadPacket& original, const char* packetName= nullptr);
 	/// specialized version, calls also makeAnswer
 	std::unique_ptr<KadPathSetupRsp> makeAnswerKadPathSetupRsp(const KadPathSetupReq& original);
 
@@ -356,6 +368,10 @@ private:
 	void countReceived(KadPacket& packet);
 	/// does statistics on dropped packet
 	void countDropped(KadPacket& packet, const OverlayKey& target, uint8_t reason);
+	/// count sent packets (use times=p >1 for broadcast to p neighbors)
+        void countSent(KadPacket& packet, unsigned int times= 1);
+	/// count forwarded
+        void countFwd(KadPacket& packet);
 	/// does statistics on received data packet
 	void countReceived(KadDataPacket& packet);
 	/// does statistics on received flood packet
@@ -459,7 +475,7 @@ private:
 	virtual void handlePacket(std::unique_ptr<KadProbeReq> packet);
 	virtual void handlePacket(std::unique_ptr<KadPathSetupReq> packet);
 	virtual void handlePacket(std::unique_ptr<KadPathTeardownReq> packet);
-	virtual void handlePacket(std::unique_ptr<KadPNDiscReq> packet);
+	virtual void handlePacket(std::unique_ptr<KadULNDiscReq> packet);
 	virtual void handlePacket(std::unique_ptr<KadQueryRouteReq> packet);
 	virtual void handlePacket(std::unique_ptr<KadUpdateRouteReq> packet);
 	virtual void handlePacket(std::unique_ptr<KadFindNodeReq> packet);
@@ -517,7 +533,7 @@ private:
 	simtime_t sendGetPhysicalNeighbors(const KadContact& contact, RequestQueueElementActionType action= unset);
 	/// sends a "get overlay neighbors" call to the contact
 	simtime_t sendGetOverlayNeighbors(const KadContact& contact, RequestQueueElementActionType action);
-	/// sends a PNDisc Request to the Physical Neighbor
+	/// sends a ULNDisc Request to the Physical Neighbor
 	simtime_t sendDiscoveryReq(const KadContact& contact, RequestQueueElementActionType action);
 	/// sends a Probe Request to the contact
 	simtime_t sendOnDemandPathProbe(KeyRequestQueue::value_type keyactionpair, RequestQueueElementActionType unused_arg);
@@ -539,7 +555,7 @@ private:
 	void scheduleSlowRediscovery(const OverlayKey& contactkey) override { scheduleRediscovery(contactkey, slowRediscoverQueue, slowRediscoveryWaitTime); };
 
 	ContactRequestQueue::iterator scheduleRequest(ContactRequestQueue& q, KadContact&& tmpcontact);
-	/// schedule sending PNDiscReq
+	/// schedule sending ULNDiscReq
 	void schedulePNDiscReq(KadContact&& tmpcontact) { scheduleRequest(PNDiscoverQueue, std::move(tmpcontact)); };
 	void scheduleGetPNReq(KadContact&& tmpcontact) { scheduleRequest(GetPNQueue, std::move(tmpcontact)); };
 	void scheduleGetONReq(const KadContact& tmpcontact);
@@ -767,7 +783,10 @@ R2Kademlia::addIncomingIFtoPIDEntry(const OverlayKey& incomingULN, PathID incomi
 template<typename T>
 std::unique_ptr<T> R2Kademlia::makePacket(const KadContact* contact, const char *name, bool append_route) {
 	auto packet = std::make_unique<T>();
-	packet->setName(name);
+        if (name)
+		packet->setName(name);
+        else
+		packet->setName(PDUNames.at(packet->getType()));
 	// TODO optimization: do this in one pass
 	packet->setSource(myOverlayKey);
 	packet->setHopLimit(hopLimit);
@@ -811,9 +830,12 @@ std::unique_ptr<T> R2Kademlia::makeDataPacket(const OverlayKey& dstNodeID, const
 
 
 template<typename T>
-std::unique_ptr<T> R2Kademlia::makeAnswer(const KadPacket& original) {
+std::unique_ptr<T> R2Kademlia::makeAnswer(const KadPacket& original, const char* packetName) {
 	auto answer = std::make_unique<T>();
-	answer->setName((std::string(original.getName()) + std::string("Answer")).c_str());
+        if (packetName)
+		answer->setName(packetName);
+	else
+		answer->setName(PDUNames.at(answer->getType()));
 	answer->setSimplifiedReturnPathFrom(original);
 	ASSERT(answer->getSource() == myOverlayKey);
 	answer->setNonce(original.getNonce());
@@ -877,5 +899,8 @@ template<typename T> bool R2Kademlia::handleIfFitting(KadDataPacket_p& packet) {
 }
 
 } //namespace
-  //
+
+
+
+
 #endif // __ROUTINGSIM_R2Kademlia_H_

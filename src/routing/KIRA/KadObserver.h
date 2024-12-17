@@ -18,7 +18,6 @@
 
 #include "KIRA.h"
 #include "foundation/NetworkManager.h"
-#include "routing/KIRA/OverlayKey128.h"
 
 using namespace routingsim;
 
@@ -40,7 +39,22 @@ std::size_t std::hash<link_t>::operator()(const link_t& link) const {
 	return link.first.hash() ^ link.second.hash();
 };
 
-}
+
+template<> class hash<std::pair<uint8_t,uint8_t>>
+{
+public:
+	size_t operator()(const std::pair<uint8_t,uint8_t>& p) const;
+};
+
+
+inline
+std::size_t std::hash<std::pair<uint8_t,uint8_t>>::operator()(const std::pair<uint8_t,uint8_t>& p) const {
+	using std::size_t;
+
+	return ((size_t) p.first << 8) | (size_t) p.second;
+};
+
+} // end namespace std
 
 namespace routingsim {
 using cHistogramPtr = std::unique_ptr<cHistogram>;
@@ -66,7 +80,46 @@ struct MessageDroppedInfo {
 	uint reason = 0;
 };
 
+enum class msg_stats_subtype : uint8_t {
+  msg_stat_sentCount,
+  msg_stat_receivedCount,
+  msg_stat_forwardedCount,
+  msg_stat_droppedCount,
+  msg_stat_sentVolume,
+  msg_stat_receivedVolume,
+  msg_stat_forwardedVolume,
+  count
+};
 
+
+class msgStatsNamesClass {
+public:
+  msgStatsNamesClass(uint8_t size_pdutypes, uint8_t size_stats_subtypes) : size_stats_subtypes(size_stats_subtypes) { name_storage = new std::vector<char *>(size_pdutypes*size_stats_subtypes,nullptr); };
+
+  ~msgStatsNamesClass() {
+    for (auto e : *name_storage)
+      delete e;
+    delete name_storage;
+  };
+
+  void setName(KadPDUType pdutype, msg_stats_subtype statssubtype, const std::string& name) {
+    if (name_storage->at((uint8_t)pdutype * size_stats_subtypes + (uint8_t)statssubtype) == nullptr and not name.empty()) {
+      auto namec = new char[name.size() + 1]; // do not forget the trailing \0 byte
+      memcpy(namec, name.c_str(), name.size()+1); // copy also the trailing \0
+      (*name_storage)[(uint8_t)pdutype * size_stats_subtypes + (uint8_t)statssubtype] = namec;
+    };
+  };
+
+  const char* getName(uint8_t pdutype, msg_stats_subtype statssubtype) const {
+    return (*name_storage).at(pdutype * size_stats_subtypes + (uint8_t)statssubtype);
+  };
+
+private:
+  std::vector<char *> *name_storage;
+  uint8_t size_stats_subtypes = 0;
+};
+
+extern msgStatsNamesClass msgStatsNames;
 
 
 /**

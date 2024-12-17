@@ -79,7 +79,7 @@ packet KadRTableRsp extends KadAnswer {
 // tries to reach dstNodeID via Overlay routing strategy
 packet KadFindNodeReq extends KadRTableReq {
 	type = KAD_FindNodeReq;
-
+	//@str({"FindNodeReq"});
 	OverlayKey dstNodeID = OverlayKey::UNSPECIFIED_KEY;
 	bool exact = false;
 	bool rediscovery = false;
@@ -88,12 +88,13 @@ packet KadFindNodeReq extends KadRTableReq {
 
 packet KadFindNodeRsp extends KadRTableRsp {
 	type = KAD_FindNodeRsp;
+	//@str({"FindNodeRsp"});
 }
 
 /// UpdateRouteReq (w/o response)
 packet KadUpdateRouteReq extends KadPacket {
        type = KAD_UpdateRouteReq;
-
+       //@str({"UpdateRouteReq"});
        OverlayKey dstNodeID = OverlayKey::UNSPECIFIED_KEY;
 
        OverlayKey contact[];
@@ -108,7 +109,8 @@ packet KadUpdateRouteReq extends KadPacket {
 // ERROR
 packet KadError extends KadAnswer {
 	type = KAD_Error;
-	uint8_t errorType @enum(KadErrorType);
+	//@str({"Error"});
+	uint8_t	errorType @enum(KadErrorType);
 	// that is the final destination of the error
 	OverlayKey dstNodeID = OverlayKey::UNSPECIFIED_KEY;
 	// this denotes the link that failed: <packet source, failedNextHopNodeID>
@@ -119,16 +121,18 @@ packet KadError extends KadAnswer {
 
 
 // HELLO
-// compare PNHello
+// compare ULNHello
 packet KadHello extends KadPacket {
-	type = KAD_PNHello;
+	type = KAD_ULNHello;
+	//@str({"ULNHello"});
 	nodeid_t sourceId;
 }
 
 
-// PNDiscReq
-packet KadPNDiscReq extends KadRTableReq {
-	type = KAD_PNDiscReq;
+// ULNDiscReq
+packet KadULNDiscReq extends KadRTableReq {
+	type = KAD_ULNDiscReq;
+	//@str({"ULNDiscReq"});
 	nodeid_t sourceId;
 	OverlayKey phyNeighbor[];
 	stateseqno_t phyNeighborSeqNo[];
@@ -136,9 +140,10 @@ packet KadPNDiscReq extends KadRTableReq {
 	nodedegree_t phyNeighborDegree[];
 }
 
-// PNDiscRsp
-packet KadPNDiscRsp extends KadRTableRsp {
-	type = KAD_PNDiscRsp;
+// ULNDiscRsp
+packet KadULNDiscRsp extends KadRTableRsp {
+	type = KAD_ULNDiscRsp;
+	//@str({"ULNDiscRsp"});
 }
 
 
@@ -146,17 +151,20 @@ packet KadPNDiscRsp extends KadRTableRsp {
 // PROBE
 packet KadProbeReq extends KadPacket {
 	type = KAD_ProbeReq;
+	//@str({"ProbeReq"});
 	bool pathCheck = false;
 }
 
 packet KadProbeRsp extends KadAnswer {
 	type = KAD_ProbeRsp;
+	//@str({"ProbeRsp"});
 }
 
 
 // PATHSETUP
 packet KadPathSetupReq extends KadPacket {
 	type = KAD_PathSetupReq;
+	//@str({"PathSetupReq"});
 	// transmit contact state at the originator
 	simtime_t contactLastSeen;
 	stateseqno_t contactSeqNo;
@@ -164,6 +172,8 @@ packet KadPathSetupReq extends KadPacket {
 
 packet KadPathSetupRsp extends KadAnswer {
 	type = KAD_PathSetupRsp;
+	//@str({"PathSetupRsp"});
+
 	// this echoes the contact state at the originator
 	// so that the originator can check whether this Rsp is obsolete
 	simtime_t contactLastSeen;
@@ -177,6 +187,7 @@ packet KadPathSetupRsp extends KadAnswer {
 // this is a kind of optimization as soft states will also remove orphans
 packet KadPathTeardownReq extends KadPacket {
 	type = KAD_PathTeardownReq;
+	//@str({"PathTeardownReq"});
 }
 
 
@@ -185,16 +196,19 @@ packet KadPathTeardownReq extends KadPacket {
 // in contast to FindNodeReq only sent to contacts directly (no overlay routing)
 packet KadQueryRouteReq extends KadRTableReq {
 	type = KAD_QueryRouteReq;
+	//@str({"QueryRouteR"});
 }
 
 packet KadQueryRouteRsp extends KadRTableRsp {
 	type = KAD_QueryRouteRsp;
+	//@str({"QueryRouteRsp"});
+
 }
 
 // Reverse Flood along PathIDs
 packet KadRevPathFlood extends KadPacket {
         type = KAD_RevPathFlood;
-
+	//@str({"RevPathFlood"});
 	// List of PathIDs for further reverse path flooding of this message
 	PathID PIDList[];
 }
@@ -202,14 +216,16 @@ packet KadRevPathFlood extends KadPacket {
 
 packet KadLinkFailureNotify extends KadPacket {
         type = KAD_LinkFailureNotify;
-
+	//@str({"LinkFailureNotify"});
 	// the final destination of the message
 	OverlayKey dstNodeID = OverlayKey::UNSPECIFIED_KEY;
 	// PathID to reach first segment sources if applicable
 	PathID dstPID = PathID::UndefinedPathID;
 }
+
 packet KadFloodPacket extends KadDataPacket {
+    type = KAD_Flood;
+    //@str({"DataFlood"});
     uint8_t floodingPrefixLength = 0;
     nonce_t nonce = 0;
-	type = KAD_Flood;
 }

@@ -18,8 +18,7 @@
 #include "KIRA.h"
 #include "KadObserver.h"
 #include "FwdTable.h"
-#include "simtime.h"
-
+#include <utility>
 
 
 namespace routingsim {
@@ -111,6 +110,7 @@ void R2Kademlia::onInitialize() {
 	}
 	probeStrategy = (uint) par("probeStrategy").intValue();
 	detailedRoutingTableStats = par("detailedRoutingTableStats").boolValue();
+	detailedKIRAMessageStats = par("detailedKIRAMessageStats").boolValue();
 	PNRediscoveryWaitTime = (simtime_t) (par("PNRediscoveryWaitTime").doubleValue() * 0.001); // given in ms
 	urgentRediscoveryWaitTime = (simtime_t) (par("urgentRediscoveryWaitTime").doubleValue() * 0.001); // given in ms
 	regularRediscoveryWaitTime = (simtime_t) (par("regularRediscoveryWaitTime").doubleValue() * 0.001); // given in ms
@@ -214,10 +214,9 @@ void R2Kademlia::onConnect( nodeid_t nid ) {
 	// send a hello packet to new neighbor after some random delay (average minHelloInterval)
 	addOneShotTimer(uniform(minHelloInterval/2,1.5*minHelloInterval), [this,nid](short int ignored)->bool {
 		auto packet(makeHelloPacket());
-		sentVolume+= packet->getByteLength();
+		countSent(*(static_cast<KadHello*>(packet->getEncapsulatedPacket())));
 		sendToNode(nid, std::move(packet));
-                sentPackets++;
-		return true;
+                return true;
 	} );
 	// additionally, reset PNHello timer if this fires too far away in the future
 	if (randomTimerDuration[PNHelloTimerId] > 3*minHelloInterval)
@@ -305,8 +304,8 @@ void R2Kademlia::nodeDisconnect(nodeid_t nid) {
 }
 
 
-// called on reception of a NodePkt for this protocol, i.e., an R2/Kad packet
-// START HERE: this is the main entry point into R2/Kad protocol logic
+/// called on reception of a NodePkt for this protocol, i.e., an R2/Kad packet
+/// START HERE: this is the main entry point into R2/Kad protocol logic
 void R2Kademlia::onMessage( NodePkt_p pkt ) {
 
 	ASSERT(pkt->getType() == KAD_CTRL_PACKET_TYPE || pkt->getType() == KAD_DATA_PACKET_TYPE);
@@ -383,7 +382,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		return;
 	}
 	// must process PNDiscReq to set the neighbor table entry first
-	if (handleIfFitting<KadPNDiscReq>(packet))
+	if (handleIfFitting<KadULNDiscReq>(packet))
 		return;
 
 	// check for presence of carried "not via" information
@@ -406,14 +405,13 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	}
 	else { // no hops left, packet is addressed to me
 
-
 		packet->setControlInfo(pkt.release());
 
-		// learn route from packet
+                // learn route from packet
+                // (unless it is a reachability test packet that should not be used for improving information)
 		//TODO optimization use isPathInteresting
 
-
-		if (packet->getType() != KAD_PNDiscRsp) {
+		if (packet->getType() != KAD_ULNDiscRsp and not packet->isTracked()) {
 			// for packets from physical neighbors: check need for resynchronization:
 			// in case the packet indicates a newer state seq no, resynch with neighbor
 			if (neighborTable.isNeighbor(packet->getSource()))
@@ -421,12 +419,12 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 
 			// evaluate return path for routing table (packet came to us this way, so path was recently working)
 			// Trusted Path Info (no need to check)
-			// for PNDiscRsp no need to add path here
+			// for ULNDiscRsp no need to add path here
 			routingTable.addPath(packet->getSource(), packet->reversePath(packet->getIntermediatePath()), packet->getStateSeqNo(), 0, packet->getSrcNodeDegree(), true);
 		}
 
 
-		// these types may forward packets, so they count themselves
+		// these types may forward packets via overlay, so they count themselves
 		if (handleIfFitting<KadFindNodeReq>(packet)) return;
 		if (handleIfFitting<KadUpdateRouteReq>(packet)) return;
 		if (handleIfFitting<KadLinkFailureNotify>(packet)) return;
@@ -513,7 +511,7 @@ void R2Kademlia::handlePacket(KadAnswer_p packet) {
 /// note: this method is also called when packets originate from this node
 void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt, simtime_t delay) {
 	// we do not route hello packets!
-	ASSERT(packet->getType() != KAD_PNHello);
+	ASSERT(packet->getType() != KAD_ULNHello);
 	ASSERT(packet->hasRemainingHops());
 	ASSERT(packet->getControlInfo() == nullptr);
 
@@ -544,10 +542,9 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt, simtime_t 
 
 	if (nid != undefined_node) {
 
-		if (not packetorigin) {
-			forwardedPackets++;
+		if (not (packetorigin or packet->isTracked())) {
 			//EV_TRACE << "forwardPacket(): Node" << node().getNodeId() << " " << packet->getName() << " nonce=" << packet->getNonce() << " progress:" << packet->getProgress() << " route:" << packet->getSrcPath() << " delay:" << delay << endl;
-			forwardedVolume+= packet->getByteLength();
+			countFwd(*packet);
 		}
 
 		nodePkt->encapsulate(packet.release());
@@ -637,10 +634,9 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt, simtime_t 
 					packet->addNotViaLink({nextHop,myOverlayKey}, 0);
 					EV_TRACE << "forwardPacket(): forwarding to next hop (" << nid << ")" << endl;
 
-					if (not packetorigin) {
-						forwardedPackets++;
+					if (not (packetorigin or packet->isTracked())) {
 						//EV_TRACE << "forwardPacket(): Node" << node().getNodeId() << " " << packet->getName() << " nonce=" << packet->getNonce() << " progress:" << packet->getProgress() << " route:" << packet->getSrcPath() << endl;
-						forwardedVolume+= packet->getByteLength();
+						countFwd(*packet);
 					}
 
 					nodePkt->encapsulate(packet.release());
@@ -747,10 +743,9 @@ void R2Kademlia::reroutePacket(const OverlayKey& finaldest, KadPacket_p packet, 
 			if (nid != undefined_node) {
 				EV_TRACE << "reroutePacket(): " << packet->getName() << " dest " << packet->getTarget().shortStr()
 					 << " next hop: " << nextHop.shortStr() << " (" << nid << ')' << endl;
-				if (not packetorigin) {
-					forwardedPackets++;
+				if (not (packetorigin or packet->isTracked())) {
 					//EV_TRACE << "forwardPacket(): Node" << node().getNodeId() << " " << packet->getName() << " nonce=" << packet->getNonce() << " progress:" << packet->getProgress() << " route:" << packet->getSrcPath() << endl;
-					forwardedVolume+= packet->getByteLength();
+					countFwd(*packet);
 				}
 				nodePkt->encapsulate(packet.release());
 				sendToNode(nid, std::move(nodePkt), delay);
@@ -829,9 +824,10 @@ void R2Kademlia::sendPacket(KadPacket_p packet, simtime_t delay) {
 		EV_ERROR << "sendPacket: not sending packet destined to myself" << endl;
 		return;
 	}
-	auto packetsize(packet->getByteLength());
 	auto nodePkt = std::make_unique<NodePkt>(packet->getName());
         nodePkt->setType(KAD_CTRL_PACKET_TYPE);
+        if (packet->isTracked()) // test packets for statistics will not be counted for link usage
+		nodePkt->setAttributes(nodePkt->getAttributes() | NODEPKT_ATTR_DO_NOT_COUNT_ON_LINK);
 	nodePkt->setAttributes(nodePkt->getAttributes() | NODEPKT_ATTR_CONTROL_PLANE_PROCESSING_DELAY);
 	if (packet->getType() == KAD_FindNodeReq) {
 		const KadFindNodeReq* tmp_packet= check_and_cast<KadFindNodeReq*>(packet.get());
@@ -844,9 +840,11 @@ void R2Kademlia::sendPacket(KadPacket_p packet, simtime_t delay) {
 		}
 	}
 	// EV_TRACE << "sendPacket(): " << packet->getName() << ", " << (int) packet->getType() << endl;
-	sentPackets++;
-	sentVolume+= packetsize;
 
+        // reachability test packets should not be counted
+	if (not packet->isTracked()) {
+		countSent(*packet);
+	}
 	forwardPacket(std::move(packet), std::move(nodePkt), delay);
 }
 
@@ -997,7 +995,7 @@ void R2Kademlia::sendFindNode(const OverlayKey& destkey, bool exact, bool track)
 			EV_ERROR << "I'm the next hop for the destination. Will not send anything." << endl;
 			return;
 		}
-		auto packet = makePacket<KadFindNodeReq>(contact, "FindNode");
+		auto packet = makePacket<KadFindNodeReq>(contact, "FindNodeReq");
 		packet->setDstNodeID(destkey);
 		packet->setExact(exact);
 		if (track)
@@ -1034,7 +1032,7 @@ void R2Kademlia::sendFindNodeVia(const OverlayKey& destkey, KadContact_p viacont
 		EV_ERROR << "I'm the next hop for the destination. Will not send anything." << endl;
 		return;
 	}
-	auto packet = makePacket<KadFindNodeReq>(*viacontact_p, "FindNode");
+	auto packet = makePacket<KadFindNodeReq>(*viacontact_p, "FindNodeReq");
 	packet->setDstNodeID(destkey);
 	packet->setExact(exact);
 	if (track)
@@ -1051,6 +1049,7 @@ void R2Kademlia::sendFindNodeVia(const OverlayKey& destkey, KadContact_p viacont
 }
 
 
+// handle incoming FindNodeReq
 void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 	const OverlayKey& query = packet->getDstNodeID(); // get the destination ID
 	bool is_rediscovery= packet->getRediscovery();
@@ -1210,15 +1209,15 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 	if (packet->isTracked()) {
 		EV_TRACE << "packet was tracked, setTracked for answer" << endl;
 		answer->markTracked();
-	}
+        }
+	countReceived(*packet);
 
 	// add valid randomly chosen contacts from all other buckets to improve connectivity
         if (addGratuitousContacts)
 	  routingTable.addRandomGratuitousContacts(contacts);
 
         fillRTableRsp(*answer, contacts);
-	countReceived(*packet);
-	if (is_rediscovery)
+	if (is_rediscovery) // rediscovery request successfully arrived at the destination
 		succeededRediscovery++;
 
 	EV_TRACE << "KadFindNodeReq query for " << query.shortStr() << " answering with list size " << contacts.size() << " Tracked: " << (answer->isTracked() ? 'T' : 'F') << endl;
@@ -1235,7 +1234,6 @@ bool R2Kademlia::handleFindNodeResponse(KadPacket_p answer_, RPCState& rpcState)
 		ASSERT(answer->getContactArraySize() == answer->getPathArraySize());
 		EV_TRACE << "received FindNodeRsp for " << findnodereq->getDstNodeID().shortStr();
 		EV_TRACE << " from " << answer->getSource().shortStr() << " with " << answer->getContactArraySize() << " contacts" << endl;
-
 		readRTableRsp(*answer);
 	}
 
@@ -1251,12 +1249,14 @@ bool R2Kademlia::handleFindNodeResponse(KadPacket_p answer_, RPCState& rpcState)
 				// fanout set to one, because each failed rediscovery request
 				// should only trigger a single new retry
 				//ASSERT(contactp->getRDS().rediscoverQtype != RediscoveryState::rediscoverQ_type::undefined);
-				simtime_t rediscoveryWaitTime((contactp->getRDS().rediscoverQtype == RediscoveryState::rediscoverQ_type::urgent) ? urgentRediscoveryWaitTime :
-							      (contactp->getRDS().rediscoverQtype == RediscoveryState::rediscoverQ_type::regular) ? regularRediscoveryWaitTime : slowRediscoveryWaitTime);
+                                simtime_t rediscoveryWaitTime(
+                                    (contactp->getRDS().rediscoverQtype == RediscoveryState::rediscoverQ_type::physicalneighbors) ? PNRediscoveryWaitTime :
+				    (contactp->getRDS().rediscoverQtype == RediscoveryState::rediscoverQ_type::urgent) ? urgentRediscoveryWaitTime :
+				    (contactp->getRDS().rediscoverQtype == RediscoveryState::rediscoverQ_type::regular) ? regularRediscoveryWaitTime : slowRediscoveryWaitTime);
 
 				addOneShotTimer(SimTime(RediscoveryNextTryWaitTime,SIMTIME_MS), std::bind(&R2Kademlia::sendRediscovery, this, contactp->getKey(), 1, rediscoveryWaitTime));
 				//sendRediscovery(contactp->getKey(), 1, rediscoverQ, rediscoveryWaitTime);
-			}
+                        }
 		}
 	}
 	return true;
@@ -1309,8 +1309,18 @@ void R2Kademlia::sampleStatistics (Statistics &stats) {
 	stats.value("receivedPackets", receivedPackets);
 	stats.value("sentVolume", sentVolume);
 	stats.value("receivedVolume", receivedVolume);
-	stats.value("forwardedVolume", forwardedVolume);
-
+        stats.value("forwardedVolume", forwardedVolume);
+	if (detailedKIRAMessageStats) {
+		for (auto msgtype : msgStats) {
+			stats.value(msgStatsNames.getName(msgtype.first,msg_stats_subtype::msg_stat_sentCount), msgtype.second.sentCount);
+			stats.value(msgStatsNames.getName(msgtype.first,msg_stats_subtype::msg_stat_forwardedCount), msgtype.second.forwardedCount);
+			stats.value(msgStatsNames.getName(msgtype.first,msg_stats_subtype::msg_stat_receivedCount), msgtype.second.receivedCount);
+			stats.value(msgStatsNames.getName(msgtype.first,msg_stats_subtype::msg_stat_droppedCount), msgtype.second.droppedCount);
+			stats.value(msgStatsNames.getName(msgtype.first,msg_stats_subtype::msg_stat_sentVolume), msgtype.second.sentVolume);
+			stats.value(msgStatsNames.getName(msgtype.first,msg_stats_subtype::msg_stat_forwardedVolume), msgtype.second.forwardedVolume);
+			stats.value(msgStatsNames.getName(msgtype.first,msg_stats_subtype::msg_stat_receivedVolume), msgtype.second.receivedVolume);
+		}
+	}
 	if (sendDataPackets) {
 		stats.value("forwardedDataPackets", forwardedDataPackets);
 		stats.value("sentDataPackets", sentDataPackets);
@@ -1351,7 +1361,6 @@ void R2Kademlia::sampleStatistics (Statistics &stats) {
 		stats.value("CPoverloadDiscard", getBoundProtocolPacketQueue(KAD_CTRL_PACKET_TYPE)->getOverloadDiscardedPackets());
                 stats.value("CPmaxSojournTime", getBoundProtocolPacketQueue(KAD_CTRL_PACKET_TYPE)->getMaxSojournTime().dbl());
 	}
-	stats.value("notifyQueueMaxLength", NotifyQueue.getMaxLength());
     stats.value("floodPacketReplications", floodPacketReplications);
 }
 
@@ -1378,6 +1387,7 @@ void R2Kademlia::recordScalars() {
 	recordScalar("rediscoverySuccess", succeededRediscovery);
 	recordScalar("rediscoveryFailed", droppedRediscovery);
 	recordScalar("rediscoveryForwarded", forwardedRediscovery);
+	recordScalar("rediscoveryRetries", retriesRediscovery);
 	recordScalar("routingTableContacts", routingTable.getNumContacts());
 	recordScalar("routingTableBuckets", routingTable.getNumBuckets());
 	recordScalar("routingTablePathLength", routingTable.getAveragePathLength());
@@ -1571,25 +1581,60 @@ void R2Kademlia::readRTableRsp(const KadRTableRsp& packet) {
 }
 
 
+// parameter times is used for counting broadcast packets like ULNHello
+void R2Kademlia::countSent(KadPacket &packet, unsigned int times) {
+	if (times == 1) {
+		msgStats[packet.getType()].sentCount++;
+		msgStats[packet.getType()].sentVolume += packet.getByteLength();
+		sentVolume += packet.getByteLength();
+		sentPackets++;
+        } else {
+		msgStats[packet.getType()].sentCount += times;
+		msgStats[packet.getType()].sentVolume += packet.getByteLength()*times;
+		sentVolume += packet.getByteLength()*times;
+		sentPackets += times;
+	}
+}
+
+
+void R2Kademlia::countFwd(KadPacket &packet) {
+        if (not packet.isTracked()) {
+		msgStats[packet.getType()].forwardedCount++;
+		msgStats[packet.getType()].forwardedVolume += packet.getByteLength();
+		forwardedVolume += packet.getByteLength();
+                forwardedPackets++;
+	}
+}
+
+
 void R2Kademlia::countReceived(KadPacket& packet) {
 	//EV_TRACE << "countReceived: tracked=" << packet.isTracked() << endl;
-	receivedPackets++;
-	receivedVolume+= packet.getByteLength();
-
-	// registerPacketDelivered will also count first packet stretch
-	getKadObserver().registerPacketDelivered(packet);
-	ASSERT(packet.getControlInfo() != nullptr);
-        getStatistics().deliveredMessage(
-            check_and_cast<cMessage *>(packet.getControlInfo()),
-            packet.getProgress()
-        );
+        // reachability test packets should not be counted
+        if (not packet.isTracked()) {
+		msgStats[packet.getType()].receivedCount++;
+		msgStats[packet.getType()].receivedVolume += packet.getByteLength();
+		receivedVolume += packet.getByteLength();
+		receivedPackets++;
+        }
+	else {
+		// registerPacketDelivered will also count first packet stretch
+		getKadObserver().registerPacketDelivered(packet);
+		ASSERT(packet.getControlInfo() != nullptr);
+		getStatistics().deliveredMessage(
+			check_and_cast<cMessage *>(packet.getControlInfo()),
+			packet.getProgress());
+	}
 }
 
 
 void R2Kademlia::countDropped(KadPacket& packet, const OverlayKey& target, uint8_t reason) {
 	discardedPackets++; // note that this is different from droppedPackets in KadObserver
-	if (packet.isTracked())
-		EV_TRACE << "+DROPPED+ nonce:" << packet.getNonce() << " reason:" << (unsigned int) reason << endl;
+	if (packet.isTracked()) {
+          EV_TRACE << "+DROPPED+ nonce:" << packet.getNonce()
+                   << " reason:" << (unsigned int)reason << endl;
+        } else {
+		msgStats[packet.getType()].droppedCount++;
+	}
 
 	getKadObserver().registerPacketDropped(packet, myOverlayKey, target, reason);
 	nodeid_t nid = undefined_node;

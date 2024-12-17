@@ -31,6 +31,8 @@ Define_Module(KadObserver);
 /// singleton pointer
 static KadObserver* observer = nullptr;
 
+msgStatsNamesClass msgStatsNames((uint8_t) KadPDUType::count, (uint8_t) msg_stats_subtype::count);
+
 void
 KadObserver::initialize(int stage) {
        // since the Observer is initialized by the dynamically created protocol module
@@ -39,6 +41,17 @@ KadObserver::initialize(int stage) {
                return;
        //EV << "KadObserver initialize() called, stage:" << stage << endl;
        ASSERT(observer == this);
+       // fill msgStatsNames
+       for (KadPDUType p : all_values<KadPDUType>) {
+	       msgStatsNames.setName( p, msg_stats_subtype::msg_stat_sentCount, string("sent") + PDUNames.at(p));
+	       msgStatsNames.setName( p, msg_stats_subtype::msg_stat_receivedCount, string("received") + PDUNames.at(p));
+	       msgStatsNames.setName( p, msg_stats_subtype::msg_stat_forwardedCount, string("forwarded") + PDUNames.at(p));
+	       msgStatsNames.setName( p, msg_stats_subtype::msg_stat_droppedCount, string("dropped") + PDUNames.at(p));
+	       msgStatsNames.setName( p, msg_stats_subtype::msg_stat_sentVolume, string("sentVolume") + PDUNames.at(p));
+	       msgStatsNames.setName( p, msg_stats_subtype::msg_stat_receivedVolume, string("receivedVolume") + PDUNames.at(p));
+	       msgStatsNames.setName( p, msg_stats_subtype::msg_stat_forwardedVolume, string("forwardedVolume") + PDUNames.at(p));
+       }
+
        if (getEnvir()->getConfig()->getConfigValue("sim-time-limit") != nullptr) {
 		simTimeLimit= SimTime::parse(getEnvir()->getConfig()->getConfigValue("sim-time-limit"));
 	}

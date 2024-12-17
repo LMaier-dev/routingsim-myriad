@@ -136,7 +136,7 @@ R2Kademlia::intermediateNodeProcessing(KadPacket& packet) {
 		// this is especially important for rediscovery messages: they may use still somewhat obsolete path information
 		// also: avoid learning about supposed physical Neighbors
 		kad_path path_of_interest(packet.reversePath(packet.getSrcPath(1, packet.getProgress())));
-		if (path_of_interest.size() > 0)
+		if (path_of_interest.size() > 0 and not packet.isTracked())
 		{
 			// Trusted Path Info: info originates from recently taken source path
 			routingTable.addPath(packet.getSource(), path_of_interest, packet.getStateSeqNo(), 0, packet.getSrcNodeDegree(), true);

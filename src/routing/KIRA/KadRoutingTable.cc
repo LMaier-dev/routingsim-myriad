@@ -21,14 +21,7 @@
 #include "KadRoutingTable.h"
 #include "KadContact.h"
 #include "KadObserver.h"
-#include <algorithm>
-#include <cstdint>
-#include <cstdlib>
-#include <limits>
-#include <utility>
 #include "RequestQueue.h"
-#include <cstddef>
-#include "OverlayKey128.h"
 #include "KIRA.h"
 
 namespace routingsim {
@@ -121,8 +114,8 @@ size_type KadRoutingTable::getBucketIndex(const OverlayKey& key) const
 {
 	OverlayKey delta = key ^ myKey;
 	// this returns the prefixlength as number of matching digits
-	// (each digit ranges from 0 to 2^accelerationfactor - 1
-	uint prefixLen = delta.sharedPrefixLength(0, accelerationFactor);
+	// (each digit ranges from 0 to 2^accelerationfactor - 1)
+	uint prefixLen = delta.sharedPrefixLength(OverlayKey::ZERO, accelerationFactor);
 
 	// bitindex is now the index of the LSB of the first non-zero digit in delta
 	int bitindex = delta.getLength() - (prefixLen+1)*accelerationFactor;
@@ -175,7 +168,7 @@ size_type KadRoutingTable::getBucketIndex(const OverlayKey& key) const
 }
 
 
-/// this should be called by PNDiscReq and PNDiscRsp only!
+/// this should be called by ULNDiscReq and ULNDiscRsp only!
 void KadRoutingTable::addPNContact(const OverlayKey& key, stateseqno_t stateseqno, uint32_t nodeDegree)
 {
 #ifndef NDEBUG

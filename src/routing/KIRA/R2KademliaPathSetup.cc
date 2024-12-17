@@ -23,7 +23,7 @@ void R2Kademlia::sendPathSetup(KadContact_p contact) {
 		EV_TRACE << "sending PathSetupReq from " << myOverlayKey.shortStr() << " to " << contact->getKey().shortStr() << endl;
 		sentPathSetup++;
 
-		std::unique_ptr<KadPathSetupReq> packet(makePacket<KadPathSetupReq>(contact, "KadPathSetupReq"));
+		std::unique_ptr<KadPathSetupReq> packet(makePacket<KadPathSetupReq>(contact));
 		packet->setContactLastSeen(contact->getLastSeen());
 		packet->setContactSeqNo(contact->getStateSeqNo());
 		sendRpcCall(std::move(packet),
@@ -41,7 +41,7 @@ void R2Kademlia::sendPathSetup(KadContact_p contact) {
 void R2Kademlia::sendPathTeardown(KadContact_p contact) {
 	EV_TRACE << "sending PathTeardownReq from " << myOverlayKey.shortStr() << " to " << contact->getKey().shortStr() << endl;
 	sentPathTeardown++;
-	std::unique_ptr<KadPathTeardownReq> packet(makePacket<KadPathTeardownReq>(contact, "KadPathTeardownReq"));
+	std::unique_ptr<KadPathTeardownReq> packet(makePacket<KadPathTeardownReq>(contact));
 
 	sendPacket(std::move(packet));
 }
