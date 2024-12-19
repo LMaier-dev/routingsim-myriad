@@ -90,7 +90,7 @@ void KadRoutingTable::init(const OverlayKey& myKey, KadPolicy* policy,
 std::string KadRoutingTable::str() const
 {
 	std::ostringstream out;
-
+	out << "RTsize=" << getNumContacts() << endl;
 	unsigned int i= 0;
 	for (const auto& b : buckets)
 	{

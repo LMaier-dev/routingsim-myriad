@@ -499,11 +499,11 @@ void KadObserver::registerPacketDelivered(KadPacket& packet) {
 		EV_ERROR << "missing keys on packet" << endl;
 		return;
 	}
-	MessageDeliveryInfo info{};
-	info.hops = packet.getProgress();
-	info.distance = getPhysicalDistance(fromKey, toKey);
-	info.prefixDist = fromKey.getLength() - fromKey.sharedPrefixLength(toKey);
-	info.overlayHops = packet.getOverlayHops();
+        MessageDeliveryInfo info {
+          packet.getProgress(), packet.getOverlayHops(),
+	  getPhysicalDistance(fromKey, toKey),
+	  fromKey.getLength() - fromKey.sharedPrefixLength(toKey)
+        };
 	//EV_TRACE << "packetDelivered: hops=" << info.hops << " distance=" << info.distance << endl;
 	ASSERT(info.overlayHops > 0);
 	histograms[hopCount]->collect(info.hops);
@@ -532,11 +532,11 @@ void KadObserver::registerPacketDelivered(KadDataPacket& packet) {
 		EV_ERROR << "missing keys on packet" << endl;
 		return;
 	}
-	MessageDeliveryInfo info{};
-	info.hops = getR2Kademlia(fromKey).getHopLimitDefault()-packet.getHopLimit();
-	info.distance = getPhysicalDistance(fromKey, toKey);
-	info.prefixDist = fromKey.getLength() - fromKey.sharedPrefixLength(toKey);
-	info.overlayHops = packet.getOverlayHops();
+        MessageDeliveryInfo info {
+          getR2Kademlia(fromKey).getHopLimitDefault() - packet.getHopLimit(),
+              packet.getOverlayHops(), getPhysicalDistance(fromKey, toKey),
+	      fromKey.getLength() - fromKey.sharedPrefixLength(toKey)
+	};
 	
 	ASSERT(info.overlayHops > 0);
 	histograms[hopCountData]->collect(info.hops);

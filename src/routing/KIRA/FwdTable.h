@@ -5,7 +5,6 @@
 #ifndef __ROUTINGSIM_FWDTABLE_H_
 #define __ROUTINGSIM_FWDTABLE_H_
 
-#include "foundation.h"
 #include <BaseTypes.h>
 #include <unordered_map>
 #include <tuple>
@@ -70,7 +69,7 @@ public:
 	void setLocal() { fwdState |= State::local; refresh(); };
 	bool isLocal() const { return fwdState & State::local; };
 
-	// void unsetPrecalc() { fwdState &= ~State::precalc; refresh(); }; // unset is never used
+	void unsetPrecalc() { fwdState &= ~State::precalc; refresh(); };
 	void setPrecalc() { fwdState |= State::precalc; fwdState &= ~State::foreign; refresh(); };
 	bool isPrecalc() const { return fwdState & State::precalc; };
 
@@ -127,9 +126,10 @@ public:
 
 	inline void setNIDtoPIDmapping(const OverlayKey& nid, const PathID incomingPathID, const PathID LastSegmentPathID= PathID::UndefinedPathID);
 	inline void eraseNIDtoPIDmapping(const OverlayKey& nid);
-	std::pair<bool, PathID> addPrecalcEntry(const kad_path& path_to_add) { return addEntry(path_to_add, false, true); }
-	std::pair<bool, PathID> addForeignEntry(const kad_path& path_to_add) { return addEntry(path_to_add, true, false); }
-	std::pair<bool, PathID> addLocalEntry(const kad_path& path_to_add, bool precalc) { return addEntry(path_to_add, false, precalc); }
+	std::pair<bool, PathID> addPrecalcEntry(const kad_path& path_to_add) { return addEntry(path_to_add, false, false, true); }
+	std::pair<bool, PathID> addForeignEntry(const kad_path& path_to_add) { return addEntry(path_to_add, false, true, false); }
+	std::pair<bool, PathID> addLocalEntry(const kad_path& path_to_add, bool precalc) { return addEntry(path_to_add, true, false, precalc); }
+        void delPrecalcEntry(const kad_path &path_to_remove);
 
 	// modify PID for path to contact
 	bool modEntry(const OverlayKey& contact_key, const kad_path& newpath, bool foreignPID);
@@ -155,7 +155,7 @@ public:
 	virtual std::string str() const;
 protected:
 	// try to add PID for path to contact (needs to be included in path_to_add), returns incomingPID or undefined on failure
-	std::pair<bool, PathID> addEntry(const kad_path& path_to_add, bool foreignPID, bool precalc);
+	std::pair<bool, PathID> addEntry(const kad_path& path_to_add, bool isLocal, bool foreignPID, bool precalc);
 
 private:
 	const OverlayKey *ownNodeID = nullptr;
@@ -168,7 +168,16 @@ private:
 inline
 void
 FwdTablePathID::setNIDtoPIDmapping(const OverlayKey& nid, const PathID incomingPathID, const PathID LastSegmentPathID) {
-	NIDPIDTable[nid]= incomingPathID;
+	if (auto it = NIDPIDTable.find(nid); it != NIDPIDTable.end()) {
+		// entry exists already, delete old PID
+                delPIDEntry(it->second);
+		// replace with new one
+                it->second= incomingPathID;
+        }
+	else {
+		NIDPIDTable.insert({nid,incomingPathID});
+	}
+	// update last segment
 	if (LastSegmentPathID != PathID::UndefinedPathID)
 		NIDPIDTableLastSeg[nid]= LastSegmentPathID;
 	else

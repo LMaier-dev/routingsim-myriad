@@ -366,7 +366,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	// other packets should include the key in the source route
 
 	// check for hop limit (last resort), normally KIRA is loop free
-        if (packet->getHopLimit() == 0) {
+	if (packet->getHopLimit() == 0) {
 		EV_ERROR << "Hoplimit reached @Node " << myOverlayKey.shortStr() << " source route=" << std::make_pair(packet->getSrcPath(),packet->getActiveVector()) << endl;
 		// will simply drop this packet
 		return;
@@ -1134,7 +1134,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
                         // then we would use the first contact instead as this makes progress
 			if ((contact.getKey() ^ query) < (myOverlayKey ^ query))
 				packet->appendRoute(contact);
-                        else
+			else
 				packet->appendRoute(contacts.front());
 
                         ASSERT(packet->getRouteArraySize() - packet->getProgress() <= packet->getHopLimit());
@@ -1344,7 +1344,6 @@ void R2Kademlia::sampleStatistics (Statistics &stats) {
 	}
 	unsigned long notifyFirstSegmentSourcesSize(0UL);
 	std::for_each(notifyFirstSegmentSources.cbegin(), notifyFirstSegmentSources.cend(), [&](auto& entry){notifyFirstSegmentSourcesSize+= entry.second.size();});
-	notifyFirstSegmentSourcesSize+= notifyFirstSegmentSources.size();
 	stats.value("notifyFirstSegmentSources",notifyFirstSegmentSourcesSize);
 	//stats.value("routingTableFoundEquivalentPaths", routingTable.getNumFoundEquivPaths());
 	stats.value("fwdTableSize", fwdTablePathID.getNumEntries());
@@ -1403,7 +1402,6 @@ void R2Kademlia::recordScalars() {
 	recordScalar("popularity", getKadObserver().getPopularity(myOverlayKey));
 	unsigned long notifyFirstSegmentSourcesSize(0UL);
 	std::for_each(notifyFirstSegmentSources.cbegin(), notifyFirstSegmentSources.cend(), [&](auto& entry){notifyFirstSegmentSourcesSize+= entry.second.size();});
-	notifyFirstSegmentSourcesSize+= notifyFirstSegmentSources.size();
 	recordScalar("notifyFirstSegmentSources",notifyFirstSegmentSourcesSize);
 	recordScalar("fwdTableSize", fwdTablePathID.getNumEntries());
 	recordScalar("fwdTableValid", fwdTablePathID.getNumValidEntries());
@@ -1610,7 +1608,7 @@ void R2Kademlia::countFwd(KadPacket &packet) {
 void R2Kademlia::countReceived(KadPacket& packet) {
 	//EV_TRACE << "countReceived: tracked=" << packet.isTracked() << endl;
         // reachability test packets should not be counted
-        if (not packet.isTracked()) {
+	if (not packet.isTracked()) {
 		msgStats[packet.getType()].receivedCount++;
 		msgStats[packet.getType()].receivedVolume += packet.getByteLength();
 		receivedVolume += packet.getByteLength();

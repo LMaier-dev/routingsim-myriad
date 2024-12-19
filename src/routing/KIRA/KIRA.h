@@ -385,8 +385,8 @@ private:
 	/// remove path ID if possible
 	void checkForPathTeardown(const KadPacket& packet);
 
-	/// for a new neighborhoodcontact, installed any known paths within discoveryRadius
-	void vicinityPathIDCompletion(const KadContact& neighborhoodContact);
+	/// for a new neighborhoodcontact, install/remove any known paths within discoveryRadius
+	void vicinityPathIDCompletion(const KadContact& neighborhoodContact, bool removePrecalcEntry= false);
 
 	/// call when a node is disconnected
 	void nodeDisconnect(nodeid_t nid);
