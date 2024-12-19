@@ -356,7 +356,7 @@ void R2Kademlia::vicinityPathIDCompletion(const KadContact& neighborhoodContact,
 				pathtoadd.push_back(*v);
 			pathtoadd.push_back(*(currentNodep->nodeKey));
 			//EV_TRACE << "vicinityPathIDCompletion - trying to add " << tmpContact.getPath() << " " << tmpContact.getKey().shortStr() << endl;
-                        if (removePIDs)
+			if (removePIDs)
 				fwdTablePathID.delPrecalcEntry(pathtoadd);
 			else
 				fwdTablePathID.addPrecalcEntry(pathtoadd);

@@ -194,8 +194,8 @@ FwdTablePathID::addEntry(const kad_path& path_to_add, bool isLocal, bool isForei
 	PIDFwdTable[incomingPathID]= fwdentry;
 
 	// tpath: path including the target
-	EV_TRACE << "addEntry(): inPID: " << incomingPathID << " outPID: "
-		 << fwdentry.outgoingPathID << " tpath: " << path_to_add << " " << fwdentry.str() << endl;
+	// EV_TRACE << "addEntry(): inPID: " << incomingPathID << " outPID: "
+	// 	 << fwdentry.outgoingPathID << " tpath: " << path_to_add << " " << fwdentry.str() << endl;
 
 	return std::make_pair(true, incomingPathID);
 }
