@@ -15,7 +15,6 @@
 
 package routingsim.routing.KIRA;
 
-
 //
 // 
 //
@@ -57,7 +56,7 @@ simple R2Kademlia extends routingsim.foundation.Protocol
 		double exploreInterval = default(0s) @unit(s);
 		double probeInterval = default(2s) @unit(s);
 		/// 0=none, 1=random, 2=exiting, 3=bucket_expand, 4=random_suffix, 5=suffix_expand, 6=random_bucket
-		int probeStrategy @enum(ProbeStrategy) = default(3);
+		int probeStrategy = default(3);
 		// minHelloInterval
 		double minHelloInterval = default(200ms) @unit(ms);
 		// maxHelloInterval
@@ -84,11 +83,11 @@ simple R2Kademlia extends routingsim.foundation.Protocol
 		/// updateMaxNotification
 		int updateMaxNotification = default(4);
 		/// updateNotifyStrategy 1=close to own key, 2=close to affected key
-		int updateNotifyStrategy @enum(UpdateNotifyStrategy) = default(1);
+		int updateNotifyStrategy = default(1);
 		/// updatePropagateStrategy 0=none, 1=KAD_Unreachable, 2=KAD_Announce, 3=KAD_Change, 4 =KAD_Announce+KAD_Change, 5=all
-		int updatePropagateStrategy @enum(UpdatePropagateStrategy) = default(1);
+		int updatePropagateStrategy = default(1);
 		/// sendLinkFailureNotifications (none = 0, floodonly= 1, flood_and_directPID= 2, full= 3)
-		int linkFailureNotifications @enum(linkFailureNotificationType) = default(0);
+		int linkFailureNotifications = default(0);
 		/// if failureFocussedProbing true: send reachability probes to affected nodes during failures (unless isolated),
 		/// otherwise choose nodes randomly
 		bool failureFocussedProbing = default(true);

@@ -546,8 +546,7 @@ R2Kademlia::scheduleRequest(ContactRequestQueue& q, KadContact&& tmpcontact)
 
 	if (not q.isScheduled())
 	{
-		simtime_t wait_time(SimTime(uniform(q.initialScheduleDelay/2,
-						    3*q.initialScheduleDelay/2),SIMTIME_US));
+	  simtime_t wait_time(uniform(q.initialScheduleDelay/2, 3*q.initialScheduleDelay/2));
 		EV_TRACE << "scheduling " << q.getDescription() << " for " << it->getKey().shortStr()
 			 << " in " << wait_time << 's' << endl;
 		addOneShotTimer(wait_time, q.sendscheduledcall);

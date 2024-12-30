@@ -297,7 +297,7 @@ void R2Kademlia::nodeDisconnect(nodeid_t nid) {
 
     if (floodOnFailure) {
         // send "LSA" after short delay
-        addOneShotTimer(SimTime(uniform(1000,3000),SIMTIME_US), [this,nid](short i) {
+      addOneShotTimer(uniform(SimTime(1000,SIMTIME_US), SimTime(3000,SIMTIME_US)), [this,nid](short i) {
                 return sendFloodPacket(std::make_optional(hop_t(nid,node().getNodeId())));
             });
     }

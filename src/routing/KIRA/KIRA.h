@@ -16,6 +16,7 @@
 #ifndef __ROUTINGSIM_KIRA_H_
 #define __ROUTINGSIM_KIRA_H_
 
+#include "simtime.h"
 #ifndef NDEBUG
 #define _DEBUG_ONLY(X) X
 #else
@@ -695,28 +696,28 @@ inline R2Kademlia::R2Kademlia()
           "PNDiscover",
           std::bind(&R2Kademlia::sendDiscoveryReq, this, ph::_1, ph::_2),
           std::bind(&R2Kademlia::sendScheduledPNDiscReqs, this),
-          PNDiscoverInitialWaitTime),
+          SimTime(PNDiscoverInitialWaitTime, omnetpp::SIMTIME_US)),
       GetPNQueue("QueryRouteReq(PN)",
                  std::bind(&R2Kademlia::sendGetPhysicalNeighbors, this, ph::_1,
                            ph::_2),
                  std::bind(&R2Kademlia::sendScheduledQueryRouteReqsPN, this),
-                 GetPNInitialWaitTime),
+                 SimTime(GetPNInitialWaitTime, omnetpp::SIMTIME_US)),
       GetONQueue(
           "QueryRouteReq(ON)",
           std::bind(&R2Kademlia::sendGetOverlayNeighbors, this, ph::_1, ph::_2),
           std::bind(&R2Kademlia::sendScheduledQueryRouteReqsON, this),
-          GetONInitialWaitTime),
+          SimTime(GetONInitialWaitTime,omnetpp::SIMTIME_US)),
       ContactCandidateProbeQueue(
           "ContactCandidateProbeQueue",
           std::bind(&R2Kademlia::sendPathProbeToContactCandidate, this, ph::_1,
                     ph::_2),
           std::bind(&R2Kademlia::sendScheduledContactCandidateProbes, this),
-          ContactCandidateInitialWaitTime),
+          SimTime(ContactCandidateInitialWaitTime,omnetpp::SIMTIME_US)),
       OnDemandPathProbeQueue(
           "OnDemandPathProbeReq",
           std::bind(&R2Kademlia::sendOnDemandPathProbe, this, ph::_1, ph::_2),
           std::bind(&R2Kademlia::sendScheduledOnDemandPathProbe, this),
-          OnDemandPathProbeReqInitialWaitTime),
+          SimTime(OnDemandPathProbeReqInitialWaitTime,omnetpp::SIMTIME_US)),
       FloodQueue(
           "FloodQueue", revPathFloodPauseTime, revPathFloodPauseTime,
           std::bind(&R2Kademlia::addFixedTimer, this, ph::_1, ph::_2, ph::_3),
@@ -832,7 +833,7 @@ std::unique_ptr<T> R2Kademlia::makeDataPacket(const OverlayKey& dstNodeID, const
 template<typename T>
 std::unique_ptr<T> R2Kademlia::makeAnswer(const KadPacket& original, const char* packetName) {
 	auto answer = std::make_unique<T>();
-        if (packetName)
+	if (packetName)
 		answer->setName(packetName);
 	else
 		answer->setName(PDUNames.at(answer->getType()));
