@@ -909,9 +909,9 @@ R2Kademlia::notifyAffectedPathUsers(const OverlayKey& nexthop_key) {
 
 	// send local link failure notifications after a very short delay to also consider multiple failed links
 	if (not localLinkFailureNotificationsScheduled) {
-		addOneShotTimer(
-			SimTime(uniform(10, 50), SIMTIME_US),
-			std::bind(&R2Kademlia::sendLocalLinkFailureNotifications, this));
+		addOneShotTimer(uniform(SimTime(10, SIMTIME_US),
+					SimTime(50, SIMTIME_US)),
+				std::bind(&R2Kademlia::sendLocalLinkFailureNotifications, this));
 		localLinkFailureNotificationsScheduled= true;
 	}
 }

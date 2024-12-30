@@ -212,7 +212,7 @@ void R2Kademlia::onConnect( nodeid_t nid ) {
           return;
 
 	// send a hello packet to new neighbor after some random delay (average minHelloInterval)
-	addOneShotTimer(uniform(minHelloInterval/2,1.5*minHelloInterval), [this,nid](short int ignored)->bool {
+	addOneShotTimer(uniform(minHelloInterval/2,3*minHelloInterval/2), [this,nid](short int ignored)->bool {
 		auto packet(makeHelloPacket());
 		countSent(*(static_cast<KadHello*>(packet->getEncapsulatedPacket())));
 		sendToNode(nid, std::move(packet));
