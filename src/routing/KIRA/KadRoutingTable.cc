@@ -593,7 +593,9 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path newpath, stateseqn
 		contact->setNodeDegree(nodeDegree);
 		contact->setValid();
 		contact->clearProposedPath();
-		contact->updateLastSeenTo(simTime()-SimTime(pathinfo_age,SIMTIME_MS));
+		contact->getActivePathMod().updateLastValidatedTo(simTime()-SimTime(pathinfo_age,SIMTIME_MS));
+		if (identical_path) // need to update path age
+			contact->updateLastSeenTo(simTime()-SimTime(pathinfo_age,SIMTIME_MS));
 		updateCount++;
 	}
 

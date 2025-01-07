@@ -87,7 +87,7 @@ void R2Kademlia::handleDataPacket(NodePkt_p pkt) {
 	EV_TRACE << "received data packet from "
 	   << packet->getSrcNodeID().shortStr() << " to "
 	   << packet->getDstNodeID().shortStr() << " overlaysrc: " << packet->getPathSrcNodeID().shortStr()
-	   << " HL:" << packet->getHopLimit() << " Type " << packet->getType() << endl;
+	   << " HL:" << packet->getHopLimit() << " Type " << (unsigned int) packet->getType() << endl;
 
 	// we should check whether the link via this message travelled is
 	// still active, otherwise we should drop this message as it was affected
