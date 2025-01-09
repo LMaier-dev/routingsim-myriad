@@ -1518,9 +1518,11 @@ void KadRoutingTable::invalidateContact(KadContact& contact, const link_t& faile
 
 				EV_TRACE << "Set Contact to invalid due to failed link " << failedLink
 					 << " (age: " << failedLinkAge << ") " << contact << endl;
-				// if contact is important neighbor: send rediscovery immediately
-				// otherwise schedule slow rediscovery if it lost its last link 
-                                // a rediscovery does not make sense if the link is repaired the node should come back to us
+                                // if contact is important neighbor: send
+                                // rediscovery immediately
+                                // otherwise schedule slow rediscovery
+                                // if it lost its last link a rediscovery does not make sense
+                                // if the link is repaired the node should come back to us
 				if (not lastlinkfailed) {
                                     if (isInLastBucket(contact.getKey()))
                                             policy->scheduleUrgentRediscovery(contact.getKey());

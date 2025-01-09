@@ -29,7 +29,8 @@ public:
         /// returns the processing time for the current packet
         simtime_t getProcessingTime() const { return processingTimeFunc(); }
 	/// sets the FinishingTime of the currently served packet (set randomly by default using the processingTimeFunc())
-	void setFinishingTime(simtime_t tp=SIMTIME_ZERO) { finishingTimeCurrentlyServedPacket=  (tp == SIMTIME_ZERO) ? processingTimeFunc() : tp; }
+        void setFinishingTime(simtime_t tp = SIMTIME_ZERO) {
+          finishingTimeCurrentlyServedPacket = (tp == SIMTIME_ZERO) ? simTime()+processingTimeFunc() : tp; }
 	simtime_t getFinishingTime() const { return finishingTimeCurrentlyServedPacket; }
 	/// returns true if packets waiting for being served or current packet not yet finished
         bool isBusy() const {return not packetQueue.empty() or simTime() <= finishingTimeCurrentlyServedPacket;};
