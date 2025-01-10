@@ -129,7 +129,7 @@ class neighbor_t {
 public:
   nodeid_t id;
   simtime_t activity;
-  simtime_t lastsent;
+  simtime_t lastTXfinished; // point in time when the last transmission will be finished
 
   cGate *out;
 };

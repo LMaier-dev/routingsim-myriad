@@ -72,7 +72,7 @@ void Node::initialize(int stage) {
 	  WATCH(id);
 	  WATCH_VECTOR(neighbor_set);
 
-          if (par("id").intValue() == -1) {
+	  if (par("id").intValue() == -1) {
 		  this->id = gnodeid;
 		  gnodeid++;
 	  }
@@ -177,8 +177,13 @@ void Node::handleMessage(cMessage *msg) {
     break;
   }
 
+  // count link statistics
+  if (not(np->getAttributes() & NODEPKT_ATTR_DO_NOT_COUNT_ON_LINK)) {
+	  linkusage_map[np->getHop().from].msgcount++;
+	  linkusage_map[np->getHop().from].bytecount += np->getByteLength();
+  }
 
-  // send to binding
+  // send to protocol binding
   if (bindings.count(np->getType()) != 0) {
     int gateIndex = bindings[np->getType()];
     send(np, "toProtocols$o", gateIndex);
@@ -226,31 +231,37 @@ void Node::sendToNode(nodeid_t nid, NodePkt *np) {
 	  node_processing_delay += SimTime(intuniform(minNodeDataPlaneDelay, maxNodeDataPlaneDelay), SIMTIME_NS);
 
   // schedule not before earlier sent message to avoid message reordering!
-  if (simTime() + node_processing_delay < n.lastsent) {
-    node_processing_delay = n.lastsent - simTime();
+  // this however, neglects the processing delay of this message then
+  // and applies back-to-back sending at infinite transmission rate
+  if (simTime() + node_processing_delay < n.lastTXfinished) {
+	  node_processing_delay = n.lastTXfinished - simTime();
   }
 
-  // schedule not before transmission of other message on channel
+  // schedule not before transmission of other message in transit on channel
   cChannel *txChannel = n.out->findTransmissionChannel();
-  if (txChannel) {
+  if (txChannel and txChannel->isBusy()) {
+    // getTransmissionFinishTime() returns the simulation time when
+    // _all_ transmissions will finish on the (sender side) of the channel.
     simtime_t txFinishTime = txChannel->getTransmissionFinishTime();
+
+    // need to delay start of transmission until all current inflight transmissions will be finished
     if (simTime() + node_processing_delay < txFinishTime) {
-      node_processing_delay = txFinishTime - simTime();
+	    node_processing_delay = txFinishTime - simTime();
     }
   }
 
-  if (not(np->getAttributes() & NODEPKT_ATTR_DO_NOT_COUNT_ON_LINK)) {
-	  linkusage_map[nid].msgcount++;
-          linkusage_map[nid].bytecount += np->getByteLength();
-  }
   // EV_TRACE << "sendToNode() @Node " << getNodeId() << ": Destination node "
-  //          << nid << " msg:" << np->getName() << " " << n.out->getNextGate()->getFullPath() << endl;
+  //          << nid << " msg:" << np->getName() << " "
+  //          << n.out->getNextGate()->getFullPath() << " (" << np->getByteLength() << " bytes)"
+  // 	   << endl;
+
+  // txChannel->getTransmissionFinishTime() will reflect also the transmission duration of the packet
   sendDelayed(np, node_processing_delay, n.out);
   if (txChannel) {
-    n.lastsent = simTime() + node_processing_delay + txChannel->calculateDuration(np);
+	  n.lastTXfinished = simTime() + node_processing_delay + txChannel->calculateDuration(np);
   }
   else {
-    n.lastsent = simTime() + node_processing_delay;
+	  n.lastTXfinished = simTime() + node_processing_delay;
   }
 }
 
@@ -318,7 +329,7 @@ void Node::onHello(NodePkt *pkt) {
 
   // set record
   nr.activity = simTime();
-  nr.lastsent = 0;
+  nr.lastTXfinished = simTime();
   nr.id = nid;
   if (pkt->getDestGateId() == -1) {
     nr.out = gate("toNeighbors$o", pkt->getArrivalGate()->getIndex());

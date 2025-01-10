@@ -1309,7 +1309,7 @@ void R2Kademlia::sampleStatistics (Statistics &stats) {
         auto linkusagemap = node().getLinkUsageMap();
 	for ( auto lu : linkusagemap) {
 		stats.value("linkUsageMsgCount", lu.second.msgcount);
-                stats.value("linkUsageSentBytes", lu.second.bytecount);
+                stats.value("linkUsageReceivedBytes", lu.second.bytecount);
 	}
 
         stats.value("forwardedPackets", forwardedPackets);
