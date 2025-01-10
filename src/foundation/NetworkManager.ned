@@ -63,10 +63,10 @@ simple NetworkManager
         /// determine the way shortest paths are determine; we want an alternative to
         /// calculating the full distance matrix for large graphs, when only sampling
         /// is used.
-        string shortestPathCalculationMode @enum(fullDistanceMatrix,onDemand) = default("fullDistanceMatrix");
+        string shortestPathCalculationMode @enum(fullDistanceMatrix,onDemand,onDemandBidirectionalBFS) = default("fullDistanceMatrix");
 
         /// when dynamics gate is not connected, create a dynamics model by name
-        string dynamicsModel @enum("None","CatastrophicFailure","LifetimeChurn","LinkFailure","IncrementalFailure") = default("LinkFailure");
+        string dynamicsModel @enum(None,CatastrophicFailure,LifetimeChurn,LinkFailure,IncrementalFailure,MixedFailure) = default("LinkFailure");
 
         string topologyStatistics @enum(None,Light,Heavy) = default("Light");
 
