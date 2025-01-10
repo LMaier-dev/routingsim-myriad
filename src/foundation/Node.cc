@@ -196,11 +196,13 @@ void Node::sendToNode(nodeid_t nid, NodePkt *np) {
   if (neighbor_map.contains(nid) == false) {
     EV_WARN << "sendToNode() @Node " << getNodeId() << ": Destination node "
             << nid << " unknown, @msg id=" << np->getId() << endl;
+#ifndef NDEBUG
     EV_TRACE << "Neighbors are: {";
     for (const auto &it : neighbor_map) {
       EV_TRACE << ' ' << (int)it.second.id;
     }
     EV_TRACE << " }" << endl;
+#endif
     delete np;
     return;
   }
@@ -237,8 +239,10 @@ void Node::sendToNode(nodeid_t nid, NodePkt *np) {
     }
   }
 
-  if (not(np->getAttributes() & NODEPKT_ATTR_DO_NOT_COUNT_ON_LINK))
-	  linkusage_map[nid]++;
+  if (not(np->getAttributes() & NODEPKT_ATTR_DO_NOT_COUNT_ON_LINK)) {
+	  linkusage_map[nid].msgcount++;
+          linkusage_map[nid].bytecount += np->getByteLength();
+  }
   // EV_TRACE << "sendToNode() @Node " << getNodeId() << ": Destination node "
   //          << nid << " msg:" << np->getName() << " " << n.out->getNextGate()->getFullPath() << endl;
   sendDelayed(np, node_processing_delay, n.out);

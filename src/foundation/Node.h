@@ -36,6 +36,11 @@ namespace routingsim {
 class Node: public cSimpleModule {
 public:
 	typedef unsigned long long linkcount_t;
+        typedef unsigned long long linkcountvolume_t;
+        typedef struct {
+		linkcount_t msgcount;
+		linkcountvolume_t bytecount;
+	} linkstats_t;
 	/// returns the node, that is either a submodule, the node of a protocol, etc
 	static Node* getNode(cModule *mod);
 	/// returns the node on the other side of this outgoing gate
@@ -48,10 +53,10 @@ public:
 	const vector_set<nodeid_t>& getNeighbors() const { return neighbor_set; }
 
 	/// getNeighborMap()
-	const std::unordered_map<nodeid_t, neighbor_t> getNeighborMap() const { return neighbor_map; }
+	const std::unordered_map<nodeid_t, neighbor_t>& getNeighborMap() const { return neighbor_map; }
 
 	/// getLinkUsageMap()
-	const std::unordered_map<nodeid_t, linkcount_t> getLinkUsageMap() const { return linkusage_map; }
+	const std::unordered_map<nodeid_t, linkstats_t>& getLinkUsageMap() const { return linkusage_map; }
 
 	/// Binds a module to the given packet type
 	void bind( int type, cModule* mod );
@@ -62,19 +67,19 @@ public:
 	/// sets the color of the display string of this Node (and its wrapper).
 	void setColor(const char *color);
 
-    template<std::derived_from<Protocol> P>
-    P* getProtocol() {
-        // iter over protocols to find matching 
-        for (int i = 0; i < this->gateSize("toProtocols"); i++) {
-            cGate* gate = this->gate("toProtocols$o", i);
-            ASSERT(gate->isConnected());
-            if (auto proto = dynamic_cast<P *>(gate->getPathEndGate()->getOwnerModule());
-                proto != nullptr) {
-                return proto;
-            }
-        }
-        return nullptr;
-    }
+	template<std::derived_from<Protocol> P>
+	P* getProtocol() {
+		// iter over protocols to find matching 
+		for (int i = 0; i < this->gateSize("toProtocols"); i++) {
+			cGate* gate = this->gate("toProtocols$o", i);
+			ASSERT(gate->isConnected());
+			if (auto proto = dynamic_cast<P *>(gate->getPathEndGate()->getOwnerModule());
+			    proto != nullptr) {
+				return proto;
+			}
+		}
+		return nullptr;
+	}
 
 protected:
 	friend class NetworkTopology;
@@ -104,8 +109,9 @@ protected:
 	/// Neighbors of the node
 	vector_set<nodeid_t> neighbor_set;
 	std::unordered_map<nodeid_t, neighbor_t> neighbor_map;
-	/// need separate map for link counters as neighbor_map will remove nodes
-	std::unordered_map<nodeid_t, linkcount_t> linkusage_map;
+	/// link statistics (unidirectional, only for sent messages, see sendToNode())
+        /// need separate map for link statistics as neighbor_map will remove nodes
+	std::unordered_map<nodeid_t, linkstats_t> linkusage_map;
 
 	/// Broadcast a message among all node modules
 	void sendToModules( NodePkt* np );

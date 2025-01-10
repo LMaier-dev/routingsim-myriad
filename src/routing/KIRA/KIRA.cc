@@ -1304,7 +1304,15 @@ bool R2Kademlia::handleRPCTimeOut(KadPacket_p answer_, RPCState& rpcState) {
 void R2Kademlia::sampleStatistics (Statistics &stats) {
 	// every value here will contribute to the average, min, max,
 	// avgDiffQuot and quantiles, a histogram is also created
-	stats.value("forwardedPackets", forwardedPackets);
+
+        // for link statistics we need to access the underlying node
+        auto linkusagemap = node().getLinkUsageMap();
+	for ( auto lu : linkusagemap) {
+		stats.value("linkUsageMsgCount", lu.second.msgcount);
+                stats.value("linkUsageSentBytes", lu.second.bytecount);
+	}
+
+        stats.value("forwardedPackets", forwardedPackets);
 	stats.value("sentPackets", sentPackets);
 	stats.value("receivedPackets", receivedPackets);
 	stats.value("sentVolume", sentVolume);
