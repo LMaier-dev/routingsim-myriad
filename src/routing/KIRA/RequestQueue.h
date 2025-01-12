@@ -1,9 +1,9 @@
 #ifndef __ROUTINGSIM_RequestQueue_H_
 #define __ROUTINGSIM_RequestQueue_H_
 
-#include<vector>
-#include<functional>
-#include<omnetpp/simtime_t.h>
+#include <vector>
+#include <functional>
+#include "simtime_t.h"
 
 namespace routingsim {
 
@@ -17,7 +17,7 @@ public:
 	RequestQueue(const std::string descriptiontxt,
 		     std::function<simtime_t(const T&, RequestQueueElementActionType)> sendrequestcall,
 		     std::function<bool(short int)> sendscheduledcall,
-		     unsigned long initialScheduleDelay) :
+		     simtime_t initialScheduleDelay) :
 		sendrequestcall(sendrequestcall),
 		sendscheduledcall(sendscheduledcall),
 		initialScheduleDelay(initialScheduleDelay),
@@ -29,7 +29,7 @@ public:
 	void clearScheduled() { scheduled= false; }
 	std::function<simtime_t(const T&, RequestQueueElementActionType)> sendrequestcall;
 	std::function<bool(short int)> sendscheduledcall;
-	unsigned long initialScheduleDelay = 0; // in µs
+	simtime_t initialScheduleDelay = SIMTIME_ZERO;
 private:
 	const std::string description;
 	bool scheduled = false;

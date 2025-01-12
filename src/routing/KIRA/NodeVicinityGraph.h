@@ -10,7 +10,7 @@ namespace routingsim {
 class nodeVicinityNode {
 public:
 	const OverlayKey* nodeKey = nullptr;
-	unsigned short distance = 0; // distance in hops from node
+	unsigned short distance = 0; // (shortest) distance in hops from (this) node
 	stateseqno_t stateseqno = stateseqno_t::invalidSeqNo; // last seen state seq no when communicated with this node
 	std::vector<const nodeVicinityNode*> children; // (sorted) list of pointer to children
 };

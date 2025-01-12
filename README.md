@@ -10,7 +10,10 @@ Singapore, SGP, December 14-16, 2011, 305–310, IEEE, Piscataway, NJ.
 doi:10.1109/ICON.2011.6168493 
 https://ieeexplore.ieee.org/document/6168493
 
-The current version has been tested with OMNeT++ 6.0.3 and OMNeT++ 5.7.
+The current version has been tested with 
+OMNeT++ 6.1.0, 6.0.3 and 5.7 
+(older versions will not work due to .msg and .ned
+format incompatibilities).
 
 ## Installation
 While OMNeT++ is able to run under Windows, the recommended and
@@ -18,7 +21,7 @@ tested environment is a native Linux installation (e.g., Ubuntu)
 Get OMNeT++ from https://omnetpp.org/ and install it according to
 the manual.
 
-You should make sure that
+This code partially uses C++20 features, so you should make sure that
 `CXXFLAGS=-std=c++20`
 is set in `configure.user` of OMNeT++
 as well as `CFLAGS_RELEASE='-O3 -DNDEBUG=1'` since we use a lot
@@ -27,7 +30,7 @@ ASSERT() macros for debugging.
 Note: you should use at least g++-12 as g++-11 has a compiler bug
 that causes crashes.
 
-Additionally, one needs boost, e.g., libboost-all-dev
+Additionally, one needs boost, e.g., `libboost-all-dev`
 as well as libgmp (libgmp-dev).
 
 Once you have OMNeT++ in your PATH and LD_LIBRARY_PATH,
@@ -53,13 +56,13 @@ and type in
     ./RoutingSim_dbg ../simulations/KIRA/eval.ini
 
 Simulations for evaluations should run with the Cmdenv interface
-and compiled with MODE=release.
+and compiled with `MODE=release`.
 
 Result files are stored in ../simulations/KIRA/results
 for the example above.
 
 ## State Export
-The state export functionality allows to dump the contents of all routingtables at the end of a simulation for offline analysis.
+The state export functionality allows to dump the contents of all KIRA routing tables at the end of a simulation for offline analysis.
 
 ### Dependencies
 For the state-export functionality one needs [https://github.com/nlohmann/json](https://github.com/nlohmann/json) version 3.10.5:

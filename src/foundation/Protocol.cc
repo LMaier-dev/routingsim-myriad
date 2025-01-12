@@ -61,15 +61,14 @@ void Protocol::handleMessage(cMessage *msg) {
                         if (np) { // got next packet to serve
 				// call function in protocol
                                 onMessage(std::move(np));
-				auto finishingTime = simTime() + ppq->getProcessingTime();
-                                ppq->setFinishingTime(finishingTime);
-				//EV_TRACE << "packet processing will be finished at " << finishingTime << endl;
-                                if (ppq->empty()) { // queue empty now, will not schedule ProtocolTimerMsg
+                                // set timer for next message to
+				if (ppq->empty()) { // queue empty now, will not schedule ProtocolTimerMsg
 					ppq->setScheduled(false);
 				}
 				else {
-					// calculate processing time for this message and start timer for popping next packet
-					scheduleAt(finishingTime, pt);
+					// calculate processing time for next message and start timer for popping next message
+					ppq->setFinishingTime();
+					scheduleAt(ppq->getFinishingTime(), pt);
                                         ppq->setScheduled(true);
 				}
                         }
@@ -109,41 +108,37 @@ void Protocol::handleMessage(cMessage *msg) {
 	}
 
         // check whether NodePkt needs to be enqueued for protocol
-        if (auto it = protocolQueues.find(np->getType());
+	if (auto it = protocolQueues.find(np->getType());
             it != protocolQueues.cend()) {
 		// add packet to queue if necessary
                 if (auto ppq = it->second.get(); ppq) {
 
-			if (ppq->isBusy()) { // waiting packets present or packet currently being served
-				// add this packet to the queue
-				auto added = ppq->addPacket(std::unique_ptr<NodePkt>(np));
-                                if (not added) // if discarded just return
-					return;
+			if (ppq->empty()) {
+				// set finishing time of this first packet
+				// (will automatically call processingTimeFunc() to determine the duration)
+                                ppq->setFinishingTime();
+			}
 
-                                if (not ppq->isScheduled()) { // no timer scheduled yet
-					auto timermsg = ppq->getTimerMsg();
-					if (timermsg == nullptr) { // otherwise reuse existing timer msg
-						// need to create new timer message
-                                                ASSERT(ppq->getTimerMsg() == nullptr);
-						timermsg= new ProtocolTimerMsg(0, ppq);
-                                                ppq->setTimerMsg(timermsg);
-                                        }
-					scheduleAt(ppq->getFinishingTime(),timermsg);
-					ppq->setScheduled(true);
-                                }
-                        }
-                        else { // queue is empty and no packet being served, so start serving immediately
-				// set finishing time of this packet
-				auto finishingTime = simTime() + ppq->getProcessingTime();
-                                ppq->setFinishingTime(finishingTime);
-				//EV_TRACE << "packet processing will be finished at " << finishingTime << endl;
-				// start serving this packet immediately
-                                onMessage(std::unique_ptr<NodePkt>(np));
+			// add this packet to the queue
+			auto added = ppq->addPacket(std::unique_ptr<NodePkt>(np));
+			if (not added) // if discarded just return
 				return;
+
+			if (not ppq->isScheduled()) { // no timer scheduled yet
+				auto timermsg = ppq->getTimerMsg();
+				if (timermsg == nullptr) { // otherwise reuse existing timer msg
+					// need to create new timer message
+					ASSERT(ppq->getTimerMsg() == nullptr);
+					timermsg= new ProtocolTimerMsg(0, ppq);
+					ppq->setTimerMsg(timermsg);
+				}
+				// first packet will be served after its processing time has passed
+                                scheduleAt(ppq->getFinishingTime(),timermsg);
+				ppq->setScheduled(true);
 			}
                 }
         }
-	else {
+	else { // no processing modelled for this packet type
 		onMessage(std::unique_ptr<NodePkt>(np));
 	}
 }

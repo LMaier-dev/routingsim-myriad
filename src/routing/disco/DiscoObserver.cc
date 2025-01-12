@@ -187,8 +187,8 @@ void DiscoObserver::recordLinkUsage() const {
 			// traverse all outgoing links to neighbors
 			unsigned long long sum= 0;
 			for (auto& neighbor : np->getLinkUsageMap()) {
-				linkUsageHist.collect(neighbor.second);
-				sum += neighbor.second;
+				linkUsageHist.collect(neighbor.second.msgcount);
+				sum += neighbor.second.msgcount;
 			}
 			//EV_TRACE << "Node " <<  nid << " linkusage sum:" << sum << endl;
 		}

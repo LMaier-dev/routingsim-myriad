@@ -212,7 +212,7 @@ void R2Kademlia::onConnect( nodeid_t nid ) {
           return;
 
 	// send a hello packet to new neighbor after some random delay (average minHelloInterval)
-	addOneShotTimer(uniform(minHelloInterval/2,1.5*minHelloInterval), [this,nid](short int ignored)->bool {
+	addOneShotTimer(uniform(minHelloInterval/2,3*minHelloInterval/2), [this,nid](short int ignored)->bool {
 		auto packet(makeHelloPacket());
 		countSent(*(static_cast<KadHello*>(packet->getEncapsulatedPacket())));
 		sendToNode(nid, std::move(packet));
@@ -297,7 +297,7 @@ void R2Kademlia::nodeDisconnect(nodeid_t nid) {
 
     if (floodOnFailure) {
         // send "LSA" after short delay
-        addOneShotTimer(SimTime(uniform(1000,3000),SIMTIME_US), [this,nid](short i) {
+      addOneShotTimer(uniform(SimTime(1000,SIMTIME_US), SimTime(3000,SIMTIME_US)), [this,nid](short i) {
                 return sendFloodPacket(std::make_optional(hop_t(nid,node().getNodeId())));
             });
     }
@@ -366,7 +366,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	// other packets should include the key in the source route
 
 	// check for hop limit (last resort), normally KIRA is loop free
-        if (packet->getHopLimit() == 0) {
+	if (packet->getHopLimit() == 0) {
 		EV_ERROR << "Hoplimit reached @Node " << myOverlayKey.shortStr() << " source route=" << std::make_pair(packet->getSrcPath(),packet->getActiveVector()) << endl;
 		// will simply drop this packet
 		return;
@@ -1134,7 +1134,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
                         // then we would use the first contact instead as this makes progress
 			if ((contact.getKey() ^ query) < (myOverlayKey ^ query))
 				packet->appendRoute(contact);
-                        else
+			else
 				packet->appendRoute(contacts.front());
 
                         ASSERT(packet->getRouteArraySize() - packet->getProgress() <= packet->getHopLimit());
@@ -1304,7 +1304,15 @@ bool R2Kademlia::handleRPCTimeOut(KadPacket_p answer_, RPCState& rpcState) {
 void R2Kademlia::sampleStatistics (Statistics &stats) {
 	// every value here will contribute to the average, min, max,
 	// avgDiffQuot and quantiles, a histogram is also created
-	stats.value("forwardedPackets", forwardedPackets);
+
+        // for link statistics we need to access the underlying node
+        auto linkusagemap = node().getLinkUsageMap();
+	for ( auto lu : linkusagemap) {
+		stats.value("linkUsageMsgCount", lu.second.msgcount);
+                stats.value("linkUsageReceivedBytes", lu.second.bytecount);
+	}
+
+        stats.value("forwardedPackets", forwardedPackets);
 	stats.value("sentPackets", sentPackets);
 	stats.value("receivedPackets", receivedPackets);
 	stats.value("sentVolume", sentVolume);
@@ -1344,7 +1352,6 @@ void R2Kademlia::sampleStatistics (Statistics &stats) {
 	}
 	unsigned long notifyFirstSegmentSourcesSize(0UL);
 	std::for_each(notifyFirstSegmentSources.cbegin(), notifyFirstSegmentSources.cend(), [&](auto& entry){notifyFirstSegmentSourcesSize+= entry.second.size();});
-	notifyFirstSegmentSourcesSize+= notifyFirstSegmentSources.size();
 	stats.value("notifyFirstSegmentSources",notifyFirstSegmentSourcesSize);
 	//stats.value("routingTableFoundEquivalentPaths", routingTable.getNumFoundEquivPaths());
 	stats.value("fwdTableSize", fwdTablePathID.getNumEntries());
@@ -1403,7 +1410,6 @@ void R2Kademlia::recordScalars() {
 	recordScalar("popularity", getKadObserver().getPopularity(myOverlayKey));
 	unsigned long notifyFirstSegmentSourcesSize(0UL);
 	std::for_each(notifyFirstSegmentSources.cbegin(), notifyFirstSegmentSources.cend(), [&](auto& entry){notifyFirstSegmentSourcesSize+= entry.second.size();});
-	notifyFirstSegmentSourcesSize+= notifyFirstSegmentSources.size();
 	recordScalar("notifyFirstSegmentSources",notifyFirstSegmentSourcesSize);
 	recordScalar("fwdTableSize", fwdTablePathID.getNumEntries());
 	recordScalar("fwdTableValid", fwdTablePathID.getNumValidEntries());
@@ -1610,7 +1616,7 @@ void R2Kademlia::countFwd(KadPacket &packet) {
 void R2Kademlia::countReceived(KadPacket& packet) {
 	//EV_TRACE << "countReceived: tracked=" << packet.isTracked() << endl;
         // reachability test packets should not be counted
-        if (not packet.isTracked()) {
+	if (not packet.isTracked()) {
 		msgStats[packet.getType()].receivedCount++;
 		msgStats[packet.getType()].receivedVolume += packet.getByteLength();
 		receivedVolume += packet.getByteLength();

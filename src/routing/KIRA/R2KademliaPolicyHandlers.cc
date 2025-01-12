@@ -118,7 +118,7 @@ void R2Kademlia::onBucketEmpty(KadBucket& bucket) {
 }
 
 
-// this is called before deletion of the contact
+// this is called before deletion of the contact (may also be caused by contact replacement)
 void R2Kademlia::onContactRemoval(KadContact_p contact)
 {
 	//EV_TRACE << "onContactRemoval(" << ((contact != nullptr) ? contact->getKey().shortStr() : "nullptr") << ") called" << endl;
@@ -127,20 +127,26 @@ void R2Kademlia::onContactRemoval(KadContact_p contact)
 
 	// delete from Forwarding table PID (not for vicinity nodes)
 	// TODO: this can be scheduled for happening later
-	if (usePathIDs and contact->getPathLength() > 2*nodeVicinityGraph::vicinityDiscoveryRadius)
-	{ // this condition must be aligned with the sendPathSetup
+	if (usePathIDs)
+	{
 		// check for pending/scheduled PathSetup first
-		if (std::find(pathSetupQueue.cbegin(),pathSetupQueue.cend(),contact->getKey()) == pathSetupQueue.cend())
+		// this condition must be aligned with the sendPathSetup
+		if (contact->getPathLength() > 2 * nodeVicinityGraph::vicinityDiscoveryRadius and
+		    std::find(pathSetupQueue.cbegin(),pathSetupQueue.cend(),contact->getKey()) == pathSetupQueue.cend()) {
 			sendPathTeardown(contact);
+		}
 
 		fwdTablePathID.delEntry(contact);
 	}
 
-	// TODO: the following is probably not useful
 	// (node may still be present in vicinity, but was evicted from bucket)
 	// remove from vicinity node set (in case of later rendezvous again)
-	if (contact->getPathLength() < nodeVicinityGraph::vicinityDiscoveryRadius and contact->getState() == KadContact::State::dead)
-		vicinity.removeNode(contact->getKey());
+	if (contact->getPathLength() < nodeVicinityGraph::vicinityDiscoveryRadius and contact->getState() == KadContact::State::dead) {
+		// need to remove precomputed PathIDs
+		vicinityPathIDCompletion(*contact, true);
+		// remove node from vicinity
+                vicinity.removeNode(contact->getKey());
+	}
 }
 
 

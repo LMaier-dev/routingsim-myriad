@@ -231,10 +231,11 @@ std::set<nodeid_t> KadObserver::sampleNodes(int n) {
 
 
 void KadObserver::recordLinkUsage() const {
-	cHistogram linkUsageHist("linkUsage");
+	cHistogram linkUsageCountHist("linkUsageCount");
+	cHistogram linkUsageBytesHist("linkUsageBytes");
 	//hist->setRange(rangeLower, rangeUpper);
 	//hist->setNumBinsHint(numBins);
-	linkUsageHist.setMode(cHistogram::MODE_INTEGERS);
+	linkUsageCountHist.setMode(cHistogram::MODE_INTEGERS);
 	NetworkTopology& topo = getNetworkManager()->getTopology();
 
 	for (nodeid_t nid=0; nid < nodeid_to_key.size(); nid++) {
@@ -242,19 +243,22 @@ void KadObserver::recordLinkUsage() const {
 			// traverse all outgoing links to neighbors
 			//unsigned long long sum= 0;
 			for (auto& neighbor : np->getLinkUsageMap()) {
-				linkUsageHist.collect(neighbor.second);
+				linkUsageCountHist.collect(neighbor.second.msgcount);
+				linkUsageBytesHist.collect(neighbor.second.bytecount);
 				//sum += neighbor.second;
 			}
 			//EV_TRACE << "Node " <<  nid << " linkusage sum:" << sum << endl;
 		}
 	}
-	linkUsageHist.record();
+	linkUsageCountHist.record();
+	linkUsageBytesHist.record();
 }
 
 
 // this will only be called at KadObserver::finish()
+// records scalar statistics (per node individual values) for a sample set of nodes
 void KadObserver::recordStatistics() {
-	// record statistics for a sample set of nodes
+	// record scalar statistics (per node individual values) for a sample set of nodes
 	for (nodeid_t nid : sampleNodes(par("nodeSample").intValue()))
 		getR2Kademlia(nid).recordScalars();
 	for (nodeid_t nid : sampleNodes(par("routingTableSample").intValue()))
@@ -482,7 +486,7 @@ void KadObserver::registerPacketDropped(KadDataPacket& packet, const OverlayKey&
 
 }
 
-// TODO: fix (segmentation fault after 6)
+// called when a registered packet has been delivered successfully
 void KadObserver::registerPacketDelivered(KadPacket& packet) {
 	if (not packet.isTracked())
 		return;
@@ -499,11 +503,11 @@ void KadObserver::registerPacketDelivered(KadPacket& packet) {
 		EV_ERROR << "missing keys on packet" << endl;
 		return;
 	}
-	MessageDeliveryInfo info{};
-	info.hops = packet.getProgress();
-	info.distance = getPhysicalDistance(fromKey, toKey);
-	info.prefixDist = fromKey.getLength() - fromKey.sharedPrefixLength(toKey);
-	info.overlayHops = packet.getOverlayHops();
+        MessageDeliveryInfo info {
+          packet.getProgress(), packet.getOverlayHops(),
+	  getPhysicalDistance(fromKey, toKey),
+	  fromKey.getLength() - fromKey.sharedPrefixLength(toKey)
+        };
 	//EV_TRACE << "packetDelivered: hops=" << info.hops << " distance=" << info.distance << endl;
 	ASSERT(info.overlayHops > 0);
 	histograms[hopCount]->collect(info.hops);
@@ -532,11 +536,11 @@ void KadObserver::registerPacketDelivered(KadDataPacket& packet) {
 		EV_ERROR << "missing keys on packet" << endl;
 		return;
 	}
-	MessageDeliveryInfo info{};
-	info.hops = getR2Kademlia(fromKey).getHopLimitDefault()-packet.getHopLimit();
-	info.distance = getPhysicalDistance(fromKey, toKey);
-	info.prefixDist = fromKey.getLength() - fromKey.sharedPrefixLength(toKey);
-	info.overlayHops = packet.getOverlayHops();
+        MessageDeliveryInfo info {
+          getR2Kademlia(fromKey).getHopLimitDefault() - packet.getHopLimit(),
+              packet.getOverlayHops(), getPhysicalDistance(fromKey, toKey),
+	      fromKey.getLength() - fromKey.sharedPrefixLength(toKey)
+	};
 	
 	ASSERT(info.overlayHops > 0);
 	histograms[hopCountData]->collect(info.hops);

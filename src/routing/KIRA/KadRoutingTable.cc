@@ -90,7 +90,7 @@ void KadRoutingTable::init(const OverlayKey& myKey, KadPolicy* policy,
 std::string KadRoutingTable::str() const
 {
 	std::ostringstream out;
-
+	out << "RTsize=" << getNumContacts() << endl;
 	unsigned int i= 0;
 	for (const auto& b : buckets)
 	{
@@ -593,7 +593,9 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path newpath, stateseqn
 		contact->setNodeDegree(nodeDegree);
 		contact->setValid();
 		contact->clearProposedPath();
-		contact->updateLastSeenTo(simTime()-SimTime(pathinfo_age,SIMTIME_MS));
+		contact->getActivePathMod().updateLastValidatedTo(simTime()-SimTime(pathinfo_age,SIMTIME_MS));
+		if (identical_path) // need to update path age
+			contact->updateLastSeenTo(simTime()-SimTime(pathinfo_age,SIMTIME_MS));
 		updateCount++;
 	}
 
@@ -1516,9 +1518,11 @@ void KadRoutingTable::invalidateContact(KadContact& contact, const link_t& faile
 
 				EV_TRACE << "Set Contact to invalid due to failed link " << failedLink
 					 << " (age: " << failedLinkAge << ") " << contact << endl;
-				// if contact is important neighbor: send rediscovery immediately
-				// otherwise schedule slow rediscovery if it lost its last link 
-                                // a rediscovery does not make sense if the link is repaired the node should come back to us
+                                // if contact is important neighbor: send
+                                // rediscovery immediately
+                                // otherwise schedule slow rediscovery
+                                // if it lost its last link a rediscovery does not make sense
+                                // if the link is repaired the node should come back to us
 				if (not lastlinkfailed) {
                                     if (isInLastBucket(contact.getKey()))
                                             policy->scheduleUrgentRediscovery(contact.getKey());
