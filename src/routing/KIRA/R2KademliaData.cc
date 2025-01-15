@@ -70,7 +70,8 @@ bool R2Kademlia::doDataProbe(short timerID) {
 		}
 
 		maxtries--;
-	} while ( nodefound == false and maxtries > 0 );
+        }
+        while ( nodefound == false and maxtries > 0 );
 
 	if (nodefound and probeKey != nullptr)
 		sendData(*probeKey);

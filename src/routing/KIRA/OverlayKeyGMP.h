@@ -487,6 +487,11 @@ public:
 	static OverlayKeyGMP random(cRNG* rng);
 
 	/**
+	 * fills a random value into given key
+	 */
+	inline static void random(OverlayKeyGMP& key, cRNG* rng);
+
+	/**
 	 * Returns the maximum key, i.e. a key filled with bit 1
 	 *
 	 * @return The maximum key, i.e. a key filled with bit 1
@@ -858,6 +863,15 @@ inline void omnet_random_gmp(mp_limb_t *r1p, mp_size_t r1n, cRNG* rng)
 		chunkPtr[i] = rng->intRand(std::numeric_limits<uint32_t>::max());
 	}
 }
+
+// generate random number key in argument
+inline
+void OverlayKeyGMP::random(OverlayKeyGMP& randomkey, cRNG* rng)
+{
+	omnet_random_gmp(randomkey.key, aSize, rng);
+	randomkey.trim();
+}
+
 
 } // end namespace
 
