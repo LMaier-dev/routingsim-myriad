@@ -55,8 +55,8 @@ simple R2Kademlia extends routingsim.foundation.Protocol
 		// the following is used for discovering diverse paths, turned-off when 0s
 		double exploreInterval = default(0s) @unit(s);
 		double probeInterval = default(2s) @unit(s);
-		/// 0=none, 1=random, 2=exiting, 3=bucket_expand, 4=random_suffix, 5=suffix_expand, 6=random_bucket
-		int probeStrategy = default(3);
+		/// strategy for probing randomly
+		string probeStrategy @enum(none,randomID,existingID,bucketExpand,randomSuffix,suffixExpand,randomBucket,randomIDandBucketMixed) = default("randomIDandBucketMixed");
 		// minHelloInterval
 		double minHelloInterval = default(200ms) @unit(ms);
 		// maxHelloInterval

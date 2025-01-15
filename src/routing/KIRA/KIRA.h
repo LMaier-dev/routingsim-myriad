@@ -78,6 +78,17 @@ enum linkFailureNotificationType : uint8_t {
 };
 
 
+enum probeStrategy_t : uint8_t {
+  probeStrategy_none = 0,
+  probeStrategy_randomID = 1,
+  probeStrategy_existingID = 2,
+  probeStrategy_bucketExpand = 3,
+  probeStrategy_randomSuffix = 4,
+  probeStrategy_suffixExpand = 5,
+  probeStrategy_randomBucket = 6,
+  probeStrategy_randomIDandBucketMixed = 7
+};
+
 // OverlayKey length 112 bit (16 bit prefix will be prepended to make it an IPv6 address)
 constexpr uint8_t OverlayKeyLength= 112;
 
@@ -147,7 +158,7 @@ private:
         bool usePathIDs;
 	bool useLinkLayerIndication;
 	short probeTimerId;
-	uint8_t probeStrategy;
+	probeStrategy_t probeStrategy = probeStrategy_none;
 	uint8_t rediscoveryFanOutFactor;
 	uint8_t rediscoveryMaxNotification;
 	uint8_t updateMaxNotification;

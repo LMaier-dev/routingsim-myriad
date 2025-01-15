@@ -488,7 +488,12 @@ public:
 	 *
 	 * @return A random key.
 	 */
-	static OverlayKey random(cRNG* rng);
+	inline static OverlayKey random(cRNG* rng);
+
+	/**
+	 * fills a random value into given key
+	 */
+	inline static void random(OverlayKey& key, cRNG* rng);
 
 	/**
 	 * Returns the maximum key, i.e. a key filled with bit 1
@@ -907,7 +912,6 @@ std::size_t OverlayKey::hash() const noexcept
 	return	XXH3_64bits((const char *) &key, OverlayKey::keyLength / 8);
 }
 
-
 // fill in overlay key with random bits (not trimmed)
 inline
 void omnet_random(OverlayKey::overlaykey_t& key, cRNG* rng)
@@ -917,15 +921,45 @@ void omnet_random(OverlayKey::overlaykey_t& key, cRNG* rng)
 	// the invalid value, in this case we just repeat
 	do {
 		// fill in 32 bit chunks
-		uint32_t tmpword;
-		for (uint32_t i= 0; i < 4; i++) {
-			tmpword= rng->intRand(std::numeric_limits<uint32_t>::max());
-			key<<= 32;
-			key|= tmpword;
-		}
+		uint32_t tmpword(rng->intRand(std::numeric_limits<uint32_t>::max())); // 1st
+		key<<= 32;
+		key|= tmpword;
+		tmpword= rng->intRand(std::numeric_limits<uint32_t>::max()); // 2nd
+		key<<= 32;
+		key|= tmpword;
+		tmpword= rng->intRand(std::numeric_limits<uint32_t>::max()); // 3rd
+		key<<= 32;
+		key|= tmpword;
+		tmpword= rng->intRand(std::numeric_limits<uint32_t>::max()); // 4th
+		key<<= 32;
+		key|= tmpword;
 	}
 	while (key == OverlayKey::INVALIDKEYVALUE);
 }
+
+
+// generate random number
+inline
+OverlayKey OverlayKey::random(cRNG* rng)
+{
+	OverlayKey newKey(ZERO);
+
+	omnet_random(newKey.key, rng);
+
+	newKey.trim();
+
+	return newKey;
+}
+
+
+// generate random number key in argument
+inline
+void OverlayKey::random(OverlayKey& randomkey, cRNG* rng)
+{
+	omnet_random(randomkey.key, rng);
+	randomkey.trim();
+}
+
 
 } // end namespace
 

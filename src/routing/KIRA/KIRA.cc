@@ -54,7 +54,7 @@ R2Kademlia::~R2Kademlia()
 	
 void R2Kademlia::onInitialize() {
 	EV << "R2Kademlia::onInitialize()" << endl;
-	myOverlayKey = OverlayKey::random(getRNG(0));
+	OverlayKey::random(myOverlayKey, getRNG(0));
 	fwdTablePathID.setOwnNodeID(&myOverlayKey);
 	vicinity.setRoot(myOverlayKey);
         getKadObserver().registerUp(myOverlayKey, node().getNodeId());
@@ -108,8 +108,28 @@ void R2Kademlia::onInitialize() {
 		EV_WARN << "usePathIDs must be set if sendDataPackets is enabled, changed to usePathIDs=on" << endl;
 		usePathIDs= true;
 	}
-	probeStrategy = (uint) par("probeStrategy").intValue();
-	detailedRoutingTableStats = par("detailedRoutingTableStats").boolValue();
+
+	auto probeStrategyStr = par("probeStrategy").stdstringValue();
+	if (probeStrategyStr == "none")
+		probeStrategy = probeStrategy_none;
+	else if (probeStrategyStr == "randomID")
+		probeStrategy = probeStrategy_randomID;
+	else if (probeStrategyStr == "existingID")
+		probeStrategy = probeStrategy_existingID;
+	else if (probeStrategyStr == "bucketExpand")
+		probeStrategy = probeStrategy_bucketExpand;
+	else if (probeStrategyStr == "randomSuffix")
+		probeStrategy = probeStrategy_randomSuffix;
+	else if (probeStrategyStr == "suffixExpand")
+		probeStrategy = probeStrategy_suffixExpand;
+	else if (probeStrategyStr == "randomBucket")
+		probeStrategy = probeStrategy_randomBucket;
+	else if (probeStrategyStr == "randomIDandBucketMixed")
+		probeStrategy = probeStrategy_randomIDandBucketMixed;
+	else
+		throw cRuntimeError("unknown probe strategy %s", probeStrategyStr.c_str());
+
+        detailedRoutingTableStats = par("detailedRoutingTableStats").boolValue();
 	detailedKIRAMessageStats = par("detailedKIRAMessageStats").boolValue();
 	PNRediscoveryWaitTime = (simtime_t) (par("PNRediscoveryWaitTime").doubleValue() * 0.001); // given in ms
 	urgentRediscoveryWaitTime = (simtime_t) (par("urgentRediscoveryWaitTime").doubleValue() * 0.001); // given in ms
