@@ -213,7 +213,7 @@ public:
 	/// returns a list of two oldest valid contacts per bucket
 	void getOldestValidContacts(std::list<OverlayKey>& result) const;
 	/// returns a list of contacts that need a path refresh
-	void getContactsforPathRefresh(std::list<OverlayKey>& result) const;
+	void getContactsforPathRefresh(std::list<OverlayKey>& result,size_t pathlen_min) const;
 	/// get list of failed PNs
 	std::list<OverlayKey> getFailedPNs() const;
 

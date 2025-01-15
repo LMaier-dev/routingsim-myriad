@@ -535,11 +535,18 @@ bool R2Kademlia::doReachabilityTest(short timerId)
 }
 
 
+// refresh paths of contacts in the forwarding tier by sending a ProbeReq
+// this is periodically called
 bool R2Kademlia::doPathRefresh(short timerId)
 {
 	std::list<OverlayKey> contactlist;
-	// refresh paths of contacts in the forwarding tier by sending a ProbeReq
-	routingTable.getContactsforPathRefresh(contactlist);
+        // collect contacts that need a path refresh
+	// without linkfailure notifications, we can restrict ourselves to explicitly setup paths
+        size_t pathlen_min =
+            (linkFailureNotifications != lfn_none)
+                ? nodeVicinityGraph::vicinityDiscoveryRadius
+                : 2 * nodeVicinityGraph::vicinityDiscoveryRadius;
+        routingTable.getContactsforPathRefresh(contactlist, pathlen_min);
 	EV_TRACE << "doPathRefresh: number of contacts " << contactlist.size() << endl;
 	for (const auto& key: contactlist)
 	{

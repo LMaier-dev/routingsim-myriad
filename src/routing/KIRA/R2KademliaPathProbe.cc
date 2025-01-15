@@ -3,6 +3,7 @@
 namespace routingsim {
 
 
+// sendPathProbe along proposed routing path to check for path validity on demand
 void R2Kademlia::scheduleOnDemandPathProbeReq(KeyRequestQueue& q, const KadContact& tmpcontact, RequestQueueElementActionType action)
 {
 	// the following compare is a bit hacky:
