@@ -158,10 +158,10 @@ void R2Kademlia::resetTimer(short timerId, simtime_t duration)
 void R2Kademlia::onSelfMessage(cMessage_p msg)
 {
 	std::unique_ptr<RPCtimeoutMsg> rpctimeout(dynamic_cast<RPCtimeoutMsg *>(msg.get()));
-	if (rpctimeout != nullptr)
+	if (rpctimeout)
 	{
 		// cast to rpctimeout was successful
-		(void) msg.release(); // no double deletion, but also don't need to original pointer
+		(void) msg.release(); // no double deletion, but also don't need to store original pointer
 
 		//EV_TRACE << "RPC Timeout Message for nonce " << rpctimeout->nonce << endl;
 
@@ -399,7 +399,8 @@ bool R2Kademlia::doCheckPNs(short timerId) {
 bool R2Kademlia::doProbeRandomly(short timerId)
 {
 	ASSERT(timerId >= 0 and timerId < fixedTimerIdBase);
-	if (neighborTable.empty()) return false; // we are isolated
+	if (neighborTable.empty())
+		return false; // we are isolated
 	OverlayKey probeKey;
 	bool exact = false;
         uint32_t index = 0;
