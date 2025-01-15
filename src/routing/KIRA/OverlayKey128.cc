@@ -332,19 +332,6 @@ bool OverlayKey::isBetweenLR(const OverlayKey& keyA,
 //----------------------------------------------------------------------
 
 
-// generate random number
-OverlayKey OverlayKey::random(cRNG* rng)
-{
-	OverlayKey newKey(ZERO);
-
-	omnet_random(newKey.key, rng);
-
-	newKey.trim();
-
-	return newKey;
-}
-
-
 // generate a key=2**exponent
 OverlayKey OverlayKey::pow2( uint32_t exponent )
 {

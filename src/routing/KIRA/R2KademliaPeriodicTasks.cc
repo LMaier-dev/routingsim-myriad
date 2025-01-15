@@ -102,7 +102,7 @@ void R2Kademlia::stopTimer(short timerId, bool delete_timermsg)
 			}
 		}
         }
-        else {
+	else {
 		throw cRuntimeError("stopTimer(): invalid timerId %d", timerId);
 	}
 }
@@ -359,7 +359,7 @@ bool R2Kademlia::doSendExplorePathPacket(short timerId)
 	    contactp != nullptr) {
 		EV_TRACE << "explore path for contact: " << *contactp << endl;
 
-                if (auto contacts = routingTable.getClosestContacts(
+		if (auto contacts = routingTable.getClosestContacts(
                         contactp->getKey(), 2 * findNodeNumber, true);
                     not contacts.empty()) {
 
@@ -388,7 +388,7 @@ bool R2Kademlia::doCheckPNs(short timerId) {
 		if (auto nid = neighborTable.getNodeId(*it); nid != undefined_node) {
 			nodeDisconnect(nid);
 		}
-                else {
+		else {
 			EV_WARN << "DeadPN " << it->shortStr() << ", but not present in neighbor table" << endl;
 		}
         }
@@ -402,38 +402,49 @@ bool R2Kademlia::doProbeRandomly(short timerId)
 	if (neighborTable.empty()) return false; // we are isolated
 	OverlayKey probeKey;
 	bool exact = false;
-	uint32_t index = 0;
+        uint32_t index = 0;
+
 	switch (probeStrategy) {
-		case 0:
-			return false;
-		case 1:
-			probeKey = OverlayKey::random(getRNG(0));
-			break;
-		case 2:
-			probeKey = getKadObserver().getRandomNodeKey();
-			break;
-		case 3:
-			index = std::min<size_type>(intuniform(1, 1 + routingTable.getDepth()*2),
-					myOverlayKey.getLength());
-			probeKey = myOverlayKey;
-			probeKey[myOverlayKey.getLength() - index] ^= 1;
-			break;
-		case 4:
-			index = routingTable.getDepth();
-			probeKey = myOverlayKey.randomSuffix(myOverlayKey.getLength() - index, getRNG(0));
-			break;
-		case 5:
-			index = std::min<size_type>(intuniform(1, 1 + routingTable.getDepth()*2),
-					myOverlayKey.getLength());
-			probeKey = myOverlayKey.randomSuffix(myOverlayKey.getLength() - index, getRNG(0));
-			break;
-		case 6:
+	case probeStrategy_none: // disable random probing
+		return false;
+	case probeStrategy_randomID: // just choose random ID from whole ID space
+		OverlayKey::random(probeKey, getRNG(0));
+		break;
+	case probeStrategy_existingID: // probe a random OverlayKey from an existing node (not realistic)
+		probeKey = getKadObserver().getRandomNodeKey();
+		exact= true;
+                break;
+	case probeStrategy_bucketExpand: // use random bucket, but use suffix from own ID (likely returns same nodes)
+		index = std::min<size_type>(intuniform(1, 1 + routingTable.getDepth()*2),
+					    myOverlayKey.getLength());
+		probeKey = myOverlayKey;
+		probeKey[myOverlayKey.getLength() - index] ^= 1;
+		break;
+	case probeStrategy_randomSuffix: // just use a random suffix in deepest bucket
+		index = routingTable.getDepth();
+		probeKey = myOverlayKey.randomSuffix(myOverlayKey.getLength() - index, getRNG(0));
+		break;
+	case probeStrategy_suffixExpand: // probe in random imaginary bucket at twice the actual depth with random suffix
+		index = std::min<size_type>(intuniform(1, 1 + routingTable.getDepth()*2),
+					    myOverlayKey.getLength());
+		probeKey = myOverlayKey.randomSuffix(myOverlayKey.getLength() - index, getRNG(0));
+		break;
+	case probeStrategy_randomBucket: // probe in randomly chosen bucket with random suffix
+		index = intuniform(1, 1 + routingTable.getDepth());
+		probeKey = myOverlayKey.randomSuffix(myOverlayKey.getLength() - index, getRNG(0));
+		break;
+	case probeStrategy_randomIDandBucketMixed: // use both randomID and randomBucket (only 1/10 of the time)
+		if (intuniform(0, 9) > 0) { // probe randomly in 9 of 10 cases
+			OverlayKey::random(probeKey, getRNG(0));
+		}
+		else { // otherwise probe randomly in bucket
 			index = intuniform(1, 1 + routingTable.getDepth());
 			probeKey = myOverlayKey.randomSuffix(myOverlayKey.getLength() - index, getRNG(0));
-			break;
-		default:
-			throw cRuntimeError("unknown probe strategy %u, values from 0 to 6 are allowed", probeStrategy);
-	}
+		}
+		break;
+	default:
+		throw cRuntimeError("unknown probe strategy %u", probeStrategy);
+	} // end switch
 	if (probeKey == myOverlayKey) probeKey[0] ^= 1;
         sendFindNode(probeKey, exact);
 
