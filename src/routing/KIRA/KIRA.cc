@@ -109,7 +109,7 @@ void R2Kademlia::onInitialize() {
 		usePathIDs= true;
 	}
 
-	auto probeStrategyStr = par("probeStrategy").stdstringValue();
+	const auto probeStrategyStr = par("probeStrategy").stdstringValue();
 	if (probeStrategyStr == "none")
 		probeStrategy = probeStrategy_none;
 	else if (probeStrategyStr == "randomID")
