@@ -256,6 +256,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadProbeReq> packet) {
 				contact_p->setStateSeqNo(packet->getStateSeqNo());
 				contact_p->updateLastSeen();
 				contact_p->setNodeDegree(packet->getSrcNodeDegree());
+				// note: also if path was working we should not use updateLastPathRefresh(), because PIDs are unidirectional
 			}
 			else
 				EV_WARN << "State sequence number of message smaller (" << packet->getStateSeqNo() << ") than for contact (" << contact_p->getStateSeqNo() << ")" << endl;
