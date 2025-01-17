@@ -1351,6 +1351,7 @@ void R2Kademlia::sampleStatistics (Statistics &stats) {
 		stats.value("routingTableFaultyPaths", no_faulty_paths);
 		stats.value("routingTableContactsWithoutPN", routingTable.getNumContactsWithoutPNs());
 		stats.value("routingTablePNContacts", routingTable.getNumContacts() - routingTable.getNumContactsWithoutPNs());
+		stats.value("routingTableFailedPNs", routingTable.getFailedPNs().size());
 	}
 	unsigned long notifyFirstSegmentSourcesSize(0UL);
 	std::for_each(notifyFirstSegmentSources.cbegin(), notifyFirstSegmentSources.cend(), [&](auto& entry){notifyFirstSegmentSourcesSize+= entry.second.size();});
