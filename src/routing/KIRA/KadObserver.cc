@@ -508,11 +508,19 @@ void KadObserver::registerPacketDelivered(KadPacket& packet) {
 	  getPhysicalDistance(fromKey, toKey),
 	  fromKey.getLength() - fromKey.sharedPrefixLength(toKey)
         };
-	//EV_TRACE << "packetDelivered: hops=" << info.hops << " distance=" << info.distance << endl;
+
+        // note that the physicalDistance might have changed while the packet
+        // was inflight in scenarios with a lot of link churn (e.g., MANETs),
+        // so that the physical distance may not be accurate anymore
+        // when the packet arrives, compared to when the packets started.
+        // This inconsistency cannot be solved reliably. We just ignore
+	// "negative" values here.
+
+        //EV_TRACE << "packetDelivered: hops=" << info.hops << " distance=" << info.distance << endl;
 	ASSERT(info.overlayHops > 0);
 	histograms[hopCount]->collect(info.hops);
 	histograms[distance]->collect(info.distance);
-	if (info.distance > 0) {
+	if (info.distance > 0 and info.hops >= info.distance) {
 		histograms[stretchMul]->collect(info.hops / (double)info.distance);
 		histograms[stretchAdd]->collect(info.hops - info.distance);
 	}
@@ -545,7 +553,7 @@ void KadObserver::registerPacketDelivered(KadDataPacket& packet) {
 	ASSERT(info.overlayHops > 0);
 	histograms[hopCountData]->collect(info.hops);
 	histograms[distanceData]->collect(info.distance);
-	if (info.distance > 0) {
+	if (info.distance > 0 and info.hops >= info.distance) {
 		histograms[stretchMulData]->collect(info.hops / (double)info.distance);
 		histograms[stretchAddData]->collect(info.hops - info.distance);
 	}
@@ -577,7 +585,7 @@ void KadObserver::sampleAnswer(KadAnswer& packet) {
 	uint hops= packet.getProgress();
 
 	//EV_TRACE << "sampleAnswer: hops=" << hops << " distance=" << distance << endl;
-	if (distance > 0)
+	if (distance > 0 and hops >= distance)
 	{
 		histograms[stretchMulAns]->collect(hops / (double)distance);
 		histograms[stretchAddAns]->collect(hops - distance);
@@ -597,7 +605,7 @@ void KadObserver::sampleLaterPath(const OverlayKey& originKey, const kad_path& p
 	uint hops= path.size();
 
 	EV_TRACE << "sampleLaterPath: hops=" << hops << " distance=" << distance << endl;
-	if (distance > 0)
+	if (distance > 0 and hops >= distance)
 	{
 		histograms[stretchMulLater]->collect(hops / (double)distance);
 		histograms[stretchAddLater]->collect(hops - distance);
