@@ -33,6 +33,7 @@ NodePkt_p R2Kademlia::makeHelloPacket()
 // in case the link was temporarily down: rediscover neighbor
 void R2Kademlia::handlePacket(KadHello_p packet) {
 	EV << "received hello packet from " << packet->getSource().shortStr() << " SSeq#" << packet->getStateSeqNo() << endl;
+
 	countReceived(*packet);
 
 	KadContact neighborcontact(myOverlayKey, packet->getSource(), kad_path());
@@ -47,11 +48,12 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 				// already known neighbor, just check for seqno synchronization (also updates lastseen)
 				checkForResync(packet->getSource(), packet->getStateSeqNo());
                         }
-                        else {
+			else {
 				// update lastseen nevertheless
 				if (KadContact *contact_p = const_cast<KadContact *>(routingTable.getContact(packet->getSource()));
 				    contact_p != nullptr and contact_p->isPhysicalNeighbor()) {
 					contact_p->updateLastSeen();
+					contact_p->updateLastDirectULContact();
 				}
 			}
                 } else {
@@ -59,12 +61,13 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 			if (KadContact *contact_p = const_cast<KadContact *>(routingTable.getContact(packet->getSource()));
 			    contact_p != nullptr and contact_p->isPhysicalNeighbor()) {
 				contact_p->updateLastSeen();
+				contact_p->updateLastDirectULContact();
 			}
 		}
 		return;
 	}
 	else
-	{ // new physical neighbor, first contact: either wait for ULNDiscReq or send one
+	{ // new underlay/physical neighbor, first contact: either wait for ULNDiscReq or send one
 
                 // connected or reconnected to first neighbor reset join timer
                 if (neighborTable.empty()) {
@@ -288,7 +291,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadULNDiscReq> packet) {
 		vicinityPathIDCompletion(pncontact);
 	}
 
-	// add physical contact to routing table or update sequence number and update last seen
+	// add physical contact to routing table or update sequence number, last seen, and LastDirectULContact
 	routingTable.addPNContact(packet->getSource(), packet->getStateSeqNo(), packet->getSrcNodeDegree());
 
 	// check for physical neighbors sent with

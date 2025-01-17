@@ -181,7 +181,9 @@ void KadRoutingTable::addPNContact(const OverlayKey& key, stateseqno_t stateseqn
 	KadContact *contact= getContactInternal(key);
 	if (contact == nullptr) { // contact is new
 		if (handleNewContact(key, kad_path(), stateseqno, 0, nodeDegree, true)) {
-			updatePaths(*getContactInternal(key));
+			auto newcontact = getContactInternal(key);
+			newcontact->updateLastDirectULContact();
+			updatePaths(*newcontact);
 		}
 		return;
 	}
@@ -228,6 +230,7 @@ void KadRoutingTable::addPNContact(const OverlayKey& key, stateseqno_t stateseqn
 		contact->setValid();
 		contact->clearProposedPath(); // whatever proposed path was present, forget it
 		contact->updateLastSeen();
+		contact->updateLastDirectULContact();
 		// the following call is important, because it calls incLSSeqNo()
 		if (improved) {
 			policy->onImprovement(*contact);
@@ -758,108 +761,12 @@ bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, sta
 	}
 	else { // no space in bucket for inserting the new contact: replace existing one?
 
-		// TODO: do not use PNS in second last bucket if last bucket is not
-		// reasonably filled with contacts -> need to keep all ID-wise neighbors in the 2nd last bucket
 		if (not proximityNeighborSelection) {
 			// EV_DEBUG << "dropping new contact " << *contact << endl;
 			return false;
-		}
-		// contact replacement if contact is "better" than existing ones
-		auto& contacts = bucket.getContactsWrite();
-		auto result = contacts.end(); // replacement candidate path length
-		auto resultconn = contacts.end(); // replacement candidate connectivity
-		size_type maxLen = contact->getPathLength();
-		uint32_t minconnectivity(contact->getConnectivity());
-		for (auto it = contacts.begin(); it!=contacts.end(); it++) {
-			if ( (*it)->getPathLength() > maxLen) {
-				maxLen = (*it)->getPathLength();
-				result = it;
-			}
-			else if ( (*it)->getPathLength() == contact->getPathLength() and (*it)->getConnectivity() < minconnectivity) {
-				minconnectivity= (*it)->getConnectivity();
-				resultconn = it;
-			}
                 }
-
-                // if result is set, it is the (last) contact in the bucket with the largest path length (larger than the current contact)
-		if (result != contacts.end()) { // existing contact with longer path found
-			if (not path_verified and (contact->getPathLength() > nodeVicinityGraph::vicinityDiscoveryRadius or contact->getPathAge() > R2Kademlia::PathInfoAgeThreshold)) {
-                          EV_TRACE << "contact candidate untrusted (PNS): "
-                                   << *contact << endl;
-			  policy->onContactCandidate(std::move(contact));
-			  return false;
-			}
-			replacementCount++;
-			EV_DEBUG << "replacing contact (PNS), new: " << *contact << " old: " << **result << endl;
-			policy->onContactRemoval(result->get());
-
-			const auto newcontactp(contact.get());
-			auto contactkey(newcontactp->getKey());
-			auto correctpos= std::upper_bound(contacts.begin(), contacts.end(), contactkey,
-							  [](const OverlayKey& lhs, const KadBucket::BucketElement& rhs) -> bool { return lhs < rhs->getKey(); });
-
-			// need to delete/destroy the previous contact object
-                        result->reset();
-                        // this may destroy the sorted order
-			*result= std::move(contact);
-			// restore the correct order
-			// depending on the correct position we need to rotate right or left
-			if (correctpos < result) {
-				// rotate left
-				std::rotate(correctpos, result, result+1);
-			}
-			else if (correctpos > result) {
-				// rotate right
-				std::rotate(result, result+1, correctpos);
-			}
-
-			//ASSERT(is_sorted(contacts.cbegin(),contacts.cend(),[](const KadBucket::BucketElement& lhs, const KadBucket::BucketElement& rhs) -> bool { return lhs.get()->getKey() < rhs.get()->getKey(); }));
-
-			policy->onNewContact(newcontactp);
-
-			return true;
-                } else if (resultconn != contacts.end()) { // contact with better connectivity found
-			if (not path_verified and (contact->getPathLength() > nodeVicinityGraph::vicinityDiscoveryRadius or contact->getPathAge() > R2Kademlia::PathInfoAgeThreshold)) {
-				EV_TRACE << "contact candidate untrusted (Conn): " << *contact << endl;
-				policy->onContactCandidate(std::move(contact));
-				return false;
-			}
-
-			replacementCount++;
-			EV_DEBUG << "replacing contact (Conn), new: " << *contact << " (" << contact->getConnectivity() << ") old: "
-				 << **resultconn << " (" << (*resultconn)->getConnectivity()  << ")" << endl;
-			policy->onContactRemoval(resultconn->get());
-
-			const auto newcontactp(contact.get());
-			auto contactkey(newcontactp->getKey());
-			auto correctpos= std::upper_bound(contacts.begin(), contacts.end(), contactkey,
-							  [](const OverlayKey& lhs, const KadBucket::BucketElement& rhs) -> bool { return lhs < rhs->getKey(); });
-
-			// need to delete/destroy the previous contact object
-                        resultconn->reset();
-                        // this may destroy the sorted order
-			*resultconn = std::move(contact);
-			// restore the correct order
-			// depending on the correct position we need to rotate right or left
-                        if (correctpos < resultconn) {
-				// rotate left
-				std::rotate(correctpos, resultconn, resultconn+1);
-			}
-			else if (correctpos > resultconn) {
-				// rotate right
-				std::rotate(resultconn, resultconn+1, correctpos);
-			}
-
-			//ASSERT(is_sorted(contacts.cbegin(),contacts.cend(),[](const KadBucket::BucketElement& lhs, const KadBucket::BucketElement& rhs) -> bool { return lhs.get()->getKey() < rhs.get()->getKey(); }));
-
-			policy->onNewContact(newcontactp);
-
-			return true;
-		}
-		else {
-			//EV_DEBUG << "bucket full - dropping new contact " << *contact << endl;
-			return false;
-		}
+		// PNS or other strategies decide on contact replacement
+		return checkForContactReplacement(bucket, std::move(contact), path_verified);
 	}
 
 	// just as safety measure in case we fall through here
@@ -867,20 +774,122 @@ bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, sta
 }
 
 
-void KadRoutingTable::splitLastBucket()
+// returns true if replacementCandidate was actually replaced by contact, otherwise false (maybe not trusted yet)
+bool
+KadRoutingTable::replaceContact(KadBucket::BucketType& contacts, KadBucket::BucketType::iterator replacementCandidate, std::unique_ptr<KadContact> contact, bool path_verified)
+{
+	if (not path_verified and (contact->getPathLength() > nodeVicinityGraph::vicinityDiscoveryRadius or contact->getPathAge() > R2Kademlia::PathInfoAgeThreshold)) {
+		EV_TRACE << "contact candidate untrusted: " << *contact << endl;
+		policy->onContactCandidate(std::move(contact));
+		return false;
+	}
+
+	replacementCount++;
+
+	EV_DEBUG << "replacing contact, new: " << *contact << " old: " << **replacementCandidate << endl;
+	policy->onContactRemoval(replacementCandidate->get());
+
+	const auto newcontactp(contact.get());
+	auto contactkey(newcontactp->getKey());
+	auto correctpos= std::upper_bound(contacts.begin(), contacts.end(), contactkey,
+					  [](const OverlayKey& lhs, const KadBucket::BucketElement& rhs) -> bool { return lhs < rhs->getKey(); });
+
+	// need to delete/destroy the previous contact object
+	replacementCandidate->reset();
+	// this may destroy the sorted order
+	*replacementCandidate= std::move(contact);
+	// restore the correct order
+	// depending on the correct position we need to rotate right or left
+	if (correctpos < replacementCandidate) {
+		// rotate left
+		std::rotate(correctpos, replacementCandidate, replacementCandidate+1);
+	}
+	else if (correctpos > replacementCandidate) {
+		// rotate right
+		std::rotate(replacementCandidate, replacementCandidate+1, correctpos);
+	}
+
+	//ASSERT(is_sorted(contacts.cbegin(),contacts.cend(),[](const KadBucket::BucketElement& lhs, const KadBucket::BucketElement& rhs) -> bool { return lhs.get()->getKey() < rhs.get()->getKey(); }));
+
+	policy->onNewContact(newcontactp);
+
+	return true;
+}
+
+
+bool
+KadRoutingTable::checkForContactReplacement(KadBucket& bucket, std::unique_ptr<KadContact> contact, bool path_verified) {
+
+	// contact replacement if contact is "better" than existing ones
+	auto& contacts = bucket.getContactsWrite();
+
+	auto resultpns = contacts.end(); // replacement candidate path length (PNS – proximity neighbor selection)
+	auto resultconn = contacts.end(); // replacement candidate connectivity
+	auto resultxor = contacts.end(); // replacement candidate xor distance metric
+
+	size_type maxLen = contact->getPathLength();
+	uint32_t minconnectivity(contact->getConnectivity());
+	auto max_distance(contact->getKey() ^ myKey);
+
+        // iterate over contacts and find replacement candidates (longest path and lowest degree)
+	for (auto it = contacts.begin(); it != contacts.end(); it++) {
+		if (auto distance= (*it)->getKey() ^ myKey; distance > max_distance) {
+			max_distance = distance;
+			resultxor= it;
+		}
+
+		if ( (*it)->getPathLength() > maxLen) { // PNS candidate
+			maxLen = (*it)->getPathLength();
+			resultpns = it;
+		}
+		else if ( (*it)->getPathLength() == contact->getPathLength() and (*it)->getConnectivity() < minconnectivity) { // candidate by degree
+			minconnectivity= (*it)->getConnectivity();
+			resultconn = it;
+		}
+	}
+
+	// do not use PNS in second last bucket if last bucket is not
+	// reasonably filled with contacts -> need to keep all ID-wise neighbors in the 2nd last bucket
+
+
+        // if (isInLastOrSecondLastBucket(contact->getKey())) {
+        // 	// XOR replacement strategy in the lowest two buckets
+	// 	return replaceContact(contacts, resultxor, std::move(contact), path_verified);
+	// }
+
+	// if result is set, it is the (last) contact in the bucket with the largest path length (larger than the current contact)
+	if (resultpns != contacts.end()) { // existing contact with longer path found
+		return replaceContact(contacts, resultpns, std::move(contact), path_verified);
+	}
+	else if (resultconn != contacts.end()) { // contact with better connectivity found
+		return replaceContact(contacts, resultconn, std::move(contact), path_verified);
+	}
+	else {  // no suitable replacement candidate found
+		//EV_DEBUG << "bucket full - dropping new contact " << *contact << endl;
+		return false;
+	}
+
+	return false;
+}
+
+
+void
+KadRoutingTable::splitLastBucket()
 {
 	EV_DEBUG << "splitting bucket " << buckets.size() - 1 << endl;
 	ASSERT(isSplittable(buckets.back()));
 	ASSERT(buckets.size() < getMaxNumBuckets());
-        KadBucket oldBucket(std::move(buckets.back()));
+	KadBucket oldBucket(std::move(buckets.back()));
 	buckets.back().clear();
 	ASSERT(oldBucket.size() >= bucketSize);
-	// create new buckets
+
+        // create new buckets
 	size_type newSize = std::min(buckets.size() + getLevelWidth(), getMaxNumBuckets());
 	if (newSize == getMaxNumBuckets()) {
 		EV_INFO << "reached full routing table depth" << endl;
 	}
-	buckets.resize(newSize);
+
+        buckets.resize(newSize);
 	// sort contacts into new buckets
 	for (auto& contact : oldBucket.getContactsWrite())
 		getBucket(contact.get()).insertContact(std::move(contact));
@@ -1147,14 +1156,14 @@ std::vector<std::pair<KadContact_p, uint8_t>> KadRoutingTable::getReplicationCon
 }
 
 
-// returns all PNs that have not updated their lastseen for dead period (given in ms)
+// returns all PNs that have not updated their lastDirectULContact for dead period (given in ms)
 // usually 3*maxHelloInterval (expect two messages at least with 1.5 maxHelloInterval)
 void KadRoutingTable::getDeadPNs(uint64_t deadPeriod, std::list<OverlayKey>& resultlist) const
 {
 	for (const auto& bucket : buckets)
 	{
 		for (const auto& contact : bucket.getPNContacts()) {
-		  if ( contact->isPhysicalNeighbor() and contact->getPathLength() == 0 and contact->getAge() > deadPeriod)
+			if ( contact->isPhysicalNeighbor() and contact->getPathLength() == 0 and (contact->getLastDirectULContact()+SimTime(deadPeriod,SIMTIME_MS) < simTime()) )
 				resultlist.push_back(contact->getKey());
 		}
 	}
@@ -1172,6 +1181,60 @@ std::list<OverlayKey> KadRoutingTable::getFailedPNs() const
 		}
 	}
 	return resultlist;
+}
+
+
+// this will be periodically called to move contacts from PNbuckets
+// to a normal bucket or dismiss them.
+// Eligible for demoting are those for which no ULNHello has been
+// seen for a while
+void
+KadRoutingTable::demotePNs()
+{
+	// visit all (PN)buckets
+	for (auto& bucket : buckets)
+	{
+		// inspect only PNbuckets
+		auto& PNbucket = bucket.getPNContactsWrite();
+
+                for (auto contact_it= PNbucket.begin(); contact_it != PNbucket.end(); contact_it++ ) {
+
+			if ( (*contact_it)->isPhysicalNeighbor() and (not neighbortable.isNeighbor((*contact_it)->getKey()))
+			     and (*contact_it)->isValid() and (*contact_it)->getPathLength()>0 ) {
+
+				// unset physical neighbor property
+				(*contact_it)->unsetPhysicalNeighbor();
+				// now try to move contact over to regular contacts
+				// get responsible bucket for contact
+				bool newsplit = false;
+                                KadBucket& tmpbucket = getBucket((*contact_it)->getKey());
+				if (isSplittable(tmpbucket)) {
+					splitLastBucket();
+					newsplit = true;
+				}
+
+				// in case of bucket split we must repeat getBucket to get the new bucket
+				KadBucket &newbucket = newsplit ? getBucket((*contact_it)->getKey()) : tmpbucket;
+				// add if space left or perform contact replacement
+				if (bucket.getContacts().size() < bucketSize) {
+					// move contact and unique_ptr over to new bucket
+					newbucket.insertContact(std::move((*contact_it)));
+
+					// since this is just an internal change,
+					// route change update to different was sent earlier already
+				}
+				else { // no space in bucket for inserting the contact: replace existing one?
+					// path_verified is true, because contact isValid() == true
+					checkForContactReplacement(newbucket, std::move((*contact_it)), true);
+				}
+
+			} // end if former PN has no longer a direct connection
+
+                        // delete from PN bucket no matter what
+			PNbucket.erase(contact_it);
+
+		} // end for all PN contacts
+	} // end for all buckets
 }
 
 

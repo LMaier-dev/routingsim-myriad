@@ -423,7 +423,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		forwardPacket(std::move(packet), std::move(pkt));
 		return;
 	}
-	else { // no hops left, packet is addressed to me
+	else { // no hops left, packet is addressed to me (I might be an overlay hop though and not the final destination)
 
 		packet->setControlInfo(pkt.release());
 

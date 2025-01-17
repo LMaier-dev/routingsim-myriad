@@ -70,14 +70,14 @@ public:
 		_get_PN       = 127  // pseudo state, not used for real contacts
 	};
 
-	KadContact(const KadContact& o) : key(o.key), lastseen(o.lastseen),
+	KadContact(const KadContact& o) : key(o.key), lastseen(o.lastseen), lastDirectULContact(SIMTIME_ZERO),
 					  active_path(o.active_path), proposed_path(o.proposed_path),
 					  seqno(o.seqno), state(o.state),
 					  physicalNeighbor(o.physicalNeighbor),
 					  nodeDegree(o.nodeDegree),
 					  rds_p(o.rds_p == nullptr ? nullptr :
 						std::make_unique<RediscoveryState>(*o.rds_p)) {};
-        KadContact(KadContact&& k) : key(std::move(k.key)), lastseen(std::move(k.lastseen)),
+	KadContact(KadContact&& k) : key(std::move(k.key)), lastseen(std::move(k.lastseen)), lastDirectULContact(std::move(k.lastDirectULContact)),
 				     active_path(std::move(k.active_path)), proposed_path(std::move(k.proposed_path)),
 				     seqno(k.seqno), state(k.state),
 				     physicalNeighbor(k.physicalNeighbor),
@@ -85,13 +85,13 @@ public:
 				     rds_p(std::move(k.rds_p)) {
 		k.clear();
 	};
-        explicit KadContact(const OverlayKey& key): key(key), lastseen(SIMTIME_ZERO), active_path(), proposed_path(), state(State::undefined), nodeDegree(0), rds_p(nullptr) {};
+        explicit KadContact(const OverlayKey& key): key(key), lastseen(SIMTIME_ZERO), lastDirectULContact(SIMTIME_ZERO), active_path(), proposed_path(), state(State::undefined), nodeDegree(0), rds_p(nullptr) {};
 	KadContact(const OverlayKey& myOverlayKey, const OverlayKey& key, const KadPath& opath, stateseqno_t seqno= stateseqno_t::invalidSeqNo, simtime_t lastseen=SIMTIME_ZERO) :
-		key(key), lastseen(lastseen), active_path(opath), seqno(seqno),
+		key(key), lastseen(lastseen), lastDirectULContact(SIMTIME_ZERO), active_path(opath), seqno(seqno),
 		state(State::valid), physicalNeighbor(active_path.isPhysicalNeighborPath() == true), nodeDegree(0), rds_p(nullptr) // simply path.empty() doesn't work correctly!
 		{};
 	KadContact(const OverlayKey& myOverlayKey, const OverlayKey& key, KadPath&& opath, stateseqno_t seqno= stateseqno_t::invalidSeqNo, simtime_t lastseen=SIMTIME_ZERO) :
-		key(key), lastseen(lastseen), active_path(std::move(opath)), seqno(seqno),
+		key(key), lastseen(lastseen), lastDirectULContact(SIMTIME_ZERO), active_path(std::move(opath)), seqno(seqno),
 		state(State::valid), physicalNeighbor(active_path.isPhysicalNeighborPath() == true), nodeDegree(0), rds_p(nullptr) // simply path.empty() doesn't work correctly!
 		{};
         KadContact& operator=(const KadContact &other); // copy assignment
@@ -100,7 +100,8 @@ public:
 	// resets all internal variables and state
 	void clear() {
 		key.clear();
-		lastseen= SIMTIME_ZERO;
+		lastseen = SIMTIME_ZERO;
+		lastDirectULContact = SIMTIME_ZERO;
 		active_path.clear();
 		proposed_path.clear();
 		seqno= stateseqno_t::invalidSeqNo;
@@ -118,7 +119,7 @@ public:
 	bool isNotValid() const { return (state != State::valid) ; } // this is not the same as isInvalid()!
 	bool isRediscovering() const { return (state == State::rediscovering) ; }
 
-	/// this will be kept being true, even if the link goes down
+	/// this will be kept being true for a while, even if the direct link goes down
 	bool isPhysicalNeighbor() const { return physicalNeighbor; }
 
 	/// set contact state
@@ -132,6 +133,8 @@ public:
 	simtime_t getLastSeen() const { return lastseen; }
 	void updateLastSeen() { lastseen= simTime(); }
 	void updateLastSeenTo(const simtime_t &new_time_stamp) { lastseen= new_time_stamp; }
+	simtime_t getLastDirectULContact() const { return lastDirectULContact; }
+	void updateLastDirectULContact() { lastDirectULContact= simTime(); }
 
 	unsigned long getPathAge() const { return active_path.getAge(); } // Path Age reflects connectivity
 	simtime_t getLastPathRefreshAge() const { return active_path.getLastPathRefreshAge(); }
@@ -142,6 +145,7 @@ public:
 	RediscoveryState& getRDS() { ASSERT(rds_p != nullptr); return *rds_p; }
 	void addRediscoverVia(const OverlayKey& nodeid) { ASSERT(rds_p != nullptr); rds_p->viaContacts.push_back(nodeid); };
 	void setPhysicalNeighbor() { physicalNeighbor= true; }
+	void unsetPhysicalNeighbor() { physicalNeighbor= false; }
 	
 	/// returns the key of this contact
 	const OverlayKey& getKey() const { return key; }
@@ -193,6 +197,7 @@ public:
 private:
 	OverlayKey key;	   /// the OverlayKey of this contact
 	simtime_t lastseen; /// time of last direct contact or path update (could stem from other node, too)
+	simtime_t lastDirectULContact; /// time of last heard ULNHello/ULNDiscReq/ULNDiscRsp in case of direct neighbor
 	/// the following path does neither contain the source (myself) nor the target node
 	KadPath active_path;  /// the best known source routing path to reach this contact
 	KadPath proposed_path; /// a path that may be "better" than the current active path
@@ -226,6 +231,7 @@ inline KadContact& KadContact::operator=(const KadContact& other)
 	if (this != &other) {
 		key= other.key;
 		lastseen= other.lastseen;
+		lastDirectULContact = other.lastDirectULContact;
 		active_path= other.active_path;
 		proposed_path= other.proposed_path;
 		seqno= other.seqno;
@@ -246,7 +252,8 @@ inline KadContact& KadContact::operator=(KadContact&& other)
 	if (this != &other) {
 		key= other.key;
 		lastseen = other.lastseen;
-		active_path= other.active_path;
+		lastDirectULContact = other.lastDirectULContact;
+                active_path= other.active_path;
 		proposed_path= other.proposed_path;
 		state= other.state;
 		seqno= other.seqno;

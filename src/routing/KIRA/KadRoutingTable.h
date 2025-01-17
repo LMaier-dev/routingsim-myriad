@@ -249,6 +249,8 @@ public:
 	void checkContacts(const link_t& failedlink);
 	/// return all PNs that have not updated their lastseen for dead period (given in ms)
         void getDeadPNs(uint64_t deadPeriod, std::list<OverlayKey>& resultlist) const;
+	/// move former PNs over to normal bucket if their direct link is gone for a period
+        void demotePNs();
 
 	/// invalidate all contacts with paths that contain a failed link otherNodeKey <-> failedNodeKey
 	void invalidateContacts(const link_t& failedLink, age_t failedLinkAge);
@@ -275,6 +277,8 @@ public:
 	inline bool isKnown(const OverlayKey& key) const { return getContact(key) != nullptr; }
 	/// returns true if key is in address range of last bucket (it does not have to be present there)
 	inline bool isInLastBucket(const OverlayKey& key) const { return getBucketIndex(key) == buckets.size()-1; }
+	/// returns true if key is in address range of last bucket (it does not have to be present there)
+	inline bool isInLastOrSecondLastBucket(const OverlayKey& key) const { return buckets.size() > 1 ? getBucketIndex(key) >= buckets.size()-2 : true; }
 	/// returns true if key is in last bucket and not present
 	inline bool isInLastBucketAndNew(const OverlayKey& key) const { size_t index(getBucketIndex(key));
 		return  index == buckets.size()-1 and buckets.at(index).getContact(key) == nullptr; }
@@ -329,7 +333,8 @@ protected:
 	//@}
 
 	KadContact *getContactInternal(const OverlayKey& key) { return const_cast<KadContact*>(getContact(key)); }
-
+	bool replaceContact(KadBucket::BucketType& contacts, KadBucket::BucketType::iterator replacementCandidate, std::unique_ptr<KadContact> contact, bool path_verified);
+        bool checkForContactReplacement(KadBucket& bucket, std::unique_ptr<KadContact> contact, bool path_verified);
 private:
 
 	const NeighborTable& neighbortable; // only for read-only access

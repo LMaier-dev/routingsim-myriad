@@ -381,17 +381,23 @@ bool R2Kademlia::doSendExplorePathPacket(short timerId)
 
 bool R2Kademlia::doCheckPNs(short timerId) {
 	ASSERT(timerId >= 0 and timerId < fixedTimerIdBase);
-        std::list<OverlayKey> resultlist;
+
+	std::list<OverlayKey> resultlist;
 	// get all PNs that have not sent a Hello or other message for a long time (assume 2 messages within 1.5 maxHelloInterval + additional 100ms)
-        getRoutingTable().getDeadPNs(3 * maxHelloInterval.inUnit(SIMTIME_MS)+100, resultlist);
-        for (auto it = resultlist.cbegin(); it != resultlist.cend(); it++) {
+	routingTable.getDeadPNs(3 * maxHelloInterval.inUnit(SIMTIME_MS)+100, resultlist);
+	for (auto it = resultlist.cbegin(); it != resultlist.cend(); it++) {
 		if (auto nid = neighborTable.getNodeId(*it); nid != undefined_node) {
 			nodeDisconnect(nid);
 		}
 		else {
 			EV_WARN << "DeadPN " << it->shortStr() << ", but not present in neighbor table" << endl;
 		}
-        }
+	}
+
+	// potentially shift PNs from PNBucket to normal bucket
+	// in case former PN is reachable via other nodes
+	routingTable.demotePNs();
+
 	return false; // do not stop timer
 }
 
