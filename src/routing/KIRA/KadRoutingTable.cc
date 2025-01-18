@@ -817,6 +817,7 @@ KadRoutingTable::replaceContact(KadBucket::BucketType& contacts, KadBucket::Buck
 }
 
 
+/// @returns true if new contact has replaced an existing contact
 bool
 KadRoutingTable::checkForContactReplacement(KadBucket& bucket, std::unique_ptr<KadContact> contact, bool path_verified) {
 
@@ -1197,8 +1198,8 @@ KadRoutingTable::demotePNs()
 		// inspect only PNbuckets
 		auto& PNbucket = bucket.getPNContactsWrite();
 
-                for (auto contact_it= PNbucket.begin(); contact_it != PNbucket.end(); contact_it++ ) {
-
+                for (auto contact_it= PNbucket.begin(); contact_it != PNbucket.end(); ) {
+			ASSERT(*contact_it != nullptr);
 			if ( (*contact_it)->isPhysicalNeighbor() and (not neighbortable.isNeighbor((*contact_it)->getKey()))
 			     and (*contact_it)->isValid() and (*contact_it)->getPathLength()>0 ) {
 
@@ -1213,26 +1214,30 @@ KadRoutingTable::demotePNs()
 					newsplit = true;
 				}
 
-				// in case of bucket split we must repeat getBucket to get the new bucket
+                                // in case of bucket split we must repeat getBucket to get the new bucket
 				KadBucket &newbucket = newsplit ? getBucket((*contact_it)->getKey()) : tmpbucket;
 				// add if space left or perform contact replacement
 				if (bucket.getContacts().size() < bucketSize) {
 					// move contact and unique_ptr over to new bucket
 					newbucket.insertContact(std::move((*contact_it)));
-
+					*contact_it= nullptr;
 					// since this is just an internal change,
 					// route change update to different was sent earlier already
 				}
 				else { // no space in bucket for inserting the contact: replace existing one?
 					// path_verified is true, because contact isValid() == true
-					checkForContactReplacement(newbucket, std::move((*contact_it)), true);
+                                        if (checkForContactReplacement(newbucket, std::move((*contact_it)), true)) {
+						*contact_it= nullptr;
+					}
 				}
 
+				// delete from PN bucket no matter what
+				contact_it= PNbucket.erase(contact_it);
+
 			} // end if former PN has no longer a direct connection
-
-                        // delete from PN bucket no matter what
-			PNbucket.erase(contact_it);
-
+			else {
+				contact_it++;
+			}
 		} // end for all PN contacts
 	} // end for all buckets
 }
