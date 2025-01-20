@@ -39,7 +39,7 @@ protected:
 	virtual void initialize(int stage);
 	virtual void finish();
 	virtual void handleMessage(cMessage *msg);
-    virtual int numInitStages() const;
+	virtual int numInitStages() const;
 
 private:
 	//const char* name;
@@ -47,7 +47,7 @@ private:
 	typedef std::unordered_map<const char*, Value*> Values;
 	Values values;
 	simtime_t samplingInterval;
-	simtime_t  simTimeLimit = SIMTIME_ZERO;
+	simtime_t simTimeLimit = SIMTIME_ZERO;
 	cMessage* samplingTimer;
 	std::vector<StatisticSample*> samples;
 	bool recordShortestPathDeliveryRatio;

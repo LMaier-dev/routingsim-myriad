@@ -63,8 +63,6 @@ public:
 	/// Destructor, reset singleton
 	~NetworkManager();
 
-	NetworkManager();
-
 protected:
 	virtual void initialize();
 	virtual void finish();
@@ -81,10 +79,18 @@ private:
         bool useMobility = false;
 
 	// Topology Statistics
-	bool evaluateStatistics;
-	cOutVector *activeNodesCount;
-	cOutVector *activeEdgesCount;
-	cOutVector *partitionCount;
+        enum uint8_t {
+          topostatsmode_none,
+          topostatsmode_light,
+	  topostatsmode_heavy
+	} topologyStatisticsMode;
+
+        bool evaluateStatistics = true;
+	uint64_t edgeChangesCount = 0;
+	uint64_t nodeChangesCount = 0;
+        cOutVector *activeNodesCountV = nullptr;
+	cOutVector *activeEdgesCountV = nullptr;
+	cOutVector *partitionCount = nullptr;
 };
 
 /// Returns the network Manager singleton

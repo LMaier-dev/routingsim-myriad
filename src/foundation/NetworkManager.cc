@@ -35,19 +35,13 @@ NetworkManager::~NetworkManager() {
 	topology = nullptr;
 	mobilityTopology = nullptr;
 
+	edgeChangesCount = 0;
+	nodeChangesCount = 0;
 	// clean up statistics
-	delete activeEdgesCount;
-	delete activeNodesCount;
+	delete activeEdgesCountV;
+	delete activeNodesCountV;
 	delete partitionCount;
-	activeEdgesCount = activeNodesCount = partitionCount = nullptr;
-}
-
-NetworkManager::NetworkManager()
-    : topology(nullptr), dynamics(nullptr),
-      mobilityTopology(nullptr), mobilityDynamics(nullptr) {
-	// TODO: assert that there has not been another NetworkManager instantiated already
-	evaluateStatistics = true;
-	activeEdgesCount = activeNodesCount = partitionCount = nullptr;
+	activeEdgesCountV = activeNodesCountV = partitionCount = nullptr;
 }
 
 
@@ -111,6 +105,17 @@ void NetworkManager::initialize() {
 		}
 	}
 
+	string topologyStatistics = par("topologyStatistics").stdstringValue();
+        if (topologyStatistics == "None") {
+		topologyStatisticsMode= topostatsmode_none;
+        }
+        else if (topologyStatistics == "Light") {
+		topologyStatisticsMode= topostatsmode_light;
+	}
+        else if (topologyStatistics == "Heavy") {
+		topologyStatisticsMode= topostatsmode_heavy;
+	}
+
         topology->setShortestPathCalculationMode(par("shortestPathCalculationMode").stdstringValue());
 	std::cout << "shortestPathCalculationMode: " << par("shortestPathCalculationMode").stdstringValue() << endl;
 
@@ -158,9 +163,9 @@ void NetworkManager::initialize() {
 		EV << "No dynamic model available." << endl;
 
 	// statistics
-	activeNodesCount = new cOutVector("activeNodesCount");
-	activeEdgesCount = new cOutVector("activeEdgesCount");
-	partitionCount = new cOutVector("partitionCount");
+	activeNodesCountV = new cOutVector("activeNodesCount");
+	activeEdgesCountV = new cOutVector("activeEdgesCount");
+        partitionCount = new cOutVector("partitionCount");
 	addStatisticSample(this);
 }
 
@@ -176,14 +181,18 @@ void NetworkManager::handleMessage(cMessage *msg) {
 
 		evaluateStatistics = true;
 		switch (di->type) {
-		case DynamicsInfo::nodeFailure:
+                case DynamicsInfo::nodeFailure:
+			edgeChangesCount+= topology->getNodeDegree(di->source);
 			topology->disableNode(di->source);
 			failedNodes.insert(di->source);
-			topology->resetNode(di->source);
+                        topology->resetNode(di->source);
+			nodeChangesCount++;
 			break;
 		case DynamicsInfo::nodeRecovery:
 			topology->enableNode(di->source);
+			edgeChangesCount+= topology->getNodeDegree(di->source);
 			failedNodes.erase(di->source);
+			nodeChangesCount++;
 			break;
 		case DynamicsInfo::linkFailure:
 			// depending on bidirectional flag deactivate one or both directions
@@ -192,6 +201,7 @@ void NetworkManager::handleMessage(cMessage *msg) {
 			if (di->bidirectionalLinkFailure) {
 				topology->disableLink(di->destination, di->source);
 			}
+			edgeChangesCount++;
 			break;
 		case DynamicsInfo::linkRecovery:
 			// depending on bidirectional flag restore one or both directions
@@ -200,7 +210,8 @@ void NetworkManager::handleMessage(cMessage *msg) {
 			if (di->bidirectionalLinkFailure) {
 				topology->enableLink(di->destination, di->source);
 			}
-			break;
+			edgeChangesCount++;
+                        break;
 		case DynamicsInfo::undefined:
 			EV_ERROR << "undefined event, did you forget to set DynamicsInfo::type?" << endl;
 			break;
@@ -225,29 +236,30 @@ void NetworkManager::finish() {
 }
 
 void NetworkManager::sampleStatistics(Statistics &stats) {
-	string topologyStatistics = par("topologyStatistics").stdstringValue();
 	static unsigned int ann, anl, pc;
 
-	if (topologyStatistics == string("None")) return;
+	if (topologyStatisticsMode == topostatsmode_none) return;
 
 	if (evaluateStatistics) {
-		if (topologyStatistics == string("Light") or topologyStatistics == string("Heavy")) {
+		if (topologyStatisticsMode == topostatsmode_light or topologyStatisticsMode == topostatsmode_heavy) {
 			ann = topology->getActiveNumberNodes() + (useMobility ? mobilityTopology->getActiveNumberNodes() : 0);
 			anl = topology->getActiveNumberLinks() + (useMobility ? mobilityTopology->getActiveNumberLinks() : 0);
 		}
-		if (topologyStatistics == string("Heavy")) {
+		if (topologyStatisticsMode == topostatsmode_heavy) {
 			pc = topology->getNumPartitions() + mobilityTopology->getNumPartitions();
 		}
 		// evaluateStatistics = false;
 	}
 
-	if (topologyStatistics == string("Light") || topologyStatistics == string("Heavy")) {
-		activeNodesCount->record(ann);
-		activeEdgesCount->record(anl);
+	if (topologyStatisticsMode == topostatsmode_light or topologyStatisticsMode == topostatsmode_heavy) {
+		activeNodesCountV->record(ann);
+                activeEdgesCountV->record(anl);
+		stats.value("edgeChangesCount", edgeChangesCount);
+		stats.value("nodeChangesCount", nodeChangesCount);
 	}
 
 	// expensive statistics
-	if (topologyStatistics == string("Heavy")) {
+	if (topologyStatisticsMode == topostatsmode_heavy) {
 		partitionCount->record(pc);
 	}
 }

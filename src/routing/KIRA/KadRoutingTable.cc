@@ -838,7 +838,6 @@ KadRoutingTable::checkForContactReplacement(KadBucket& bucket, std::unique_ptr<K
 			max_distance = distance;
 			resultxor= it;
 		}
-
 		if ( (*it)->getPathLength() > maxLen) { // PNS candidate
 			maxLen = (*it)->getPathLength();
 			resultpns = it;
@@ -852,11 +851,10 @@ KadRoutingTable::checkForContactReplacement(KadBucket& bucket, std::unique_ptr<K
 	// do not use PNS in second last bucket if last bucket is not
 	// reasonably filled with contacts -> need to keep all ID-wise neighbors in the 2nd last bucket
 
-
-        // if (isInLastOrSecondLastBucket(contact->getKey())) {
-        // 	// XOR replacement strategy in the lowest two buckets
-	// 	return replaceContact(contacts, resultxor, std::move(contact), path_verified);
-	// }
+        if (isInLastOrSecondLastBucket(contact->getKey()) and resultxor != contacts.end()) {
+		// XOR replacement strategy in the lowest two buckets
+		return replaceContact(contacts, resultxor, std::move(contact), path_verified);
+	}
 
 	// if result is set, it is the (last) contact in the bucket with the largest path length (larger than the current contact)
 	if (resultpns != contacts.end()) { // existing contact with longer path found
