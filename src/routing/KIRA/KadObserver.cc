@@ -520,14 +520,16 @@ void KadObserver::registerPacketDelivered(KadPacket& packet) {
 	ASSERT(info.overlayHops > 0);
 	histograms[hopCount]->collect(info.hops);
 	histograms[distance]->collect(info.distance);
+	//  distance == 0 means unreachable and
+	//  hops < distance may be the case if underlying topology change while packet was in flight
 	if (info.distance > 0 and info.hops >= info.distance) {
-		histograms[stretchMul]->collect(info.hops / (double)info.distance);
+		histograms[stretchMul]->collect((double) info.hops / (double) info.distance);
 		histograms[stretchAdd]->collect(info.hops - info.distance);
 	}
 	histograms[prefixDist]->collect(info.prefixDist);
 	histograms[overlayHops]->collect(info.overlayHops);
 	if (info.overlayHops > 0)
-		histograms[prefixPerHop]->collect(info.prefixDist / (double)info.overlayHops);
+		histograms[prefixPerHop]->collect((double) info.prefixDist / (double) info.overlayHops);
 	if (simTime() > messageSampleTime and messageDeliveryInfos.size() < numMessageDeliveryInfos)
 		messageDeliveryInfos.push_back(info);
 }
@@ -554,13 +556,13 @@ void KadObserver::registerPacketDelivered(KadDataPacket& packet) {
 	histograms[hopCountData]->collect(info.hops);
 	histograms[distanceData]->collect(info.distance);
 	if (info.distance > 0 and info.hops >= info.distance) {
-		histograms[stretchMulData]->collect(info.hops / (double)info.distance);
+	  histograms[stretchMulData]->collect((double) info.hops / (double) info.distance);
 		histograms[stretchAddData]->collect(info.hops - info.distance);
 	}
 	histograms[prefixDistData]->collect(info.prefixDist);
 	histograms[overlayHopsData]->collect(info.overlayHops);
 	if (info.overlayHops > 0)
-		histograms[prefixPerHopData]->collect(info.prefixDist / (double)info.overlayHops);
+		histograms[prefixPerHopData]->collect((double) info.prefixDist / (double)info.overlayHops);
 	if (simTime() > messageSampleTime and dataDeliveryInfos.size() < numMessageDeliveryInfos)
 		dataDeliveryInfos.push_back(info);
 }
@@ -584,10 +586,12 @@ void KadObserver::sampleAnswer(KadAnswer& packet) {
 	uint distance= getPhysicalDistance(fromKey, toKey);
 	uint hops= packet.getProgress();
 
-	//EV_TRACE << "sampleAnswer: hops=" << hops << " distance=" << distance << endl;
-	if (distance > 0 and hops >= distance)
+	// EV_TRACE << "sampleAnswer: hops=" << hops << " distance=" << distance << endl;
+	//  distance == 0 means unreachable and
+	//  hops < distance may be the case if underlying topology change while packet was in flight
+        if (distance > 0 and hops >= distance)
 	{
-		histograms[stretchMulAns]->collect(hops / (double)distance);
+		histograms[stretchMulAns]->collect((double) hops / (double) distance);
 		histograms[stretchAddAns]->collect(hops - distance);
 	}
 }
@@ -604,10 +608,12 @@ void KadObserver::sampleLaterPath(const OverlayKey& originKey, const kad_path& p
 	uint distance= getPhysicalDistance(originKey, toKey);
 	uint hops= path.size();
 
-	EV_TRACE << "sampleLaterPath: hops=" << hops << " distance=" << distance << endl;
+	EV_TRACE << "sampleLaterPath: " << path << " hops=" << hops << " distance=" << distance << endl;
+	//  distance == 0 means unreachable and
+	//  hops < distance may be the case if underlying topology change while packet was in flight
 	if (distance > 0 and hops >= distance)
 	{
-		histograms[stretchMulLater]->collect(hops / (double)distance);
+		histograms[stretchMulLater]->collect((double) hops / (double) distance);
 		histograms[stretchAddLater]->collect(hops - distance);
 	}
 }
