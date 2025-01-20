@@ -24,7 +24,7 @@ void R2Kademlia::sendPathSetup(KadContact_p contact) {
 		sentPathSetup++;
 
 		std::unique_ptr<KadPathSetupReq> packet(makePacket<KadPathSetupReq>(contact));
-		packet->setContactLastSeen(contact->getLastSeen());
+		packet->setContactLastSeen(contact->getLastSeen()); // should probably be replaced by getPathAge()
 		packet->setContactSeqNo(contact->getStateSeqNo());
 		sendRpcCall(std::move(packet),
 			    std::bind(&R2Kademlia::handlePathSetupResponse, this, ph::_1, ph::_2),
@@ -99,6 +99,7 @@ bool R2Kademlia::handlePathSetupResponse(KadPacket_p answer, RPCState& rpcState)
 		 << " original path: " << originalpath << " last segment:" << lastsegmentpath << endl;
 
 	KadContact tmpcontact(myOverlayKey, target, std::move(originalpath));
+	tmpcontact.updateLastSeenTo(pathSetupRsp->getContactLastSeen());
 
 	bool addthispath(false);
 	// meanwhile the contact may have been replaced or deleted etc.
@@ -106,10 +107,11 @@ bool R2Kademlia::handlePathSetupResponse(KadPacket_p answer, RPCState& rpcState)
 	// otherwise actually install the path
 	if (auto contactp= const_cast<KadContact*>(routingTable.getContact(tmpcontact.getKey())); contactp != nullptr) {
 		// check if contact has been changed meanwhile
-		// e.g., maybe without path setup as precalc, so this action would override the correct better path...
+		// however, current path might have been validated multiple times, so newer local timestamp is not a reliable indicator
+                // e.g., maybe without path setup as precalc, so this action would override the correct better path...
 		if (contactp->getStateSeqNo() < pathSetupRsp->getContactSeqNo() or
 		    (contactp->getStateSeqNo() == pathSetupRsp->getContactSeqNo() and
-		     tmpcontact.getLastSeen() < pathSetupRsp->getContactLastSeen())) {
+		     tmpcontact.getLastSeen() <= pathSetupRsp->getContactLastSeen())) {
                     if (contactp->isValid() and contactp->getPathLength() < tmpcontact.getPathLength()) {
                         // do nothing we have a valid shorter path in our contact
 			// next path setup should have been scheduled then, or PID was precomputed
@@ -120,8 +122,9 @@ bool R2Kademlia::handlePathSetupResponse(KadPacket_p answer, RPCState& rpcState)
 		else {
 			// Last Seen of current contact is more recent
 			// check whether path has changed, then we should better ignore this PathSetup as obsolete and ignore
-			if (contactp->getPathLength() != tmpcontact.getPath().size()+nodeVicinityGraph::vicinityDiscoveryRadius or contactp->getPath() != tmpcontact.getPath()) {
-				EV_WARN << "PathSetupRsp: ignoring, because Last Seen of current contact is more recent and path has changed meanwhile:" << tmpcontact.getLastSeen() << endl;
+			if (contactp->getPathLength() != tmpcontact.getPathLength()
+                            or contactp->getPath() != tmpcontact.getPath()) {
+				EV_WARN << "PathSetupRsp: ignoring, because Last Seen of current contact is more recent " << contactp->getLastSeen() << "and path has changed meanwhile: now=" << contactp->getPath() << " before=" << tmpcontact.getPath() << endl;
 				// TODO: initiate Teardown of the obsolete path
 			}
 			else {
