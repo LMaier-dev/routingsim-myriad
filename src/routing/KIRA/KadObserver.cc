@@ -411,6 +411,23 @@ uint KadObserver::getPopularity(const OverlayKey& key) const {
 }
 
 
+uint KadObserver::getPathPopularity(const OverlayKey& key) const {
+	uint pop = 0;
+	for (auto pair : nodeid_to_key) {
+		const KadRoutingTable& rt= getR2Kademlia(pair.first).getRoutingTable();
+                for (auto contactp : rt.getAllValidContacts(true)) {
+			for (auto e : contactp->getRawActivePath()) {
+				if (e == key) {
+                                  pop++;
+				  break;
+                                }
+			} // end for
+		} // end for
+	} // end for
+	return pop;
+}
+
+
 void KadObserver::registerPacket(KadPacket& packet) {
 	if (simTime() < getSimulation()->getWarmupPeriod()) return;
 	packet.markTracked();

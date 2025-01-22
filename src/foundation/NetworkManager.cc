@@ -242,11 +242,17 @@ void NetworkManager::sampleStatistics(Statistics &stats) {
 
 	if (evaluateStatistics) {
 		if (topologyStatisticsMode == topostatsmode_light or topologyStatisticsMode == topostatsmode_heavy) {
-			ann = topology->getActiveNumberNodes() + (useMobility ? mobilityTopology->getActiveNumberNodes() : 0);
-			anl = topology->getActiveNumberLinks() + (useMobility ? mobilityTopology->getActiveNumberLinks() : 0);
+			ann = topology->getActiveNumberNodes() + (mobilityTopology ? mobilityTopology->getActiveNumberNodes() : 0);
+			anl = topology->getActiveNumberLinks() + (mobilityTopology ? mobilityTopology->getActiveNumberLinks() : 0);
 		}
 		if (topologyStatisticsMode == topostatsmode_heavy) {
-			pc = topology->getNumPartitions() + mobilityTopology->getNumPartitions();
+			if (not failedNodes.empty())
+				pc = topology->getNumPartitions();
+			else
+				pc = 0;
+
+                        if (mobilityTopology)
+				pc += mobilityTopology->getNumPartitions();
 		}
 		// evaluateStatistics = false;
 	}

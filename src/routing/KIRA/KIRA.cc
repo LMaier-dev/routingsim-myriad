@@ -1428,6 +1428,8 @@ void R2Kademlia::recordScalars() {
 	recordScalar("nodeId", nid);
 	recordScalar("degree", getNetworkManager()->getTopology().getNodeDegree(nid));
 	recordScalar("popularity", getKadObserver().getPopularity(myOverlayKey));
+	// calulating pathpopularity is costly, only activate if really needed
+        //recordScalar("pathpopularity", getKadObserver().getPathPopularity(myOverlayKey));
 	unsigned long notifyFirstSegmentSourcesSize(0UL);
 	std::for_each(notifyFirstSegmentSources.cbegin(), notifyFirstSegmentSources.cend(), [&](auto& entry){notifyFirstSegmentSourcesSize+= entry.second.size();});
 	recordScalar("notifyFirstSegmentSources",notifyFirstSegmentSourcesSize);

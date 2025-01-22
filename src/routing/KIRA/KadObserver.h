@@ -243,8 +243,10 @@ public:
 	const OverlayKey& getRandomExistingKey() { return getClosestExistingKey(OverlayKey::random(getRNG(0))); };
 	/// returns the physical distance between the to nodes with the keys. the keys MUST exist!
 	uint getPhysicalDistance(const OverlayKey& from, const OverlayKey& to) const;
-	/// returns the number of other nodes that have this key in their routing table
+	/// returns the number of other nodes that have this key as contact in their routing table
 	uint getPopularity(const OverlayKey& key) const;
+	/// returns the number of other nodes that have this key in active paths in their routing table
+	uint getPathPopularity(const OverlayKey& key) const;
 
 	void registerPacket(KadPacket&);
 	void registerPacketDropped(KadPacket&, const OverlayKey& current, const OverlayKey& target=OverlayKey::UNSPECIFIED_KEY, uint8_t reason= 0);
