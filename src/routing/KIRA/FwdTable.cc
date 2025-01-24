@@ -463,21 +463,36 @@ void FwdTablePathID::delEntry(KadContact_p contact)
 }
 
 
-void FwdTablePathID::garbageCollect(std::unordered_map<PathID, std::unordered_set<OverlayKey>>& notifyFirstSegmentSources, const unsigned long fwdentry_refresh_timeout_ms)
+void
+FwdTablePathID::garbageCollect(std::unordered_map<PathID, std::unordered_set<OverlayKey>>& notifyFirstSegmentSources,
+			       std::unordered_map<OverlayKey, std::pair<OverlayKey, PathID>>& notifyFirstSegmentSourcesReversePath,
+			       const unsigned long fwdentry_refresh_timeout_ms)
 {
-	auto it= PIDFwdTable.begin();
-	while ( it != PIDFwdTable.end() )
+	auto pwdtable_it= PIDFwdTable.begin();
+	while ( pwdtable_it != PIDFwdTable.end() )
 	{
 		// not used entries are marked for deletion and also have lost their foreign bit
-		if (not it->second.isLocal() and not it->second.isPrecalc()
-		    and it->second.getAge() > fwdentry_refresh_timeout_ms) {
-			EV_TRACE << "garbageCollect(): actually deleting PID " << it->first << ": " << it->second.str() << endl;
-			notifyFirstSegmentSources.erase(it->first);
-                        it = PIDFwdTable.erase(it);
+		if (not pwdtable_it->second.isLocal() and not pwdtable_it->second.isPrecalc()
+		    and pwdtable_it->second.getAge() > fwdentry_refresh_timeout_ms) {
+			EV_TRACE << "garbageCollect(): actually deleting PID "
+				 << pwdtable_it->first << ": " << pwdtable_it->second.str() << endl;
+
+                        if (auto nfss_it = notifyFirstSegmentSources.find(pwdtable_it->first);
+                            nfss_it != notifyFirstSegmentSources.end()) {
+				// need to iterate over all 1st segment source nodes in this entry
+				for (auto srcnode : nfss_it->second) {
+					notifyFirstSegmentSourcesReversePath.erase(srcnode);
+				} // end for
+
+			}
+			// remove all 1st segment source nodes for this PID
+			notifyFirstSegmentSources.erase(pwdtable_it->first);
+			// remove PID
+			pwdtable_it = PIDFwdTable.erase(pwdtable_it);
 			updates++;
 		}
 		else {
-			it++;
+			pwdtable_it++;
 		}
 	} // end while
 }

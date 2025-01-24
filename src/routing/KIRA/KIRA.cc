@@ -1373,6 +1373,7 @@ void R2Kademlia::sampleStatistics (Statistics &stats) {
 	unsigned long notifyFirstSegmentSourcesSize(0UL);
 	std::for_each(notifyFirstSegmentSources.cbegin(), notifyFirstSegmentSources.cend(), [&](auto& entry){notifyFirstSegmentSourcesSize+= entry.second.size();});
 	stats.value("notifyFirstSegmentSources",notifyFirstSegmentSourcesSize);
+	stats.value("notifyFirstSegmentSourcesViaPID",notifyFirstSegmentSourcesReversePath.size());
 	//stats.value("routingTableFoundEquivalentPaths", routingTable.getNumFoundEquivPaths());
 	stats.value("fwdTableSize", fwdTablePathID.getNumEntries());
 	stats.value("fwdTableValid", fwdTablePathID.getNumValidEntries());

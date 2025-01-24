@@ -18,11 +18,11 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 
 	unsigned int overallPathLengthHops(packet.getRouteArraySize()); // will be in number of hops after next if
 	// note: packet.getRouteArraySize()-1 == number of hops, we need to decrement by one
-	if (overallPathLengthHops>1) {
+	if (overallPathLengthHops > 1) {
 		overallPathLengthHops--;
 	}
 	else {
-		ASSERT(overallPathLengthHops>1);
+		ASSERT(overallPathLengthHops > 1);
 		EV_ERROR << "checkForPathIDInstallation: path too short" << endl;
 		return false;
 	}
@@ -50,7 +50,7 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 	if (overallPathLengthHops == 2*nodeVicinityGraph::vicinityDiscoveryRadius+1) {
 		firstsegment_end= nodeVicinityGraph::vicinityDiscoveryRadius+1;
 	}
-	else // more than six hops
+	else // six hops or more
 	if (overallPathLengthHops >= 2*(nodeVicinityGraph::vicinityDiscoveryRadius+1)) {
 		firstsegment_end-= nodeVicinityGraph::vicinityDiscoveryRadius+1;
 	}
@@ -60,6 +60,7 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 	PathID incomingPID(getPathID(myOverlayKey, pathtoadd));
 
 	// add incoming interface everywhere except at the end of the first segment
+	// to potentially restrict reverse flooding to the relevant neighbors only
 	if (packet.getProgress() != firstsegment_end) {
 		addIncomingIFtoPIDEntry(packet.getHop(packet.getProgress()-1), incomingPID);
 	}
@@ -84,6 +85,7 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 				EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources PID=" << incomingPID << endl;
 			}
 
+			// use the PathIDs of the reverse Path within radius of preinstalled PathIDs (here 3 hop distance)
 			auto pathtosrc(packet.reversePath(packet.getSrcPath(0, packet.getProgress())));
 			// we need to store the outgoing PID as we will probably have no mapping for destinations in 3 hop distance
 			// but we also need to store the next hop as we may have no local mapping
@@ -110,27 +112,31 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 
 		// PID must be installed if hops > vicinityDiscoveryRadius
 		EV_TRACE << "checkForPathIDInstallation: path to " << packet.getTarget().shortStr() << ": " << pathtoadd;
- 		if (auto [added,incomingPID]= fwdTablePathID.addForeignEntry(pathtoadd); added == true) {
+		if (auto [added,incomingPID]= fwdTablePathID.addForeignEntry(pathtoadd); added == true) {
 			EV_TRACE << " added " << incomingPID << endl;
 
 			if (linkFailureNotifications != lfn_none) {
 				if (auto it= notifyFirstSegmentSources.find(incomingPID); it != notifyFirstSegmentSources.end()) {
+					// just add the source to an existing entry for the PID
 					it->second.insert(packet.getSource());
 					EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources PID=" << incomingPID << endl;
 				}
 				else {
+					// create new entry for PID and add the source
 					notifyFirstSegmentSources.insert({incomingPID,{packet.getSource()}});
 					EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources PID=" << incomingPID << endl;
 				}
 			}
 
+			// this is the case for overall path length of 6 hops and exactly three hops back to first segment source
 			if (packet.getProgress() == nodeVicinityGraph::vicinityDiscoveryRadius+1 and linkFailureNotifications != lfn_none) {
 				auto pathtosrc(packet.reversePath(packet.getSrcPath(0, packet.getProgress())));
 				// we need to store the outgoing PID as we will probably have no mapping for destinations in 3 hop distance
 				PathID PIDtoSrc(getPathID(pathtosrc));
 				if (auto it= notifyFirstSegmentSourcesReversePath.find(packet.getSource()); it != notifyFirstSegmentSourcesReversePath.end()) {
+					// entry for source node exists already but probably needs an update due to route change
 					notifyFirstSegmentSourcesReversePath[packet.getSource()]= {pathtosrc.at(0),PIDtoSrc};
-					EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources PID=" << PIDtoSrc << endl;
+					EV_TRACE << " updated " << packet.getSource().shortStr() << " in notifyFirstSegmentSources PID=" << PIDtoSrc << endl;
 				}
 				else {
 					notifyFirstSegmentSourcesReversePath.insert({packet.getSource(), {pathtosrc.at(0),PIDtoSrc}});
@@ -167,7 +173,7 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 	}
 	else
 	if (packet.hopsLeft() >= 2*(nodeVicinityGraph::vicinityDiscoveryRadius+1)) {
-                // at least six hops left to destination: install PID to node three hops before destination
+                // at least six hops left to destination: install PID to node three hops before destination (begin of 2nd segment)
 		const auto target(packet.getRoute(overallPathLengthHops-nodeVicinityGraph::vicinityDiscoveryRadius-1));
 		const auto pathtoadd(packet.getSrcPath(packet.getProgress()+1, overallPathLengthHops-nodeVicinityGraph::vicinityDiscoveryRadius));
 		// PID must be installed if hops > vicinityDiscoveryRadius
@@ -189,6 +195,7 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 			return false;
 		}
 	}
+
 	return false;
 }
 

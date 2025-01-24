@@ -572,7 +572,7 @@ bool R2Kademlia::doGarbageCollectPathIDs(short timerId)
 {
 	ASSERT(timerId >= fixedTimerIdBase and timerId < oneShotTimerId); // assume fixed timer
 	EV_TRACE << "PathID garbage collection called" << endl;
-        fwdTablePathID.garbageCollect(notifyFirstSegmentSources,
+	fwdTablePathID.garbageCollect(notifyFirstSegmentSources, notifyFirstSegmentSourcesReversePath,
                                       3 * R2Kademlia::PathRefreshThreshold);
 	return false; // do not stop timer after callback
 }

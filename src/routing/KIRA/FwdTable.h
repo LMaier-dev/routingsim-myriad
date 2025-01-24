@@ -140,7 +140,9 @@ public:
 	void delForeignPIDEntry(PathID pid);
 
 	// garbage collect, actually delete unnecessary entries
-	void garbageCollect(std::unordered_map<PathID, std::unordered_set<OverlayKey>>& notifyFirstSegmentSources, const unsigned long fwdentry_refresh_timeout_ms);
+        void garbageCollect(std::unordered_map<PathID, std::unordered_set<OverlayKey>> &notifyFirstSegmentSources,
+			    std::unordered_map<OverlayKey, std::pair<OverlayKey, PathID>> &notifyFirstSegmentSourcesReversePath,
+			    const unsigned long fwdentry_refresh_timeout_ms);
 
 	// for gathering statistics
 	size_type getNumEntries() const { return PIDFwdTable.size()+NIDPIDTable.size()+NIDPIDTableLastSeg.size(); };

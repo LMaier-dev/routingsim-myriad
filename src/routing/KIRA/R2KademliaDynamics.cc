@@ -972,7 +972,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadRevPathFlood> packet) {
 		}
 	}
 
-        if (not upstreamPIDs_p->empty()) {
+	if (not upstreamPIDs_p->empty()) {
 		_DEBUG_ONLY(
 			EV_TRACE << "sendLinkFailureNotifications for upstream PIDs { ";
 			for (const auto& pid : *upstreamPIDs_p)
@@ -1030,6 +1030,7 @@ R2Kademlia::doNotifyFirstSegmentSources(std::unordered_set<PathID>* upstreamPIDs
 
 	for (const auto &notify_target : nodes_to_notify) {
 
+		// first: try to sent directly to all first segment sources that can be reached with(in) a single segment PID
 		bool sentViaPID(false);
 		if (const auto pid_it= notifyFirstSegmentSourcesReversePath.find(notify_target); pid_it != notifyFirstSegmentSourcesReversePath.cend())
 		{ // use a direct path with PIDs
@@ -1066,6 +1067,7 @@ R2Kademlia::doNotifyFirstSegmentSources(std::unordered_set<PathID>* upstreamPIDs
 				EV_TRACE << "Cannot continue with PID-based forwarding of LinkFailureNotify due to next hop failure" << endl;
 		}
 
+		// if not already sent directly via PID, use overlay routing to reach first segment source
 		if (not sentViaPID and linkFailureNotifications == lfn_full) { // send via overlay
 			size_t contactsLen = std::max((size_t)findNodeNumber, routingTable.getSplitSize());
                         NotViaList_t tmpnotvialist; // getClosestContacts needs relative time (NotViaList_t)
