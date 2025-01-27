@@ -95,7 +95,7 @@ protected:
 	//@{
 	/// used for sending packets
 	virtual void sendPacket(packet_p packet, simtime_t delay) = 0;
-	virtual void addOneShotTimer(simtime_t delay, TimerMsg::cbfunc_t callback) = 0;
+	virtual TimerMsg* addOneShotTimer(simtime_t delay, TimerMsg::cbfunc_t callback) = 0;
 	//@}
 
 public:	

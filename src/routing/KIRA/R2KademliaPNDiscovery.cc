@@ -111,7 +111,7 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 simtime_t R2Kademlia::sendGetPhysicalNeighbors(const KadContact& contact, RequestQueueElementActionType action)
 {
 	EV_TRACE << "sending query route request (PN" << ((action & RequestQueueElementActions::get_OverlayNeighborsSource) ? "+ON)" : ")") << " to " << contact << endl;
-	auto req = makePacket<KadQueryRouteReq>(contact, "QueryRouteReq");
+	auto req = makePacket<KadQueryRouteReq>(contact);
 	req->setNeighborhood(1); // get only physical neighbors (1 hop away)
 	req->setContactsOnly(false);
 	req->setOverlayNeighbors(false);
@@ -163,7 +163,7 @@ simtime_t R2Kademlia::sendGetPhysicalNeighbors(const KadContact& contact, Reques
 simtime_t R2Kademlia::sendGetOverlayNeighbors(const KadContact& contact, RequestQueueElementActionType action)
 {
 	EV_TRACE << "sending query route request (ON) to " << contact << endl;
-	auto req = makePacket<KadQueryRouteReq>(contact, "QueryRouteReq");
+	auto req = makePacket<KadQueryRouteReq>(contact);
 	req->setNeighborhood(0); // no physical neighbors
 	req->setOverlayNeighborsSource( (action & RequestQueueElementActions::get_OverlayNeighborsSource) != 0 ); // get known overlay neighbors for my ID
 	req->setContactsOnly(false); // get also the routes

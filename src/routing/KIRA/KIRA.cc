@@ -571,11 +571,11 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt, simtime_t 
 		sendToNode(nid, std::move(nodePkt), delay);
 
 		return;
-        }
+	}
 
-        // next hop not available: for some packet types we can try to reroute
-        bool try_to_reroute(false);
-        switch (packet->getType()) {
+	// next hop not available: for some packet types we can try to reroute
+	bool try_to_reroute(false);
+	switch (packet->getType()) {
         case KAD_UpdateRouteReq:
         case KAD_FindNodeReq:
         case KAD_LinkFailureNotify:
@@ -586,8 +586,8 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt, simtime_t 
 	// break;
 	}; // end switch
 
-        if (try_to_reroute) {
-               // for Routing Updates and Rediscovery messages try to use overlay-based forwarding
+	if (try_to_reroute) {
+		// for Routing Updates and Rediscovery messages try to use overlay-based forwarding
 		EV_TRACE << "forwardPacket(): next hop " << nextHop.shortStr() << " unavailable" << endl;
 
 		const OverlayKey* finaldestination(nullptr);
@@ -1015,7 +1015,7 @@ void R2Kademlia::sendFindNode(const OverlayKey& destkey, bool exact, bool track)
 			EV_ERROR << "I'm the next hop for the destination. Will not send anything." << endl;
 			return;
 		}
-		auto packet = makePacket<KadFindNodeReq>(contact, "FindNodeReq");
+		auto packet = makePacket<KadFindNodeReq>(contact);
 		packet->setDstNodeID(destkey);
 		packet->setExact(exact);
 		if (track)
@@ -1052,7 +1052,7 @@ void R2Kademlia::sendFindNodeVia(const OverlayKey& destkey, KadContact_p viacont
 		EV_ERROR << "I'm the next hop for the destination. Will not send anything." << endl;
 		return;
 	}
-	auto packet = makePacket<KadFindNodeReq>(*viacontact_p, "FindNodeReq");
+	auto packet = makePacket<KadFindNodeReq>(*viacontact_p);
 	packet->setDstNodeID(destkey);
 	packet->setExact(exact);
 	if (track)

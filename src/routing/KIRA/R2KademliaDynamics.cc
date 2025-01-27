@@ -1079,7 +1079,7 @@ R2Kademlia::doNotifyFirstSegmentSources(std::unordered_set<PathID>* upstreamPIDs
 				// check whether that contact is closer to the target than we are (but do not send back to source)
 				if ( next_contact.isValid() and (next_contact.getKey() ^ myOverlayKey) > (next_contact.getKey() ^ notify_target) )
 				{
-					auto notify_packet = makePacket<KadLinkFailureNotify>(next_contact, "LinkFailureNotifyDirect");
+					auto notify_packet = makePacket<KadLinkFailureNotify>(next_contact);
 					notify_packet->setDstNodeID(notify_target);
 					notify_packet->setDstPID(PathID::UndefinedPathID);
 					// copy notvia list

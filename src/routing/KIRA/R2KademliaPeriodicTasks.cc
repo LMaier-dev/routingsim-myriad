@@ -35,6 +35,9 @@ R2Kademlia::addRandomizedTimer(simtime_t initialOffset, simtime_t duration, Time
 	if (duration/2 > initialOffset)
 		throw cRuntimeError("initialOffset %s too small for duration %s",initialOffset.str().c_str(),duration.str().c_str());
 
+        if (randomTimerDuration.size() == (size_type)fixedTimerIdBase - 1)
+		throw cRuntimeError("Cannot add randomized timer, reached maximum number of possible timers %lu",randomTimerDuration.size());
+
 	short int ntimerId(duration == omnetpp::SimTime::ZERO ? oneShotTimerId : randomTimerDuration.size());
 	auto msg= new TimerMsg(ntimerId, callback);
 
@@ -57,7 +60,11 @@ short R2Kademlia::addFixedTimer(simtime_t initialOffset, simtime_t duration, Tim
 	ASSERT(fixedTimerDuration.size() == fixedTimerMsg.size());
 	ASSERT(fixedTimerDuration.size() < (size_type) std::numeric_limits<short int>::max()-1-fixedTimerIdBase);
         ASSERT(duration >= omnetpp::SimTime::ZERO);
-	// for fixed timers the timerId starts at fixedTimerIdBase
+
+        if (randomTimerDuration.size() == std::numeric_limits<short int>::max()-1-fixedTimerIdBase)
+		throw cRuntimeError("Cannot add randomized timer, reached maximum number of possible timers %lu",randomTimerDuration.size());
+
+        // for fixed timers the timerId starts at fixedTimerIdBase
 	short int ntimerId((duration == omnetpp::SimTime::ZERO) ? oneShotTimerId :  fixedTimerIdBase+fixedTimerDuration.size());
 	auto msg= new TimerMsg(ntimerId, callback);
 	if (duration > omnetpp::SimTime::ZERO) {

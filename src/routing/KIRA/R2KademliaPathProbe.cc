@@ -204,12 +204,12 @@ void R2Kademlia::sendPathProbeToContact(const KadContact& contact, RequestQueueE
 	std::unique_ptr<KadProbeReq> probereq(nullptr);
 	// if action says so and proposed path is present, we probe for this
 	if ( (action & probeProposedPath) and contact.proposedPathDefined()) {
-		probereq= makePacket<KadProbeReq>(contact, "ProbeReq", false);
+		probereq= makePacket<KadProbeReq>(contact, PDUNames.at(KAD_ProbeReq), false);
 		probereq->appendRoute(contact.getRawProposedPath(), contact.getKey());
 		EV_TRACE << " (Proposed Path): " << contact.getRawProposedPath();
 	}
 	else {
-		probereq= makePacket<KadProbeReq>(contact, "ProbeReq");
+		probereq= makePacket<KadProbeReq>(contact);
 		EV_TRACE << " (Active Path): " << contact.getRawActivePath();
 	}
 

@@ -354,7 +354,7 @@ private:
 	/// adds a timer to the timer vectors, sends a timer packet
 	short addRandomizedTimer(simtime_t initialOffset, simtime_t duration, TimerMsg::cbfunc_t callback);
 	short addFixedTimer(simtime_t initialOffset, simtime_t duration, TimerMsg::cbfunc_t callback);
-	inline void addOneShotTimer(simtime_t delay, TimerMsg::cbfunc_t callback) override;
+	inline TimerMsg* addOneShotTimer(simtime_t delay, TimerMsg::cbfunc_t callback) override;
 	/// stops timer and cancels timer message (and may delete it!)
 	void stopTimer(short timerId,  bool delete_timermsg= true);
 	/// stops timer and cancel timer message, starts new timer with new duration
@@ -741,12 +741,14 @@ inline R2Kademlia::R2Kademlia()
 };
 
 
-// for functions that only get called once and not periodically
-inline
-void R2Kademlia::addOneShotTimer(simtime_t delay, TimerMsg::cbfunc_t callback) {
-	auto msg = new TimerMsg(-1, callback);
+/// for functions that only get called once and not periodically
+/// @return pointer to timer message, e.g., for later cancellation
+inline TimerMsg *
+R2Kademlia::addOneShotTimer(simtime_t delay, TimerMsg::cbfunc_t callback) {
+	auto msg = new TimerMsg(oneShotTimerId, callback);
 	// callback will be carried out after delay
 	scheduleAt(simTime() + delay, msg);
+	return msg;
 }
 
 
@@ -886,9 +888,12 @@ template<typename T> bool R2Kademlia::handleIfFitting(KadPacket_p& packet) {
 	//EV_TRACE << "handleIfFitting raw_ptr " << static_cast<void*>(raw_ptr) << endl;
 	std::unique_ptr<T> tPacket(dynamic_cast<T*>(raw_ptr));
 	// if cast failed we get nullptr -> skip the rest, return false
-	if (not tPacket) return false;
-	// invalidate the original unique_ptr
-	(void) packet.release();
+        if (not tPacket) {
+		// note: packet should not be delete here as handleIfFitting() is used with fall through calls
+		return false;
+        }
+	// only after new encapsulation has been successful, control is now handed over to tPacket
+	std::ignore = packet.release();
 	//EV_TRACE << "handleIfFitting tPacket " << static_cast<void*>(tPacket.get()) << endl;
 	// delegate responsibility to handlePacket method
 	handlePacket(std::move(tPacket));
@@ -901,9 +906,12 @@ template<typename T> bool R2Kademlia::handleIfFitting(KadDataPacket_p& packet) {
 	//EV_TRACE << "handleIfFitting raw_ptr " << static_cast<void*>(raw_ptr) << endl;
 	std::unique_ptr<T> tPacket(dynamic_cast<T*>(raw_ptr));
 	// if cast failed we get nullptr -> skip the rest, return false
-	if (not tPacket) return false;
-	// invalidate the original unique_ptr
-	(void) packet.release();
+	if (not tPacket) {
+		// note: packet should not be delete here as handleIfFitting() is used with fall through calls
+		return false;
+	}
+	// only after new encapsulation has been successful, control is now handed over to tPacket
+	std::ignore = packet.release();
 	//EV_TRACE << "handleIfFitting tPacket " << static_cast<void*>(tPacket.get()) << endl;
 	// delegate responsibility to handlePacket method
 	handlePacket(std::move(tPacket));
