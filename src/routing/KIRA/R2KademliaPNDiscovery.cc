@@ -483,8 +483,9 @@ bool R2Kademlia::handlePNDiscResponse(KadPacket_p answer, RPCState& rpcState)
 	if (response->getRouteArraySize() != 2)
 	  EV_ERROR << response->getName() << " not received via direct link" << endl;
 
-	// update sequence number or restore direct link
-	vicinity.updateNodeStateSeqNo(response->getSource(), response->getStateSeqNo());
+	// update sequence number no in vicinity or restore direct link
+	bool state_has_changed= false;
+	state_has_changed = vicinity.updateNodeStateSeqNo(response->getSource(), response->getStateSeqNo());
 	routingTable.addPNContact(response->getSource(), response->getStateSeqNo(), response->getSrcNodeDegree());
 
 	// update PNsyncSeqNo
@@ -494,8 +495,41 @@ bool R2Kademlia::handlePNDiscResponse(KadPacket_p answer, RPCState& rpcState)
 	else
 		EV_ERROR << "PN not found as contact in RT!" << endl;
 
+	std::unordered_set<OverlayKey> list_of_children;
+
+	// in case of changes, detect any deleted links now
+	if (state_has_changed) { // create list of children to detect missing links
+		if (auto nodep= vicinity.getNode(response->getSource()); nodep) {
+			for (auto childnode : nodep->children) {
+				if (childnode and childnode->nodeKey)
+					list_of_children.insert(*childnode->nodeKey);
+			} // end for
+		}
+	}
+
 	// now read PNs from neighbor
 	readRTableRsp(*response);
+
+	// now check for deleted links of this node
+	if (state_has_changed) {
+
+		for (size_t i = 0; i < response->getContactArraySize(); i++) {
+			if (response->getPath(i).empty()) { // only check for PN contacts
+				list_of_children.erase(response->getContact(i));
+			}
+		}
+
+		// the remaining contacts in list_of_children must have been deleted
+		for (auto nodekey : list_of_children) {
+			if (vicinity.removeLink(response->getSource(),nodekey)) {
+				EV_TRACE << "Deleted link <" << response->getSource().shortStr() << "," << nodekey.shortStr() << ">" << endl;
+				// remove precalculated PID
+				kad_path pathtoremove{response->getSource(),nodekey};
+				fwdTablePathID.delPrecalcEntry(pathtoremove);
+			}
+		} // end for
+	}
+
 	return true;
 }
 
@@ -508,12 +542,44 @@ bool R2Kademlia::handleQueryRouteResponse(KadPacket_p answer, RPCState& rpcState
 	}
 	auto response = safe_packet_cast<KadQueryRouteRsp>(answer);
 	EV_TRACE << "received " << response->getContactArraySize() << " neighbors from " << response->getSource().shortStr() << endl;
+
+	bool state_has_changed= false;
+	std::unordered_set<OverlayKey> list_of_children;
 	if (response->getPNListDelivered()) {
 		// update state seq no in vicinity
-		vicinity.updateNodeStateSeqNo(response->getSource(), response->getStateSeqNo());
+		// in case of changes, detect any deleted links now
+		state_has_changed = vicinity.updateNodeStateSeqNo(response->getSource(), response->getStateSeqNo());
+		if ( state_has_changed ) { // create list of children to detect missing links
+			if (auto nodep= vicinity.getNode(response->getSource()); nodep) {
+				for (auto childnode : nodep->children) {
+					if (childnode and childnode->nodeKey)
+						list_of_children.insert(*childnode->nodeKey);
+				} // end for
+			}
+		}
 	}
 
 	readRTableRsp(*response);
+
+	// now check for deleted links of this node
+	if (response->getPNListDelivered() and state_has_changed) {
+		for (size_t i = 0; i < response->getContactArraySize(); i++) {
+			if (response->getPath(i).empty()) { // only check for PN contacts
+				list_of_children.erase(response->getContact(i));
+			}
+		} // end for
+
+		// the remaining contacts in list_of_children must have been deleted
+		for (auto nodekey : list_of_children) {
+
+			if (vicinity.removeLink(response->getSource(),nodekey)) {
+				EV_TRACE << "Deleted link <" << response->getSource().shortStr() << "," << nodekey.shortStr() << ">" << endl;
+				// remove precalculated PID
+				kad_path pathtoremove{response->getSource(),nodekey};
+				fwdTablePathID.delPrecalcEntry(pathtoremove);
+			}
+		} // end for
+	}
 	return true;
 }
 

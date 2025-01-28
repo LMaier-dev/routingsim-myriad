@@ -162,7 +162,7 @@ FwdTablePathID::addEntry(const kad_path& path_to_add, bool isLocal, bool isForei
 		if (precalc)
 			pidentry->second.setPrecalc();
 
-		EV_TRACE << "addEntry(): inPID entry " << incomingPathID << " exists already. " << pidentry->second.str() << endl;
+		//EV_TRACE << "addEntry(): inPID entry " << incomingPathID << " exists already. " << pidentry->second.str() << endl;
 
 		updates++;
 		return std::make_pair(false, incomingPathID); // already there, fine

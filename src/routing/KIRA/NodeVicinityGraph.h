@@ -9,17 +9,18 @@ namespace routingsim {
 
 class nodeVicinityNode {
 public:
-	const OverlayKey* nodeKey = nullptr;
-	unsigned short distance = 0; // (shortest) distance in hops from (this) node
+	const OverlayKey* nodeKey = nullptr; // NodeID for this node
+	unsigned short distance = 0; // (shortest) distance from root node in hops to (this) node
 	stateseqno_t stateseqno = stateseqno_t::invalidSeqNo; // last seen state seq no when communicated with this node
-	std::vector<const nodeVicinityNode*> children; // (sorted) list of pointer to children
+	std::vector<const nodeVicinityNode*> children; // (sorted) list of pointers to children (to allow for binary search)
 };
 
 
 /***********************************************
  * The following class describes a directed graph
  * It is mainly used to precalculate PathIDs for all potential paths
- * in the 2-hop vicinity
+ * in the 2-hop vicinity. It tries to be memory efficient as 2-hop vicinities
+ * may become quite large in large graphs (10000s of nodes!)
  **/
 class nodeVicinityGraph {
 public:
@@ -28,9 +29,10 @@ public:
 	/// adds child node to parent node
 	std::tuple<bool, bool, nodeVicinityNode*> addNode(const OverlayKey& parentNodeKey, const OverlayKey& childNodeKey, unsigned short distance);
 	void removeNode(const OverlayKey& nodeKey);
+	bool removeLink(const OverlayKey& parentNodeKey, const OverlayKey& childNodeKey);
 	size_t size() const { return graph.size(); }
 	const nodeVicinityNode* getNode(const OverlayKey& NodeKey) const;
-	void updateNodeStateSeqNo(const OverlayKey& NodeKey, stateseqno_t newseqno);
+	bool updateNodeStateSeqNo(const OverlayKey& NodeKey, stateseqno_t newseqno);
 	auto cbegin() const { return graph.cbegin(); }
 	auto cend() const { return graph.cend(); }
 	static constexpr unsigned short vicinityDiscoveryRadius = 2; // this is fixed, otherwise it gets too large
@@ -40,14 +42,21 @@ private:
 };
 
 
-
+/// Updates state sequence number for node with given NodeKey if necessary
+/// @returns true if newseqno is larger than the one that was stored
 inline
-void
+bool
 nodeVicinityGraph::updateNodeStateSeqNo(const OverlayKey& NodeKey, stateseqno_t newseqno)
 {
 	if (auto it= graph.find(NodeKey); it != graph.end()) {
-		it->second.stateseqno= newseqno;
+		if (newseqno > it->second.stateseqno) {
+			it->second.stateseqno = newseqno;
+			return true;
+		} else { // not larger or equals
+			return false;
+		}
 	}
+	return false;
 }
 
 

@@ -54,7 +54,8 @@ nodeVicinityGraph::addNode(const OverlayKey& parentNodeKey, const OverlayKey& ch
 		foundnode= childnodeptr;
 		auto& childrenlist(parentnode_it->second.children);
 		// check for existing child node in children list of parent (if exists: link already known)
-		auto child_it= std::lower_bound(childrenlist.cbegin(),childrenlist.cend(), childnodeptr);
+		// perform binary search and then insertion for efficient lookup in large vicinities
+                auto child_it= std::lower_bound(childrenlist.cbegin(),childrenlist.cend(), childnodeptr);
 		// if not found, add (parent, child) as new link
 		if (child_it == childrenlist.cend() or *child_it != childnodeptr) {
 			childrenlist.insert(child_it, childnodeptr);
@@ -104,5 +105,36 @@ nodeVicinityGraph::removeNode(const OverlayKey& nodeKey)
 		
 }
 
+
+/// removes a link between parentNodeKey and childNodeKey
+/// it may be the case that the childNode is an orphan after the removal.
+/// This can be fixed by a later garbage collection.
+/// @return true in case link was removed, false if not found
+bool
+nodeVicinityGraph::removeLink(const OverlayKey &parentNodeKey,
+			      const OverlayKey &childNodeKey) {
+	// lookup parent node
+	if (auto graphit= graph.find(parentNodeKey); graphit != graph.end()) {
+		nodeVicinityNode* parentnode(&graphit->second);
+                graphit = graph.find(childNodeKey);
+                if (graphit != graph.end()) {
+			const nodeVicinityNode* childnode(&graphit->second);
+			if (not parentnode->children.empty()) {
+				if (auto child_it = std::lower_bound(
+					    parentnode->children.cbegin(),
+					    parentnode->children.cend(), childnode);
+				    child_it != parentnode->children.cend()) {
+					// remove link
+					EV_TRACE << "nodeVicinity: removing link <"
+						 << parentNodeKey.shortStr()
+						 << "," << childNodeKey.shortStr() << ">" << endl;
+					parentnode->children.erase(child_it);
+					return true;
+				}
+			}
+		}
+	}
+	return false;
+}
 
 } //namespace
