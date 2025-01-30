@@ -1205,15 +1205,15 @@ KadRoutingTable::demotePNs()
 				(*contact_it)->unsetPhysicalNeighbor();
 				// now try to move contact over to regular contacts
 				// get responsible bucket for contact
-				bool newsplit = false;
-                                KadBucket& tmpbucket = getBucket((*contact_it)->getKey());
-				if (isSplittable(tmpbucket)) {
+				KadBucket& newbucket = getBucket((*contact_it)->getKey());
+				if (isSplittable(newbucket)) {
 					splitLastBucket();
-					newsplit = true;
+					// we need to recurse here, because splitLastBucket() modifies the bucket structure
+					// so the contact_it is not valid anymore. Recursion will stop however.
+					demotePNs();
+					return;
 				}
 
-                                // in case of bucket split we must repeat getBucket to get the new bucket
-				KadBucket &newbucket = newsplit ? getBucket((*contact_it)->getKey()) : tmpbucket;
 				// add if space left or perform contact replacement
 				if (bucket.getContacts().size() < bucketSize) {
 					// move contact and unique_ptr over to new bucket
@@ -1224,7 +1224,7 @@ KadRoutingTable::demotePNs()
 				}
 				else { // no space in bucket for inserting the contact: replace existing one?
 					// path_verified is true, because contact isValid() == true
-                                        if (checkForContactReplacement(newbucket, std::move((*contact_it)), true)) {
+					if (checkForContactReplacement(newbucket, std::move((*contact_it)), true)) {
 						*contact_it= nullptr;
 					}
 				}
