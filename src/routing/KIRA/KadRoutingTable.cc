@@ -1265,17 +1265,17 @@ void KadRoutingTable::addRandomGratuitousContacts(KadContactList &contactList) c
 				if (contactp != contactList.back()) {
 					contactList.push_back(contactp);
 					EV_TRACE << ' ' << contactp->getKey().shortStr();
-                                        foundContacts++;
-                                }
-                                else {
+					foundContacts++;
+				}
+				else {
 					retries++;
 				}
-                        }
-                        else {
+			}
+			else {
 				retries++;
-                        }
+			}
 		}; // end while
-        } // end for all buckets
+	} // end for all buckets
 	EV_TRACE << endl;
 }
 
@@ -1589,10 +1589,11 @@ void KadRoutingTable::invalidateContact(KadContact& contact, const link_t& faile
                                 // if it lost its last link a rediscovery does not make sense
                                 // if the link is repaired the node should come back to us
 				if (not lastlinkfailed) {
-                                    if (isInLastBucket(contact.getKey()))
-                                            policy->scheduleUrgentRediscovery(contact.getKey());
-                                    else
-                                            policy->scheduleSlowRediscovery(contact.getKey());
+
+					if (isInLastBucket(contact.getKey()))
+						policy->scheduleUrgentRediscovery(contact.getKey());
+					else
+						policy->scheduleSlowRediscovery(contact.getKey());
                                 }
 			}
 			else
@@ -1700,6 +1701,8 @@ void KadRoutingTable::invalidateContacts(const link_t& failedLink, age_t failedL
 		} // end for inner loop over all contacts
 
 		for (auto& contact : b.getPNContacts()) {
+			// we could try to call policy->onFailedLinkInVicinity(failedLink,failedLinkAge);
+			// in case contact is one end of the failed link, but results were better without doing so
 			invalidateContact(*contact, failedLink, failedLinkAge);
 		} // end for inner loop over all PN contacts
 	} // end for over all buckets

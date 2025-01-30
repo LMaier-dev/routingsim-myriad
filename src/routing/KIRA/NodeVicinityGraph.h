@@ -32,7 +32,9 @@ public:
 	bool removeLink(const OverlayKey& parentNodeKey, const OverlayKey& childNodeKey);
 	size_t size() const { return graph.size(); }
 	const nodeVicinityNode* getNode(const OverlayKey& NodeKey) const;
+	const nodeVicinityNode* getRootNode() const { return getNode(*rootNodeKey); };
 	bool updateNodeStateSeqNo(const OverlayKey& NodeKey, stateseqno_t newseqno);
+	std::pair<bool, std::vector<OverlayKey>> findPath(const OverlayKey& NodeKey) const;
 	auto cbegin() const { return graph.cbegin(); }
 	auto cend() const { return graph.cend(); }
 	static constexpr unsigned short vicinityDiscoveryRadius = 2; // this is fixed, otherwise it gets too large

@@ -151,6 +151,8 @@ void R2Kademlia::onContactRemoval(KadContact_p contact)
 
 
 // this is called after invalidation of the contact, i.e., path is known to be broken
+// currently it invalidates the corresponding entry in the forwarding tier
+// and tries to find an alternative path in the vicinity if possible
 void R2Kademlia::onContactInvalidation(KadContact_p contact)
 {
 	if (contact == nullptr)
@@ -158,6 +160,21 @@ void R2Kademlia::onContactInvalidation(KadContact_p contact)
 
 	if (usePathIDs)
 		fwdTablePathID.invalidateEntry(contact);
+
+	// if contact is in the vicinity, try to find an alternative path there first
+	// set this a proposed path and carry out an immediate path probe for the proposed path
+	if (contact->getPathLength() < nodeVicinityGraph::vicinityDiscoveryRadius and contact->getNodeDegree() > 1) {
+
+		if (auto [found,newpath]= vicinity.findPath(contact->getKey()); found) {
+			EV_TRACE << "found alternative path to " << contact->getKey().shortStr() << " in vicinity: " << newpath << endl;
+			// set proposed path and probe directly
+			auto pathHashSum= HashSum(myOverlayKey, newpath, contact->getKey());
+			// now we need write access to the contact to set the proposed path
+			const_cast<KadContact*>(contact)->setProposedPath(std::move(newpath), std::move(pathHashSum));
+			// do not schedule, but send directly a probe
+			sendPathProbeToContact(*contact, probeProposedPath | pathSetupCheck);
+		}
+	}
 }
 
 
@@ -372,5 +389,9 @@ void R2Kademlia::onContactCandidate(std::unique_ptr<KadContact> contactp) {
 	scheduleContactCandidateProbe(std::move(*(contactp.get())));
 	contactp.reset(nullptr);
 }
+
+// void R2Kademlia::onFailedLinkInVicinity(const link_t &failedLink, age_t failedLinkAge) {
+// 	vicinity.removeLink(failedLink.first,failedLink.second);
+// }
 
 } // end namespace

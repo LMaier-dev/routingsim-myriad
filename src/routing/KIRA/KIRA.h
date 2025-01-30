@@ -639,7 +639,7 @@ public:
 	virtual void recheckPhysicalNeighbors(const KadContact& contact) override;
 	/** called when supposed failed link detected to initiate path probing **/
 	virtual void onPathCheck(const KadContact& contact, RequestQueueElementActionType action) override;
-
+	//virtual void onFailedLinkInVicinity(const link_t& failedLink, age_t failedLinkAge) override;
 	//@}
 
 	uint getHopLimitDefault() const { return hopLimit; };

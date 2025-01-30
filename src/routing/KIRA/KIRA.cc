@@ -266,6 +266,9 @@ void R2Kademlia::nodeDisconnect(nodeid_t nid) {
         // change in physical neighborhood increases the Sequence Number
 	incLSSeqNo();
 	neighborTable.removeNeighbor(key);
+	// remove link from vicinity
+	vicinity.removeLink(myOverlayKey,key);
+
 	ASSERT(neighborTable.getNodeId(key) == undefined_node);
 	// set contact invalid (was routingTable.removeContact(key))
 	// since the state gets updated, contact lastSeen is updated in setContactInvalid()
@@ -277,6 +280,7 @@ void R2Kademlia::nodeDisconnect(nodeid_t nid) {
 	else {  // due to the if condition we know that routingTable.getContact(key) will not return nullptr
 		auto contactp= routingTable.getContactMutable(key);
 		// call policy function
+		// this may try an alternative route as proposed path from the vicinity if applicable
 		onContactInvalidation(contactp);
 	}
 
@@ -301,16 +305,11 @@ void R2Kademlia::nodeDisconnect(nodeid_t nid) {
 	// it is promoted to urgent in case there are more than a certain percentage
 	//if (threshold > routingTable.getNumContactsWithoutPNs())
 
-        if (routingTable.getContact(key)->getNodeDegree() > 1) {
-		schedulePNRediscovery(key);
-	//else {
-	//if (routingTable.isInLastBucket(key))
-	//	scheduleUrgentRediscovery(key);
-	//else
-	//	scheduleRegularRediscovery(key);
-	//}
+	if (routingTable.getContact(key)->getNodeDegree() > 1) {
 
-        }
+		// try to find an alternative route using rediscovery via the overlay
+		schedulePNRediscovery(key);
+	}
 	// send UpdateRouteReq w/ failed link to ID-wise closest Nodes
 	// we can rely on routingTable.getContact(key) != nullptr, because of earlier setContactInvalid() call
 	scheduleUpdate(*(routingTable.getContact(key)), KAD_Unreachable);

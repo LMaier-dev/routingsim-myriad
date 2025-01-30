@@ -31,7 +31,7 @@ std::ostream &operator<<(std::ostream &os,
 	os << '<';
 	if (p.size() == 0)
 		 os << '-';
-        else {
+	else {
 		ASSERT(p.size() == a.size());
 		auto a_it= a.cbegin();
                 for (const auto &key : p) {
@@ -58,7 +58,7 @@ bool containsUndirectedLink(const OverlayKey& source, const OverlayKey& target, 
 		// check for first link (PN)
 		if ( (link.first == source and link.second == path[0]) or (link.first == path[0] and link.second == source) )
 			return true;
-	        else
+		else
 			return (target == link.first and path[path.size()-1] == link.second) // pen-ultimate hop is neighbor node of failed contact => this link failed
 				or
 				(target == link.second and path[path.size()-1] == link.first) // pen-ultimate hop is the failed node leading to the neighboring node => this link failed

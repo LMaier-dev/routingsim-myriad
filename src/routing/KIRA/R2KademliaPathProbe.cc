@@ -191,7 +191,7 @@ R2Kademlia::sendScheduledContactCandidateProbeReqs(ContactRequestQueue& q) {
 void R2Kademlia::sendPathProbeToContact(const KadContact& contact, RequestQueueElementActionType action)
 {
 	// must be a valid contact
-	if ( contact.getKey().isUnspecified() or contact.isInvalid() ) {
+	if ( contact.getKey().isUnspecified() or (contact.isInvalid() and not (action & probeProposedPath))) {
 		EV_TRACE << "not sending ProbeReq from " << myOverlayKey.shortStr() << " to " << contact.getKey().shortStr() << " because of invalid contact" << endl;
 		return;
 	}

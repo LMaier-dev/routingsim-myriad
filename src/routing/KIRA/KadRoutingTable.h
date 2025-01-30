@@ -133,6 +133,7 @@ public:
 	virtual void scheduleSlowRediscovery(const OverlayKey& contact) = 0;
 	/** called when the path of a contact is probably broken and needs to be checked */
 	virtual void onPathCheck(const KadContact& contact, RequestQueueElementActionType action) = 0;
+	//virtual void onFailedLinkInVicinity(const link_t& failedLink, age_t failedLinkAge) = 0;
 };
 
 /**
