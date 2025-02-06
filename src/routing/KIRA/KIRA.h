@@ -183,7 +183,7 @@ private:
 	bool failureFocussedProbing;
 	bool addGratuitousContacts;
 	// Number of tries to find a connected node as test packet destination
-	unsigned int maxDataprobeTries;
+	unsigned int maxReachablityTries;
 	//@}
 
 	// to notify neighbors about affected PathIDs after a failure

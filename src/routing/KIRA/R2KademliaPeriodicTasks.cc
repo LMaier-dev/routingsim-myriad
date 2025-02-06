@@ -479,7 +479,7 @@ bool R2Kademlia::doReachabilityTest(short timerId)
         if (neighborTable.empty())
           return false; // we are isolated
 	const OverlayKey* key(nullptr);
-	unsigned int maxtries= 10;
+	unsigned int maxtries= maxReachablityTries;
 	bool nodefound= false;
 	do {
 		// during periods of failed links we want to preferably test reachability for affected nodes

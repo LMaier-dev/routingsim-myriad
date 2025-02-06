@@ -162,7 +162,7 @@ void R2Kademlia::onInitialize() {
 	floodCompleteBucketOpt = par("floodCompleteBucketOpt").boolValue();
 	floodOnFailure = par("floodOnFailure").boolValue();
 
-	maxDataprobeTries = par("maxDataprobeTries").intValue();
+	maxReachablityTries = par("maxReachablityTries").intValue();
 
 	// register this module for statistics
 	getStatistics().addSample(this);
