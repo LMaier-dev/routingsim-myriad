@@ -182,6 +182,8 @@ private:
 	// send reachability test packets only to nodes with failed links
 	bool failureFocussedProbing;
 	bool addGratuitousContacts;
+	// Number of tries to find a connected node as test packet destination
+	unsigned int maxDataprobeTries;
 	//@}
 
 	// to notify neighbors about affected PathIDs after a failure

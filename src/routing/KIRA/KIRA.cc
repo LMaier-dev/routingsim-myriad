@@ -162,6 +162,8 @@ void R2Kademlia::onInitialize() {
 	floodCompleteBucketOpt = par("floodCompleteBucketOpt").boolValue();
 	floodOnFailure = par("floodOnFailure").boolValue();
 
+	maxDataprobeTries = par("maxDataprobeTries").intValue();
+
 	// register this module for statistics
 	getStatistics().addSample(this);
 	minHelloInterval = SimTime(par("minHelloInterval").doubleValue(),SIMTIME_MS);
