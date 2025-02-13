@@ -1,5 +1,8 @@
 
 #include "MobilityBase.h"
+#include "checkandcast.h"
+#include "coutvector.h"
+#include "mobility/MobilityNode.h"
 
 namespace routingsim {
 
@@ -10,6 +13,18 @@ void MobilityBase::initialize() {
   updateInterval = par("updateInterval");
   initializePosition();
   initializeHeading();
+
+  nodeid_t nodeId = check_and_cast<MobilityNode*>(getParentModule()->getSubmodule("node"))->getNodeId();
+  EV_DEBUG << "MobilityBase of Node: " << nodeId << endl;
+  posX = new cOutVector("posX");
+  take(posX);
+  posY = new cOutVector("posY");
+  take(posY);
+}
+
+void MobilityBase::preDelete(cComponent *root) {
+  delete posX;
+  delete posY;
 }
 
 void MobilityBase::initializePosition() { lastPosition = getRandomPosition(); }
@@ -24,6 +39,10 @@ void MobilityBase::updatePosition() {
   if (isOutside(lastPosition)) {
     handleIfOutside();
   }
+
+  posX->record(lastPosition.x);
+  posY->record(lastPosition.y);
+
 }
 
 void MobilityBase::handleIfOutside() { reflectIfOutside(); }

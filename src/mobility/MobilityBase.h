@@ -13,6 +13,7 @@
 
 #include <cmath>
 #include "Environment.h"
+#include "coutvector.h"
 
 enum { MOBILITY_UPDATE };
 
@@ -20,6 +21,7 @@ namespace routingsim {
     class MobilityBase : public Environment {
     private:
         static int reflect(double, double, double &, double &);
+        cOutVector *posX, *posY;
 
     protected:
         // The interval to update the position of the node.
@@ -54,6 +56,8 @@ namespace routingsim {
 
         // reflect the node if it is outside the environment
         void reflectIfOutside();
+
+        void preDelete(cComponent *root) override;
 
     public:
         // Sets initial position and heading of the node.
