@@ -34,15 +34,21 @@ void MobilityBase::initializeHeading() {
 }
 
 void MobilityBase::updatePosition() {
+  Coord2D prevPosition(lastPosition.x, lastPosition.y);
   move();
   heading.setFromVector(velocity);
   if (isOutside(lastPosition)) {
     handleIfOutside();
   }
 
-  posX->record(lastPosition.x);
-  posY->record(lastPosition.y);
+  EV_DEBUG << "Prev node pos: (" << prevPosition.x << "," << prevPosition.y << ")"
+    << " New pos: (" << lastPosition.x << "," << lastPosition.y << ")" << endl;
 
+  if (prevPosition != lastPosition) {
+    // Only record changes in position
+    posX->record(lastPosition.x);
+    posY->record(lastPosition.y);
+  }
 }
 
 void MobilityBase::handleIfOutside() { reflectIfOutside(); }
