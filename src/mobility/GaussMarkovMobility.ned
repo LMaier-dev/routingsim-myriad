@@ -6,11 +6,14 @@ simple GaussMarkovMobility extends MobilityBase {
         // Gauss-Markov Mobility Degree of Memory
         double beta = default(1);
         // mu_|v|
-        double speedMean;
+        double speedMean @unit(mps);
         // sigma_|v|
-        double speedVariance;
+        double speedVariance @unit(mps);
         // mu_theta
         double headingMean = default(0);
         // simga_theta
         double headingVariance;
+        // border margins
+        double borderMarginX @unit(m);
+        double borderMarginY @unit(m);
 }

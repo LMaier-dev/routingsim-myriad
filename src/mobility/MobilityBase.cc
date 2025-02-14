@@ -41,6 +41,9 @@ void MobilityBase::updatePosition() {
     handleIfOutside();
   }
 
+  ASSERT(borderMin.x <= lastPosition.x && lastPosition.x <= borderMax.x);
+  ASSERT(borderMin.y <= lastPosition.y && lastPosition.y <= borderMax.y);
+
   EV_DEBUG << "Prev node pos: (" << prevPosition.x << "," << prevPosition.y << ")"
     << " New pos: (" << lastPosition.x << "," << lastPosition.y << ")" << endl;
 

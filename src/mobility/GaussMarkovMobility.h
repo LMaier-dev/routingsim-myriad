@@ -15,8 +15,11 @@ namespace routingsim {
             double speedVariance;
             double headingMean;
             double headingVariance;
+            double borderMarginX;
+            double borderMarginY;
 
             void updateDirection();
+            void handleBorderMargin();
         protected:
             const int MOBILITY_RNG = 1;
             // Move the node to the targetPosition and update the lastPosition of the node.
