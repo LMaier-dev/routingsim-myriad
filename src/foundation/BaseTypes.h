@@ -220,7 +220,7 @@ public:
   }
 
   Coord2D toVector() const {
-    return Coord2D(sin(radius), cos(radius));
+    return Coord2D(cos(2*std::numbers::pi*radius/360), sin(2*std::numbers::pi*radius/360));
   }
 
   Rad2D operator=(double d) {
