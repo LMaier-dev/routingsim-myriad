@@ -20,10 +20,6 @@
 #include <string>
 #include <vector>
 #include <ctime>
-#include <boost/algorithm/string.hpp>
-
-#include <boost/unordered_map.hpp>
-#include <boost/unordered_set.hpp>
 
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/graph_traits.hpp>
