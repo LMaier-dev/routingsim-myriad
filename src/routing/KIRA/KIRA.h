@@ -185,10 +185,10 @@ private:
 	//@}
 
 	// to notify neighbors about affected PathIDs after a failure
-        std::unordered_set<PathID>* notifyPIDs_p = nullptr;
+	std::unordered_set<PathID>* notifyPIDs_p = nullptr;
 	std::unordered_map<PathID, std::unordered_set<OverlayKey>> notifyFirstSegmentSources;
 	std::unordered_map<OverlayKey, std::pair<OverlayKey, PathID>> notifyFirstSegmentSourcesReversePath; // target, <outgoingIF, PathID to target>
-        std::unordered_map<OverlayKey, std::unordered_set<PathID>> incomingIFtoPIDmap;
+	std::unordered_map<OverlayKey, std::unordered_set<PathID>> incomingIFtoPIDmap;
 
 
 	inline void addIncomingIFtoPIDEntry(const OverlayKey& incomingULN, PathID pidentry);

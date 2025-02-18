@@ -34,10 +34,12 @@ namespace routingsim {
 // type definitions
 
 constexpr unsigned short int maxRediscoveryRetries= 6;
+constexpr size_t maxAlternativePaths= 2;
 
 // see R2Kademlia.h
 
 class R2Kademlia;
+
 
 
 class RediscoveryState {
@@ -71,21 +73,21 @@ public:
 	};
 
 	KadContact(const KadContact& o) : key(o.key), lastseen(o.lastseen), lastDirectULContact(SIMTIME_ZERO),
-					  active_path(o.active_path), proposed_path(o.proposed_path),
+					  active_path(o.active_path), proposed_path(o.proposed_path), alternative_paths(o.alternative_paths),
 					  seqno(o.seqno), state(o.state),
 					  physicalNeighbor(o.physicalNeighbor),
 					  nodeDegree(o.nodeDegree),
 					  rds_p(o.rds_p == nullptr ? nullptr :
 						std::make_unique<RediscoveryState>(*o.rds_p)) {};
 	KadContact(KadContact&& k) : key(std::move(k.key)), lastseen(std::move(k.lastseen)), lastDirectULContact(std::move(k.lastDirectULContact)),
-				     active_path(std::move(k.active_path)), proposed_path(std::move(k.proposed_path)),
+				     active_path(std::move(k.active_path)), proposed_path(std::move(k.proposed_path)), alternative_paths(std::move(k.alternative_paths)),
 				     seqno(k.seqno), state(k.state),
 				     physicalNeighbor(k.physicalNeighbor),
 				     nodeDegree(k.nodeDegree),
 				     rds_p(std::move(k.rds_p)) {
 		k.clear();
 	};
-        explicit KadContact(const OverlayKey& key): key(key), lastseen(SIMTIME_ZERO), lastDirectULContact(SIMTIME_ZERO), active_path(), proposed_path(), state(State::undefined), nodeDegree(0), rds_p(nullptr) {};
+	explicit KadContact(const OverlayKey& key): key(key), lastseen(SIMTIME_ZERO), lastDirectULContact(SIMTIME_ZERO), active_path(), proposed_path(), alternative_paths(maxAlternativePaths), state(State::undefined), nodeDegree(0), rds_p(nullptr) {};
 	KadContact(const OverlayKey& myOverlayKey, const OverlayKey& key, const KadPath& opath, stateseqno_t seqno= stateseqno_t::invalidSeqNo, simtime_t lastseen=SIMTIME_ZERO) :
 		key(key), lastseen(lastseen), lastDirectULContact(SIMTIME_ZERO), active_path(opath), seqno(seqno),
 		state(State::valid), physicalNeighbor(active_path.isPhysicalNeighborPath() == true), nodeDegree(0), rds_p(nullptr) // simply path.empty() doesn't work correctly!
@@ -94,7 +96,7 @@ public:
 		key(key), lastseen(lastseen), lastDirectULContact(SIMTIME_ZERO), active_path(std::move(opath)), seqno(seqno),
 		state(State::valid), physicalNeighbor(active_path.isPhysicalNeighborPath() == true), nodeDegree(0), rds_p(nullptr) // simply path.empty() doesn't work correctly!
 		{};
-        KadContact& operator=(const KadContact &other); // copy assignment
+	KadContact& operator=(const KadContact &other); // copy assignment
 	KadContact& operator=(KadContact &&other); // move assignment
 
 	// resets all internal variables and state
@@ -104,6 +106,7 @@ public:
 		lastDirectULContact = SIMTIME_ZERO;
 		active_path.clear();
 		proposed_path.clear();
+		alternative_paths.clear();
 		seqno= stateseqno_t::invalidSeqNo;
 		syncPNSeqno= stateseqno_t::invalidSeqNo;
 		state= State::undefined;
@@ -170,6 +173,9 @@ public:
 	const OverlayKey& getPathHashSum() const { return active_path.getPathHashSum(); }
 	bool proposedPathDefined() const { return proposed_path.isDefined(); }
 
+    const std::vector<KadPath>& getAlternativePaths() const { return alternative_paths; };
+    std::vector<KadPath>& getAlternativePathsMod() { return alternative_paths; };
+
 	stateseqno_t getStateSeqNo() const { return seqno; }
 	void setStateSeqNo(stateseqno_t newseqno) {
 		//if (not (seqno.isInvalid() or (not seqno.isInvalid() and newseqno >= seqno)))
@@ -201,6 +207,7 @@ private:
 	/// the following path does neither contain the source (myself) nor the target node
 	KadPath active_path;  /// the best known source routing path to reach this contact
 	KadPath proposed_path; /// a path that may be "better" than the current active path
+	std::vector<KadPath> alternative_paths;
 	stateseqno_t seqno= stateseqno_t::invalidSeqNo; /// sequence number for the path state (announced by origin)
 	stateseqno_t syncPNSeqno= stateseqno_t::invalidSeqNo; /// sequence number for syncing via PNDiscReq/Rsp with PN to update the two hop vicinity, this is somewhat independent of seqno
 	State state= State::undefined; /// the state of the contact
@@ -234,6 +241,7 @@ inline KadContact& KadContact::operator=(const KadContact& other)
 		lastDirectULContact = other.lastDirectULContact;
 		active_path= other.active_path;
 		proposed_path= other.proposed_path;
+		alternative_paths= other.alternative_paths;
 		seqno= other.seqno;
 		state= other.state;
 		physicalNeighbor= other.physicalNeighbor;
@@ -255,6 +263,7 @@ inline KadContact& KadContact::operator=(KadContact&& other)
 		lastDirectULContact = other.lastDirectULContact;
                 active_path= other.active_path;
 		proposed_path= other.proposed_path;
+		alternative_paths= other.alternative_paths;
 		state= other.state;
 		seqno= other.seqno;
 		physicalNeighbor= other.physicalNeighbor;

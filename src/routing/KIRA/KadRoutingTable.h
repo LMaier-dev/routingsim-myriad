@@ -41,11 +41,11 @@ class KadBucket
 {
 public:
 	using BucketElement = std::unique_ptr<KadContact>;
-        using BucketType = std::vector<BucketElement>;
+	using BucketType = std::vector<BucketElement>;
 
 	KadBucket() {};
-        KadBucket(KadBucket &&other);
-        ~KadBucket() { clear(); };
+	KadBucket(KadBucket &&other);
+	~KadBucket() { clear(); };
 	void clear();
 	KadContact_p getContact(const OverlayKey& key) const;
 	inline void insertContact(BucketType& bucket, BucketElement&& contactp);
