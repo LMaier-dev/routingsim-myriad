@@ -15,8 +15,8 @@ namespace routingsim {
             double speedVariance;
             double headingMean;
             double headingVariance;
-            double borderMarginX;
-            double borderMarginY;
+
+            double topMargin, rightMargin, bottomMargin, leftMargin;
 
             void updateDirection();
             void handleBorderMargin();
@@ -29,6 +29,8 @@ namespace routingsim {
         public:
             // Initialize the mobility model.
             void initialize() override;
+            // Returns a random position inside the margins
+            Coord2D getRandomPosition();
     };
 }
 
