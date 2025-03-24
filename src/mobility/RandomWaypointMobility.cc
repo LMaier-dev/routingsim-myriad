@@ -1,5 +1,6 @@
 
 #include "RandomWaypointMobility.h"
+#include "BaseTypes.h"
 
 namespace routingsim {
 
@@ -7,7 +8,7 @@ Define_Module(RandomWaypointMobility);
 
 void RandomWaypointMobility::initialize() {
   MobilityBase::initialize();
-  waitTime = par("waitTime").doubleValue();
+  defaultWaitTime = par("waitTime").doubleValue();
   maxSpeed = par("maxSpeed").doubleValue();
   minSpeed = par("minSpeed").doubleValue();
   setNextTarget();
@@ -27,6 +28,16 @@ void RandomWaypointMobility::move() {
   } else if (now > lastUpdate) {
     ASSERT(nextChange == -1 || now < nextChange);
     lastPosition += velocity * (now - lastUpdate).dbl();
+
+    Coord2D direction = targetPosition - lastPosition;
+    if (direction.get_normalized() != heading.toVector()) {
+      // Missed target by overshooting
+      lastPosition = targetPosition;
+      // Calculate the time we still need to wait at the target
+      waitTime = defaultWaitTime - (direction.distance() / speed);
+    } else {
+      waitTime = defaultWaitTime;
+    }
     lastUpdate = now;
   }
 }
@@ -35,6 +46,7 @@ void RandomWaypointMobility::setNextTarget() {
   setTargetPosition();
   setTargetSpeed();
   setTargetVelocity();
+  setHeading();
   setTargetNextPeriod();
   waitNextPeriod = !waitNextPeriod;
 }
@@ -60,6 +72,10 @@ void RandomWaypointMobility::setTargetVelocity() {
   }
 }
 
+void RandomWaypointMobility::setHeading() {
+  heading.setFromVector(velocity);
+}
+
 void RandomWaypointMobility::setTargetSpeed() {
   speed = uniform(minSpeed, maxSpeed, 1);
 }
@@ -67,5 +83,67 @@ void RandomWaypointMobility::setTargetSpeed() {
 void RandomWaypointMobility::setTargetNextPeriod() {
   nextChange = simTime() + timeToNextPeriod;
 }
+
+double RandomWaypointMobility::getLeaveDuration(Coord2D pos, Coord2D topLeft, Coord2D bottomRight) {
+  if (Coord2D::ZERO == velocity) {
+    // We have to redetermine the leave duration after the wait time is over
+    return timeToNextPeriod;
+  }
+
+  // Calculate the time the destination is reached
+  double targetDuration = lastPosition.distance(targetPosition) / speed;
+
+  // Calcuate the time when we leave the given rectangle
+  // Determine relevant rectangle side
+  if (velocity.x == 0) {
+    // Top/Bottom intersection
+    if (velocity.y > 0) {
+      // Top intersection
+      return std::min(targetDuration, (topLeft.y - pos.y) / velocity.y);
+    } else {
+      // Bottom intersection
+      return std::min(targetDuration, (pos.y - bottomRight.y) / velocity.y);
+    }
+  }
+
+  if (velocity.y == 0) {
+    // Left/Right intersection
+    if (velocity.x > 0) {
+      // Right intersection
+      return std::min(targetDuration, (bottomRight.x - pos.x) / velocity.x);
+    } else {
+      // Left intersection
+      return std::min(targetDuration, (pos.x - bottomRight.x) / velocity.x);
+    }
+  }
+
+  if (velocity.y > 0) {
+    // Top/Left/Right intersection
+    double top = (topLeft.y - pos.y) / velocity.y;
+    if (velocity.x > 0) {
+      // Top/Right intersection
+      double right = (bottomRight.x - pos.x) / velocity.x;
+      return std::min(targetDuration, std::min(top, right));
+    } else {
+      // Top/Left intersection
+      double left = (pos.x - topLeft.x) / velocity.x;
+      return std::min(targetDuration, std::min(top, left));
+    }
+  } else {
+  // if (velocity.y < 0) {
+    // Bottom/Left/Right intersection
+    double bottom = (pos.y - bottomRight.y) / velocity.y;
+    if (velocity.x > 0) {
+      // Bottom/Right intersection
+      double right = (bottomRight.x - pos.x) / velocity.x;
+      return std::min(targetDuration, std::min(bottom, right));
+    } else {
+      // Bottom/Left intersection
+      double left = (pos.x - topLeft.x) / velocity.x;
+      return std::min(targetDuration, std::min(bottom, left));
+    }
+  }
+}
+
 
 }; // namespace routingsim

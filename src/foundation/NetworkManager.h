@@ -72,25 +72,28 @@ protected:
 private:
 	NetworkTopology* topology = nullptr;
 	NetworkDynamics* dynamics = nullptr;
-        MobilityTopology* mobilityTopology = nullptr;
-        MobilityDynamics* mobilityDynamics = nullptr;
+    MobilityTopology* mobilityTopology = nullptr;
+    MobilityDynamics* mobilityDynamics = nullptr;
 
 	std::unordered_set<nodeid_t> failedNodes; // this is set by DynamicsInfo messages
-        bool useMobility = false;
+    bool useMobility = false;
 
 	// Topology Statistics
-        enum uint8_t {
-          topostatsmode_none,
-          topostatsmode_light,
-	  topostatsmode_heavy
+	enum uint8_t {
+		topostatsmode_none,
+		topostatsmode_light,
+		topostatsmode_heavy
 	} topologyStatisticsMode;
 
-        bool evaluateStatistics = true;
+    bool evaluateStatistics = true;
 	uint64_t edgeChangesCount = 0;
 	uint64_t nodeChangesCount = 0;
-        cOutVector *activeNodesCountV = nullptr;
+    cOutVector *activeNodesCountV = nullptr;
 	cOutVector *activeEdgesCountV = nullptr;
 	cOutVector *partitionCount = nullptr;
+
+	time_t startTime;
+	time_t stopTime;
 };
 
 /// Returns the network Manager singleton

@@ -35,10 +35,11 @@ load_dir = '.'
 json_data = dict()
 configs = namedtuple('configs', [])
 runs = list()
+SCAVETOOL = 'opp_scavetool'
 
 def load_result_file(path):
     """Loads a omnet++ result file to the global data dict"""
-    p = subprocess.run(['scavetool', 'x', '-o', '-', '-F', 'JSON', str(path)],
+    p = subprocess.run([SCAVETOOL, 'x', '-o', '-', '-F', 'JSON', str(path)],
                        stdout=subprocess.PIPE)
     p.check_returncode()
     data = json.loads(p.stdout)
@@ -209,7 +210,7 @@ def _get_json(path, force_new=False):
             logger.warning(e)
     logger.info("using scavetool to generate json file %s", jsonpath)
     p = subprocess.run(
-        ['scavetool', 'x', '-o', str(jsonpath), '-F', 'JSON', str(path)])
+        [SCAVETOOL, 'x', '-o', str(jsonpath), '-F', 'JSON', str(path)])
     p.check_returncode()
     assert _is_newer(path, jsonpath)
     return _get_json_contents(jsonpath)

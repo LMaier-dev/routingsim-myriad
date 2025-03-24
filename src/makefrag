@@ -1,6 +1,6 @@
 # uncomment the following two lines for profiling
-#COPTS:=-pg -fprofile-arcs -fprofile-generate $(COPTS)
-#LDOPTS:= -pg $(LDOPTS) -lgcov
+#COPTS:=-pg -fprofile-arcs -ftest-coverage $(COPTS)
+#LDFLAGS:=-pg -lgcov --coverage $(LDFLAGS)
 
 # this simply adds debug symbols (even for release mode)
 #COPTS:=-g $(COPTS)

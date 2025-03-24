@@ -162,6 +162,8 @@ void R2Kademlia::onInitialize() {
 	floodCompleteBucketOpt = par("floodCompleteBucketOpt").boolValue();
 	floodOnFailure = par("floodOnFailure").boolValue();
 
+	maxReachablityTries = par("maxReachablityTries").intValue();
+
 	// register this module for statistics
 	getStatistics().addSample(this);
 	minHelloInterval = SimTime(par("minHelloInterval").doubleValue(),SIMTIME_MS);
@@ -1368,6 +1370,9 @@ void R2Kademlia::sampleStatistics (Statistics &stats) {
                 if (rt_stretch > 0) // it rt_stretch == 0 do not add the value, node has no valid contacts left
                   stats.value("routingTablePathStretch", rt_stretch);
 		stats.value("routingTableFaultyPaths", no_faulty_paths);
+		stats.value("routingTableContactsWithoutPN", routingTable.getNumContactsWithoutPNs());
+		stats.value("routingTablePNContacts", routingTable.getNumContacts() - routingTable.getNumContactsWithoutPNs());
+		stats.value("routingTableFailedPNs", routingTable.getFailedPNs().size());
 	}
 	unsigned long notifyFirstSegmentSourcesSize(0UL);
 	std::for_each(notifyFirstSegmentSources.cbegin(), notifyFirstSegmentSources.cend(), [&](auto& entry){notifyFirstSegmentSourcesSize+= entry.second.size();});

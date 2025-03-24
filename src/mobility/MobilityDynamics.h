@@ -29,6 +29,9 @@ private:
   // the update interval that controls the time between periodic updates
   double updateInterval = 0.1;
 
+  // ProximityGrid
+  RegularGrid* grid= nullptr;
+
   // updates the position and connection between two specific MobilityNodes
   void updateConnection(MobilityNode *fromNode, MobilityNode *toNode) const;
 
@@ -39,6 +42,7 @@ private:
   cOutVector *mobilityNodeAvgDegree= nullptr;
   cOutVector *mobilityNodeAvgDatarate= nullptr;
   cOutVector *mobilityNodeAvgDistance= nullptr;
+  cHistogram *accelerationQuotient= nullptr;
 
 protected:
   void sampleStatistics(Statistics &stats) override;
@@ -49,6 +53,8 @@ public:
 
   ~MobilityDynamics();
   void preDelete(cComponent *root) override;
+
+  void finish() override;
 
   MobilityTopology *mobilityTopology = nullptr;
   void initialize(int stage) override;

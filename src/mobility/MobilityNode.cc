@@ -1,5 +1,6 @@
 #include "MobilityNode.h"
 #include "RandomWaypointMobility.h"
+#include "GaussMarkovMobility.h"
 #include "IsotropicAntenna.h"
 
 namespace routingsim {
@@ -23,7 +24,12 @@ void MobilityNode::initialize(int stage) {
       mobility_model->finalizeParameters();
       mobility_model->initialize();
     }
-    else {
+    else if (mobilityType == "GaussMarkov") {
+      mobilityModelType = cModuleType::get("routingsim.mobility.GaussMarkovMobility");
+      mobility_model = check_and_cast<GaussMarkovMobility *>(mobilityModelType->create(mobilityModelName.c_str(), getParentModule()));
+      mobility_model->finalizeParameters();
+      mobility_model->initialize();
+    } else {
       throw new cRuntimeError("Unknown mobility model %s", mobilityType.c_str());
     }
 

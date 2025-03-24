@@ -13,6 +13,7 @@
 
 #include <cmath>
 #include "Environment.h"
+#include "coutvector.h"
 
 enum { MOBILITY_UPDATE };
 
@@ -20,6 +21,7 @@ namespace routingsim {
     class MobilityBase : public Environment {
     private:
         static int reflect(double, double, double &, double &);
+        cOutVector *posX, *posY;
 
     protected:
         // The interval to update the position of the node.
@@ -55,6 +57,8 @@ namespace routingsim {
         // reflect the node if it is outside the environment
         void reflectIfOutside();
 
+        void preDelete(cComponent *root) override;
+
     public:
         // Sets initial position and heading of the node.
         void initialize() override;
@@ -66,6 +70,13 @@ namespace routingsim {
         void updatePosition();
 
         double getUpdateInterval() const;
+
+        // Returns the duration in s until pos leaves the given rectangle
+        // given it moves relative to this node
+        // (if this time is currently unkown, returns the earliest
+        // time when this information may be reevaluated)
+        // It can be assumed that the rectangle encloses the given position
+        double getLeaveDuration(Coord2D pos, Coord2D a, Coord2D b) { return 1.0E-3; }
     };
 
 };

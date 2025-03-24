@@ -26,7 +26,7 @@ namespace routingsim {
 bool R2Kademlia::doDataProbe(short timerID) {
 	if (neighborTable.empty()) return false; // we are isolated
 	const OverlayKey* probeKey(nullptr);
-	unsigned int maxtries= 10;
+	unsigned int maxtries= maxReachablityTries;
 	bool nodefound= false;
 	do {
 		// during periods of failed links we want to preferably test reachability for affected nodes

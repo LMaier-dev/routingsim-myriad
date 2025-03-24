@@ -1,4 +1,10 @@
 #include "MobilityDynamics.h"
+#include "BaseTypes.h"
+#include "MobilityTopology.h"
+#include "checkandcast.h"
+#include "csimulation.h"
+#include "mobility/MobilityNode.h"
+#include <unordered_set>
 
 namespace routingsim {
 
@@ -11,12 +17,19 @@ MobilityDynamics::preDelete(cComponent *root)
   delete mobilityNodeAvgDegree;
   delete mobilityNodeAvgDatarate;
   delete mobilityNodeAvgDistance;
+  delete accelerationQuotient;
 }
 
 
 MobilityDynamics::~MobilityDynamics() {
 }
 
+void MobilityDynamics::finish() {
+  if (accelerationQuotient) {
+    // Record Acceleration Statistic
+    accelerationQuotient->record();
+  }
+}
 
 void
 MobilityDynamics::initialize(int stage) {
@@ -29,6 +42,19 @@ MobilityDynamics::initialize(int stage) {
     mobilityNodeAvgDistance = new cOutVector("mobilityNodeAvgDistance");
     take(mobilityNodeAvgDistance);
     addStatisticSample(this);
+
+    if (par("useGrid").boolValue()) {
+      grid = new RegularGrid(
+        par("borderX"),
+        par("borderY"),
+        par("gridDepth"),
+        par("useNearNodesCache"),
+        par("useSparseGridCellUpdates")
+      );
+      mobilityTopology->initializeProximityGrid(grid);
+      accelerationQuotient = new cHistogram("accelerationQuotient");
+      take(accelerationQuotient);
+    }
   }
 }
 
@@ -43,24 +69,76 @@ MobilityDynamics::handleMessage(cMessage *msg) {
 
 
 void MobilityDynamics::updateMobility() {
+  // Map Node to set of oldNodes (nodes that are in range before the position update)
+  std::map<MobilityNode*, std::unordered_set<MobilityNode*>> oldNodesMapping{};
+  if (grid) {
+    for (cModule *node_wrapper : mobilityTopology->getNodeMods()) {
+      auto *node =
+          check_and_cast<MobilityNode *>(node_wrapper->getSubmodule("node"));
+      oldNodesMapping[node] = grid->getNodesNear(node);
+    }
+  }
+
   // first update all positions
   for (cModule *node_wrapper : mobilityTopology->getNodeMods()) {
     auto *node =
         check_and_cast<MobilityNode *>(node_wrapper->getSubmodule("node"));
+    Coord2D oldPosition = node->getMobilityModel()->getPosition();
     updateMobilityNode(node);
+    if (grid)
+      grid->update(node, oldPosition, simTime().dbl());
   }
 
   // now update connectivity for all nodes in a second step to avoid asymmetry
   for (cModule *node_wrapper : mobilityTopology->getNodeMods()) {
     auto *from_node =
       check_and_cast<MobilityNode *>(node_wrapper->getSubmodule("node"));
-    for (cModule *to_node_wrapper : mobilityTopology->getNodeMods()) {
-      auto *to_node =
+
+    if (grid) {
+      // Only update near nodes
+      std::unordered_set<MobilityNode*> nearNodes = grid->getNodesNear(from_node);
+      for (MobilityNode *to_node : nearNodes) {
+        // Calculate set difference of oldNodes\nearNodes
+        //oldNodesMapping[from_node].erase(to_node);
+
+        if (from_node != to_node) {
+          int i =nearNodes.size();
+          int j =mobilityTopology->getNodeMods().size();
+          accelerationQuotient->collect(i/(double)j);
+
+          updateConnection(from_node, to_node);
+          updateConnection(to_node, from_node);
+        }
+      }
+    } else {
+      // Update all nodes
+      for (cModule *to_node_wrapper : mobilityTopology->getNodeMods()) {
+        auto *to_node =
           check_and_cast<MobilityNode *>(to_node_wrapper->getSubmodule("node"));
 
-      if (from_node != to_node)
-        updateConnection(from_node, to_node);
+        if (from_node != to_node) {
+          updateConnection(from_node, to_node);
+        }
+      }
     }
+
+  }
+
+  for (cModule *node_wrapper : mobilityTopology->getNodeMods()) {
+    auto *from_node =
+      check_and_cast<MobilityNode *>(node_wrapper->getSubmodule("node"));
+    if (grid) {
+      // Update removed nodes
+      EV_DEBUG << "old near nodes of: " << from_node->getNodeId();
+      for (MobilityNode* old_node : oldNodesMapping[from_node]) {
+        EV_DEBUG << old_node->getNodeId() << ", ";
+        if (from_node != old_node) {
+          updateConnection(from_node, old_node);
+          updateConnection(old_node, from_node);
+        }
+      }
+      EV_DEBUG << endl;
+   }
   }
 }
 
@@ -93,10 +171,10 @@ MobilityDynamics::updateConnection(MobilityNode *fromNode,
     if (newDatarate > 0) {
       if (not mobilityTopology->isConnected(fromNode->getNodeId(),
 					    toNode->getNodeId())) {
-	EV_TRACE << "Create link from node " << fromNode->getNodeId()
-		 << " to node " << toNode->getNodeId() << " with datarate "
-		 << newDatarate << "bps" << endl;
-	mobilityTopology->createLink(fromNode, toNode);
+      	EV_TRACE << "Create link from node " << fromNode->getNodeId()
+      		 << " to node " << toNode->getNodeId() << " with datarate "
+      		 << newDatarate << "bps" << endl;
+	      mobilityTopology->createLink(fromNode, toNode);
       }
       mobilityTopology->setDatarate(fromNode, toNode, newDatarate);
       return;

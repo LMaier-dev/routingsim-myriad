@@ -94,6 +94,9 @@ simple R2Kademlia extends routingsim.foundation.Protocol
 		/// add additional randomly selected contacts from various buckets in responses (usually 2 per bucket)
 		bool addGratuitousContacts = default(true);
 
+		/// Number of tries when searching a reachable destination for a probe packet
+		int maxReachablityTries = default(10);
+
 		/// in which interval a node sends a floodPacket (0s is disabled)
 		double floodInterval = default(0s) @unit(s);
 		/// max stride factor for flooding packets
