@@ -13,5 +13,6 @@ simple AntennaBase {
         double maxFreq @unit(MHz) = default(2400MHz);
         double bandwidth @unit(MHz) = default(40MHz);
         double systemNoise @unit(db) = default(-172db);
+        double averageDatarate @unit(bps) = default(-1bps);
 }
 
