@@ -43,6 +43,8 @@ MobilityDynamics::initialize(int stage) {
     take(mobilityNodeAvgDistance);
     addStatisticSample(this);
 
+    updateInterval = par("updateInterval");
+
     if (par("useGrid").boolValue()) {
       grid = new RegularGrid(
         par("borderX"),
