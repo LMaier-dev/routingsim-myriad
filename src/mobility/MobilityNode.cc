@@ -7,6 +7,10 @@ namespace routingsim {
 
 Define_Module(MobilityNode);
 
+MobilityNode::~MobilityNode() {
+  delete nodeDegreeV;
+}
+
 void MobilityNode::initialize(int stage) {
   if (stage == 0) {
     Node::initialize(stage);
@@ -39,6 +43,9 @@ void MobilityNode::initialize(int stage) {
         antennaModelType->create(antennaModelName.c_str(), getParentModule()));
     antenna_model->finalizeParameters();
     antenna_model->initialize();
+
+    nodeDegreeV = new cOutVector("nodeDegree");
+    take(nodeDegreeV);
   }
 
 }

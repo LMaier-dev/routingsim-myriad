@@ -22,9 +22,11 @@ class MobilityNode : public Node {
     private:
         MobilityBase *mobility_model;
         AntennaBase *antenna_model;
+        cOutVector *nodeDegreeV;
 
     protected:
         friend class MobilityTopology;
+        ~MobilityNode();
 
     public:
 	// initialises a mobility and antenna model for this MobilityNode
@@ -33,13 +35,14 @@ class MobilityNode : public Node {
         void doBuildInside() override;
         void preDelete(cComponent *root) override {
           mobility_model = nullptr;
-	  antenna_model = nullptr;
+	      antenna_model = nullptr;
 	};
 
         // visualises movement and wireless events in the GUI
         void refreshDisplay() const override;
         MobilityBase *getMobilityModel() { return mobility_model; };
         AntennaBase *getAntennaModel() { return antenna_model; };
+        cOutVector *getNodeDegreeVector() { return nodeDegreeV; };
 };
 
 }// namespace routingsim
