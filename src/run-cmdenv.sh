@@ -8,8 +8,8 @@
 # Only errors
 # ./RoutingSim ../simulations/KIRA/eval.ini -c MyStudy -r 0 -u Cmdenv --cmdenv-log-level=error --cmdenv-express-mode=false --cmdenv-event-banners=false
 
-config=kParameterStudieShort
-runfilter="\$mN=2500 && \$mobilitySeed=0"
+config='MovementModelScenario'
+runfilter='$mobilitySeed<3 && $mN!=625 && $mobilityModel="RandomWaypoint"'
 
 
 runs=$(opp_run ../simulations/KIRA/manet.ini -c ${config} -q runnumbers -s -r "${runfilter}")
