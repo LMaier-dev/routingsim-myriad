@@ -11,8 +11,9 @@
 config=kParameterStudieShort
 runfilter="\$mN=2500 && \$mobilitySeed=0"
 
-runs=$(opp_run ../simulations/KIRA/eval.ini -c ${config} -q runnumbers -s -r "${runfilter}")
+
+runs=$(opp_run ../simulations/KIRA/manet.ini -c ${config} -q runnumbers -s -r "${runfilter}")
 for r in ${runs}; do
-	opp_run ../simulations/KIRA/eval.ini -c ${config} -q runs -s -r${r}
-	nohup ./RoutingSim ../simulations/KIRA/eval.ini -c ${config} -r${r} -u Cmdenv --cmdenv-redirect-output=true > "$(hostname)_${config}_${r}_nohupRoutingSimOut.txt" &
+	opp_run ../simulations/KIRA/manet.ini -c ${config} -q runs -s -r${r}
+	nohup ./RoutingSim ../simulations/KIRA/manet.ini -c ${config} -r${r} -u Cmdenv --cmdenv-redirect-output=true > "$(hostname)_${config}_${r}_out.txt" &
 done
