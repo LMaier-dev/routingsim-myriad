@@ -39,6 +39,7 @@ void GaussMarkovMobility::initialize() {
 }
 
 Coord2D GaussMarkovMobility::getRandomPosition() {
+    // Chose random position inside margins
     return {uniform(leftMargin, rightMargin, 1), uniform(bottomMargin, topMargin, 1)};
 }
 
@@ -75,21 +76,21 @@ void GaussMarkovMobility::handleBorderMargin() {
 
     // Change mean direction based on position
     if (inTopMargin and inLeftMargin) {
-        headingMean = 315;
+        headingMean = 315; // Head down right
     } else if (inTopMargin and inRightMargin) {
-        headingMean = 225;
+        headingMean = 225; // Head down left
     } else if (inBottomMargin and inRightMargin) {
-        headingMean = 135;
+        headingMean = 135; // Head up left
     } else if (inBottomMargin and inLeftMargin) {
-        headingMean = 45;
+        headingMean = 45; // Head up right
     } else if (inLeftMargin) {
-        headingMean = 0;
+        headingMean = 0; // Head right
     } else if (inTopMargin) {
-        headingMean = 270;
+        headingMean = 270; // Head down
     } else if (inRightMargin) {
-        headingMean = 180;
+        headingMean = 180; // Head left
     } else if (inBottomMargin) {
-        headingMean = 90;
+        headingMean = 90; // Head up
     }
 }
 
