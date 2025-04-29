@@ -17,9 +17,9 @@ void GaussMarkovMobility::initialize() {
     EV_DEBUG << "alpha: " << alpha << ", beta: " << beta << endl;
 
     speedMean = par("speedMean");
-    speedVariance = par("speedVariance");
+    speedStandardDeviation = par("speedStandardDeviation");
     headingMean = par("headingMean");
-    headingVariance = par("headingVariance");
+    headingStandardDeviation = par("headingStandardDeviation");
     double borderMarginX = par("borderMarginX");
     double borderMarginY = par("borderMarginY");
 
@@ -55,12 +55,12 @@ void GaussMarkovMobility::move() {
 void GaussMarkovMobility::updateDirection() {
     EV_DEBUG << "Old Velocity: " << velocity.toString() << " Old Heading: " << heading.getRadius() << " Old Heading Mean: " << Rad2D(headingMean).toVector().toString() << endl;
     // Speed
-    double speed = alpha * velocity.distance() + (1 - alpha) * speedMean + speedVariance * sqrt(1 - alpha*alpha) * normal(0, 1, MOBILITY_RNG);
+    double speed = alpha * velocity.distance() + (1 - alpha) * speedMean + speedStandardDeviation * sqrt(1 - alpha*alpha) * normal(0, 1, MOBILITY_RNG);
     // Heading
     double rand_heading = normal(0, 1, MOBILITY_RNG);
     double old_heading = heading.getRadius();
-    heading = Rad2D(alpha * heading.getRadius() + (1 - alpha) * headingMean + headingVariance * sqrt(1 - alpha*alpha) * rand_heading);
-    EV_DEBUG << heading.getRadius() << " = " << alpha << " * " << old_heading << " + (1 -" << alpha << ") * " << headingMean << " + " << headingVariance << " * sqrt(1 -" << alpha*alpha << ") * " << rand_heading << endl;
+    heading = Rad2D(alpha * heading.getRadius() + (1 - alpha) * headingMean + headingStandardDeviation * sqrt(1 - alpha*alpha) * rand_heading);
+    EV_DEBUG << heading.getRadius() << " = " << alpha << " * " << old_heading << " + (1 -" << alpha << ") * " << headingMean << " + " << headingStandardDeviation << " * sqrt(1 -" << alpha*alpha << ") * " << rand_heading << endl;
     // Velocity
     velocity = heading.toVector() * speed;
     EV_DEBUG << "Velocity: " << velocity.toString() << " Heading: " << heading.getRadius() << ", " << heading.toVector().toString() << " Heading Mean: " << Rad2D(headingMean).toVector().toString() << endl;
