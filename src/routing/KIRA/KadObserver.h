@@ -97,9 +97,11 @@ public:
   msgStatsNamesClass(uint8_t size_pdutypes, uint8_t size_stats_subtypes) : size_stats_subtypes(size_stats_subtypes) { name_storage = new std::vector<char *>(size_pdutypes*size_stats_subtypes,nullptr); };
 
   ~msgStatsNamesClass() {
-    for (auto e : *name_storage)
-      delete e;
-    delete name_storage;
+      if (name_storage) {
+          for (auto e : *name_storage)
+              delete e;
+          delete name_storage;
+      }
   };
 
   void setName(KadPDUType pdutype, msg_stats_subtype statssubtype, const std::string& name) {

@@ -155,6 +155,7 @@ class NodePkt_ps { @existingClass; } // that's a container
 // a fast path Data packet
 packet KadDataPacket {
 	@customize(true);
+    PathID detourPathID = PathID::UndefinedPathID;            // only present for active next hop detour
 	PathID firstPathID = PathID::UndefinedPathID;             // outer header destination (outermost destination)
 	PathID secondPathID = PathID::UndefinedPathID;            // outer header destination
 	OverlayKey pathSrcNodeID = OverlayKey::UNSPECIFIED_KEY;   // outer header source (previous overlay hop)

@@ -1,7 +1,32 @@
 #include "NodeVicinityGraph.h"
 #include <algorithm>
+#include <sstream>
 
 namespace routingsim {
+
+std::string nodeVicinityGraph::str() const {
+	std::ostringstream out;
+	auto rootnode = getRootNode();
+    if (!rootnode)
+			return "NodeVicinity NULL";
+	out << "NodeVicinity " << rootnode->nodeKey->shortStr() << " children: ";
+	for (auto childit = rootnode->children.cbegin(); childit != rootnode->children.cend(); childit++) {
+		if (auto childptr= *childit; childptr and childptr->nodeKey) {
+			out << childptr->nodeKey->shortStr()
+				<< " (" <<  childptr->distance << "), s:" << childptr->stateseqno << " [";
+			for (auto nchildit = childptr->children.cbegin(); nchildit != childptr->children.cend(); nchildit++) {
+				if (auto nchildptr= *nchildit; nchildptr and nchildptr->nodeKey) {
+					out << nchildptr->nodeKey->shortStr()
+						<< " (" <<  nchildptr->distance << ")";
+				}
+			} // end for
+			out << "] ";
+		}
+	} // end for
+	out << endl;
+	return out.str();
+}
+
 
 // adds a new childnode to the parent or at least the link if the childnode is already known
 // also updates distance if childnode already known
@@ -55,7 +80,7 @@ nodeVicinityGraph::addNode(const OverlayKey& parentNodeKey, const OverlayKey& ch
 		auto& childrenlist(parentnode_it->second.children);
 		// check for existing child node in children list of parent (if exists: link already known)
 		// perform binary search and then insertion for efficient lookup in large vicinities
-                auto child_it= std::lower_bound(childrenlist.cbegin(),childrenlist.cend(), childnodeptr);
+		auto child_it= std::lower_bound(childrenlist.cbegin(),childrenlist.cend(), childnodeptr);
 		// if not found, add (parent, child) as new link
 		if (child_it == childrenlist.cend() or *child_it != childnodeptr) {
 			childrenlist.insert(child_it, childnodeptr);
@@ -111,13 +136,12 @@ nodeVicinityGraph::removeNode(const OverlayKey& nodeKey)
 /// This can be fixed by a later garbage collection.
 /// @return true in case link was removed, false if not found
 bool
-nodeVicinityGraph::removeLink(const OverlayKey &parentNodeKey,
-			      const OverlayKey &childNodeKey) {
+nodeVicinityGraph::removeLink(const OverlayKey &parentNodeKey, const OverlayKey &childNodeKey) {
 	// lookup parent node
 	if (auto graphit= graph.find(parentNodeKey); graphit != graph.end()) {
 		nodeVicinityNode* parentnode(&graphit->second);
-                graphit = graph.find(childNodeKey);
-                if (graphit != graph.end()) {
+		graphit = graph.find(childNodeKey);
+		if (graphit != graph.end()) {
 			nodeVicinityNode* childnode(&graphit->second);
 			if (not parentnode->children.empty()) {
 				if (auto child_it = std::lower_bound(
@@ -130,10 +154,11 @@ nodeVicinityGraph::removeLink(const OverlayKey &parentNodeKey,
 						 << "," << childNodeKey.shortStr() << ">" << endl;
 					parentnode->children.erase(child_it);
 					// update distance if this was a direct link
-                                        if (parentnode->nodeKey == rootNodeKey) {
+					if (parentnode->nodeKey == rootNodeKey) {
 						ASSERT(childnode->distance == 1);
 						childnode->distance= 2;
 					}
+					//EV_TRACE << "nodeVicinityGraph::removeLink(" << parentNodeKey.shortStr() << "," << childNodeKey.shortStr() << ") " << str() << endl;
 					return true;
 				}
 			}
@@ -148,6 +173,7 @@ nodeVicinityGraph::removeLink(const OverlayKey &parentNodeKey,
 std::pair<bool, std::vector<OverlayKey>>
 nodeVicinityGraph::findPath(const OverlayKey &NodeKey) const
 {
+	//EV_TRACE << "nodeVicinityGraph::findPath(" << NodeKey.shortStr() << ") " << str() << endl;
 	auto graphit = graph.find(NodeKey);
 	if (graphit != graph.end()) {
 		const nodeVicinityNode *destnode(&graphit->second);
@@ -168,7 +194,7 @@ nodeVicinityGraph::findPath(const OverlayKey &NodeKey) const
 				if (childnode) {
 					// compare to childnode first, should be covered by binary search above,
 					// however, it can be the case that the distance information is inaccurate
-                                        if (childnode->nodeKey == destnode->nodeKey) {
+					if (childnode->nodeKey == destnode->nodeKey) {
 						return {true, {}}; // found destnode
 					}
 					// perform binary seach in children of this child
@@ -179,7 +205,7 @@ nodeVicinityGraph::findPath(const OverlayKey &NodeKey) const
 					}
 				}
 			} // end for every direct child
-                }
+		}
 		else {
 			EV_WARN << "nodeVicinityGraph::findPath() Node " << NodeKey.shortStr() << " not found in vicinity" << endl;
 		}
