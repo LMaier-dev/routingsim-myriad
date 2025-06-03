@@ -25,7 +25,7 @@ public:
 class nodeVicinityGraph {
 public:
 	// cannot use constructor to initialize root, because ownNodeKey is only set in initialize()
-	void setRoot(const OverlayKey& ownNodeKey) { rootNodeKey= &ownNodeKey; graph[*rootNodeKey]= { rootNodeKey, 0, {} }; }
+	void setRoot(const OverlayKey& ownNodeKey) { rootNodeKey= &ownNodeKey; graph[*rootNodeKey]= { rootNodeKey, 0, {}, {} }; }
 	/// adds child node to parent node
 	std::tuple<bool, bool, nodeVicinityNode*> addNode(const OverlayKey& parentNodeKey, const OverlayKey& childNodeKey, unsigned short distance);
 	void removeNode(const OverlayKey& nodeKey);

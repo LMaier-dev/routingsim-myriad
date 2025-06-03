@@ -16,13 +16,9 @@
 
 #include "KIRA.h"
 #include "KadObserver.h"
-#include "NodePkt_m.h"
 #include "PathIDUtils.h"
 
 namespace routingsim {
-
-
-
 
 bool R2Kademlia::doDataProbe(short timerID) {
 	if (neighborTable.empty()) return false; // we are isolated
@@ -185,6 +181,7 @@ bool R2Kademlia::forwardDataPacketToNextHop(KadDataPacket_p& packet, NodePkt_p& 
 	else
 		EV_ERROR << "hit forwarding table entry with undefined state" << endl;
 
+	// try regular forwarding to next hop according to forwarding entry
 	nodeid_t nid = neighborTable.getNodeId(nh.nextHopNode);
 	if (nid != undefined_node) {
 		// this is the normal case
@@ -219,10 +216,10 @@ bool R2Kademlia::forwardDataPacketToNextHop(KadDataPacket_p& packet, NodePkt_p& 
 			const auto newpid= getPathID(myOverlayKey, newpath);
 			auto detourPIDentry= fwdTablePathID.PIDFwdTable.find(newpid);
 			if (detourPIDentry != fwdTablePathID.PIDFwdTable.cend()) {
-                          if (auto &detourFwdEntry = detourPIDentry->second;
-                              detourFwdEntry.isValid() and
-                              detourFwdEntry.nextHopNode != OverlayKey::UNSPECIFIED_KEY) {
-							  if (detourFwdEntry.fwdAction == FwdTableEntry::Action::fwdNextPathID) { // set new outgoing PathID
+				if (auto &detourFwdEntry = detourPIDentry->second;
+					detourFwdEntry.isValid() and
+					detourFwdEntry.nextHopNode != OverlayKey::UNSPECIFIED_KEY) {
+					if (detourFwdEntry.fwdAction == FwdTableEntry::Action::fwdNextPathID) { // set new outgoing PathID
 
 								  packet->setDetourPathID(detourFwdEntry.outgoingPathID);
 								  EV_TRACE << "Outgoing Detour PathID: " << detourFwdEntry.outgoingPathID << endl;
@@ -389,6 +386,7 @@ bool R2Kademlia::forwardDataPacketToNextHop(KadDataPacket_p& packet, NodePkt_p& 
 }
 
 
+// forward data packet to next hop or deliver locally
 void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 
 	ASSERT(packet != nullptr);
@@ -571,8 +569,8 @@ void R2Kademlia::sendData(const OverlayKey& finaldestkey, NodePkt_ps payload) {
 			return;
 		}
 		auto packet = makeDataPacket<KadDataPacket>(finaldestkey, &contact, "KadDataPacket");
-		EV_TRACE << "sending KadDataPacket id=" << packet->getId() << " via " << contact.getKey().shortStr() << " to " << finaldestkey.shortStr()
-			 << " 1st PID=" << packet->getFirstPathID() << " 2nd PID=" << packet->getSecondPathID() << endl;
+		EV_TRACE << "sending KadDataPacket id=" << packet->getId() << " via " << contact.getKey().shortStr() << " to " << finaldestkey.shortStr() << " path=" << contact.getPath()
+				 << " 1st PID=" << packet->getFirstPathID() << " 2nd PID=" << packet->getSecondPathID() << endl;
 		// note that makeDataPacket sets DestPathID accordingly!
 		sendPacket(std::move(packet));
 	}

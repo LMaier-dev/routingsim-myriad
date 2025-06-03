@@ -111,6 +111,8 @@ public:
     return rev;
   }
 
+  hop_t& operator=(const hop_t &other) { from= other.from; to= other.to; distance= other.distance; return *this; }
+
   /// compare hop, distance is not compared!!
   bool operator==(const hop_t &hop) const {
     return hop.from == from && hop.to == to;

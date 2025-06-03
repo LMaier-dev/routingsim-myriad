@@ -21,6 +21,7 @@ private:
 public:
 	stateseqno_t() : seqnumber(0u) {}
 	stateseqno_t(unsigned short no) : seqnumber(no) {}
+	stateseqno_t(const stateseqno_t& other) : seqnumber(other.seqnumber) {}
 	stateseqno_t& operator=(const stateseqno_t& other) { seqnumber= other.seqnumber; return *this; }
 	// pre increment ++a
 	stateseqno_t& operator++() { ++seqnumber; if (seqnumber == invalidSeqNo) { ++seqnumber; }; return *this; }

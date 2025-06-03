@@ -359,7 +359,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 	KadPacket_p packet = \
 		std::unique_ptr<KadPacket>(check_and_cast<KadPacket*>(pkt->decapsulate()));
 
-        /*
+	/*
 	  EV_TRACE << "onMessage msgid:" << packet->getId() << " treeId:" << packet->getTreeId()
 	      << " <" << packet->getName() << "> this="
 		 << static_cast<void*>(packet.get()) << " c:" << packet->getCreationTime()
