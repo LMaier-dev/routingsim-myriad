@@ -27,7 +27,7 @@ NodePkt_p R2Kademlia::makeHelloPacket()
 }
 
 
-// everything starts here: discovering a neighbor by seeing a PNHello packet
+// everything starts here: discovering a neighbor by seeing a ULNHello packet
 // the node is added to the neighborTable, but not added as contact until
 // bidirectional reachability is confirmed
 // in case the link was temporarily down: rediscover neighbor
@@ -110,7 +110,7 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 // @returns a delay value for the next call of this method
 simtime_t R2Kademlia::sendGetPhysicalNeighbors(const KadContact& contact, RequestQueueElementActionType action)
 {
-	EV_TRACE << "sending query route request (PN" << ((action & RequestQueueElementActions::get_OverlayNeighborsSource) ? "+ON)" : ")") << " to " << contact << endl;
+	EV_TRACE << "sending query route request (ULN" << ((action & RequestQueueElementActions::get_OverlayNeighborsSource) ? "+ON)" : ")") << " to " << contact << endl;
 	auto req = makePacket<KadQueryRouteReq>(contact);
 	req->setNeighborhood(1); // get only physical neighbors (1 hop away)
 	req->setContactsOnly(false);
@@ -493,7 +493,7 @@ bool R2Kademlia::handlePNDiscResponse(KadPacket_p answer, RPCState& rpcState)
 		contact_p->setSyncPNSeqNo(response->getStateSeqNo());
 	}
 	else
-		EV_ERROR << "PN not found as contact in RT!" << endl;
+		EV_ERROR << "ULN not found as contact in RT!" << endl;
 
 	std::unordered_set<OverlayKey> list_of_children;
 

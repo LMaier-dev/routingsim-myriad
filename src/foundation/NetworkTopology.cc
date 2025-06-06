@@ -14,6 +14,7 @@
 //
 
 #include "NetworkTopology.h"
+#include "BaseTypes.h"
 
 #include <map>
 #include <fstream>
@@ -317,9 +318,9 @@ void NetworkTopology::readSelfDefinedTopology(std::ifstream &topologyFile, std::
 	string line;
 	unsigned int numNodes(0); // as given by header
 	unsigned int numLinks(0); // as given by header
-	nodeid_t fromNode, toNode;
+	nodeid_t fromNode(undefined_node), toNode(undefined_node);
 	int lineNumber = 0;
-	bool undirectedGraph;
+	bool undirectedGraph= true;
 
 	while (std::getline(topologyFile, line)) {
 		if(line.length() == 0 || line.front() == '#') continue;
@@ -682,18 +683,16 @@ void NetworkTopology::getNeighborNodeIDs(nodeid_t fromID, vector<nodeid_t> &neig
 
 
 vector<nodeid_t>  NetworkTopology::getHighestDegreeNodes( unsigned int count ) const {
-	std::map<nodeid_t, unsigned long> nodeDegrees;
 	std::map<nodeid_t, unsigned long> selectedNodes;
-	std::map<nodeid_t, unsigned long>::const_iterator ndit;
-	std::map<nodeid_t, unsigned long>::const_iterator snit;
 	vector<nodeid_t> returnIDs;
 
+	std::map<nodeid_t, unsigned long> nodeDegrees;
 	getNodeDegrees( nodeDegrees );
 
 	unsigned long minDeg=std::numeric_limits<unsigned long>::max();
-	nodeid_t minNodeID;
+	nodeid_t minNodeID= undefined_node;
 
-	for ( ndit=nodeDegrees.begin(); ndit!=nodeDegrees.end(); ndit++) {
+	for ( auto ndit=nodeDegrees.cbegin(); ndit!=nodeDegrees.cend(); ndit++) {
 
 		// insert first count elements directly
 		if (selectedNodes.size() < count) {
@@ -715,7 +714,7 @@ vector<nodeid_t>  NetworkTopology::getHighestDegreeNodes( unsigned int count ) c
 
 		// update minDeg and minNodeID
 		minDeg=std::numeric_limits<unsigned long>::max();
-		for ( snit=selectedNodes.begin(); snit!=selectedNodes.end(); snit++ ) {
+		for ( auto snit=selectedNodes.cbegin(); snit!=selectedNodes.cend(); snit++ ) {
 			if ( snit->second < minDeg ) {
 				minNodeID = snit->first;
 				minDeg = snit->second;
@@ -724,7 +723,7 @@ vector<nodeid_t>  NetworkTopology::getHighestDegreeNodes( unsigned int count ) c
 	}
 
 	// prepare return vector
-	for ( snit=selectedNodes.begin(); snit!=selectedNodes.end(); snit++ ) {
+	for ( auto snit=selectedNodes.cbegin(); snit!=selectedNodes.cend(); snit++ ) {
 		returnIDs.push_back(snit->first);
 	}
 

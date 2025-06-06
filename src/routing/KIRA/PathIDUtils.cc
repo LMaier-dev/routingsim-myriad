@@ -35,6 +35,8 @@ getSegmentPathIDs(const OverlayKey ownNodeID, const kad_path& path)
 	}
 }
 
+
+// path needs to contain intermediate nodes and the destination node
 PathID getPathID(const OverlayKey& prependKey, const kad_path& path)
 {
 	if (path.size() > 0) {

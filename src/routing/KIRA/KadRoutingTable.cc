@@ -235,8 +235,8 @@ void KadRoutingTable::addPNContact(const OverlayKey& key, stateseqno_t stateseqn
 		if (improved) {
 			policy->onImprovement(*contact);
 			// improving existing paths should be safe with this current information from our PN
-                        updatePaths(*contact);
-                }
+			updatePaths(*contact);
+		}
 
 	} // end else (=contact already known)
 }

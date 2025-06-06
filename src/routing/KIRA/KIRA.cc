@@ -316,12 +316,12 @@ void R2Kademlia::nodeDisconnect(nodeid_t nid) {
 	// we can rely on routingTable.getContact(key) != nullptr, because of earlier setContactInvalid() call
 	scheduleUpdate(*(routingTable.getContact(key)), KAD_Unreachable);
 
-    if (floodOnFailure) {
+	if (floodOnFailure) {
         // send "LSA" after short delay
-      addOneShotTimer(uniform(SimTime(1000,SIMTIME_US), SimTime(3000,SIMTIME_US)), [this,nid](short i) {
-                return sendFloodPacket(std::make_optional(hop_t(nid,node().getNodeId())));
-            });
-    }
+		addOneShotTimer(uniform(SimTime(1000,SIMTIME_US), SimTime(3000,SIMTIME_US)), [this,nid](short i) {
+			return sendFloodPacket(std::make_optional(hop_t(nid,node().getNodeId())));
+		});
+	}
 }
 
 
@@ -1548,8 +1548,8 @@ void R2Kademlia::readRTableRsp(const KadRTableRsp& packet) {
 	for (size_t i = 0; i < packet.getContactArraySize(); i++) {
 		// TODO optimization: isPathInteresting
 		// Examples: contact 0779b9 via path < ee2741 0de89c > + <->
-                //           contact 06cc5e via path < ee2741 0de89c > + < d9c74f >
-		//EV_TRACE << "readRTableRsp: contact " <<  packet.getContact(i).shortStr() << " via " << viaPath << " + " << packet.getPath(i) << endl;
+		//           contact 06cc5e via path < ee2741 0de89c > + < d9c74f >
+		EV_TRACE << "readRTableRsp: contact " <<  packet.getContact(i).shortStr() << " via " << viaPath << " + " << packet.getPath(i) << endl;
 		// check whether contact is not contained in path (avoid cycles)
 		if ( find(viaPath.cbegin(), viaPath.cend(), packet.getContact(i)) != viaPath.cend()
 		     or

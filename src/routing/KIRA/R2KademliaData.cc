@@ -211,7 +211,7 @@ bool R2Kademlia::forwardDataPacketToNextHop(KadDataPacket_p& packet, NodePkt_p& 
 	// first we try to reroute via another neighbor from the nodeVicinityGraph
 	if (auto [found,newpath]= vicinity.findPath(nh.nextHopNode); found) {
 			EV_TRACE << "found alternative path to " << nh.nextHopNode.shortStr() << " in vicinity: " << newpath << endl;
-			// find outgoing pathID
+			// find outgoing pathID for detour
 			newpath.push_back(nh.nextHopNode);
 			const auto newpid= getPathID(myOverlayKey, newpath);
 			auto detourPIDentry= fwdTablePathID.PIDFwdTable.find(newpid);
@@ -221,29 +221,34 @@ bool R2Kademlia::forwardDataPacketToNextHop(KadDataPacket_p& packet, NodePkt_p& 
 					detourFwdEntry.nextHopNode != OverlayKey::UNSPECIFIED_KEY) {
 					if (detourFwdEntry.fwdAction == FwdTableEntry::Action::fwdNextPathID) { // set new outgoing PathID
 
-								  packet->setDetourPathID(detourFwdEntry.outgoingPathID);
-								  EV_TRACE << "Outgoing Detour PathID: " << detourFwdEntry.outgoingPathID << endl;
-								  nodeid_t nid= neighborTable.getNodeId(detourFwdEntry.nextHopNode);
-								  if (nid != undefined_node) {
-									  // the detour works
-									  // forward to underlay next hop of detour
-									  detourFwdEntry.incrementUsageCount();
-									  packet->advanceProgress(); // decrease hop limit
-									  nodePkt->encapsulate(packet.release());
-									  sendToNode(nid, std::move(nodePkt));
-									  if (not packetorigin) {
-										  forwardedDataPackets++;
-									  }
-									  EV_TRACE << "send to next hop nid=" << nid << endl;
-									  // true means success
-									  return true;
-								  }
-							  }
-							  else {
-								  EV_TRACE << "Outgoing Detour PathID for " << detourFwdEntry.nextHopNode.shortStr() << " different fwdAction than expected " << detourFwdEntry.str() << endl;
-							  }
-                          }
+						packet->setDetourPathID(detourFwdEntry.outgoingPathID);
+						EV_TRACE << "Outgoing Detour PathID: " << detourFwdEntry.outgoingPathID << endl;
+						nodeid_t nid= neighborTable.getNodeId(detourFwdEntry.nextHopNode);
+						if (nid != undefined_node) {
+							// the detour works
+							// forward to underlay next hop of detour
+							detourFwdEntry.incrementUsageCount();
+							packet->advanceProgress(); // decrease hop limit
+							nodePkt->encapsulate(packet.release());
+							sendToNode(nid, std::move(nodePkt));
+							if (not packetorigin) {
+								forwardedDataPackets++;
+							}
+							EV_TRACE << "send to next hop nid=" << nid << endl;
+							// true means success
+							return true;
+						}
+					}
+					else {
+						EV_TRACE << "Outgoing Detour PathID for " << detourFwdEntry.nextHopNode.shortStr() << " different fwdAction than expected " << detourFwdEntry.str() << endl;
+					}
+				} else {
+					EV_WARN << "forwarding entry for detour PID " << newpid << " not usable (invalid?): " << detourFwdEntry.str() << endl;
+				}
 			} // endif detourPIDEntry found
+			else {
+				EV_WARN << "detour PID " << newpid << " not found!" << endl;
+			}
 	}
 
 
