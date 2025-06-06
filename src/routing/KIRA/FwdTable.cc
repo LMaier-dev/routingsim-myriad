@@ -387,13 +387,13 @@ void FwdTablePathID::delPIDEntry(PathID pid)
 		// foreign entries should be deleted by PathTeardown messages by unsetting their foreign bit first
 		if ( not it->second.isLocal() and not it->second.isForeign() and not it->second.isPrecalc() and it->second.getReferenceCount()==0) {
 			it->second.setDeleted();
-			EV_TRACE << "FwdTablePathID::delPIDEntry PathID " << pid << " marked for deletion " << it->second.str() << endl;
+			EV_TRACE << "FwdTablePathID::delPIDEntry PathID " << pid << " marked for deletion, " << it->second.str() << endl;
 			// entry cannot be deleted here, because there may be other foreign nodes
 			// that require it still. Need to wait for garbage collection.
 			return;
 		}
 		else { // Precalc or Foreign or still locally used
-			EV_TRACE << "FwdTablePathID::delPIDEntry PathID " << pid << " not yet deleted." << it->second.str() << endl;
+			EV_TRACE << "FwdTablePathID::delPIDEntry PathID " << pid << " not yet deleted, " << it->second.str() << endl;
 		}
 
 		EV_TRACE << "FwdTablePathID::delPIDEntry finished for " << pid << " " << it->second.str() << endl;

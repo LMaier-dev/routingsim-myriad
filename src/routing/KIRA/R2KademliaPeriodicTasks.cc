@@ -386,7 +386,7 @@ bool R2Kademlia::doSendExplorePathPacket(short timerId)
 }
 
 
-bool R2Kademlia::doCheckPNs(short timerId) {
+bool R2Kademlia::doCheckULNs(short timerId) {
 	ASSERT(timerId >= 0 and timerId < fixedTimerIdBase);
 
 	std::list<OverlayKey> resultlist;

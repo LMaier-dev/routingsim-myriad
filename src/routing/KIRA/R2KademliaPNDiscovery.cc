@@ -98,7 +98,7 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 		     ((delta == 0 or delta == 0x80000000UL) and myOverlayKey < packet->getSource())
 			) {
 			// schedule ULNDiscReq
-			schedulePNDiscReq({myOverlayKey, packet->getSource(), {}, stateseqno_t::invalidSeqNo});
+			scheduleULNDiscReq({myOverlayKey, packet->getSource(), {}, stateseqno_t::invalidSeqNo});
 		}
 	}
 
@@ -256,8 +256,8 @@ simtime_t R2Kademlia::sendDiscoveryReq(const KadContact& contact, RequestQueueEl
 	EV_TRACE << " delay: " << delay << endl;
 	sendRpcCall(
 		std::move(req),
-		std::bind(&R2Kademlia::handlePNDiscResponse, this, ph::_1, ph::_2),
-		std::bind(&R2Kademlia::handlePNDiscResponse, this, ph::_1, ph::_2),
+		std::bind(&R2Kademlia::handleULNDiscResponse, this, ph::_1, ph::_2),
+		std::bind(&R2Kademlia::handleULNDiscResponse, this, ph::_1, ph::_2),
 		std::bind(&R2Kademlia::handleRPCTimeOut, this, ph::_1, ph::_2),
 		0
 	);
@@ -299,13 +299,13 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadULNDiscReq> packet) {
 	if (packet->getPhyNeighborArraySize() > 0) {
 		for (uint i = 0; i < packet->getPhyNeighborArraySize(); i++) {
 
-			// this addPath cannot be trusted, because the PN's neighbor may have not been contacted recently
+			// this addPath cannot be trusted, because the ULN's neighbor may have not been contacted recently
 			if (not routingTable.addPath(packet->getPhyNeighbor(i), path,
 						     packet->getPhyNeighborSeqNo(i),
 						     packet->getPhyNeighborAge(i),
 						     packet->getPhyNeighborDegree(i),
 						     false)) {
-				// if not put into routing table, add PN's neighbor to vicinity nevertheless
+				// if not put into routing table, add ULN's neighbor to vicinity nevertheless
 				auto [node_added, link_added, nodeptr]= vicinity.addNode(packet->getSource(),
 								  packet->getPhyNeighbor(i),
 								  2);
@@ -473,7 +473,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadQueryRouteReq> packet)
 }
 
 
-bool R2Kademlia::handlePNDiscResponse(KadPacket_p answer, RPCState& rpcState)
+bool R2Kademlia::handleULNDiscResponse(KadPacket_p answer, RPCState& rpcState)
 {
 	if (rpcState.status != RPC_SUCCESS) return true;
 	auto response = safe_packet_cast<KadULNDiscRsp>(answer);
@@ -507,7 +507,7 @@ bool R2Kademlia::handlePNDiscResponse(KadPacket_p answer, RPCState& rpcState)
 		}
 	}
 
-	// now read PNs from neighbor
+	// now read ULNs from neighbor
 	readRTableRsp(*response);
 
 	// now check for deleted links of this node
@@ -630,10 +630,10 @@ R2Kademlia::scheduleRequest(ContactRequestQueue& q, KadContact&& tmpcontact)
 void
 R2Kademlia::scheduleGetONReq(const KadContact& tmpcontact) {
 	// check first for same node in GetPNQueue (so node is in vicinity)
-	auto it= std::lower_bound(GetPNQueue.begin(), GetPNQueue.end(), tmpcontact,
+	auto it= std::lower_bound(GetULNQueue.begin(), GetULNQueue.end(), tmpcontact,
 				  [&](const auto& lhs, const auto& rhs) -> bool { return lhs.getKey() < rhs.getKey(); });
-	if (it != GetPNQueue.end() and it->getKey() == tmpcontact.getKey()) {
-		EV_TRACE << "scheduleGetONReq() found entry for " << tmpcontact.getKey().shortStr() << " in GetPNQueue, setting get_ON flag" << endl;
+	if (it != GetULNQueue.end() and it->getKey() == tmpcontact.getKey()) {
+		EV_TRACE << "scheduleGetONReq() found entry for " << tmpcontact.getKey().shortStr() << " in GetULNQueue, setting get_ON flag" << endl;
 		it->setState(KadContact::State::_get_ON);
 		// delete it from GetONQueue
 		// if (auto ONit= std::lower_bound(GetONQueue.begin(), GetONQueue.end(), tmpcontact,
@@ -658,7 +658,7 @@ R2Kademlia::sendScheduledRequests(ContactRequestQueue& q) {
 	simtime_t delay_next_call(0);
 	EV_TRACE << "sendScheduledRequests(" << q.getDescription() << ") called, queued requests:" << q.size() << endl;
 	while (not q.empty())
-	{ // for getPN getON we have no neighbors and probably also no contacts in the routing table available
+	{ // for getULN getON we have no neighbors and probably also no contacts in the routing table available
 		// normally we would use front(), but for vectors back() and pop_back() is easier
 		// due to the sorted order
 		auto& tmpcontact= q.back();
@@ -673,7 +673,7 @@ R2Kademlia::sendScheduledRequests(ContactRequestQueue& q) {
 			lastseenseqno= rt_contact->getSyncPNSeqNo();
 		}
 		else { // try to find node in vicinity
-			// e.g., if we only received a PNHello, PN is not a contact yet, but it is in the vicinity
+			// e.g., if we only received a ULNHello, ULN is not a contact yet, but it is in the vicinity
 			// furthermore, other nodes may never be a contact due to bucket size restrictions
 			if (tmpcontact.getPath().size() < nodeVicinityGraph::vicinityDiscoveryRadius) {
 				if (auto vnodep= vicinity.getNode(tmpcontact.getKey()); vnodep != nullptr) {
@@ -696,7 +696,7 @@ R2Kademlia::sendScheduledRequests(ContactRequestQueue& q) {
 				EV_ERROR << q.getDescription() << " cannot be sent, because contact " << tmpcontact.getKey().shortStr() << " not in neighbor table anymore" << endl;
 			}
 			else {
-				// send the request (ULNDiscReq, QueryRouteReq(PN), QueryRouteReq(ON))
+				// send the request (ULNDiscReq, QueryRouteReq(ULN), QueryRouteReq(ON))
 				// e.g., see R2Kademlia::sendDiscoveryReq(KadContact_p contact)
 				delay_next_call= q.sendrequestcall(*rt_contact, getOverlayNeighborsSource ? get_OverlayNeighborsSource : unset);
 			}
@@ -737,7 +737,7 @@ bool R2Kademlia::checkForResync(const OverlayKey& contact, stateseqno_t newseqno
 			EV_TRACE << "resync required for " << contact_p->getKey().shortStr() << " new: "
 				 << newseqno << " old: " << contact_p->getSyncPNSeqNo() << endl;
 
-			reSyncPN(*contact_p, newseqno);
+			reSyncULN(*contact_p, newseqno);
 
 			return true;
 		}

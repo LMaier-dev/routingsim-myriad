@@ -123,11 +123,11 @@ public:
 	/** called when a contact is invalidated */
 	virtual void onContactInvalidation(KadContact_p contact) = 0;
 	/** called when physical neighbors may be out of synch with their sequence numbers **/
-	virtual void reSyncPN(const KadContact& contact, stateseqno_t expected_seqno) = 0;
+	virtual void reSyncULN(const KadContact& contact, stateseqno_t expected_seqno) = 0;
 	/** called when physical neighbors in discoveryradius may be out of synch with their sequence numbers **/
 	virtual void recheckPhysicalNeighbors(const KadContact& contact) = 0;
 	/** called when a rediscovery needs to be performed for a contact */
-	virtual void schedulePNRediscovery(const OverlayKey& contact) = 0;
+	virtual void scheduleULNRediscovery(const OverlayKey& contact) = 0;
 	virtual void scheduleUrgentRediscovery(const OverlayKey& contact) = 0;
 	virtual void scheduleRegularRediscovery(const OverlayKey& contact) = 0;
 	virtual void scheduleSlowRediscovery(const OverlayKey& contact) = 0;

@@ -185,7 +185,7 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 	//ASSERT( getKadObserver().checkSeqNo(contact->getKey(),contact->getStateSeqNo()) == true );
 
 	// physical neighbor, may have been heard of its existence by some third node!
-	// avoid further actions until we hear a HELLO or get a PNDiscReq
+	// avoid further actions until we hear a HELLO or get a ULNDiscReq
 	if (contact->getPathLength() == 0) 
 	{
 		if (not neighborTable.isNeighbor(contact->getKey()))
@@ -200,16 +200,16 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 
 	// ask for physical neighbors if new contact is within discovery radius
 	// contact->getPathLength() excludes the destination, so path length = 0 
-	// holds for PhyNeighbors (their Physical Neighbors are already discovered by PNDiscReq/Rsp)
+	// holds for PhyNeighbors (their Physical Neighbors are already discovered by ULNDiscReq/Rsp)
 	// getPathLength()+1 corresponds to the number of hops from me to the contact.
 	// Thus, contact->getPathLength()+1 < discoveryRadius is correct, because we ask
-	// those contacts about their PNs which is even one hop further away
+	// those contacts about their ULNs which is even one hop further away
 	if (contact->getPathLength() > 0)
 	{
 		if (contact->getPathLength()+1 < discoveryRadius) {
 			// sends a QueryRouteReq requesting their 1 hop neighborhood
 			// sendGetPhysicalNeighbors() adds contact to vicinity to keep track of already queried nodes in vicinity
-			scheduleGetPNReq(KadContact(*contact));
+			scheduleGetULNReq(KadContact(*contact));
 		}
 		else // maybe just on the radius, check to add contact for vicinity
 		if (contact->getPathLength()+1 == nodeVicinityGraph::vicinityDiscoveryRadius) {
@@ -363,16 +363,16 @@ void
 R2Kademlia::recheckPhysicalNeighbors(const KadContact& contact) {
 	// simply recheck the physical Neighbors
 	EV_TRACE << "recheckPhysicalNeighbors triggered for " << contact.getKey().shortStr() << endl;
-	scheduleGetPNReq(KadContact(contact));
+	scheduleGetULNReq(KadContact(contact));
 }
 
 
 void
-R2Kademlia::reSyncPN(const KadContact& contact, stateseqno_t expected_seqno) {
-	// simply trigger a PNDiscReq to update any sequence number
-	EV_TRACE << "reSyncPN scheduled for " << contact.getKey().shortStr() << " expected seqno: " << expected_seqno << endl;
+R2Kademlia::reSyncULN(const KadContact& contact, stateseqno_t expected_seqno) {
+	// simply trigger a ULNDiscReq to update any sequence number
+	EV_TRACE << "reSyncULN scheduled for " << contact.getKey().shortStr() << " expected seqno: " << expected_seqno << endl;
 
-	schedulePNDiscReq({myOverlayKey, contact.getKey(), {}, expected_seqno});
+	scheduleULNDiscReq({myOverlayKey, contact.getKey(), {}, expected_seqno});
 }
 
 

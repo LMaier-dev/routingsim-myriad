@@ -93,32 +93,32 @@ enum class msg_stats_subtype : uint8_t {
 
 
 class msgStatsNamesClass {
-public:
-  msgStatsNamesClass(uint8_t size_pdutypes, uint8_t size_stats_subtypes) : size_stats_subtypes(size_stats_subtypes) { name_storage = new std::vector<char *>(size_pdutypes*size_stats_subtypes,nullptr); };
+    public:
+        msgStatsNamesClass(uint8_t size_pdutypes, uint8_t size_stats_subtypes) : size_stats_subtypes(size_stats_subtypes) { name_storage = new std::vector<char *>(size_pdutypes*size_stats_subtypes,nullptr); };
 
-  ~msgStatsNamesClass() {
-      if (name_storage) {
-          for (auto e : *name_storage)
-              delete e;
-          delete name_storage;
-      }
-  };
+        ~msgStatsNamesClass() {
+            if (name_storage) {
+                for (auto e : *name_storage)
+                    delete[] e;
+                delete name_storage;
+            }
+        };
 
-  void setName(KadPDUType pdutype, msg_stats_subtype statssubtype, const std::string& name) {
-    if (name_storage->at((uint8_t)pdutype * size_stats_subtypes + (uint8_t)statssubtype) == nullptr and not name.empty()) {
-      auto namec = new char[name.size() + 1]; // do not forget the trailing \0 byte
-      memcpy(namec, name.c_str(), name.size()+1); // copy also the trailing \0
-      (*name_storage)[(uint8_t)pdutype * size_stats_subtypes + (uint8_t)statssubtype] = namec;
-    };
-  };
+        void setName(KadPDUType pdutype, msg_stats_subtype statssubtype, const std::string& name) {
+            if (name_storage->at((uint8_t)pdutype * size_stats_subtypes + (uint8_t)statssubtype) == nullptr and not name.empty()) {
+                auto namec = new char[name.size() + 1]; // do not forget the trailing \0 byte
+                memcpy(namec, name.c_str(), name.size()+1); // copy also the trailing \0
+                (*name_storage)[(uint8_t)pdutype * size_stats_subtypes + (uint8_t)statssubtype] = namec;
+            };
+        };
 
-  const char* getName(uint8_t pdutype, msg_stats_subtype statssubtype) const {
-    return (*name_storage).at(pdutype * size_stats_subtypes + (uint8_t)statssubtype);
-  };
+        const char* getName(uint8_t pdutype, msg_stats_subtype statssubtype) const {
+            return (*name_storage).at(pdutype * size_stats_subtypes + (uint8_t)statssubtype);
+        };
 
-private:
-  std::vector<char *> *name_storage;
-  uint8_t size_stats_subtypes = 0;
+    private:
+        std::vector<char *> *name_storage;
+        uint8_t size_stats_subtypes = 0;
 };
 
 extern msgStatsNamesClass msgStatsNames;

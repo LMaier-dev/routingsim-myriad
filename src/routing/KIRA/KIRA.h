@@ -221,7 +221,7 @@ private:
 	private:
 		bool scheduled;
 	};
-	rediscoverQueueClass PNRediscoverQueue;
+	rediscoverQueueClass ULNRediscoverQueue;
 	rediscoverQueueClass urgentRediscoverQueue;
 	rediscoverQueueClass regularRediscoverQueue;
 	rediscoverQueueClass slowRediscoverQueue;
@@ -235,11 +235,11 @@ private:
 	// a list that is used to periodically probe contacts
 	std::list<OverlayKey> probeContactQueue;
 
-	// a queue that is used to send PN/ON discover request messages
+	// a queue that is used to send ULN/ON discover request messages
 
 	// queues for rate limited requests
-	ContactRequestQueue PNDiscoverQueue; // for sending PNDiscReq
-	ContactRequestQueue GetPNQueue;      // for sending QueryRouteReq (Physical Neighbors)
+	ContactRequestQueue ULNDiscoverQueue; // for sending ULNDiscReq
+	ContactRequestQueue GetULNQueue;      // for sending QueryRouteReq (Physical Neighbors)
 	ContactRequestQueue GetONQueue;      // for sending QueryRouteReq (Overlay Neighbors)
 	ContactRequestQueue ContactCandidateProbeQueue; // for probing contact candidates
         KeyRequestQueue OnDemandPathProbeQueue; // for sending path probes on demand (in contrast to periodical ones)
@@ -251,7 +251,7 @@ private:
         // selfMessage
 	bool pathSetupScheduled= false;
 
-	// timestamp for outstanding PNDiscReqs
+	// timestamp for outstanding ULNDiscReqs
 	simtime_t LastPNDiscReq;
 	// timestamp for outstanding PNQueryRouteReqs
 	simtime_t LastPNQueryRouteReq;
@@ -262,7 +262,7 @@ private:
 	// timestamp for outstanding contact Candidate PathProbe
 	simtime_t LastContactCandidateProbeReq;
 
-	// state seq number sent with last PNHello
+	// state seq number sent with last ULNHello
 	stateseqno_t lastPNHelloStateSeqNo= stateseqno_t::invalidSeqNo;
 
 	/** @name statistics */
@@ -373,7 +373,7 @@ private:
 	bool doReachabilityTest(short timerId);
 	bool doSendExplorePathPacket(short timerId);
         bool doPathRefresh(short timerId);
-	bool doCheckPNs(short timerId);
+	bool doCheckULNs(short timerId);
 	//@}
 
 	/** @name private helpers */
@@ -404,7 +404,7 @@ private:
 
 	/// call when a node is disconnected
 	void nodeDisconnect(nodeid_t nid);
-	/// checks whether a PN requires a resynch and initiates PNDiscReq if so
+	/// checks whether a ULN requires a resynch and initiates ULNDiscReq if so
 	bool checkForResync(const OverlayKey& contact, stateseqno_t newseqno);
 	/**
 	 * sends an error packet to the sender of the given packet
@@ -448,7 +448,7 @@ private:
 	bool handleProbeResponse(KadPacket_p answer, RPCState& rpcState);
 	bool handlePathSetupResponse(KadPacket_p answer, RPCState& rpcState);
 	bool handleQueryRouteResponse(KadPacket_p answer, RPCState& rpcState);
-	bool handlePNDiscResponse(KadPacket_p answer, RPCState& rpcState);
+	bool handleULNDiscResponse(KadPacket_p answer, RPCState& rpcState);
 	bool handleFindNodeResponse(KadPacket_p answer, RPCState& rpcState);
 	bool handleRPCTimeOut(KadPacket_p answer, RPCState& rpcState);
 	//@}
@@ -563,24 +563,24 @@ private:
 	//@}
 
 	/// schedule rediscovery
-	void schedulePNRediscovery(const OverlayKey& contactkey) override { scheduleRediscovery(contactkey, PNRediscoverQueue, PNRediscoveryWaitTime); };
+	void scheduleULNRediscovery(const OverlayKey& contactkey) override { scheduleRediscovery(contactkey, ULNRediscoverQueue, PNRediscoveryWaitTime); };
 	void scheduleUrgentRediscovery(const OverlayKey& contactkey) override { scheduleRediscovery(contactkey, urgentRediscoverQueue, urgentRediscoveryWaitTime); };
 	void scheduleRegularRediscovery(const OverlayKey& contactkey) override { scheduleRediscovery(contactkey, regularRediscoverQueue, regularRediscoveryWaitTime); };
 	void scheduleSlowRediscovery(const OverlayKey& contactkey) override { scheduleRediscovery(contactkey, slowRediscoverQueue, slowRediscoveryWaitTime); };
 
 	ContactRequestQueue::iterator scheduleRequest(ContactRequestQueue& q, KadContact&& tmpcontact);
 	/// schedule sending ULNDiscReq
-	void schedulePNDiscReq(KadContact&& tmpcontact) { scheduleRequest(PNDiscoverQueue, std::move(tmpcontact)); };
-	void scheduleGetPNReq(KadContact&& tmpcontact) { scheduleRequest(GetPNQueue, std::move(tmpcontact)); };
+	void scheduleULNDiscReq(KadContact&& tmpcontact) { scheduleRequest(ULNDiscoverQueue, std::move(tmpcontact)); };
+	void scheduleGetULNReq(KadContact&& tmpcontact) { scheduleRequest(GetULNQueue, std::move(tmpcontact)); };
 	void scheduleGetONReq(const KadContact& tmpcontact);
 	void scheduleContactCandidateProbe(KadContact&& tmpcontact) { scheduleRequest(ContactCandidateProbeQueue, std::move(tmpcontact)); }
         // schedule on demand ProbeReq
 	void scheduleOnDemandPathProbeReq(KeyRequestQueue& q, const KadContact& tmpcontact, RequestQueueElementActionType action);
-	/// schedule sending PNDiscReq
-	bool sendScheduledPNDiscReqs() { sendScheduledRequests(PNDiscoverQueue); return false; };
-	bool sendScheduledQueryRouteReqsPN() { sendScheduledRequests(GetPNQueue); return false; };
+	/// schedule sending ULNDiscReq
+	bool sendScheduledULNDiscReqs() { sendScheduledRequests(ULNDiscoverQueue); return false; };
+	bool sendScheduledQueryRouteReqsULN() { sendScheduledRequests(GetULNQueue); return false; };
 	bool sendScheduledQueryRouteReqsON() { sendScheduledRequests(GetONQueue); return false; };
-        bool sendScheduledRequests(ContactRequestQueue& q);
+	bool sendScheduledRequests(ContactRequestQueue& q);
 
 	void sendScheduledContactCandidateProbeReqs(ContactRequestQueue& q);
 	bool sendScheduledContactCandidateProbes() { sendScheduledContactCandidateProbeReqs(ContactCandidateProbeQueue); return false; }
@@ -617,8 +617,8 @@ private:
 	//@}
 	virtual void sampleStatistics (Statistics &stats) override;
 public:
-        R2Kademlia();
-  virtual void finish() override { fwdTablePathID.garbageCollect(notifyFirstSegmentSources,notifyFirstSegmentSourcesReversePath, 3*R2Kademlia::PathRefreshThreshold); RPCProtocol::finish(); stopAllTimers(); }
+		R2Kademlia();
+		virtual void finish() override { fwdTablePathID.garbageCollect(notifyFirstSegmentSources,notifyFirstSegmentSourcesReversePath, 3*R2Kademlia::PathRefreshThreshold); RPCProtocol::finish(); stopAllTimers(); }
 	/** @name policy functions called by routing table */
 	//@{
 	/** called when last contact is removed from a bucket*/
@@ -636,7 +636,7 @@ public:
 	/** called when a route got improved (shorter or repaired) */
 	virtual void onImprovement(const KadContact& contact) override;
 	/** called when physical neighbors may be out of synch with their sequence numbers **/
-	virtual void reSyncPN(const KadContact& contact, stateseqno_t expected_seqno) override;
+	virtual void reSyncULN(const KadContact& contact, stateseqno_t expected_seqno) override;
 	/** sendGetPhysicalNeighbors to contact **/
 	virtual void recheckPhysicalNeighbors(const KadContact& contact) override;
 	/** called when supposed failed link detected to initiate path probing **/
@@ -702,18 +702,18 @@ public:
 
 // default constructor
 inline R2Kademlia::R2Kademlia()
-    : routingTable(neighborTable), cmp(myOverlayKey), PNRediscoverQueue(cmp),
+    : routingTable(neighborTable), cmp(myOverlayKey), ULNRediscoverQueue(cmp),
       urgentRediscoverQueue(cmp), regularRediscoverQueue(cmp),
       slowRediscoverQueue(cmp),
-      PNDiscoverQueue(
-          "PNDiscover",
+      ULNDiscoverQueue(
+          "ULNDiscover",
           std::bind(&R2Kademlia::sendDiscoveryReq, this, ph::_1, ph::_2),
-          std::bind(&R2Kademlia::sendScheduledPNDiscReqs, this),
+          std::bind(&R2Kademlia::sendScheduledULNDiscReqs, this),
           SimTime(PNDiscoverInitialWaitTime, omnetpp::SIMTIME_US)),
-      GetPNQueue("QueryRouteReq(PN)",
+      GetULNQueue("QueryRouteReq(ULN)",
                  std::bind(&R2Kademlia::sendGetPhysicalNeighbors, this, ph::_1,
                            ph::_2),
-                 std::bind(&R2Kademlia::sendScheduledQueryRouteReqsPN, this),
+                 std::bind(&R2Kademlia::sendScheduledQueryRouteReqsULN, this),
                  SimTime(GetPNInitialWaitTime, omnetpp::SIMTIME_US)),
       GetONQueue(
           "QueryRouteReq(ON)",

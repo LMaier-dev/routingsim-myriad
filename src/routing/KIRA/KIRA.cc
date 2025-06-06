@@ -179,7 +179,7 @@ void R2Kademlia::onInitialize() {
 
 	// regularly probe for closest (overlay/ID-wise)  neighbors
 	addRandomizedTimer(std::max(probeInterval, SimTime(1000,SIMTIME_MS)), probeInterval*2, std::bind(&R2Kademlia::doProbeNeighbors, this, ph::_1));
-	// regularly probe for non PN contacts to test path liveliness and also refresh soft states in the forwarding tier
+	// regularly probe for non ULN contacts to test path liveliness and also refresh soft states in the forwarding tier
 	addRandomizedTimer(std::max(probeInterval/2, SimTime(1000,SIMTIME_MS)), probeInterval, std::bind(&R2Kademlia::doProbeContacts, this, ph::_1));
 	// regularly send FindNodeReq to _randomly_ chosen IDs, i.e., key-IDs but not node-IDs
 	// the advantage is to discover new and better contacts and/or paths
@@ -191,9 +191,9 @@ void R2Kademlia::onInitialize() {
 	// resend Hello packets to keep state sequence numbers in synch, note that is includes an exponential backoff (until maxHelloInteral, usually 30s max)
 	PNHelloTimerId= addRandomizedTimer(minHelloInterval, minHelloInterval, std::bind(&R2Kademlia::doSendHello, this, ph::_1));
 
-	// when we do not have link layer indications, we need to regularly check for dead PNs
+	// when we do not have link layer indications, we need to regularly check for dead ULNs
 	if (not useLinkLayerIndication)
-		addRandomizedTimer(3.5*maxHelloInterval,maxHelloInterval,std::bind(&R2Kademlia::doCheckPNs, this, ph::_1));
+		addRandomizedTimer(3.5*maxHelloInterval,maxHelloInterval,std::bind(&R2Kademlia::doCheckULNs, this, ph::_1));
 
         if (usePathIDs) {
 		// if PathRefreshThreshold is 20s, refresh is scheduled between [10s,30s]
@@ -227,7 +227,7 @@ void R2Kademlia::onInitialize() {
 }
 
 
-// link comes up (treat like a link layer indication "link established"), immediately send a PNHello message
+// link comes up (treat like a link layer indication "link established"), immediately send a ULNHello message
 void R2Kademlia::onConnect( nodeid_t nid ) {
 
         if (not useLinkLayerIndication)
@@ -240,7 +240,7 @@ void R2Kademlia::onConnect( nodeid_t nid ) {
 		sendToNode(nid, std::move(packet));
                 return true;
 	} );
-	// additionally, reset PNHello timer if this fires too far away in the future
+	// additionally, reset ULNHello timer if this fires too far away in the future
 	if (randomTimerDuration[PNHelloTimerId] > 3*minHelloInterval)
 		resetTimer(PNHelloTimerId, minHelloInterval);
 }
@@ -310,7 +310,7 @@ void R2Kademlia::nodeDisconnect(nodeid_t nid) {
 	if (routingTable.getContact(key)->getNodeDegree() > 1) {
 
 		// try to find an alternative route using rediscovery via the overlay
-		schedulePNRediscovery(key);
+		scheduleULNRediscovery(key);
 	}
 	// send UpdateRouteReq w/ failed link to ID-wise closest Nodes
 	// we can rely on routingTable.getContact(key) != nullptr, because of earlier setContactInvalid() call
@@ -402,7 +402,7 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 		countDropped(*packet, packet->getTarget(), erroneousSourceRoute);
 		return;
 	}
-	// must process PNDiscReq to set the neighbor table entry first
+	// must process ULNDiscReq to set the neighbor table entry first
 	if (handleIfFitting<KadULNDiscReq>(packet))
 		return;
 
@@ -637,7 +637,7 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt, simtime_t 
 			// due to broken link < b20388 d65e04 > sustituted by <f8d1e5 2550d5 d65e04>
 			// destination node is already contained in path
 			routingTable.simplifyPath(newpath, {});
-			EV_TRACE << "forwardPacket(): reroute PN, contact " << *contact << endl;
+			EV_TRACE << "forwardPacket(): reroute ULN, contact " << *contact << endl;
 			// rerouting makes this intermediate node to overlay hop
 			packet->setActive(packet->getProgress(), true);
 			packet->modRoute(newpath);
@@ -1149,7 +1149,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 				EV_WARN << "no prefix progress made" << endl;
 			}
 #endif
-                        // in rare cases, chooseNextHop may choose a PNS contact
+                        // in rare cases, chooseNextHop may choose a ULNS contact
                         // that is further away than this node (e.g., many
                         // invalid contacts in higher buckets and the query is in such a higher bucket)
                         // then we would use the first contact instead as this makes progress
@@ -1549,7 +1549,8 @@ void R2Kademlia::readRTableRsp(const KadRTableRsp& packet) {
 		// TODO optimization: isPathInteresting
 		// Examples: contact 0779b9 via path < ee2741 0de89c > + <->
 		//           contact 06cc5e via path < ee2741 0de89c > + < d9c74f >
-		EV_TRACE << "readRTableRsp: contact " <<  packet.getContact(i).shortStr() << " via " << viaPath << " + " << packet.getPath(i) << endl;
+		//EV_TRACE << "readRTableRsp: contact " <<  packet.getContact(i).shortStr() << " via " << viaPath << " + " << packet.getPath(i) << endl;
+
 		// check whether contact is not contained in path (avoid cycles)
 		if ( find(viaPath.cbegin(), viaPath.cend(), packet.getContact(i)) != viaPath.cend()
 		     or
@@ -1578,11 +1579,11 @@ void R2Kademlia::readRTableRsp(const KadRTableRsp& packet) {
 								  neighborhoodContact.getKey(), // new child node
 								  neighborhoodContact.getPathLength()+1); // distance of child node to us
 				if (nodeAdded) {
-					// newly put into vicinity, so get its PNs (unconditionally, therefore store invalid seq no)
+					// newly put into vicinity, so get its ULNs (unconditionally, therefore store invalid seq no)
 					querynode= true;
 				}
 				else {
-					// newer sequence number for existing neighbor? reget PNs
+					// newer sequence number for existing neighbor? reget ULNs
 					if (vn != nullptr and vn->stateseqno < neighborhoodContact.getStateSeqNo())
 						querynode= true;
 				}
@@ -1599,7 +1600,7 @@ void R2Kademlia::readRTableRsp(const KadRTableRsp& packet) {
 				}
 			} // endif entry within vicinitydiscovery
 
-			// only get further PNs from node if strictly smaller than discovery radius
+			// only get further ULNs from node if strictly smaller than discovery radius
 			// this should improve the routing table contacts
 			if ( querynode and ((viaPath.size() + packet.getPath(i).size() + 1) < discoveryRadius) ) {
 				KadContact neighborhoodContact(myOverlayKey,
@@ -1607,7 +1608,7 @@ void R2Kademlia::readRTableRsp(const KadRTableRsp& packet) {
 							       routingTable.concatViaPath(viaPath, packet.getPath(i)),
 							       packet.getSeqNo(i));
 
-				scheduleGetPNReq(std::move(neighborhoodContact));
+				scheduleGetULNReq(std::move(neighborhoodContact));
 			}
 		} // endif: new path not added
 	} // end for each reported contact

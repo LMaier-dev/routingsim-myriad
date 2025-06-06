@@ -434,7 +434,7 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path newpath, stateseqn
 				EV_TRACE << "resync required for " << contact->getKey().shortStr() << " new: "
 					 << stateseqno << " old: " << contact->getStateSeqNo() << endl;
 				if (not contact->getStateSeqNo().isInvalid())
-					policy->reSyncPN(*contact, stateseqno);
+					policy->reSyncULN(*contact, stateseqno);
 				return false;
 			}
 		}

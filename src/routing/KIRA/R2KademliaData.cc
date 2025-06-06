@@ -211,6 +211,7 @@ bool R2Kademlia::forwardDataPacketToNextHop(KadDataPacket_p& packet, NodePkt_p& 
 	// first we try to reroute via another neighbor from the nodeVicinityGraph
 	if (auto [found,newpath]= vicinity.findPath(nh.nextHopNode); found) {
 			EV_TRACE << "found alternative path to " << nh.nextHopNode.shortStr() << " in vicinity: " << newpath << endl;
+			//EV_TRACE << "vicinity:" << vicinity.str() << endl;
 			// find outgoing pathID for detour
 			newpath.push_back(nh.nextHopNode);
 			const auto newpid= getPathID(myOverlayKey, newpath);

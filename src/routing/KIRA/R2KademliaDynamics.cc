@@ -109,8 +109,8 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadUpdateRouteReq> packet) {
 					// now invalidate all contacts with this link
 					routingTable.invalidateContacts({contactkey, path[0]}, packet->getPathInfoAge(i));
 				}
-				else { // if I'm part of the failed link, it's a PN link, so ignore this
-					EV_TRACE << "ignored news about me or my PN" << endl;
+				else { // if I'm part of the failed link, it's a ULN link, so ignore this
+					EV_TRACE << "ignored news about me or my ULN" << endl;
 				}
 
 				if (updatePropagateStrategy == 1 or
@@ -266,7 +266,7 @@ void R2Kademlia::evalUpdateReq(const KadUpdateRouteReq* packet)
 					// now invalidate all contacts with this link
 					routingTable.invalidateContacts({contactkey, path[0]}, 0);
 				}
-				else { // if I'm part of the failed link, it's a PN link, so ignore this
+				else { // if I'm part of the failed link, it's a ULN link, so ignore this
 					EV_TRACE << "ignored news about me" << endl;
 				}
 				break;
@@ -555,7 +555,7 @@ void R2Kademlia::scheduleRediscovery(const OverlayKey& contactkey, rediscoverQue
 		return;
 	}
 
-	EV_TRACE << ((&rediscoverQ == &PNRediscoverQueue) ? "PN" :
+	EV_TRACE << ((&rediscoverQ == &ULNRediscoverQueue) ? "ULN" :
 		     ((&rediscoverQ == &slowRediscoverQueue) ? "Slow" :
 		     ((&rediscoverQ == &regularRediscoverQueue) ? "Regular" :
 		      ((&rediscoverQ == &urgentRediscoverQueue) ? "Urgent" : "Unknown"))))
@@ -563,7 +563,7 @@ void R2Kademlia::scheduleRediscovery(const OverlayKey& contactkey, rediscoverQue
 
 	rediscoverQ.push(contactkey);
 	// remember where it was queued in for next retry round
-	RediscoveryState::rediscoverQ_type rediscoverQ_type((&rediscoverQ == &PNRediscoverQueue) ? RediscoveryState::rediscoverQ_type::physicalneighbors :
+	RediscoveryState::rediscoverQ_type rediscoverQ_type((&rediscoverQ == &ULNRediscoverQueue) ? RediscoveryState::rediscoverQ_type::physicalneighbors :
 							    ((&rediscoverQ == &urgentRediscoverQueue) ? RediscoveryState::rediscoverQ_type::urgent :
 							    ((&rediscoverQ == &regularRediscoverQueue) ? RediscoveryState::rediscoverQ_type::regular : RediscoveryState::rediscoverQ_type::slow)));
 
@@ -582,12 +582,12 @@ bool R2Kademlia::rediscoverContacts(RediscoveryState::rediscoverQ_type qtype, si
 	// traverse list of scheduled contacts for rediscovery
 	// the list is sorted by ID-wise vicinity, because contacts in lower buckets are more important
 	// recheck status and set to rediscover
-	rediscoverQueueClass& rediscoverQ( (qtype==RediscoveryState::rediscoverQ_type::physicalneighbors ? PNRediscoverQueue :
+	rediscoverQueueClass& rediscoverQ( (qtype==RediscoveryState::rediscoverQ_type::physicalneighbors ? ULNRediscoverQueue :
 					    (qtype==RediscoveryState::rediscoverQ_type::urgent ? urgentRediscoverQueue :
 					     (qtype==RediscoveryState::rediscoverQ_type::regular ? regularRediscoverQueue :
 					      slowRediscoverQueue))) );
 
-	EV_TRACE << ((&rediscoverQ == &PNRediscoverQueue) ? "PN" :
+	EV_TRACE << ((&rediscoverQ == &ULNRediscoverQueue) ? "ULN" :
 		     ((&rediscoverQ == &slowRediscoverQueue) ? "slow" :
 		     ((&rediscoverQ == &regularRediscoverQueue) ? "regular" :
 		      ((&rediscoverQ == &urgentRediscoverQueue) ? "urgent" : "unknown"))))
@@ -606,7 +606,7 @@ bool R2Kademlia::rediscoverContacts(RediscoveryState::rediscoverQ_type qtype, si
 			if (rt_contact->isInvalid() or (rt_contact->isRediscovering() and rt_contact->getRDS().viaContacts.empty()))
 			{
 				if (rt_contact->isPhysicalNeighbor() and rt_contact->getNodeDegree()==1) {
-					// PN has lost its only link to us -> not useful for rediscovering
+					// ULN has lost its only link to us -> not useful for rediscovering
 					rediscoverQ.pop();
 					continue;
 				}
@@ -681,13 +681,13 @@ bool R2Kademlia::sendRediscovery(OverlayKey failedcontactkey, uint8_t maxFanOut,
 	// contact still exists
 	// get the correct queue object
 	RediscoveryState::rediscoverQ_type qtype(failedcontact->getRDS().rediscoverQtype);
-	rediscoverQueueClass& rediscoverQ( (qtype==RediscoveryState::rediscoverQ_type::physicalneighbors ? PNRediscoverQueue :
+	rediscoverQueueClass& rediscoverQ( (qtype==RediscoveryState::rediscoverQ_type::physicalneighbors ? ULNRediscoverQueue :
 					    (qtype==RediscoveryState::rediscoverQ_type::urgent ? urgentRediscoverQueue :
 					    (qtype==RediscoveryState::rediscoverQ_type::regular ? regularRediscoverQueue :
 					     slowRediscoverQueue))) );
 
 	EV_TRACE << "sendRediscovery for " << failedcontact->getKey().shortStr()
-		 << " (" << ((&rediscoverQ == &PNRediscoverQueue) ? "PN" :
+		 << " (" << ((&rediscoverQ == &ULNRediscoverQueue) ? "ULN" :
 			     ((&rediscoverQ == &slowRediscoverQueue) ? "slow" :
 			     ((&rediscoverQ == &regularRediscoverQueue) ? "regular" :
 			      ((&rediscoverQ == &urgentRediscoverQueue) ? "urgent" : "unknown"))))
@@ -748,7 +748,7 @@ bool R2Kademlia::sendRediscovery(OverlayKey failedcontactkey, uint8_t maxFanOut,
 		}
 		else {
 			// do not remove physical contacts immediately, they will stay dead for a while
-			// and garbage collected by periodically execute doCheckPNs method
+			// and garbage collected by periodically execute doCheckULNs method
                         if (failedcontact->isInvalid()) {
                                 failedcontact->setState(KadContact::State::dead);
 
@@ -830,7 +830,7 @@ R2Kademlia::sendLinkFailureNotifications(NotViaListAbsTime_t* notvialist_p, std:
 		auto contactp(routingTable.getContact(ntcit->first));
 		if (contactp == nullptr) {
 			// this should normally not happen, but may be the case
-			// direct after startup, when the PNDiscovery handshake was not finished yet (PNDiscReq still scheduled)
+			// direct after startup, when the ULNDiscovery handshake was not finished yet (ULNDiscReq still scheduled)
 			continue;
 		}
 
