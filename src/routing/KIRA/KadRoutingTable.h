@@ -83,10 +83,10 @@ private:
 
 	// regular Kademlia bucket
 	BucketType contacts;
-	// extends the bucket by _all_ physical neighbors,
+	// extends the bucket by _all_ underlay neighbors (formerly: physical neighbors),
 	// but do not fit into the regular bucket anymore
 	// this is not strictly necessary, but saves overlay hops
-	BucketType PNContacts;
+    BucketType PNContacts;
 };
 
 
@@ -111,7 +111,7 @@ public:
 	/** called when last contact is removed from a bucket */
 	virtual void onBucketEmpty(KadBucket& bucket) = 0;
 	/** called when a new contact is created in the routing table */
-        virtual void onNewContact(KadContact_p contact) = 0;
+	virtual void onNewContact(KadContact_p contact) = 0;
 	/** called for contact candidates **/
 	virtual void onContactCandidate(std::unique_ptr<KadContact> contactp) = 0;
 	/** called when path has changed, but is not improved **/
@@ -232,7 +232,7 @@ public:
 	///size_type getNumFoundEquivPaths() const { return pathSet.size(); };
 
 	/// returns a pointer random valid contact
-        KadContact_p getRandomContact() const;
+	KadContact_p getRandomContact() const;
 	// get random contact from given bucket that is valid and larger than lastContactKey
 	KadContact_p getRandomContact(const KadBucket &bucket, OverlayKey lastContactKey) const;
 	/// appends two randomly selected contacts per bucket to the given contact list
@@ -249,9 +249,9 @@ public:
 	/// do not invalidate valid contacts, but test path validity
 	void checkContacts(const link_t& failedlink);
 	/// return all PNs that have not updated their lastseen for dead period (given in ms)
-        void getDeadPNs(uint64_t deadPeriod, std::list<OverlayKey>& resultlist) const;
+	void getDeadPNs(uint64_t deadPeriod, std::list<OverlayKey>& resultlist) const;
 	/// move former PNs over to normal bucket if their direct link is gone for a period
-        void demotePNs();
+	void demotePNs();
 
 	/// invalidate all contacts with paths that contain a failed link otherNodeKey <-> failedNodeKey
 	void invalidateContacts(const link_t& failedLink, age_t failedLinkAge);
@@ -298,7 +298,7 @@ public:
 	/// removes duplicates and loops from a path
 	bool simplifyPath(kad_path& path, const OverlayKey& destination) const;
 	inline size_t getBucketCount() const { return buckets.size(); }
-        KadContactList getValidContactsFromBucket(size_t index) const;
+	KadContactList getValidContactsFromBucket(size_t index) const;
 
 	/** returns the width of a level in the accelerated lookup tree */
 	inline size_type getAccelerationFactor() const { return accelerationFactor; }
@@ -335,7 +335,7 @@ protected:
 
 	KadContact *getContactInternal(const OverlayKey& key) { return const_cast<KadContact*>(getContact(key)); }
 	bool replaceContact(KadBucket::BucketType& contacts, KadBucket::BucketType::iterator replacementCandidate, std::unique_ptr<KadContact> contact, bool path_verified);
-        bool checkForContactReplacement(KadBucket& bucket, std::unique_ptr<KadContact> contact, bool path_verified);
+	bool checkForContactReplacement(KadBucket& bucket, std::unique_ptr<KadContact> contact, bool path_verified);
 private:
 
 	const NeighborTable& neighbortable; // only for read-only access

@@ -16,16 +16,19 @@
 #ifndef __ROUTINGSIM_KIRA_H_
 #define __ROUTINGSIM_KIRA_H_
 
-#include "simtime.h"
 #ifndef NDEBUG
 #define _DEBUG_ONLY(X) X
 #else
 #define _DEBUG_ONLY(X)
 #endif
 
-#include <omnetpp.h>
+// std includes
 #include <optional>
 
+// omnetpp includes
+#include "simtime.h"
+
+// local includes
 #include "BaseTypes.h"
 #include "Protocol.h"
 #include "StatisticSample.h"
@@ -58,7 +61,7 @@ using NotViaListAbsTime_t = std::list< std::pair<link_t,simtime_t> >; // link wi
 
 enum reasoncode : uint8_t {
 	unspecified = 0,
-        hopLimitExceeded = 1, // should never happen as KIRA is loop free
+	hopLimitExceeded = 1, // should never happen as KIRA is loop free
 	nextHopUnknown = 2,   // not used
 	travelledDisabledLink = 3, // in case a packet is wrongly sent along a link that is disabled/broken
 	erroneousSourceRoute= 4,        // current hop in source route is not correct
@@ -155,7 +158,7 @@ private:
 	/// if activated the node collects path information from passing packets
 	bool pathSnooping;
 	bool sendDataPackets;
-        bool usePathIDs;
+	bool usePathIDs;
 	bool useLinkLayerIndication;
 	short probeTimerId;
 	probeStrategy_t probeStrategy = probeStrategy_none;
@@ -177,7 +180,7 @@ private:
 	simtime_t minHelloInterval;
 	simtime_t maxHelloInterval;
 	bool detailedRoutingTableStats;
-        bool detailedKIRAMessageStats;
+	bool detailedKIRAMessageStats;
 	linkFailureNotificationType linkFailureNotifications;
 	// send reachability test packets only to nodes with failed links
 	bool failureFocussedProbing;
@@ -512,6 +515,7 @@ private:
 	void forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt);
 	/// forwards a data packet based on PathID present in the packet
 	bool forwardDataPacketToNextHop(KadDataPacket_p& packet, NodePkt_p& nodePkt);
+	bool tryForwardToNextOverlayHopWithPID(KadDataPacket_p& packet, NodePkt_p& nodePkt, const OverlayKey& nextOverlayHop);
 
     /// replicate the flood packet in respective id range, returns number of replications sent
     uint32_t replicateFloodPacket(std::unique_ptr<KadFloodPacket>& packet);
@@ -813,9 +817,11 @@ std::unique_ptr<T> R2Kademlia::makePacket(const KadContact* contact, const char 
 	return packet;
 }
 
+
+// this creates a Data packet and fills in the segment PathIDs
 template<typename T>
 std::unique_ptr<T> R2Kademlia::makeDataPacket(const OverlayKey& dstNodeID, const KadContact* viacontact, const char *name) {
-	// viacontact is the next overlay hop we neeed to reach
+	// viacontact is the next overlay hop we need to reach
 	auto packet = std::make_unique<T>();
 	packet->setName(name);
 	packet->setType(KAD_Data);
@@ -824,7 +830,7 @@ std::unique_ptr<T> R2Kademlia::makeDataPacket(const OverlayKey& dstNodeID, const
 	packet->setDstNodeID(dstNodeID);
 	packet->setHopLimit(hopLimit);
 
-	// since we only forward to known contacts, we also have a PID for them
+	// since we only forward to known contacts, we also have a PID for them (unless PathSetup is in progress)
 	// this PID may only lead to the Node three hops before the contact
 	if ( auto pidentry= fwdTablePathID.NIDPIDTable.find(viacontact->getKey());
 	     pidentry != fwdTablePathID.NIDPIDTable.cend() )

@@ -40,8 +40,8 @@ nodeVicinityGraph::addNode(const OverlayKey& parentNodeKey, const OverlayKey& ch
 	if (distance > vicinityDiscoveryRadius)
 		return { false, false, foundnode };
 
-	//EV_TRACE << "vicinity.addNode(): " << childNodeKey.shortStr()
-	//	 << " parent: " << parentNodeKey.shortStr() << " distance:" << distance << endl;
+	// EV_TRACE << "vicinity.addNode(): " << childNodeKey.shortStr()
+	// 	 << " parent: " << parentNodeKey.shortStr() << " distance:" << distance << endl;
 
 	bool node_added(false);
 	bool link_added(false);
@@ -61,7 +61,7 @@ nodeVicinityGraph::addNode(const OverlayKey& parentNodeKey, const OverlayKey& ch
 			auto result= graph.insert(std::make_pair(childNodeKey, nodeVicinityNode()));
 			graph[childNodeKey].nodeKey= &(result.first)->first;
 			graph[childNodeKey].distance= distance;
-			// EV_TRACE << "vicinity.addNode(): added new node " <<  childNodeKey.shortStr() << endl;
+			EV_TRACE << "vicinity.addNode(): added new node " <<  childNodeKey.shortStr() << endl;
 			childnodeptr= &graph[childNodeKey];
 			node_added= true;
 		}
@@ -69,7 +69,7 @@ nodeVicinityGraph::addNode(const OverlayKey& parentNodeKey, const OverlayKey& ch
 			childnodeptr= &(child_it->second);
 			// in case this node is closer than before, update the distance
 			unsigned int old_distance= child_it->second.distance;
-			// EV_TRACE << "vicinity.addNode(): node exists already, distance " <<  old_distance << endl;
+			//EV_TRACE << "vicinity.addNode(): node exists already, distance " <<  old_distance << endl;
 			if (distance < old_distance) {
 				child_it->second.distance= distance;
 				link_added= true;
@@ -93,7 +93,7 @@ nodeVicinityGraph::addNode(const OverlayKey& parentNodeKey, const OverlayKey& ch
 		EV_ERROR << "cannot add child " << childNodeKey.shortStr() << ", because parent " << parentNodeKey << " not found" << endl;
 	}
 
-	//EV_TRACE << "vicinity.addNode(): " << childNodeKey.shortStr() << (modified ? " modified" : " not modified") << endl;
+	//EV_TRACE << "vicinity.addNode(): " << childNodeKey.shortStr() << (node_added ? " added node," : " node existed,") << (link_added ? " added link" : " no link added") << endl;
 
 	return { node_added, link_added, foundnode };
 }
@@ -127,7 +127,7 @@ nodeVicinityGraph::removeNode(const OverlayKey& nodeKey)
 	else {
 		EV_WARN << "vicinity.removeNode(): " << nodeKey.shortStr() << " node not found" << endl;
 	}
-		
+
 }
 
 
@@ -138,27 +138,30 @@ nodeVicinityGraph::removeNode(const OverlayKey& nodeKey)
 bool
 nodeVicinityGraph::removeLink(const OverlayKey &parentNodeKey, const OverlayKey &childNodeKey) {
 	// lookup parent node
+	//EV_TRACE << "nodeVicinityGraph::removeLink(" << parentNodeKey.shortStr() << "," << childNodeKey.shortStr() << ") called" << endl;
 	if (auto graphit= graph.find(parentNodeKey); graphit != graph.end()) {
 		nodeVicinityNode* parentnode(&graphit->second);
 		graphit = graph.find(childNodeKey);
 		if (graphit != graph.end()) {
 			nodeVicinityNode* childnode(&graphit->second);
 			if (not parentnode->children.empty()) {
-				if (auto child_it = std::lower_bound(
-					    parentnode->children.cbegin(),
-					    parentnode->children.cend(), childnode, [](auto p1, auto p2) { return *(p1->nodeKey) < *(p2->nodeKey); });
-				    child_it != parentnode->children.cend()) {
+				if (auto child_it = std::lower_bound(parentnode->children.cbegin(), parentnode->children.cend(), childnode,
+													 [](auto p1, auto p2) {
+														 return *(p1->nodeKey) < *(p2->nodeKey);
+													 });
+					child_it != parentnode->children.cend() and
+					*child_it == childnode) {
 					// remove link
 					EV_TRACE << "nodeVicinity: removing link <"
-						 << parentNodeKey.shortStr()
-						 << "," << childNodeKey.shortStr() << ">" << endl;
+							 << parentNodeKey.shortStr()
+							 << "," << childNodeKey.shortStr() << ">" << endl;
 					parentnode->children.erase(child_it);
 					// update distance if this was a direct link
 					if (parentnode->nodeKey == rootNodeKey) {
 						ASSERT(childnode->distance == 1);
 						childnode->distance= 2;
 					}
-					//EV_TRACE << "nodeVicinityGraph::removeLink(" << parentNodeKey.shortStr() << "," << childNodeKey.shortStr() << ") " << str() << endl;
+					//EV_TRACE << "nodeVicinityGraph::removeLink(" << parentNodeKey.shortStr() << "," << childNodeKey.shortStr() << ") done. " << str() << endl;
 					return true;
 				}
 			}
@@ -184,8 +187,10 @@ nodeVicinityGraph::findPath(const OverlayKey &NodeKey) const
 
 			if (destnode->distance == 1) { // direct link may still exist if 2nd hop broke
 				// use a fast binary search first
-				if (auto children_it = std::lower_bound(rootnode->children.cbegin(), rootnode->children.cend(), destnode, [](auto p1, auto p2) { return *(p1->nodeKey) < *(p2->nodeKey); });
-				    children_it != rootnode->children.cend()) {
+				if (auto children_it = std::lower_bound(rootnode->children.cbegin(), rootnode->children.cend(), destnode,
+														[](auto p1, auto p2) { return *(p1->nodeKey) < *(p2->nodeKey);});
+					children_it != rootnode->children.cend() and
+					*children_it == destnode) {
 					return {true, {}}; // found destnode
 				}
 			}

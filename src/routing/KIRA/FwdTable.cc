@@ -208,13 +208,12 @@ FwdTablePathID::delPrecalcEntry(const kad_path &path_to_remove) {
 		return;
 	PathID incomingPathID(getPathID(*ownNodeID, path_to_remove));
 	// get PID
-        if (auto pidentry = PIDFwdTable.find(incomingPathID);
-            pidentry != PIDFwdTable.end()) {
+	if (auto pidentry = PIDFwdTable.find(incomingPathID);
+		pidentry != PIDFwdTable.end()) {
 		pidentry->second.unsetPrecalc();
 		// PIDEntry may still be used by others, so let the regular routine decide about deletion
-                delPIDEntry(incomingPathID);
-        }
-
+		delPIDEntry(incomingPathID);
+	}
 }
 
 
@@ -297,7 +296,7 @@ bool FwdTablePathID::modEntry(const OverlayKey& contact_key, const kad_path& new
 		else {
 			if (priorPathID != incomingPathID)
 			{ // this is a different PID than before, but maybe it exists already (will be handled below)
-                          // set old PID entry to obsolete state if local update and not referenced anymore
+				// set old PID entry to obsolete state if local update and not referenced anymore
 				FwdTableEntry& priorfwdentry(PIDFwdTable[pidentry->second]);
 
 				// mark it obsolete (may be still in use by foreign nodes)
@@ -365,9 +364,9 @@ bool FwdTablePathID::modEntry(const OverlayKey& contact_key, const kad_path& new
 		setNIDtoPIDmapping(contact_key, incomingPathID, lastsegmentPathID);
 
 	EV_TRACE << "modEntry(): inPID:" << incomingPathID << " outPID:"
-		 << fwdentry.outgoingPathID << " 2nd PID:" << lastsegmentPathID
-		 << (additionalEntry ? " additional entry" : ((pidentry != NIDPIDTable.end()) ? " replacement" : " new"))
-		 << " path: " << newpath << " Fwdentry:" << fwdentry.str() << endl;
+			 << fwdentry.outgoingPathID << " 2nd PID:" << lastsegmentPathID
+			 << (additionalEntry ? " additional entry" : ((pidentry != NIDPIDTable.end()) ? " replacement" : " new"))
+			 << " path: " << newpath << " Fwdentry:" << fwdentry.str() << endl;
 
 	return true;
 }
@@ -419,20 +418,20 @@ void FwdTablePathID::delForeignPIDEntry(const PathID pid)
 // currently called from onContactRemoval()
 void FwdTablePathID::delEntry(KadContact_p contact)
 {
-       	if (contact == nullptr)
+	if (contact == nullptr)
 		return;
 
 	// Lookup NID -> PID entry
 	if ( auto pidentry= NIDPIDTable.find(contact->getKey()); pidentry != NIDPIDTable.end() )
 	{
 		// delete all PID entries related to this contact
-                if (PathID currentPathID = pidentry->second; currentPathID != PathID::UndefinedPathID) {
+		if (PathID currentPathID = pidentry->second; currentPathID != PathID::UndefinedPathID) {
 			if (auto pid_it = PIDFwdTable.find(pidentry->second); pid_it != PIDFwdTable.end()) {
 				FwdTableEntry& priorfwdentry= pid_it->second;
 				if (priorfwdentry.isLocal()) {
 					if (priorfwdentry.decrementReferenceCount() == 0) {
 						// last reference not a local entry anymore
-                                                priorfwdentry.unsetLocal();
+						priorfwdentry.unsetLocal();
 						if (not priorfwdentry.isPrecalc())
 							priorfwdentry.setObsolete(); // obsolete means: no longer locally used (implies referenceCounter == 0)
 						// note: entry may still be precalculated or required by foreign nodes
@@ -440,7 +439,7 @@ void FwdTablePathID::delEntry(KadContact_p contact)
 				}
 			}
 
-                        // now try to delete the PID entries
+			// now try to delete the PID entries
 			delPIDEntry(currentPathID);
 		}
 
@@ -458,7 +457,7 @@ void FwdTablePathID::delEntry(KadContact_p contact)
 		PathID incomingPathID(getPathID(*ownNodeID, newpath));
 		// try to find PID entry and unset the foreign flag
 		delForeignPIDEntry(incomingPathID);
-        }
+	}
 	updates++;
 }
 

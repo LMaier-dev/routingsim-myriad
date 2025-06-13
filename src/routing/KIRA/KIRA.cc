@@ -129,7 +129,7 @@ void R2Kademlia::onInitialize() {
 	else
 		throw cRuntimeError("unknown probe strategy %s", probeStrategyStr.c_str());
 
-        detailedRoutingTableStats = par("detailedRoutingTableStats").boolValue();
+	detailedRoutingTableStats = par("detailedRoutingTableStats").boolValue();
 	detailedKIRAMessageStats = par("detailedKIRAMessageStats").boolValue();
 	PNRediscoveryWaitTime = (simtime_t) (par("PNRediscoveryWaitTime").doubleValue() * 0.001); // given in ms
 	urgentRediscoveryWaitTime = (simtime_t) (par("urgentRediscoveryWaitTime").doubleValue() * 0.001); // given in ms
@@ -898,7 +898,7 @@ R2Kademlia::sendCtrlPacket(simtime_t time_added, KadPacket_p packet)
 KadContactList::const_iterator
 R2Kademlia::chooseNextHop(const KadContactList& contacts, const OverlayKey& target, KadContactList::const_iterator startit) {
 	// if target falls into deepest bucket, use XOR metric instead of proximity routing
-        // since the contact list is sorted by XOR, the ID-wise closest contact should be the first one
+	// since the contact list is sorted by XOR, the ID-wise closest contact should be the first one
 	if (routingTable.isInLastBucket(target)) {
 		return startit;
 	}
@@ -1561,6 +1561,7 @@ void R2Kademlia::readRTableRsp(const KadRTableRsp& packet) {
 
 		// try to add contact or update path and/or contact meta data
 		if ( not(routingTable.addPath(packet.getContact(i), packet.getPath(i), packet.getSeqNo(i), packet.getPathInfoAge(i), packet.getNodeDegree(i), viaPath)) ) {
+			// NOTE addPath() returns false for non verified paths
 			// even if contact was not interesting for RT, add it as PID entry if within vicinitydiscovery radius
 			// the following condition is correct because the target contact
 			// is not contained in (viaPath + packet.getPath(i))

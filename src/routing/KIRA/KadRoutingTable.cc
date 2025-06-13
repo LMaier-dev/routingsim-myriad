@@ -466,7 +466,7 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path newpath, stateseqn
 			// 	 << (consider_proposed_path ? contact->getProposedPath().getRawPath() : contact->getActivePath().getRawPath())
 			// 	 << endl;
 
-                        return false; // returning from here would reject the longer route
+			return false; // returning from here would reject the longer route
 
                         //}
 		}
@@ -764,7 +764,7 @@ bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, sta
 		if (not proximityNeighborSelection) {
 			// EV_DEBUG << "dropping new contact " << *contact << endl;
 			return false;
-                }
+		}
 		// PNS or other strategies decide on contact replacement
 		return checkForContactReplacement(bucket, std::move(contact), path_verified);
 	}
@@ -929,19 +929,19 @@ KadContactList KadRoutingTable::getClosestContacts(const OverlayKey& key, size_t
 
 	// the following function excludes contacts that are affected by a notvia link list
 	auto selectorValidNotViaSafeFn = [&](const KadContact& contact) -> bool {
-					     if (contact.isValid()) {
-						     for ( const auto& failedLink : notvialist) {
-							     if (contact.getPathAge() > failedLink.second and
-								 containsUndirectedLink(myKey,contact.getKey(),contact.getPath(),failedLink.first))
-							     {
-								     EV_TRACE << "Contact " << contact << " matches not via " << failedLink.first << endl;
-								     return false;
-							     }
-						     };
-						     return true;
-					     }
-					     return false;
-				     };
+		if (contact.isValid()) {
+			for ( const auto& failedLink : notvialist) {
+				if (contact.getPathAge() > failedLink.second and
+					containsUndirectedLink(myKey,contact.getKey(),contact.getPath(),failedLink.first))
+				{
+					EV_TRACE << "Contact " << contact << " matches not via " << failedLink.first << endl;
+					return false;
+				}
+			};
+			return true;
+		}
+		return false;
+	};
 
 	// selects all valid and "not via safe" contacts, i.e., contacts are excluded if occuring in the notvialist
 	auto copyValidNotViaSafeContacts = std::bind( &copySelectedContacts,ph::_1,ph::_2, selectorValidNotViaSafeFn );
@@ -1057,22 +1057,23 @@ KadContactList KadRoutingTable::getAllValidContacts(bool noPN) const
 
 KadContactList KadRoutingTable::getValidContactsFromBucket(size_t index) const
 {
-    KadContactList result{};
-    if (buckets.size() > index) {
-        auto& bucket = buckets[index];
-	result.reserve(bucketSize);
-        copyValidContacts(bucket.getContacts(), result);
-        copyValidContacts(bucket.getPNContacts(), result);
-    }
-    return result;
+	KadContactList result{};
+	if (buckets.size() > index) {
+		auto& bucket = buckets[index];
+		result.reserve(bucketSize);
+		copyValidContacts(bucket.getContacts(), result);
+		copyValidContacts(bucket.getPNContacts(), result);
+	}
+	return result;
 }
+
 
 std::vector<std::pair<KadContact_p, uint8_t>> KadRoutingTable::getReplicationContacts(
         const uint8_t floodPrefixLength, uint8_t maxSplit, bool completeBucketOpt) const 
 {
     // we are at the end. No need to flood further 
     std::vector<std::pair<KadContact_p, uint8_t>> contacts;
-    if (floodPrefixLength == 112) {
+    if (floodPrefixLength == OverlayKeyLength) {
        return contacts; 
     }
     
@@ -1087,7 +1088,7 @@ std::vector<std::pair<KadContact_p, uint8_t>> KadRoutingTable::getReplicationCon
     // what to do if contacts are invalid? after all we are responsible to inform them
     // maybe we can deflect to one of our valid contacts?
     for (auto contact: getValidContactsFromBucket(getNumBuckets() - 1)) {
-            contacts.push_back(std::make_pair(contact, 112));
+            contacts.push_back(std::make_pair(contact, OverlayKeyLength));
     }
 
     if (getNumBuckets() < 2) {
@@ -1101,7 +1102,7 @@ std::vector<std::pair<KadContact_p, uint8_t>> KadRoutingTable::getReplicationCon
     if (completeBucketOpt) {
         for (; i >= floodPrefixLength and buckets[i].size() < getSplitSize(); i--) {
             for (auto contact: getValidContactsFromBucket(i)) {
-                contacts.push_back(std::make_pair(contact, 112));
+                contacts.push_back(std::make_pair(contact, OverlayKeyLength));
             }
         }
     }
@@ -1196,7 +1197,7 @@ KadRoutingTable::demotePNs()
 		// inspect only PNbuckets
 		auto& PNbucket = bucket.getPNContactsWrite();
 
-                for (auto contact_it= PNbucket.begin(); contact_it != PNbucket.end(); ) {
+		for (auto contact_it= PNbucket.begin(); contact_it != PNbucket.end(); ) {
 			ASSERT(*contact_it != nullptr);
 			if ( (*contact_it)->isPhysicalNeighbor() and (not neighbortable.isNeighbor((*contact_it)->getKey()))
 			     and (*contact_it)->isValid() and (*contact_it)->getPathLength()>0 ) {
@@ -1401,7 +1402,7 @@ void KadRoutingTable::getOldestValidContacts(std::list<OverlayKey>& result) cons
 			}
 		}
 
-                for (auto it = bucket.getPNContacts().cbegin(); it != bucket.getPNContacts().cend(); it++) {
+		for (auto it = bucket.getPNContacts().cbegin(); it != bucket.getPNContacts().cend(); it++) {
 			if (*it != nullptr) {
 				auto kadcontactp(it->get());
 				if ( kadcontactp != nullptr and kadcontactp->getPathLength() > 0 and kadcontactp->getPathAge() > R2Kademlia::PathInfoAgeThreshold ) {
@@ -1462,8 +1463,8 @@ size_type KadRoutingTable::getNumContactsWithoutPNs() const
 // however, these improvements need to be validated
 void KadRoutingTable::updatePaths(const KadContact& improvedContact)
 {
-        // this will probably revalidate many contacts
-        bool reconnected(improvedContact.isPhysicalNeighbor() and neighbortable.size() == 1);
+	// this will probably revalidate many contacts
+	bool reconnected(improvedContact.isPhysicalNeighbor() and neighbortable.size() == 1);
 	// iterate over all buckets and contacts (not PNcontacts, because this does not make any sense)
 	for (KadBucket& b : buckets) {
 		for (auto& contact : b.getContacts()) {
@@ -1551,14 +1552,15 @@ void KadRoutingTable::updatePaths(const KadContact& improvedContact)
 			}
 		} // end for inner loop over all contacts
 	} // end for over all buckets
-        // if we reconnected with this contact send pathchecks to all revalidated 
-        // closest contacts to restore reachability
-        // TODO: potentially space this out a bit
-        if (reconnected) {
-            for (auto& contact: getClosestContacts(myKey,getSplitSize()/10, false)) {
-                    policy->onPathCheck(*contact, pathSetupCheck);
-            }
-        }
+
+	// if we reconnected with this contact send pathchecks to all revalidated
+	// closest contacts to restore reachability
+	// TODO: potentially space this out a bit
+	if (reconnected) {
+		for (auto& contact: getClosestContacts(myKey,getSplitSize()/10, false)) {
+			policy->onPathCheck(*contact, pathSetupCheck);
+		}
+	}
 }
 
 
@@ -1570,9 +1572,9 @@ void KadRoutingTable::invalidateContact(KadContact& contact, const link_t& faile
 	{
 		if (contact.getPathAge() > failedLinkAge and contact.isContainedinPath(myKey, failedLink))
 		{ // link somewhere in the path
-                  //
-                        bool lastlinkfailed((failedLink.first == contact.getKey() or failedLink.second == contact.getKey())
-                                            and contact.getNodeDegree() == 1); 
+			//
+			bool lastlinkfailed((failedLink.first == contact.getKey() or failedLink.second == contact.getKey())
+								and contact.getNodeDegree() == 1);
 
 			if (contact.isValid()) {
 
@@ -1594,15 +1596,15 @@ void KadRoutingTable::invalidateContact(KadContact& contact, const link_t& faile
 						policy->scheduleUrgentRediscovery(contact.getKey());
 					else
 						policy->scheduleSlowRediscovery(contact.getKey());
-                                }
+				}
 			}
 			else
 			if (contact.isInvalid() or contact.isRediscovering()) { // contact already invalid or rediscovering
 				// add potentially further failed link
 				contact.setInvalid(failedLink, failedLinkAge);
 				contact.updateLastSeen();
-                                // TODO stop any rediscoveries that don't have any chance of success
-                                //if (lastlinkfailed)
+				// TODO stop any rediscoveries that don't have any chance of success
+				//if (lastlinkfailed)
 			}
 		}
 	}

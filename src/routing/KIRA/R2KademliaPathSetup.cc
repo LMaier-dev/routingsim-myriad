@@ -96,7 +96,7 @@ bool R2Kademlia::handlePathSetupResponse(KadPacket_p answer, RPCState& rpcState)
 	}
 
 	EV_TRACE << "Received PathSetupRsp, setup path: " << setuppath << " to " << target.shortStr()
-		 << " original path: " << originalpath << " last segment:" << lastsegmentpath << endl;
+			 << " original path: " << originalpath << " last segment:" << lastsegmentpath << endl;
 
 	KadContact tmpcontact(myOverlayKey, target, std::move(originalpath));
 	tmpcontact.updateLastSeenTo(pathSetupRsp->getContactLastSeen());
@@ -112,12 +112,12 @@ bool R2Kademlia::handlePathSetupResponse(KadPacket_p answer, RPCState& rpcState)
 		if (contactp->getStateSeqNo() < pathSetupRsp->getContactSeqNo() or
 		    (contactp->getStateSeqNo() == pathSetupRsp->getContactSeqNo() and
 		     tmpcontact.getLastSeen() <= pathSetupRsp->getContactLastSeen())) {
-                    if (contactp->isValid() and contactp->getPathLength() < tmpcontact.getPathLength()) {
-                        // do nothing we have a valid shorter path in our contact
-			// next path setup should have been scheduled then, or PID was precomputed
-                    } else {
-			addthispath= true;
-                    }
+			if (contactp->isValid() and contactp->getPathLength() < tmpcontact.getPathLength()) {
+				// do nothing we have a valid shorter path in our contact
+				// next path setup should have been scheduled then, or PID was precomputed
+			} else {
+				addthispath= true;
+			}
 		}
 		else {
 			// Last Seen of current contact is more recent

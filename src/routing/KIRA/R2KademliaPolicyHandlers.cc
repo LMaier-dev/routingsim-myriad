@@ -82,8 +82,9 @@ R2Kademlia::onErrorPacket(KadError& error) {
 		{ // Invalidate contact as the error information is current
 
 			// find out the failed link
-		        auto reportingNode(error.getSource());
+			auto reportingNode(error.getSource());
 			link_t failedlink(reportingNode, error.getFailedNextHopNodeID());
+
 			EV_INFO << "Check for invalid contacts because of failed link " << failedlink << " in error packet" << endl;
 			// this segment or node error is current and should invalidate all affected contacts
 			// a rediscovery will be triggered automatically if necessary
@@ -145,7 +146,7 @@ void R2Kademlia::onContactRemoval(KadContact_p contact)
 		// need to remove precomputed PathIDs
 		vicinityPathIDCompletion(*contact, true);
 		// remove node from vicinity
-                vicinity.removeNode(contact->getKey());
+		vicinity.removeNode(contact->getKey());
 	}
 }
 
@@ -153,14 +154,18 @@ void R2Kademlia::onContactRemoval(KadContact_p contact)
 // this is called after invalidation of the contact, i.e., path is known to be broken
 // currently it invalidates the corresponding entry in the forwarding tier
 // and tries to find an alternative path in the vicinity if possible
-void R2Kademlia::onContactInvalidation(KadContact_p contact)
+void
+R2Kademlia::onContactInvalidation(KadContact_p contact)
 {
 	if (contact == nullptr)
 		return;
 
-	if (usePathIDs)
-		fwdTablePathID.invalidateEntry(contact);
-
+	if (usePathIDs) {
+		// we avoid invalidating the entry if it is in the last bucket (detour could be in place)
+		// drawback is that the packet is dropped later on the path if there is not detour until alternative route is in place
+		if (not routingTable.isInLastBucket(contact->getKey()))
+			fwdTablePathID.invalidateEntry(contact);
+	}
 	// if contact is in the vicinity, try to find an alternative path there first
 	// set this a proposed path and carry out an immediate path probe for the proposed path
 	if (contact->getPathLength() < nodeVicinityGraph::vicinityDiscoveryRadius and contact->getNodeDegree() > 1) {

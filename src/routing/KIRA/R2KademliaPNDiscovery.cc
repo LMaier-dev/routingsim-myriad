@@ -142,6 +142,7 @@ simtime_t R2Kademlia::sendGetPhysicalNeighbors(const KadContact& contact, Reques
 	LastPNQueryRouteReq= simTime()+delay;
 
 	// update vicinity to avoid future redundant requests
+	// NOTE this is potentially a problem because the path may not have been verified yet!
 	auto [nodeAdded, linkAdded, nodeptr]= vicinity.addNode(contact.getPath().empty() ? myOverlayKey : contact.getPath().back(), // parent
 					       contact.getKey(), // new child
 					       contact.getPathLength()+1);
@@ -668,7 +669,7 @@ R2Kademlia::sendScheduledRequests(ContactRequestQueue& q) {
 		auto rt_contact= routingTable.getContact(tmpcontact.getKey());
 
 		// check for current status of scheduled contact if locally known
-		// note: contact may have been invalidated or changed meanwhile
+		// NOTE contact may have been invalidated or changed meanwhile
 		if (rt_contact != nullptr) { // so contact still exists
 			lastseenseqno= rt_contact->getSyncPNSeqNo();
 		}
@@ -683,8 +684,9 @@ R2Kademlia::sendScheduledRequests(ContactRequestQueue& q) {
 			}
 		}
 
-		// temporary contact object in case we don't have a real one yet
-		if (rt_contact == nullptr)
+		// use temporary contact object in case we don't have a real one (or a valid one) yet:
+		// the contact may have a proposed path that is going to be probed and thus could be still invalid (esp. former ULN)
+		if (rt_contact == nullptr or rt_contact->isNotValid())
 			rt_contact= &tmpcontact;
 
 		auto expected_seqno(tmpcontact.getStateSeqNo());
@@ -703,8 +705,8 @@ R2Kademlia::sendScheduledRequests(ContactRequestQueue& q) {
 		}
 		else {
 			EV_TRACE << "Obsolete " << q.getDescription() << " for " << rt_contact->getKey().shortStr() << " avoided due to current seqno "
-				 << lastseenseqno << " expected: "
-				 <<  expected_seqno << endl;
+					 << lastseenseqno << " expected: "
+					 << expected_seqno << endl;
 		}
 		// remove the scheduled request now
 		q.pop_back();
@@ -721,7 +723,7 @@ R2Kademlia::sendScheduledRequests(ContactRequestQueue& q) {
 
 	// queue is empty now
 	// next call of this procedure will be scheduled on demand
-        q.clearScheduled();
+	q.clearScheduled();
 	return true;
 }
 

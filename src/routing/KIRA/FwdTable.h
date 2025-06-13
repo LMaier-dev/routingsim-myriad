@@ -129,7 +129,7 @@ public:
 	std::pair<bool, PathID> addPrecalcEntry(const kad_path& path_to_add) { return addEntry(path_to_add, false, false, true); }
 	std::pair<bool, PathID> addForeignEntry(const kad_path& path_to_add) { return addEntry(path_to_add, false, true, false); }
 	std::pair<bool, PathID> addLocalEntry(const kad_path& path_to_add, bool precalc) { return addEntry(path_to_add, true, false, precalc); }
-        void delPrecalcEntry(const kad_path &path_to_remove);
+	void delPrecalcEntry(const kad_path &path_to_remove);
 
 	// modify PID for path to contact
 	bool modEntry(const OverlayKey& contact_key, const kad_path& newpath, bool foreignPID);
@@ -150,7 +150,7 @@ public:
 	size_type getNumValidEntries() const;
 	size_type getNumValidLocalEntries() const;
 	size_type getNumForeignEntries() const;
-        std::tuple<size_type, size_type> getNumUsedPrecalcEntries() const;
+	std::tuple<size_type, size_type> getNumUsedPrecalcEntries() const;
 	size_type getNumUpdates() const { return updates; };
 
 	// from cObject()
