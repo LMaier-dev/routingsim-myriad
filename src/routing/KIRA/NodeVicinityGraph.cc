@@ -40,7 +40,7 @@ nodeVicinityGraph::addNode(const OverlayKey& parentNodeKey, const OverlayKey& ch
 	if (distance > vicinityDiscoveryRadius)
 		return { false, false, foundnode };
 
-	// EV_TRACE << "vicinity.addNode(): " << childNodeKey.shortStr()
+	//EV_TRACE << "vicinity.addNode(): " << childNodeKey.shortStr()
 	// 	 << " parent: " << parentNodeKey.shortStr() << " distance:" << distance << endl;
 
 	bool node_added(false);
@@ -61,7 +61,7 @@ nodeVicinityGraph::addNode(const OverlayKey& parentNodeKey, const OverlayKey& ch
 			auto result= graph.insert(std::make_pair(childNodeKey, nodeVicinityNode()));
 			graph[childNodeKey].nodeKey= &(result.first)->first;
 			graph[childNodeKey].distance= distance;
-			EV_TRACE << "vicinity.addNode(): added new node " <<  childNodeKey.shortStr() << endl;
+			//EV_TRACE << "vicinity.addNode(): added new node " <<  childNodeKey.shortStr() << endl;
 			childnodeptr= &graph[childNodeKey];
 			node_added= true;
 		}
