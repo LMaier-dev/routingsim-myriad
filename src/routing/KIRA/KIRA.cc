@@ -57,28 +57,28 @@ void R2Kademlia::onInitialize() {
 	OverlayKey::random(myOverlayKey, getRNG(0));
 	fwdTablePathID.setOwnNodeID(&myOverlayKey);
 	vicinity.setRoot(myOverlayKey);
-        getKadObserver().registerUp(myOverlayKey, node().getNodeId());
+	getKadObserver().registerUp(myOverlayKey, node().getNodeId());
 
 	// bind KIRA_CTRL_PACKET_TYPE
 	// interval bounds for random delay per control message
 	const uint64_t minCtrlPlaneProcessingDelay = par("minKIRAControlPlaneProcessingDelay").intValue(); // in ns
-        const uint64_t maxCtrlPlaneProcessingDelay = par("maxKIRAControlPlaneProcessingDelay").intValue(); // in ns
+	const uint64_t maxCtrlPlaneProcessingDelay = par("maxKIRAControlPlaneProcessingDelay").intValue(); // in ns
 	const simtime_t maxCPWaitTime = SimTime(par("KIRAControlPlaneProcessingQueueDelayLimit").intValue(), omnetpp::SIMTIME_MS);
-        ASSERT(minCtrlPlaneProcessingDelay <= maxCtrlPlaneProcessingDelay);
-        if (maxCtrlPlaneProcessingDelay > 0 and minCtrlPlaneProcessingDelay <= maxCtrlPlaneProcessingDelay) {
+	ASSERT(minCtrlPlaneProcessingDelay <= maxCtrlPlaneProcessingDelay);
+	if (maxCtrlPlaneProcessingDelay > 0 and minCtrlPlaneProcessingDelay <= maxCtrlPlaneProcessingDelay) {
 		bind(KAD_CTRL_PACKET_TYPE,
 		     std::make_unique<ProtocolPacketQueue>( [this,minCtrlPlaneProcessingDelay,maxCtrlPlaneProcessingDelay](void){ return uniform(SimTime(minCtrlPlaneProcessingDelay,SIMTIME_NS),SimTime(maxCtrlPlaneProcessingDelay,SIMTIME_NS)); }, maxCPWaitTime.inUnit(SIMTIME_NS)/maxCtrlPlaneProcessingDelay ));
-        } else {
+	} else {
 		bind(KAD_CTRL_PACKET_TYPE);
 	}
 
 	// bind KIRA_DATA_PACKET_TYPE
-        const uint64_t minDataPlaneProcessingDelay = par("minKIRADataPlaneProcessingDelay").intValue();
-        const uint64_t maxDataPlaneProcessingDelay = par("maxKIRADataPlaneProcessingDelay").intValue();
-        if (maxDataPlaneProcessingDelay > 0 and minDataPlaneProcessingDelay <= maxDataPlaneProcessingDelay ) {
+	const uint64_t minDataPlaneProcessingDelay = par("minKIRADataPlaneProcessingDelay").intValue();
+	const uint64_t maxDataPlaneProcessingDelay = par("maxKIRADataPlaneProcessingDelay").intValue();
+	if (maxDataPlaneProcessingDelay > 0 and minDataPlaneProcessingDelay <= maxDataPlaneProcessingDelay ) {
 		bind(KAD_DATA_PACKET_TYPE,
 		     std::make_unique<ProtocolPacketQueue>( [this,minDataPlaneProcessingDelay,maxDataPlaneProcessingDelay](void){ return uniform(SimTime(minDataPlaneProcessingDelay,SIMTIME_NS), SimTime(maxDataPlaneProcessingDelay,SIMTIME_NS)); }, SimTime(10, SIMTIME_MS).inUnit(SIMTIME_NS)/maxDataPlaneProcessingDelay) );
-        } else {
+	} else {
 		bind(KAD_DATA_PACKET_TYPE);
 	}
 
@@ -100,8 +100,8 @@ void R2Kademlia::onInitialize() {
 	proximityRouting = par("proximityRouting").boolValue();
 	hopLimit = (uint) par("hopLimit").intValue();
 	pathSnooping = par("pathSnooping").boolValue();
-        sendDataPackets = par("sendDataPackets").boolValue();
-        usePathIDs = par("usePathIDs").boolValue();
+	sendDataPackets = par("sendDataPackets").boolValue();
+	usePathIDs = par("usePathIDs").boolValue();
 	useLinkLayerIndication = par("useLinkLayerIndication").boolValue();
 	if (sendDataPackets and not usePathIDs)
 	{
@@ -143,19 +143,19 @@ void R2Kademlia::onInitialize() {
 	updateMaxNotification = (uint) par("updateMaxNotification").intValue();
 	updateNotifyStrategy = (uint) par("updateNotifyStrategy").intValue();
 	updatePropagateStrategy = (uint) par("updatePropagateStrategy").intValue();
-        switch ((uint)par("linkFailureNotifications").intValue()) {
-        case lfn_floodonly:
-		linkFailureNotifications= lfn_floodonly;
-		break;
-        case lfn_flood_and_directPID:
-		linkFailureNotifications= lfn_flood_and_directPID;
-		break;
+	switch ((uint)par("linkFailureNotifications").intValue()) {
+		case lfn_floodonly:
+			linkFailureNotifications= lfn_floodonly;
+			break;
+		case lfn_flood_and_directPID:
+			linkFailureNotifications= lfn_flood_and_directPID;
+			break;
         case lfn_full:
-		linkFailureNotifications= lfn_full;
-		break;
-        default:
-		linkFailureNotifications= lfn_none;
-        };
+			linkFailureNotifications= lfn_full;
+			break;
+		default:
+			linkFailureNotifications= lfn_none;
+	};
 	failureFocussedProbing = par("failureFocussedProbing").boolValue();
 	addGratuitousContacts = par("addGratuitousContacts").boolValue();
 	floodStrideFactor = par("floodStrideFactor").intValue();
@@ -195,7 +195,7 @@ void R2Kademlia::onInitialize() {
 	if (not useLinkLayerIndication)
 		addRandomizedTimer(3.5*maxHelloInterval,maxHelloInterval,std::bind(&R2Kademlia::doCheckULNs, this, ph::_1));
 
-        if (usePathIDs) {
+	if (usePathIDs) {
 		// if PathRefreshThreshold is 20s, refresh is scheduled between [10s,30s]
 		addRandomizedTimer(SimTime(PathRefreshThreshold/2,SIMTIME_MS), SimTime(PathRefreshThreshold,SIMTIME_MS), std::bind(&R2Kademlia::doPathRefresh, this, ph::_1));
 		// garbageCollection would happen after 90s + every 10s
@@ -213,9 +213,9 @@ void R2Kademlia::onInitialize() {
 
 	// Reachability Test: check whether other _existing_ nodes can be reached (uses KadObserver)
 	// this is additional artificial test traffic to evaluate the routing protocol and not necessary for its operation
-        addRandomizedTimer(probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doReachabilityTest, this, ph::_1));
+	addRandomizedTimer(probeInterval*1.5, probeInterval, std::bind(&R2Kademlia::doReachabilityTest, this, ph::_1));
 
-        // expose the following variables in GUI for inspection
+	// expose the following variables in GUI for inspection
 	WATCH(myOverlayKey);
 	WATCH(lsseqno);
 	WATCH(neighborTable);
@@ -230,15 +230,15 @@ void R2Kademlia::onInitialize() {
 // link comes up (treat like a link layer indication "link established"), immediately send a ULNHello message
 void R2Kademlia::onConnect( nodeid_t nid ) {
 
-        if (not useLinkLayerIndication)
-          return;
+	if (not useLinkLayerIndication)
+		return;
 
 	// send a hello packet to new neighbor after some random delay (average minHelloInterval)
 	addOneShotTimer(uniform(minHelloInterval/2,3*minHelloInterval/2), [this,nid](short int ignored)->bool {
 		auto packet(makeHelloPacket());
 		countSent(*(static_cast<KadHello*>(packet->getEncapsulatedPacket())));
 		sendToNode(nid, std::move(packet));
-                return true;
+		return true;
 	} );
 	// additionally, reset ULNHello timer if this fires too far away in the future
 	if (randomTimerDuration[PNHelloTimerId] > 3*minHelloInterval)
@@ -261,11 +261,11 @@ void R2Kademlia::nodeDisconnect(nodeid_t nid) {
 
 	OverlayKey key = getKadObserver().getNodeKey(nid);
 	ASSERT(not key.isUnspecified());
-        if (neighborTable.getNodeId(key) != nid)
+	if (neighborTable.getNodeId(key) != nid)
 		return;
 	//ASSERT(neighborTable.getNodeId(key) == nid );
-
-        // change in physical neighborhood increases the Sequence Number
+	EV_TRACE << "disconnect of node " << key.shortStr() << " (" << nid << ")" << endl;
+	// change in physical neighborhood increases the Sequence Number
 	incLSSeqNo();
 	neighborTable.removeNeighbor(key);
 	// remove link from vicinity

@@ -32,7 +32,7 @@ NodePkt_p R2Kademlia::makeHelloPacket()
 // bidirectional reachability is confirmed
 // in case the link was temporarily down: rediscover neighbor
 void R2Kademlia::handlePacket(KadHello_p packet) {
-	EV << "received hello packet from " << packet->getSource().shortStr() << " SSeq#" << packet->getStateSeqNo() << endl;
+	EV << "received hello packet from " << packet->getSource().shortStr() << " (" << packet->getSourceId() << ") SSeq#" << packet->getStateSeqNo() << endl;
 
 	countReceived(*packet);
 
@@ -69,18 +69,19 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 	else
 	{ // new underlay/physical neighbor, first contact: either wait for ULNDiscReq or send one
 
-                // connected or reconnected to first neighbor reset join timer
-                if (neighborTable.empty()) {
-                    resetTimer(probeTimerId, SimTime(ProbeSelfMinInterval,SIMTIME_MS));
-                }
+		// connected or reconnected to first neighbor reset join timer
+		if (neighborTable.empty()) {
+			resetTimer(probeTimerId, SimTime(ProbeSelfMinInterval,SIMTIME_MS));
+		}
 
 		// we need to add the node to our neighbortable, because we need to send a Req
 		neighborTable.addNeighbor(packet->getSource(), packet->getSourceId());
 
 		// add node to vicinity
-		auto [node_added, link_added, nodeptr]= vicinity.addNode(myOverlayKey, // parent
-						  packet->getSource(), // new child
-						  1);
+		auto [node_added, link_added, nodeptr] =
+			vicinity.addNode(myOverlayKey, // parent
+							 packet->getSource(), // new child
+							 1);
 
 		if (usePathIDs and (node_added or link_added)) {
 			fwdTablePathID.addPrecalcEntry({neighborcontact.getKey()});
@@ -143,9 +144,10 @@ simtime_t R2Kademlia::sendGetPhysicalNeighbors(const KadContact& contact, Reques
 
 	// update vicinity to avoid future redundant requests
 	// NOTE this is potentially a problem because the path may not have been verified yet!
-	auto [nodeAdded, linkAdded, nodeptr]= vicinity.addNode(contact.getPath().empty() ? myOverlayKey : contact.getPath().back(), // parent
-					       contact.getKey(), // new child
-					       contact.getPathLength()+1);
+	auto [nodeAdded, linkAdded, nodeptr] =
+		vicinity.addNode(contact.getPath().empty() ? myOverlayKey : contact.getPath().back(), // parent
+						 contact.getKey(), // new child
+						 contact.getPathLength()+1);
 	if (usePathIDs and (nodeAdded or linkAdded)) {
 		auto newpath(contact.getPath());
 		newpath.push_back(contact.getKey());
