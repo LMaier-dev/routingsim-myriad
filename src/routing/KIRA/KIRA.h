@@ -245,7 +245,7 @@ private:
 	ContactRequestQueue GetULNQueue;      // for sending QueryRouteReq (Physical Neighbors)
 	ContactRequestQueue GetONQueue;      // for sending QueryRouteReq (Overlay Neighbors)
 	ContactRequestQueue ContactCandidateProbeQueue; // for probing contact candidates
-        KeyRequestQueue OnDemandPathProbeQueue; // for sending path probes on demand (in contrast to periodical ones)
+	KeyRequestQueue OnDemandPathProbeQueue; // for sending path probes on demand (in contrast to periodical ones)
 
 	RateLimitedQueue FloodQueue;
 	RateLimitedQueue NotifyQueue;

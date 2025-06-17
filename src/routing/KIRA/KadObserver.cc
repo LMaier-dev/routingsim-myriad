@@ -21,6 +21,8 @@
 #include "KadObserver.h"
 #include "NetworkManager.h"
 
+#include <format>
+
 #ifdef R2K_RT_EXPORT
 #include <fstream>
 #endif
@@ -279,6 +281,11 @@ void KadObserver::recordMessageScalars() {
 		mod->recordScalar("overlayHops", info.overlayHops);
 		mod->recordScalar("distance", info.distance);
 		mod->recordScalar("prefixDist", info.prefixDist);
+		uint i= 0;
+		for (auto e : info.overlaydistVec) {
+			mod->recordScalar(std::format("overlayPathLength{}", i).c_str(), e);
+			i++;
+		}
 	}
 	i = 0;
 	std::string messageDroppedStr{"messageDropped"};
@@ -520,20 +527,23 @@ void KadObserver::registerPacketDelivered(KadPacket& packet) {
 		EV_ERROR << "missing keys on packet" << endl;
 		return;
 	}
-        MessageDeliveryInfo info {
-          packet.getProgress(), packet.getOverlayHops(),
-	  getPhysicalDistance(fromKey, toKey),
-	  fromKey.getLength() - fromKey.sharedPrefixLength(toKey)
-        };
 
-        // note that the physicalDistance might have changed while the packet
-        // was inflight in scenarios with a lot of link churn (e.g., MANETs),
-        // so that the physical distance may not be accurate anymore
-        // when the packet arrives, compared to when the packets started.
-        // This inconsistency cannot be solved reliably. We just ignore
+	MessageDeliveryInfo info {
+		packet.getProgress(),
+		packet.getOverlayHops(),
+		getPhysicalDistance(fromKey, toKey),
+		fromKey.getLength() - fromKey.sharedPrefixLength(toKey),
+		packet.getOverlayPathLengths()
+	};
+
+	// note that the physicalDistance might have changed while the packet
+	// was inflight in scenarios with a lot of link churn (e.g., MANETs),
+	// so that the physical distance may not be accurate anymore
+	// when the packet arrives, compared to when the packets started.
+	// This inconsistency cannot be solved reliably. We just ignore
 	// "negative" values here.
 
-        //EV_TRACE << "packetDelivered: hops=" << info.hops << " distance=" << info.distance << endl;
+	//EV_TRACE << "packetDelivered: hops=" << info.hops << " distance=" << info.distance << endl;
 	ASSERT(info.overlayHops > 0);
 	histograms[hopCount]->collect(info.hops);
 	histograms[distance]->collect(info.distance);
@@ -563,12 +573,14 @@ void KadObserver::registerPacketDelivered(KadDataPacket& packet) {
 		EV_ERROR << "missing keys on packet" << endl;
 		return;
 	}
-        MessageDeliveryInfo info {
-          getR2Kademlia(fromKey).getHopLimitDefault() - packet.getHopLimit(),
-              packet.getOverlayHops(), getPhysicalDistance(fromKey, toKey),
-	      fromKey.getLength() - fromKey.sharedPrefixLength(toKey)
+
+	MessageDeliveryInfo info {
+		getR2Kademlia(fromKey).getHopLimitDefault() - packet.getHopLimit(),
+		 packet.getOverlayHops(), getPhysicalDistance(fromKey, toKey),
+		 fromKey.getLength() - fromKey.sharedPrefixLength(toKey),
+		 {} // data packets have no source route, so no way to record this
 	};
-	
+
 	ASSERT(info.overlayHops > 0);
 	histograms[hopCountData]->collect(info.hops);
 	histograms[distanceData]->collect(info.distance);

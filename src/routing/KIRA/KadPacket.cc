@@ -215,6 +215,21 @@ KadPacket::getActiveVector() const {
 }
 
 
+std::vector<uint> KadPacket::getOverlayPathLengths() const {
+	std::vector<uint> result; // even larger networks have not very often a larger number of overlay hops
+	uint current_pathlen = 0;
+	size_t path_start = 0;
+	for (size_t i = 0; i < getActiveArraySize(); i++) {
+		if (getActive(i) and i > path_start) {
+			// next overlay hop found
+			result.push_back(i - path_start);
+			path_start= i;
+		}
+	}
+	return result;
+}
+
+
 // failedlinkage should always be set to 0 by nodes that are one of the failedLink nodes,
 // i.e., they have current information that the link is currently down
 void KadPacket::addNotViaLink(const link_t& failedlink, age_t failedlinkAge) {

@@ -67,6 +67,7 @@ struct MessageDeliveryInfo {
 	uint overlayHops = 0;
 	uint distance = 0;
 	uint prefixDist = 0;
+	vector<uint> overlaydistVec;
 };
 
 

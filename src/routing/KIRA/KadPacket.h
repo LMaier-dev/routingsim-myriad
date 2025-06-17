@@ -82,10 +82,10 @@ public:
 	void setReturnPathFrom(const KadPacket& other);
 	/// same as setReturnPathFrom, but shortens the path if possible (returns true if it was)
 	bool setSimplifiedReturnPathFrom(const KadPacket& other);
-        /// get active as vector
+	/// get active as vector
 	std::vector<bool> getActiveVector() const;
-        //@}
-
+	std::vector<uint> getOverlayPathLengths() const;
+	//@}
 	/** @name inline utility functions */
 	//@{
 	// --- inline utility foo
