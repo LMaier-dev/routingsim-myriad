@@ -368,6 +368,20 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path newpath, stateseqn
 	// if paths diverge, they will do this more likely at their end
 	bool identical_path(not equivalent_path ? false : are_equal_r(newpath, path_to_consider.getRawPath()));
 
+	// Additional OPTIMIZATION
+	// set condition for potential later repair of broken ULN link
+	bool check_for_ULN_repair(false);
+	KadContact* nexthop_contactp= nullptr;
+	if (contact->isInvalid() and contact->getPathLength() == 1) { // current contact was a two hop contact
+		auto &nexthop_contact_key = contact->getPath()[0];
+		if (not neighbortable.isNeighbor(nexthop_contact_key)) { // next hop is not available directly
+                  nexthop_contactp = getContactMutable(nexthop_contact_key);
+			if (nexthop_contactp and nexthop_contactp->isNotValid()) { // next hop maybe just rediscovering
+				check_for_ULN_repair= true;
+			}
+		}
+	}
+
 	if ( not (shorter_path
 		  or
 		  newer_seqno
@@ -585,7 +599,7 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path newpath, stateseqn
 		}
 	}
 	//else // new path is identical with old path
-		// need to set this to valid state again
+	// need to set this to valid state again
 
 
 	// update lastseen to that of the originator, but only if we are sure to have validated the full path
@@ -595,7 +609,10 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path newpath, stateseqn
 			contact->setStateSeqNo(stateseqno);
 		contact->setNodeDegree(nodeDegree);
 		contact->setValid();
-		contact->clearProposedPath();
+		// clear the proposed path if verified path is at least as good
+		// otherwise a probe may be sent later to install the shorter proposed path
+		if (contact->getActivePath().length() < contact->getProposedPath().length())
+			contact->clearProposedPath();
 		contact->getActivePathMod().updateLastValidatedTo(simTime()-SimTime(pathinfo_age,SIMTIME_MS));
 		if (identical_path) // need to update path age
 			contact->updateLastSeenTo(simTime()-SimTime(pathinfo_age,SIMTIME_MS));
@@ -609,9 +626,20 @@ bool KadRoutingTable::addPath(const OverlayKey& key, kad_path newpath, stateseqn
 	// do something on improved path according to policy
 	// (only if path has been improved actually)
 	if (pathimproved and path_verified) {
-		ASSERT(contact->proposedPathDefined() == false);
 		policy->onImprovement(*contact);
-
+		// special check for longer next hop detours that may repair ULN
+		if (check_for_ULN_repair and nexthop_contactp) {
+			if (auto proposed_path = nexthop_contactp->getProposedPath();
+				proposed_path.isUndefined()) {
+				// proposed repair path is via current contact
+				auto repairpath(contact->getPath());
+				repairpath.push_back(contact->getKey());
+				auto repairpathHashSum= HashSum(myKey, repairpath, nexthop_contactp->getKey());
+				EV_TRACE << "next hop repair: scheduling path probe for " << repairpath << " to " << *nexthop_contactp << endl;
+				nexthop_contactp->setProposedPath(std::move(repairpath), std::move(repairpathHashSum));
+				policy->onPathCheck(*nexthop_contactp, probeProposedPath | pathSetupCheck);
+			}
+		}
 		// try to improve other paths with newly improved contact path
 		updatePaths(*contact);
 	}
@@ -1379,7 +1407,7 @@ void KadRoutingTable::getOldestValidContacts(std::list<OverlayKey>& result) cons
 	for (auto& bucket : buckets)
 	{
 		KadContact_p oldest(nullptr);
-                KadContact_p secondoldest(nullptr);
+		KadContact_p secondoldest(nullptr);
 
 		for (auto it = bucket.getContacts().cbegin(); it != bucket.getContacts().cend(); it++) {
 			if (*it != nullptr) {
@@ -1499,8 +1527,8 @@ void KadRoutingTable::updatePaths(const KadContact& improvedContact)
 						}
 
 						bool pathimproved((contact->isInvalid() and pathrepaired)
-								  or
-								  (newpath != contact->getPath() and newpath.size() < contact->getPath().size()));
+										  or
+										  (newpath != contact->getPath() and newpath.size() < contact->getPath().size()));
 
 						// NOTE: new path may contain cycles, must remove them
 						if (pathimproved) {
@@ -1524,14 +1552,14 @@ void KadRoutingTable::updatePaths(const KadContact& improvedContact)
 						else
 						if (contact->isInvalid() and pathrepaired) {
 							// the contact will stay in rediscovering, but we check this possibility for repair
-                                                        if (contact ->proposedPathDefined()) {
-                                                                if (improvedContact.getPathAge() < contact->getProposedPath().getAge() and newpath.size() < contact->getProposedPath().length()) {
+							if (contact->proposedPathDefined()) {
+								if (improvedContact.getPathAge() < contact->getProposedPath().getAge() and newpath.size() < contact->getProposedPath().length()) {
 									// update the proposed path
 									contact->setProposedPath(newpath, HashSum(myKey,newpath,contact->getKey()));
 									policy->onPathCheck(*contact, probeProposedPath | pathSetupCheck);
-                                                                }
-                                                        }
-                                                        else {
+								}
+							}
+							else {
 								contact->setProposedPath(newpath, HashSum(myKey,newpath,contact->getKey()));
 								policy->onPathCheck(*contact, probeProposedPath | pathSetupCheck);
 							}

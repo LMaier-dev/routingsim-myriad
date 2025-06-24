@@ -17,7 +17,7 @@ void R2Kademlia::scheduleOnDemandPathProbeReq(KeyRequestQueue& q, const KadConta
 	}
 	else
 	{ // it == q.end() or it->getKey() != tmpcontact.getKey()
-                // entry does not exist yet, so insert it at the right place
+		// entry does not exist yet, so insert it at the right place
 		q.insert(it, std::make_pair(tmpcontact.getKey(),action));
 	}
 
