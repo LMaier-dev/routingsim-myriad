@@ -44,10 +44,10 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 
 		if (auto nodep= vicinity.getNode(packet->getSource()); nodep != nullptr) {
 			if (nodep->stateseqno < packet->getStateSeqNo()) {
-				EV_TRACE << "check for resync" << endl;
+				//EV_TRACE << "check for resync" << endl;
 				// already known neighbor, just check for seqno synchronization (also updates lastseen)
 				checkForResync(packet->getSource(), packet->getStateSeqNo());
-                        }
+			}
 			else {
 				// update lastseen nevertheless
 				if (KadContact *contact_p = const_cast<KadContact *>(routingTable.getContact(packet->getSource()));
@@ -85,7 +85,7 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 
 		if (usePathIDs and (node_added or link_added)) {
 			fwdTablePathID.addPrecalcEntry({neighborcontact.getKey()});
-			vicinityPathIDCompletion(neighborcontact);
+			vicinityPathIDCompletion(myOverlayKey, neighborcontact.getKey());
 		}
 
 		// use this deterministic strategy to save redundant ULNDiscReq/Rsp exchanges
@@ -144,15 +144,16 @@ simtime_t R2Kademlia::sendGetPhysicalNeighbors(const KadContact& contact, Reques
 
 	// update vicinity to avoid future redundant requests
 	// NOTE this is potentially a problem because the path may not have been verified yet!
+	auto parentNodeKey= contact.getPath().empty() ? myOverlayKey : contact.getPath().back();
 	auto [nodeAdded, linkAdded, nodeptr] =
-		vicinity.addNode(contact.getPath().empty() ? myOverlayKey : contact.getPath().back(), // parent
+		vicinity.addNode(parentNodeKey, // parent
 						 contact.getKey(), // new child
 						 contact.getPathLength()+1);
 	if (usePathIDs and (nodeAdded or linkAdded)) {
 		auto newpath(contact.getPath());
 		newpath.push_back(contact.getKey());
 		fwdTablePathID.addPrecalcEntry(newpath);
-		vicinityPathIDCompletion(contact);
+		vicinityPathIDCompletion(parentNodeKey, contact.getKey());
 	}
 	// return delay for next call
 	return delay;
@@ -243,15 +244,15 @@ simtime_t R2Kademlia::sendDiscoveryReq(const KadContact& contact, RequestQueueEl
 	simtime_t delay(0);
 
 	// default (see R2Kademlia.h): 10000µs is 10ms, so the rate limit is 100 ULNDiscReqs/s
-	static const simtime_t mindelay(SimTime(PNDiscoverWaitTime,SIMTIME_US));
-	if  ( simTime() < LastPNDiscReq ) {
+	static const simtime_t mindelay(SimTime(ULNDiscoverWaitTime,SIMTIME_US));
+	if  ( simTime() < LastULNDiscReq ) {
 		// last was scheduled in future, schedule it mindelay behind that
-		delay= LastPNDiscReq-simTime()+mindelay;
+		delay= LastULNDiscReq-simTime()+mindelay;
 	}
 	else { // last send in past
-		if (simTime()-LastPNDiscReq < mindelay) {
+		if (simTime()-LastULNDiscReq < mindelay) {
 			// we are too early, so delay until mindelay is fulfilled
-			delay= LastPNDiscReq+mindelay-simTime();
+			delay= LastULNDiscReq+mindelay-simTime();
 		}
 		// otherwise no extra delay necessary
 	}
@@ -265,7 +266,7 @@ simtime_t R2Kademlia::sendDiscoveryReq(const KadContact& contact, RequestQueueEl
 		0
 	);
 
-	LastPNDiscReq= simTime()+delay;
+	LastULNDiscReq= simTime()+delay;
 
 	return delay;
 }
@@ -288,10 +289,9 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadULNDiscReq> packet) {
 		// set or update the sequence number
 		nodeptr->stateseqno= packet->getStateSeqNo();
 	}
-	KadContact pncontact(myOverlayKey, packet->getSource(), kad_path());
 	if (usePathIDs and (node_added or link_added)) {
-		fwdTablePathID.addPrecalcEntry({pncontact.getKey()});
-		vicinityPathIDCompletion(pncontact);
+		fwdTablePathID.addPrecalcEntry({packet->getSource()});
+		vicinityPathIDCompletion(myOverlayKey, packet->getSource());
 	}
 
 	// add physical contact to routing table or update sequence number, last seen, and LastDirectULContact
@@ -313,11 +313,10 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadULNDiscReq> packet) {
 								  packet->getPhyNeighbor(i),
 								  2);
 				if (usePathIDs and (node_added or link_added)) {
-					KadContact nncontact(myOverlayKey, packet->getPhyNeighbor(i), { {packet->getSource()} });
 					auto newpath(path);
-					newpath.push_back(nncontact.getKey());
+					newpath.push_back(packet->getPhyNeighbor(i));
 					fwdTablePathID.addPrecalcEntry(newpath);
-					vicinityPathIDCompletion(nncontact);
+					vicinityPathIDCompletion(packet->getSource(), packet->getPhyNeighbor(i));
 				}
 			}
 		}

@@ -1574,9 +1574,9 @@ void R2Kademlia::readRTableRsp(const KadRTableRsp& packet) {
 							       packet.getContact(i),
 							       routingTable.concatViaPath(viaPath, packet.getPath(i)),
 							       packet.getSeqNo(i));
-
+				auto& parentNodeKey= neighborhoodContact.getPath().empty() ? myOverlayKey : neighborhoodContact.getPath().back();
 				// try to add node to vicinity, but maybe already there
-				auto [nodeAdded, linkAdded, vn]= vicinity.addNode(neighborhoodContact.getPath().empty() ? myOverlayKey : neighborhoodContact.getPath().back(), // parent node
+				auto [nodeAdded, linkAdded, vn]= vicinity.addNode(parentNodeKey, // parent node
 								  neighborhoodContact.getKey(), // new child node
 								  neighborhoodContact.getPathLength()+1); // distance of child node to us
 				if (nodeAdded) {
@@ -1597,7 +1597,7 @@ void R2Kademlia::readRTableRsp(const KadRTableRsp& packet) {
 					auto pathtoadd(neighborhoodContact.getPath());
 					pathtoadd.push_back(neighborhoodContact.getKey());
 					fwdTablePathID.addPrecalcEntry(pathtoadd);
-					vicinityPathIDCompletion(neighborhoodContact);
+					vicinityPathIDCompletion(parentNodeKey, neighborhoodContact.getKey());
 				}
 			} // endif entry within vicinitydiscovery
 

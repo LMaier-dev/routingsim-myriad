@@ -255,7 +255,7 @@ private:
 	bool pathSetupScheduled= false;
 
 	// timestamp for outstanding ULNDiscReqs
-	simtime_t LastPNDiscReq;
+	simtime_t LastULNDiscReq;
 	// timestamp for outstanding PNQueryRouteReqs
 	simtime_t LastPNQueryRouteReq;
 	// timestamp for outstanding ONQueryRouteReqs
@@ -402,8 +402,8 @@ private:
 	/// remove path ID if possible
 	void checkForPathTeardown(const KadPacket& packet);
 
-	/// for a new neighborhoodcontact, install/remove any known paths within discoveryRadius
-	void vicinityPathIDCompletion(const KadContact& neighborhoodContact, bool removePrecalcEntry= false);
+	/// for a new node in the vicinity (link: parentNode->checkNode), install/remove any known paths within discoveryRadius
+	void vicinityPathIDCompletion(const OverlayKey& parentNodeKey, const OverlayKey& checkNodeKey, bool removePrecalcEntry= false);
 
 	/// call when a node is disconnected
 	void nodeDisconnect(nodeid_t nid);
@@ -688,8 +688,8 @@ public:
 	static constexpr unsigned long ProbeSelfMinInterval = 250; // ms
 	static constexpr unsigned long notifyLinkFailureWaitTime = 10UL; // ms
 	static constexpr unsigned long RediscoveryNextTryWaitTime = 100UL; // ms
-	static constexpr unsigned long PNDiscoverInitialWaitTime = 1'000UL; // µs (1ms)
-	static constexpr unsigned long PNDiscoverWaitTime = 10'000UL; // µs (10ms ~ 100 Requests/s)
+	static constexpr unsigned long ULNDiscoverInitialWaitTime = 10'000UL; // µs (10ms)
+	static constexpr unsigned long ULNDiscoverWaitTime = 100'000UL; // µs (100ms ~ 10 Requests/s)
 	static constexpr unsigned long GetPNInitialWaitTime = 10'000UL; // µs
 	static constexpr unsigned long GetPNWaitTime = 20'000UL; // µs (50 Requests/s)
 	static constexpr unsigned long GetONInitialWaitTime = 20'000UL; // µs
@@ -713,7 +713,7 @@ inline R2Kademlia::R2Kademlia()
           "ULNDiscover",
           std::bind(&R2Kademlia::sendDiscoveryReq, this, ph::_1, ph::_2),
           std::bind(&R2Kademlia::sendScheduledULNDiscReqs, this),
-          SimTime(PNDiscoverInitialWaitTime, omnetpp::SIMTIME_US)),
+          SimTime(ULNDiscoverInitialWaitTime, omnetpp::SIMTIME_US)),
       GetULNQueue("QueryRouteReq(ULN)",
                  std::bind(&R2Kademlia::sendGetPhysicalNeighbors, this, ph::_1,
                            ph::_2),

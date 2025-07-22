@@ -9,7 +9,7 @@ namespace routingsim {
 
 class nodeVicinityNode {
 public:
-	const OverlayKey* nodeKey = nullptr; // NodeID for this node
+	const OverlayKey* nodeKey = nullptr; // pointer to NodeID for this node (typically the key in the graph structure)
 	unsigned short distance = 0; // (shortest) distance from root node in hops to (this) node
 	stateseqno_t stateseqno = stateseqno_t::invalidSeqNo; // last seen state seq no when communicated with this node
 	std::vector<const nodeVicinityNode*> children; // (sorted) list of pointers to children (to allow for binary search)

@@ -144,7 +144,7 @@ void R2Kademlia::onContactRemoval(KadContact_p contact)
 	// remove from vicinity node set (in case of later rendezvous again)
 	if (contact->getPathLength() < nodeVicinityGraph::vicinityDiscoveryRadius and contact->getState() == KadContact::State::dead) {
 		// need to remove precomputed PathIDs
-		vicinityPathIDCompletion(*contact, true);
+		vicinityPathIDCompletion(contact->getKey(), contact->getKey(), true);
 		// remove node from vicinity
 		vicinity.removeNode(contact->getKey());
 	}
@@ -267,8 +267,10 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 					// PID was added, it can directly be used, because no path setup necessary within 5 hops
 					EV_TRACE << "added local NID " << contact->getKey() << " and PID entry " << incomingPID << " 2ndPID: " << secondSegmentPID <<  endl;
 					fwdTablePathID.setNIDtoPIDmapping(contact->getKey(), incomingPID, secondSegmentPID);
-					if (contact->getPathLength() < nodeVicinityGraph::vicinityDiscoveryRadius)
-						vicinityPathIDCompletion(*contact);
+					if (contact->getPathLength() < nodeVicinityGraph::vicinityDiscoveryRadius) {
+						auto& parentNodeKey= contact->getPath().empty() ? myOverlayKey : contact->getPath().back();
+						vicinityPathIDCompletion(parentNodeKey, contact->getKey());
+					}
 				}
 			}
 			else {

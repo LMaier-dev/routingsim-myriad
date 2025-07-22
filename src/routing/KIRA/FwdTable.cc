@@ -146,8 +146,8 @@ FwdTablePathID::addEntry(const kad_path& path_to_add, bool isLocal, bool isForei
 		// if it was marked for deletion before, reset the flag as it is used now
 		pidentry->second.unsetDeleted();
 		pidentry->second.setValid();
-                pidentry->second.unsetObsolete();
-                pidentry->second.setUsed();
+		pidentry->second.unsetObsolete();
+		pidentry->second.setUsed();
 
 		// set foreign or local flag
 		if (isForeignPID)
@@ -155,7 +155,7 @@ FwdTablePathID::addEntry(const kad_path& path_to_add, bool isLocal, bool isForei
 		else {
 			if (isLocal) { // only if we have a local contact
 				pidentry->second.incrementReferenceCount();
-                                pidentry->second.setLocal();
+				pidentry->second.setLocal();
 			}
 		}
 
@@ -180,7 +180,7 @@ FwdTablePathID::addEntry(const kad_path& path_to_add, bool isLocal, bool isForei
 	else {
 		if (isLocal) { // only if we have a local contact
 			fwdentry.incrementReferenceCount();
-                        fwdentry.setLocal();
+			fwdentry.setLocal();
 		}
 	}
 
@@ -195,7 +195,7 @@ FwdTablePathID::addEntry(const kad_path& path_to_add, bool isLocal, bool isForei
 
 	// tpath: path including the target
 	//EV_TRACE << "addEntry(): inPID: " << incomingPathID << " outPID: "
-	//		 << fwdentry.outgoingPathID << " tpath: " << path_to_add << " " << fwdentry.str() << endl;
+	// 		 << fwdentry.outgoingPathID << " tpath: " << path_to_add << " " << fwdentry.str() << endl;
 
 	return std::make_pair(true, incomingPathID);
 }

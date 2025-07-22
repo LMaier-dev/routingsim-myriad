@@ -200,35 +200,38 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 }
 
 
-// this creates potential additional entries for PathIDs for PNs in distance <= vicinityDiscoveryRadius
+// this creates potential additional entries for PathIDs for ULNs and/or links in distance <= vicinityDiscoveryRadius
 // note that the provided contact is of temporary nature and need not be a part of the routing table
-void R2Kademlia::vicinityPathIDCompletion(const KadContact& neighborhoodContact, bool removePIDs)
+// if parentNodeKey and checkNodeKey are identical, then the whole node is probably removed
+void R2Kademlia::vicinityPathIDCompletion(const OverlayKey& parentNodeKey, const OverlayKey& checkNodeKey, bool removePIDs)
 {
-	const nodeVicinityNode* newnode= vicinity.getNode(neighborhoodContact.getKey());
-	EV_TRACE << "vicinityPathIDCompletion(" << neighborhoodContact.getKey().shortStr() << ")" << endl;
+	const nodeVicinityNode* parentnode= vicinity.getNode(parentNodeKey);
+	const nodeVicinityNode* newnode= vicinity.getNode(checkNodeKey);
+	EV_TRACE << "vicinityPathIDCompletion(" << parentNodeKey.shortStr() << ',' << checkNodeKey.shortStr() << ")" << endl;
 
-        if (newnode == nullptr or newnode->distance == 0 or
-            newnode->distance > nodeVicinityGraph::vicinityDiscoveryRadius) {
+	if (newnode == nullptr or newnode->distance == 0
+		or newnode->distance > nodeVicinityGraph::vicinityDiscoveryRadius
+		or (parentnode != newnode and parentnode->distance == nodeVicinityGraph::vicinityDiscoveryRadius)) {
 		return;
 	}
 	// check for further PID entries that need to be created leading to or starting from this neighborhood contact
 	//EV_TRACE << "vicinityPathIDCompletion - collecting parent nodes" << endl;
 
 	// now traverse back toward the root node to cover all paths that lead to this node
-	// we need a temporary graph structure for this, therefore we use unique_ptr
+	// we need a temporary graph structure for this (called nodeSet), therefore we use unique_ptr
 	// since we also need the root node at level 0, we need discoveryRadius+1 levels in total
-	std::list<std::unique_ptr<nodeVicinityNode>> nodeSet[nodeVicinityGraph::vicinityDiscoveryRadius+1];
-	// add the root node
+	std::unordered_set<std::unique_ptr<nodeVicinityNode>> nodeSet[nodeVicinityGraph::vicinityDiscoveryRadius+1];
+	// add me as the root node
 	std::unique_ptr<nodeVicinityNode> rootnode= std::make_unique<nodeVicinityNode>();
 	rootnode->nodeKey= vicinity.getNode(myOverlayKey)->nodeKey;
 	rootnode->distance= 0;
-	nodeSet[0].push_back(std::move(rootnode));
+	nodeSet[0].insert(std::move(rootnode));
 
 	// add the current node
 	std::unique_ptr<nodeVicinityNode> tmpnewnode= std::make_unique<nodeVicinityNode>();
 	tmpnewnode->nodeKey= newnode->nodeKey;
 	tmpnewnode->distance= newnode->distance;
-	nodeSet[newnode->distance].push_back(std::move(tmpnewnode));
+	nodeSet[newnode->distance].insert(std::move(tmpnewnode));
 
 	// collect all parents towards root node
 	for (unsigned int level= newnode->distance; level > 0; level--) {
@@ -243,33 +246,36 @@ void R2Kademlia::vicinityPathIDCompletion(const KadContact& neighborhoodContact,
 				// check for parents at depth = level-1
 				if (all_nodes_it->second.distance+1U == level) {
 					// if the current_node is among the children of this node, the latter is a parent
-					auto child_it= std::find_if(all_nodes_it->second.children.cbegin(),
-								    all_nodes_it->second.children.cend(),
-								    [&](auto v){ return v->nodeKey == (*current_node_it)->nodeKey; });
 
-					if (child_it != all_nodes_it->second.children.cend()) {
-							
+					auto child_it = std::lower_bound(all_nodes_it->second.children.cbegin(),
+													 all_nodes_it->second.children.cend(),
+													 current_node_it->get(),
+													 [](auto p1, auto p2) { return *(p1->nodeKey) < *(p2->nodeKey); });
+
+					if (child_it != all_nodes_it->second.children.cend() and (*child_it)->nodeKey == (*current_node_it)->nodeKey) {
+
 						// found the current's node parent in all nodes (all_nodes_it points to parent)
-						const auto& existing_parent= std::find_if(nodeSet[level-1].cbegin(),
-											  nodeSet[level-1].cend(),
-											  [&](const auto& v){ return v->nodeKey == all_nodes_it->second.nodeKey; });
+						// now insert the node into temporary graph (nodeSet) unless already there
+						const auto& existing_parent_it= std::find_if(nodeSet[level-1].cbegin(),
+																  nodeSet[level-1].cend(),
+																  [&](const auto& v){ return v->nodeKey == all_nodes_it->second.nodeKey; });
 
-						if (existing_parent == nodeSet[level-1].cend()) {
-							// no parent exists already in nodeSet, add it
+						if (existing_parent_it == nodeSet[level-1].cend()) {
+							// no parent exists already in nodeSet, so add it
 							std::unique_ptr<nodeVicinityNode> newparentnode= std::make_unique<nodeVicinityNode>();
 							newparentnode->nodeKey= &all_nodes_it->first; // nodeKey should point to the vicinity graph instances
 							newparentnode->distance= level-1;
 							newparentnode->children= { current_node_it->get() }; // children point to these temporary nodes
 							//EV_TRACE << "vicinityPathIDCompletion - create new parent " << newparentnode->nodeKey->shortStr() << " in node set @level " << level -1 << endl;
 							// if not already present, add node to parent set
-							nodeSet[level-1].push_back(std::move(newparentnode));
+							nodeSet[level - 1].insert (std::move(newparentnode));
 						}
 						else { // just add this child to the parent node unless already there
 							//EV_TRACE << "vicinityPathIDCompletion - found parent " << (*existing_parent)->nodeKey->shortStr() << " in node set @level " << level -1 << endl;
-							if (std::find_if((*existing_parent)->children.cbegin(),
-									 (*existing_parent)->children.cend(),
-									 [&](auto v){ return v->nodeKey == current_node_it->get()->nodeKey; }) == (*existing_parent)->children.cend())
-								(*existing_parent)->children.push_back( current_node_it->get() );
+							if (std::find_if((*existing_parent_it)->children.cbegin(),
+									 (*existing_parent_it)->children.cend(),
+									 [&](auto v){ return v->nodeKey == current_node_it->get()->nodeKey; }) == (*existing_parent_it)->children.cend())
+								(*existing_parent_it)->children.push_back( current_node_it->get() );
 						}
 					}
 				} // endif node has the correct depth
@@ -297,29 +303,29 @@ void R2Kademlia::vicinityPathIDCompletion(const KadContact& neighborhoodContact,
 
 			// now iterate over all children of this node (must do this in vicinity graph)
 			for (auto child_node : currentVicinityNode->children) {
-					
-				if (child_node->distance == level+1) { // check whether child is at the correct level
-					// in case child is on lesser level, we ignore it now, because shortest path is preferred
 
-					// check if child exists in next level already, otherwise create this node
-					auto existing_child= std::find_if(nodeSet[level+1].cbegin(),
-									  nodeSet[level+1].cend(),
-									  [&](const auto& v){ return v->nodeKey == child_node->nodeKey; });
-					if (existing_child == nodeSet[level+1].cend()) {
-						// must create new child
-						std::unique_ptr<nodeVicinityNode> newchildnode= std::make_unique<nodeVicinityNode>();
-						newchildnode->nodeKey= child_node->nodeKey; // nodeKey should point to the vicinity graph instances
-						newchildnode->distance= level;
-						// add child to current node
-						currentTmpNode_p->children.push_back(newchildnode.get());
+				// child may be also present on higher level, we nevertheless add it, because we also
+				// need to compute reverse paths
+				// formerly we ignored it then because shortest path was preferred
 
-						nodeSet[level+1].push_back(std::move(newchildnode));
-					}
-					else {
-						// add existing child to current node
-						currentTmpNode_p->children.push_back(existing_child->get());
-					}
-				} // endif child at correct level
+				// check if child exists in next level already, otherwise create this node
+				auto existing_child= std::find_if(nodeSet[level+1].cbegin(),
+												  nodeSet[level+1].cend(),
+												  [&](const auto& v){ return v->nodeKey == child_node->nodeKey; });
+				if (existing_child == nodeSet[level+1].cend()) {
+					// must create new child
+					std::unique_ptr<nodeVicinityNode> newchildnode= std::make_unique<nodeVicinityNode>();
+					newchildnode->nodeKey= child_node->nodeKey; // nodeKey should point to the vicinity graph instances
+					newchildnode->distance= level;
+					// add child to current node
+					currentTmpNode_p->children.push_back(newchildnode.get());
+
+					nodeSet[level+1].insert(std::move(newchildnode));
+				}
+				else {
+					// add existing child to current node
+					currentTmpNode_p->children.push_back(existing_child->get());
+				}
 
 			} // end for all children
 		} // end for
@@ -337,8 +343,14 @@ void R2Kademlia::vicinityPathIDCompletion(const KadContact& neighborhoodContact,
 	unsigned int currentLevel= 0;
 	// iterator over children: note that childiter_state[i] iterates over nodes at level i+1!
 	decltype(nodeVicinityNode::children)::const_iterator childiter_state[nodeVicinityGraph::vicinityDiscoveryRadius];
-	childiter_state[currentLevel]= nodeSet[0].front()->children.cbegin();
-	while (childiter_state[0] != nodeSet[0].front()->children.cend())
+    auto rootnode_it = nodeSet[0].cbegin();
+    if (rootnode_it == nodeSet[0].cend()) {
+		EV_ERROR << "vicinitPathIDCompletion: rootnode level is empty?! " << endl;
+		return;
+    }
+
+	childiter_state[currentLevel]= (*rootnode_it)->children.cbegin();
+	while (childiter_state[0] != (*rootnode_it)->children.cend())
 	{
 		//EV_TRACE << "vicinityPathIDCompletion - currentLevel: " << currentLevel << endl;
 
@@ -356,13 +368,13 @@ void R2Kademlia::vicinityPathIDCompletion(const KadContact& neighborhoodContact,
 		// currentNodep is at currentLevel+1 since it is a child of the node at currentLevel
 		auto currentNodep= *childiter_state[currentLevel];
 		//EV_TRACE << "vicinityPathIDCompletion - currentNodep: " << currentNodep->nodeKey->shortStr() << endl;
-		// if at or beyond "new" node add pathID  for path
+		// if at or beyond "new" node add pathID for path
 		if (currentLevel+1 >= newnode->distance) {
 			kad_path pathtoadd;
 			for (auto v : currentpath)
 				pathtoadd.push_back(*v);
 			pathtoadd.push_back(*(currentNodep->nodeKey));
-			//EV_TRACE << "vicinityPathIDCompletion - trying to add " << tmpContact.getPath() << " " << tmpContact.getKey().shortStr() << endl;
+			//EV_TRACE << "vicinityPathIDCompletion - trying to add " << pathtoadd << endl;
 			if (removePIDs)
 				fwdTablePathID.delPrecalcEntry(pathtoadd);
 			else
