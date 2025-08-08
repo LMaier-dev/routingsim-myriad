@@ -428,8 +428,8 @@ void R2Kademlia::onMessage( NodePkt_p pkt ) {
 
 		packet->setControlInfo(pkt.release());
 
-                // learn route from packet
-                // (unless it is a reachability test packet that should not be used for improving information)
+		// learn route from packet
+		// (unless it is a reachability test packet that should not be used for improving information)
 		//TODO optimization use isPathInteresting
 
 		if (packet->getType() != KAD_ULNDiscRsp and not packet->isTracked()) {
@@ -530,7 +530,9 @@ void R2Kademlia::handlePacket(KadAnswer_p packet) {
 
 
 /// note: this method is also called when packets originate from this node
-void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt, simtime_t delay) {
+/// @return false if error occurred and packet cannot be forwarded to next hop, otherwise true
+bool
+R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt, simtime_t delay) {
 	// we do not route hello packets!
 	ASSERT(packet->getType() != KAD_ULNHello);
 	ASSERT(packet->hasRemainingHops());
@@ -571,7 +573,7 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt, simtime_t 
 		nodePkt->encapsulate(packet.release());
 		sendToNode(nid, std::move(nodePkt), delay);
 
-		return;
+		return true;
 	}
 
 	// next hop not available: for some packet types we can try to reroute
@@ -663,7 +665,7 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt, simtime_t 
 					nodePkt->encapsulate(packet.release());
 					sendToNode(nid, std::move(nodePkt), delay);
 
-					return;
+					return true;
 				}
 				else {
 					EV_ERROR << "forwardPacket(): alternative next hop " << newpath.front().shortStr() << " also not valid" << endl;
@@ -687,12 +689,13 @@ void R2Kademlia::forwardPacket(KadPacket_p packet, NodePkt_p nodePkt, simtime_t 
 				linkfailurenotifypacket->setDstPID(PathID::UndefinedPathID);
 			// try to reroute
 			reroutePacket(*finaldestination, std::move(packet), std::move(nodePkt), delay);
-			return;
+			return true;
 		}
 	} // end else try_to_reroute
 
 	EV_ERROR << "forwardPacket(): could not find next hop!" << endl;
 	onMissingNeighbor(std::move(packet), std::move(nodePkt), nextHop);
+	return false;
 }
 
 
@@ -837,13 +840,15 @@ void R2Kademlia::resendPacket(KadPacket_p packet) {
 }
 
 
-void R2Kademlia::sendPacket(KadPacket_p packet, simtime_t delay) {
+// @return false if transmission to next hop failed, otherwise false (cannot say for delayed sending though)
+bool
+R2Kademlia::sendPacket(KadPacket_p packet, simtime_t delay) {
 	ASSERT(packet->getSource() == myOverlayKey);
 	ASSERT(packet->getControlInfo() == nullptr);
 
 	if (not packet->hasRemainingHops() or packet->getTarget() == myOverlayKey) {
 		EV_ERROR << "sendPacket: not sending packet destined to myself" << endl;
-		return;
+		return false;
 	}
 	auto nodePkt = std::make_unique<NodePkt>(packet->getName());
         nodePkt->setType(KAD_CTRL_PACKET_TYPE);
@@ -866,13 +871,14 @@ void R2Kademlia::sendPacket(KadPacket_p packet, simtime_t delay) {
 	if (not packet->isTracked()) {
 		countSent(*packet);
 	}
-	forwardPacket(std::move(packet), std::move(nodePkt), delay);
+	return forwardPacket(std::move(packet), std::move(nodePkt), delay);
 }
 
 
 // this sends a R²/Kad control message and corrects the notvia age by
 // considering time passed since point in time time_added
-void
+// @return false if transmission to next hop failed, otherwise false (cannot say for delayed sending though)
+bool
 R2Kademlia::sendCtrlPacket(simtime_t time_added, KadPacket_p packet)
 {
   // need to adjust notvia timestamp by waiting time before sending
@@ -886,7 +892,7 @@ R2Kademlia::sendCtrlPacket(simtime_t time_added, KadPacket_p packet)
 	  packet->setFailedLinkAge(i, age_in_ms+(unsigned long) timediff.trunc(SIMTIME_MS).inUnit(SIMTIME_MS));
 	} // end for
   }
-  sendPacket(std::move(packet));
+  return sendPacket(std::move(packet));
 }
 
 
@@ -1597,7 +1603,7 @@ void R2Kademlia::readRTableRsp(const KadRTableRsp& packet) {
 					auto pathtoadd(neighborhoodContact.getPath());
 					pathtoadd.push_back(neighborhoodContact.getKey());
 					fwdTablePathID.addPrecalcEntry(pathtoadd);
-					vicinityPathIDCompletion(parentNodeKey, neighborhoodContact.getKey());
+					//vicinityPathIDCompletion(parentNodeKey, neighborhoodContact.getKey());
 				}
 			} // endif entry within vicinitydiscovery
 

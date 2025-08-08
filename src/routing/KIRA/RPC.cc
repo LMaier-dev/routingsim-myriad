@@ -19,13 +19,13 @@
 
 namespace routingsim {
 
-void RPCProtocol::sendRpcCall(packet_p rpcCall, rpc_callback_t callback, simtime_t delay)
+bool RPCProtocol::sendRpcCall(packet_p rpcCall, rpc_callback_t callback, simtime_t delay)
 {
-	sendRpcCall(std::move(rpcCall), callback, callback, callback, delay);
+	return sendRpcCall(std::move(rpcCall), callback, callback, callback, delay);
 }
 
 
-void RPCProtocol::sendRpcCall(packet_p rpcCall, rpc_callback_t success_callback,
+bool RPCProtocol::sendRpcCall(packet_p rpcCall, rpc_callback_t success_callback,
 			      rpc_callback_t error_callback,  rpc_callback_t timeout_callback, simtime_t delay)
 {
 	nonce_t nonce = rpcCall->getTreeId();
@@ -50,8 +50,9 @@ void RPCProtocol::sendRpcCall(packet_p rpcCall, rpc_callback_t success_callback,
 	states[nonce] = std::move(rpcState);
 
 	// send RPC out immediately or after delay
-	if (delay == 0)
-		sendPacket(std::move(rpcCall), delay);
+	if (delay == 0) {
+		return sendPacket(std::move(rpcCall), delay);
+	}
 	else {
 		// sendPacket will be called after delay
 		// moving the unique pointer usgin std::bind() is a problem,
@@ -70,6 +71,7 @@ void RPCProtocol::sendRpcCall(packet_p rpcCall, rpc_callback_t success_callback,
                         }
 			return true;
 		} );
+		return true;
 	}
 }
 

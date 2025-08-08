@@ -87,21 +87,12 @@ nodeVicinityGraph::addNode(const OverlayKey& parentNodeKey, const OverlayKey& ch
 		if (child_it == childrenlist.cend() or *child_it != childnodeptr) {
 			childrenlist.insert(child_it, childnodeptr);
 			link_added= true;
+			foundnode->parents++;
 			//EV_TRACE << "vicinity.addNode(): added (" << parentNodeKey.shortStr() << "," << childNodeKey.shortStr() << ")" << endl;
 		}
 		//ASSERT(std::is_sorted(childrenlist.cbegin(),childrenlist.cend(), [](auto p1, auto p2) { return *(p1->nodeKey) < *(p2->nodeKey); }));
 
-		// also add the reverse link if necessary: insert parentnode into children of child
-		// do not insert the link if it would be outside the vicinity radius
-		if (childnodeptr->distance < vicinityDiscoveryRadius) {
-			auto& childrenlist(childnodeptr->children);
-			auto child_it= std::lower_bound(childrenlist.cbegin(),childrenlist.cend(), parentnode_ptr, [](auto p1, auto p2) { return *(p1->nodeKey) < *(p2->nodeKey); });
-			if (child_it == childrenlist.cend() or *child_it != parentnode_ptr) {
-				childrenlist.insert(child_it, parentnode_ptr);
-				link_added= true;
-				//EV_TRACE << "vicinity.addNode(): added (" << childNodeKey.shortStr() << "," << parentNodeKey.shortStr() << ")" << endl;
-			}
-		}
+		//  do not add the reverse link because the node at the other end will report the link
 	}
 	else { // parent node not found
 		EV_ERROR << "cannot add child " << childNodeKey.shortStr() << ", because parent " << parentNodeKey << " not found" << endl;
@@ -116,7 +107,7 @@ nodeVicinityGraph::addNode(const OverlayKey& parentNodeKey, const OverlayKey& ch
 void
 nodeVicinityGraph::removeNode(const OverlayKey& nodeKey)
 {
-	//EV_TRACE << "vicinity.removeNode(): " << nodeKey.shortStr() << endl;
+	EV_TRACE << "vicinity.removeNode(): " << nodeKey.shortStr() << endl;
 	// never remove own root node
 	if (nodeKey == *rootNodeKey) {
 		EV_WARN << "vicinity.removeNode(): trying to remove root node" << endl;
@@ -146,8 +137,8 @@ nodeVicinityGraph::removeNode(const OverlayKey& nodeKey)
 
 
 /// removes a link between parentNodeKey and childNodeKey
-/// it may be the case that the childNode is an orphan after the removal.
-/// This can be fixed by a later garbage collection.
+/// it may be the case that the childNode is an orphan after the removal
+/// then it will be erased automatically
 /// @return true in case link was removed, false if not found
 bool
 nodeVicinityGraph::removeLink(const OverlayKey &parentNodeKey, const OverlayKey &childNodeKey) {
@@ -170,6 +161,18 @@ nodeVicinityGraph::removeLink(const OverlayKey &parentNodeKey, const OverlayKey 
 							 << parentNodeKey.shortStr()
 							 << "," << childNodeKey.shortStr() << ">" << endl;
 					parentnode->children.erase(child_it);
+					if (childnode->parents > 0) {
+						childnode->parents--;
+						if (childnode->parents == 0) {
+							// last parent removed we can delete this node now
+							EV_TRACE << "nodeVicinity: removing node " << childnode->nodeKey->shortStr() << " has no parents anymore" << endl;
+							graph.erase(graphit);
+							return true;
+						}
+					} else {
+						EV_ERROR << "nodeVicinity: childnode->parents == " << childnode->parents << endl;
+						ASSERT(childnode->parents > 0);
+					}
 					// update distance if this was a direct link
 					if (parentnode->nodeKey == rootNodeKey) {
 						ASSERT(childnode->distance == 1);
@@ -237,5 +240,6 @@ nodeVicinityGraph::findPath(const OverlayKey &NodeKey) const
 
 	return {false, {}};
 }
+
 
 } //namespace

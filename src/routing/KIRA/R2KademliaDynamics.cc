@@ -749,10 +749,10 @@ bool R2Kademlia::sendRediscovery(OverlayKey failedcontactkey, uint8_t maxFanOut,
 		else {
 			// do not remove physical contacts immediately, they will stay dead for a while
 			// and garbage collected by periodically execute doCheckULNs method
-                        if (failedcontact->isInvalid()) {
-                                failedcontact->setState(KadContact::State::dead);
+			if (failedcontact->isInvalid()) {
+				failedcontact->setState(KadContact::State::dead);
 
-                                if (failedcontact->isPhysicalNeighbor() == false) {
+				if (failedcontact->isPhysicalNeighbor() == false) {
 					EV_TRACE << "rediscovery finally failed, removing contact " << failedcontact->getKey().shortStr() << endl;
 					routingTable.removeContact(failedcontact);
 				}

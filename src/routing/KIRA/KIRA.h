@@ -294,9 +294,9 @@ private:
 	uint receivedPathSetup = 0;
 	uint forwardedPathSetup = 0;
 	uint forwardedPathTeardown = 0;
-        uint receivedPathTeardown = 0;
+	uint receivedPathTeardown = 0;
 
-        struct msg_stats {
+    struct msg_stats {
 		unsigned long sentCount = 0UL;
 		unsigned long receivedCount = 0UL;
 		unsigned long forwardedCount = 0UL;
@@ -304,9 +304,9 @@ private:
 		unsigned long sentVolume = 0UL;
 		unsigned long receivedVolume = 0UL;
 		unsigned long forwardedVolume = 0UL;
-        };
+	};
 	// per message type statistics
-        std::unordered_map<uint8_t, msg_stats> msgStats;
+	std::unordered_map<uint8_t, msg_stats> msgStats;
 
 	uint floodPacketsReceived = 0;
 	uint floodPacketReplications = 0;
@@ -402,8 +402,11 @@ private:
 	/// remove path ID if possible
 	void checkForPathTeardown(const KadPacket& packet);
 
+	// remove all PathIDs associated with this node
+	void removePathIDsOfNode(const OverlayKey &removeNodeKey);
+
 	/// for a new node in the vicinity (link: parentNode->checkNode), install/remove any known paths within discoveryRadius
-	void vicinityPathIDCompletion(const OverlayKey& parentNodeKey, const OverlayKey& checkNodeKey, bool removePrecalcEntry= false);
+	//void vicinityPathIDCompletion(const OverlayKey& parentNodeKey, const OverlayKey& checkNodeKey, bool removePrecalcEntry= false);
 
 	/// call when a node is disconnected
 	void nodeDisconnect(nodeid_t nid);
@@ -510,7 +513,7 @@ private:
 	 * uses the given NodePkt for encapsulation.
 	 * This does not make any routing decision.
 	 */
-	void forwardPacket(KadPacket_p packet, NodePkt_p nodePkt, simtime_t delay= 0);
+	bool forwardPacket(KadPacket_p packet, NodePkt_p nodePkt, simtime_t delay= 0);
 	/// forwards a data packet
 	void forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt);
 	/// forwards a data packet based on PathID present in the packet
@@ -532,17 +535,17 @@ private:
 	/// try to find alternative next overlay hop
 	void reroutePacket(const OverlayKey& finaldest, KadPacket_p packet, NodePkt_p nodePkt, simtime_t delay= 0);
 	/// routes a packet to a neighbor based on the source route in the packet
-	void sendPacket(KadPacket_p packet, simtime_t delay= 0) override;
+	bool sendPacket(KadPacket_p packet, simtime_t delay= 0) override;
 	/// routes a packet to a neighbor based on the source route in the packet
-	void sendCtrlPacket(simtime_t time_added, KadPacket_p packet);
+	bool sendCtrlPacket(simtime_t time_added, KadPacket_p packet);
 	/// routes a packet to a neighbor based on the Segment PIDs  in the packet
 	void sendPacket(KadDataPacket_p packet);
 	KadContactList::const_iterator chooseNextHop(const KadContactList& contacts, const OverlayKey& target, KadContactList::const_iterator startit);
 	/// chooses the contact to forward a request to according to the overlay metric.
 	const KadContact& chooseNextHop(const KadContactList&, const OverlayKey& target);
 	/// sends a probe request to the given contact to check for path validity
-	void sendPathProbeToContact(const KadContact& contact, RequestQueueElementActionType action);
-	void sendPathProbe(const OverlayKey& contactkey);
+	bool sendPathProbeToContact(const KadContact& contact, RequestQueueElementActionType action);
+	bool sendPathProbe(const OverlayKey& contactkey);
 	/// sends a path setup request to the given contact
 	void sendPathSetup(KadContact_p contact);
 	/// sends a path teardown request to the given contact
@@ -688,10 +691,10 @@ public:
 	static constexpr unsigned long ProbeSelfMinInterval = 250; // ms
 	static constexpr unsigned long notifyLinkFailureWaitTime = 10UL; // ms
 	static constexpr unsigned long RediscoveryNextTryWaitTime = 100UL; // ms
-	static constexpr unsigned long ULNDiscoverInitialWaitTime = 10'000UL; // µs (10ms)
+	static constexpr unsigned long ULNDiscoverInitialWaitTime = 20'000UL; // µs (20ms)
 	static constexpr unsigned long ULNDiscoverWaitTime = 100'000UL; // µs (100ms ~ 10 Requests/s)
-	static constexpr unsigned long GetPNInitialWaitTime = 10'000UL; // µs
-	static constexpr unsigned long GetPNWaitTime = 20'000UL; // µs (50 Requests/s)
+	static constexpr unsigned long GetPNInitialWaitTime = 25'000UL; // µs (25ms)
+	static constexpr unsigned long GetPNWaitTime = 100'000UL; // µs (10 Requests/s)
 	static constexpr unsigned long GetONInitialWaitTime = 20'000UL; // µs
 	static constexpr unsigned long GetONWaitTime = 40'000UL; // µs (25 Requests/s)
 	static constexpr unsigned long ContactCandidateInitialWaitTime = 40'000UL; // µs (40ms)

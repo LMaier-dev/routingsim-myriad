@@ -36,13 +36,14 @@ void R2Kademlia::scheduleOnDemandPathProbeReq(KeyRequestQueue& q, const KadConta
 
 // sendPathProbe along full source routing path to existing contact w/ given key
 // called by periodic refresh function doProbeNeighbors() and doProbeContacts()
-void R2Kademlia::sendPathProbe(const OverlayKey& contactkey)
+bool R2Kademlia::sendPathProbe(const OverlayKey& contactkey)
 {
 	if (auto contactp(routingTable.getContact(contactkey)); contactp != nullptr)
-		sendPathProbeToContact(*contactp, pathSetupCheck);
+		return sendPathProbeToContact(*contactp, pathSetupCheck);
 	else {
 		EV_TRACE << "not sending ProbeReq from " << myOverlayKey.shortStr() << " to " << contactkey.shortStr() << " because of invalid contact" << endl;
 	}
+	return false;
 }
 
 
@@ -75,7 +76,10 @@ simtime_t R2Kademlia::sendOnDemandPathProbe(KeyRequestQueue::value_type keyactio
 
 	EV_TRACE << "sendOnDemandPathProbe(" << contactkey.shortStr() << ") next delay: " << delay << endl;
 
-	sendPathProbeToContact(*contactp, action);
+	auto success = sendPathProbeToContact(*contactp, action);
+	// if transmission failed locally, we do not delay, but can process the next request immediately
+	if (not success)
+		return SIMTIME_ZERO;
 
 	LastOnDemandProbeReq= simTime()+delay;
 
@@ -138,7 +142,11 @@ simtime_t R2Kademlia::sendPathProbeToContactCandidate(const KadContact& tmpconta
 
 	EV_TRACE << "sendPathProbeToContactCandidate(" << tmpcontact.getKey().shortStr() << ") next delay: " << delay << endl;
 
-	sendPathProbeToContact(tmpcontact, action);
+	auto success = sendPathProbeToContact(tmpcontact, action);
+
+	// if transmission failed locally, we do not delay, but can process the next request immediately
+	if (not success)
+		return SIMTIME_ZERO;
 
 	LastContactCandidateProbeReq= simTime()+delay;
 
@@ -155,18 +163,18 @@ R2Kademlia::sendScheduledContactCandidateProbeReqs(ContactRequestQueue& q) {
 	{
 		// normally we would use front(), but for vectors back() and pop_back() is easier
 		// due to the sorted order
-                auto contact = q.back();
+		auto contact = q.back();
 		// check whether it is a contact already (no need to check then)
 		if (not routingTable.isKnown(contact.getKey())) {
 			// send the path probe request (second argument is ignored, because the pair already contains the action)
-                        delay_next_call= q.sendrequestcall(contact, pathSetupCheck);
-                }
-                else { // skip this element: remove it from the queue and do not send anything
+			delay_next_call= q.sendrequestcall(contact, pathSetupCheck);
+		}
+		else { // skip this element: remove it from the queue and do not send anything
 			delay_next_call = 0;
 			EV_TRACE << "skipped contact candidate " << contact.getKey().shortStr() << " as it is already a contact" << endl;
 		}
 
-                // remove the scheduled request now
+		// remove the scheduled request now
 		q.pop_back();
 
 		if (not q.empty() and delay_next_call > 0) {
@@ -188,16 +196,16 @@ R2Kademlia::sendScheduledContactCandidateProbeReqs(ContactRequestQueue& q) {
 // Path Probing: sends a ProbeReq to check for validity of an existing path
 // the ProbeReq will travel the full path to its final destination if the path is intact
 // if pathsetupcheck is true it will also refresh PathIDs that have been installed in intermediate nodes
-void R2Kademlia::sendPathProbeToContact(const KadContact& contact, RequestQueueElementActionType action)
+bool R2Kademlia::sendPathProbeToContact(const KadContact& contact, RequestQueueElementActionType action)
 {
 	// must be a valid contact
 	if ( contact.getKey().isUnspecified() or (contact.isInvalid() and not (action & probeProposedPath))) {
 		EV_TRACE << "not sending ProbeReq from " << myOverlayKey.shortStr() << " to " << contact.getKey().shortStr() << " because of invalid contact" << endl;
-		return;
+		return false;
 	}
 	if ( (action & probeProposedPath) and not contact.proposedPathDefined() ) {
 		EV_TRACE << "not sending ProbeReq from " << myOverlayKey.shortStr() << " to " << contact.getKey().shortStr() << " because proposed path not defined anymore" << endl;
-		return;
+		return false;
 	}
 
 	EV_TRACE << "sending ProbeReq from " << myOverlayKey.shortStr() << " to " << contact.getKey().shortStr();
@@ -238,7 +246,7 @@ void R2Kademlia::sendPathProbeToContact(const KadContact& contact, RequestQueueE
 		i++;
 	}
 
-	sendRpcCall(std::move(probereq),
+	return sendRpcCall(std::move(probereq),
 		std::bind(&R2Kademlia::handleProbeResponse, this, ph::_1, ph::_2),
 		std::bind(&R2Kademlia::handleProbeResponse, this, ph::_1, ph::_2),
 		std::bind(&R2Kademlia::handleRPCTimeOut, this, ph::_1, ph::_2));

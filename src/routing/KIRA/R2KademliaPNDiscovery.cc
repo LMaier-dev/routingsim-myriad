@@ -85,7 +85,7 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 
 		if (usePathIDs and (node_added or link_added)) {
 			fwdTablePathID.addPrecalcEntry({neighborcontact.getKey()});
-			vicinityPathIDCompletion(myOverlayKey, neighborcontact.getKey());
+			//vicinityPathIDCompletion(myOverlayKey, neighborcontact.getKey());
 		}
 
 		// use this deterministic strategy to save redundant ULNDiscReq/Rsp exchanges
@@ -133,13 +133,18 @@ simtime_t R2Kademlia::sendGetPhysicalNeighbors(const KadContact& contact, Reques
 		}
 	}
 
-	sendRpcCall(
+	auto success = sendRpcCall(
 		std::move(req),
 		std::bind(&R2Kademlia::handleQueryRouteResponse, this, ph::_1, ph::_2),
 		std::bind(&R2Kademlia::handleQueryRouteResponse, this, ph::_1, ph::_2),
-		std::bind(&R2Kademlia::handleRPCTimeOut, this, ph::_1, ph::_2),
-		0
-	);
+		std::bind(&R2Kademlia::handleRPCTimeOut, this, ph::_1, ph::_2), 0);
+
+	// if transmission failed locally, we do not delay, but can process the next request immediately
+	if (not success) {
+		EV_TRACE << "sendRPC failed" << endl;
+		return SIMTIME_ZERO;
+	}
+
 	LastPNQueryRouteReq= simTime()+delay;
 
 	// update vicinity to avoid future redundant requests
@@ -153,7 +158,7 @@ simtime_t R2Kademlia::sendGetPhysicalNeighbors(const KadContact& contact, Reques
 		auto newpath(contact.getPath());
 		newpath.push_back(contact.getKey());
 		fwdTablePathID.addPrecalcEntry(newpath);
-		vicinityPathIDCompletion(parentNodeKey, contact.getKey());
+		//vicinityPathIDCompletion(parentNodeKey, contact.getKey());
 	}
 	// return delay for next call
 	return delay;
@@ -187,13 +192,19 @@ simtime_t R2Kademlia::sendGetOverlayNeighbors(const KadContact& contact, Request
 		// otherwise no extra delay necessary
 	}
 
-	sendRpcCall(
+	auto success = sendRpcCall(
 		std::move(req),
 		std::bind(&R2Kademlia::handleQueryRouteResponse, this, ph::_1, ph::_2),
 		std::bind(&R2Kademlia::handleQueryRouteResponse, this, ph::_1, ph::_2),
 		std::bind(&R2Kademlia::handleRPCTimeOut, this, ph::_1, ph::_2),
 		0
 	);
+
+	// if transmission failed locally, we do not delay, but can process the next request immediately
+	if (not success) {
+		EV_TRACE << "sendRPC failed" << endl;
+		return SIMTIME_ZERO;
+	}
 
 	LastONQueryRouteReq= simTime()+delay;
 
@@ -258,14 +269,18 @@ simtime_t R2Kademlia::sendDiscoveryReq(const KadContact& contact, RequestQueueEl
 	}
 
 	EV_TRACE << " delay: " << delay << endl;
-	sendRpcCall(
+	auto success = sendRpcCall(
 		std::move(req),
 		std::bind(&R2Kademlia::handleULNDiscResponse, this, ph::_1, ph::_2),
 		std::bind(&R2Kademlia::handleULNDiscResponse, this, ph::_1, ph::_2),
 		std::bind(&R2Kademlia::handleRPCTimeOut, this, ph::_1, ph::_2),
 		0
 	);
-
+	// if transmission failed locally, we do not delay, but can process the next request immediately
+	if (not success) {
+		EV_TRACE << "sendRPC failed" << endl;
+		return SIMTIME_ZERO;
+	}
 	LastULNDiscReq= simTime()+delay;
 
 	return delay;
@@ -291,7 +306,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadULNDiscReq> packet) {
 	}
 	if (usePathIDs and (node_added or link_added)) {
 		fwdTablePathID.addPrecalcEntry({packet->getSource()});
-		vicinityPathIDCompletion(myOverlayKey, packet->getSource());
+		//vicinityPathIDCompletion(myOverlayKey, packet->getSource());
 	}
 
 	// add physical contact to routing table or update sequence number, last seen, and LastDirectULContact
@@ -316,7 +331,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadULNDiscReq> packet) {
 					auto newpath(path);
 					newpath.push_back(packet->getPhyNeighbor(i));
 					fwdTablePathID.addPrecalcEntry(newpath);
-					vicinityPathIDCompletion(packet->getSource(), packet->getPhyNeighbor(i));
+					//vicinityPathIDCompletion(packet->getSource(), packet->getPhyNeighbor(i));
 				}
 			}
 		}
@@ -628,7 +643,7 @@ R2Kademlia::scheduleRequest(ContactRequestQueue& q, KadContact&& tmpcontact)
 
 
 // this schedules a request for getting the overlay neighbors
-// if the node is in the GetPNQueue, we simply set an additional flag in the contact copy inside the queue
+// if the node is in the GetULNQueue, we simply set an additional flag in the contact copy inside the queue
 void
 R2Kademlia::scheduleGetONReq(const KadContact& tmpcontact) {
 	// check first for same node in GetPNQueue (so node is in vicinity)
@@ -664,7 +679,7 @@ R2Kademlia::sendScheduledRequests(ContactRequestQueue& q) {
 		// normally we would use front(), but for vectors back() and pop_back() is easier
 		// due to the sorted order
 		auto& tmpcontact= q.back();
-		bool isPN= (tmpcontact.getPath().size() == 0); // Physical neighbor
+		bool isULN= (tmpcontact.getPath().size() == 0); // Physical neighbor
 
 		stateseqno_t lastseenseqno(stateseqno_t::invalidSeqNo);
 		auto rt_contact= routingTable.getContact(tmpcontact.getKey());
@@ -695,7 +710,7 @@ R2Kademlia::sendScheduledRequests(ContactRequestQueue& q) {
 		// check whether update is needed (invalidSeqNo means unconditionally update)
 		// this makes no sense for querying overlay neighbors as this is not reflected in sequence numbers
 		if (getOverlayNeighborsSource or lastseenseqno.isInvalid() or expected_seqno.isInvalid() or expected_seqno > lastseenseqno) {
-			if (isPN and not neighborTable.isNeighbor(tmpcontact.getKey())) {
+			if (isULN and not neighborTable.isNeighbor(tmpcontact.getKey())) {
 				EV_ERROR << q.getDescription() << " cannot be sent, because contact " << tmpcontact.getKey().shortStr() << " not in neighbor table anymore" << endl;
 			}
 			else {

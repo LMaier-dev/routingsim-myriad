@@ -80,21 +80,24 @@ protected:
 	 * @success_callback is called with the answer when it arrives
 	 * @error_callback is called with the error packet when it arrives
 	 * @timeout_callback is called when a timeout is reached
+	 *
+	 * @return false if error occured while trying to send message, otherwise true
 	 */
 	
-	void sendRpcCall(packet_p rpcCall, rpc_callback_t success_callback,
+	bool sendRpcCall(packet_p rpcCall, rpc_callback_t success_callback,
 			 rpc_callback_t error_callback,  rpc_callback_t timeout_callback, simtime_t delay= 0);
 	/**
 	 * registers the given packet, assigns a nonce and sends it out
 	 * callback is called on answer, error or timeout
+	 * @return false if error occured while trying to send message, otherwise true
 	 */
-	void sendRpcCall(packet_p rpcCall, rpc_callback_t callback, simtime_t delay= 0);
+	bool sendRpcCall(packet_p rpcCall, rpc_callback_t callback, simtime_t delay= 0);
 	//@}
 
 	/** @name functions implemented by the subclass */
 	//@{
 	/// used for sending packets
-	virtual void sendPacket(packet_p packet, simtime_t delay) = 0;
+	virtual bool sendPacket(packet_p packet, simtime_t delay) = 0;
 	virtual TimerMsg* addOneShotTimer(simtime_t delay, TimerMsg::cbfunc_t callback) = 0;
 	//@}
 

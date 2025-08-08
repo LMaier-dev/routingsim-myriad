@@ -8,11 +8,12 @@
 namespace routingsim {
 
 class nodeVicinityNode {
-public:
-	const OverlayKey* nodeKey = nullptr; // pointer to NodeID for this node (typically the key in the graph structure)
-	unsigned short distance = 0; // (shortest) distance from root node in hops to (this) node
-	stateseqno_t stateseqno = stateseqno_t::invalidSeqNo; // last seen state seq no when communicated with this node
-	std::vector<const nodeVicinityNode*> children; // (sorted) list of pointers to children (to allow for binary search)
+	public:
+		const OverlayKey* nodeKey = nullptr; // pointer to NodeID for this node (typically the key in the graph structure)
+		unsigned short distance = 0; // (shortest) distance from root node in hops to (this) node
+		stateseqno_t stateseqno = stateseqno_t::invalidSeqNo; // last seen state seq no when communicated with this node
+		unsigned long parents = 0UL;
+		std::vector<const nodeVicinityNode*> children; // (sorted) list of pointers to children (to allow for binary search)
 };
 
 
@@ -24,8 +25,9 @@ public:
  **/
 class nodeVicinityGraph {
 public:
+	static constexpr unsigned short vicinityDiscoveryRadius = 2; // this is fixed, otherwise it gets too large
 	// cannot use constructor to initialize root, because ownNodeKey is only set in initialize()
-	void setRoot(const OverlayKey& ownNodeKey) { rootNodeKey= &ownNodeKey; graph[*rootNodeKey]= { rootNodeKey, 0, {}, {} }; }
+	void setRoot(const OverlayKey& ownNodeKey) { rootNodeKey= &ownNodeKey; graph[*rootNodeKey]= { rootNodeKey, 0, {}, 0, {} }; }
 	/// adds child node to parent node
 	std::tuple<bool, bool, nodeVicinityNode*> addNode(const OverlayKey& parentNodeKey, const OverlayKey& childNodeKey, unsigned short distance);
 	void removeNode(const OverlayKey& nodeKey);
@@ -37,9 +39,8 @@ public:
 	std::pair<bool, std::vector<OverlayKey>> findPath(const OverlayKey& NodeKey) const;
 	auto cbegin() const { return graph.cbegin(); }
 	auto cend() const { return graph.cend(); }
-	static constexpr unsigned short vicinityDiscoveryRadius = 2; // this is fixed, otherwise it gets too large
 	std::string str() const;
-	private:
+private:
 	std::unordered_map<OverlayKey,nodeVicinityNode> graph;
 	const OverlayKey* rootNodeKey = nullptr;
 };
