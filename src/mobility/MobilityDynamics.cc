@@ -43,6 +43,8 @@ MobilityDynamics::initialize(int stage) {
     take(mobilityNodeAvgDistance);
     addStatisticSample(this);
 
+    updateInterval = par("updateInterval");
+
     if (par("useGrid").boolValue()) {
       grid = new RegularGrid(
         par("borderX"),
@@ -249,6 +251,17 @@ void MobilityDynamics::sampleStatistics(Statistics &stats) {
     mobilityNodeAvgDistance->record(avgDistance / numDistance);
   else
     mobilityNodeAvgDistance->record(0);
+
+  EV_DEBUG << "Record statistics" << endl;
+
+  // Sample Active Links per Node
+  auto nodeMods = mobilityTopology->getNodeMods();
+  for (unsigned int i = 0; i < nodeMods.size(); i++) {
+    auto node = check_and_cast<MobilityNode *>(nodeMods.at(i)->getSubmodule("node"));
+    int degree = mobilityTopology->getNodeDegree(node->getNodeId());
+    EV_DEBUG << "Degree of Node " << node->getNodeId() << ": " << degree << endl;
+    node->getNodeDegreeVector()->record(degree);
+  }
 }
 
 } // namespace routingsim

@@ -12,9 +12,9 @@ namespace routingsim {
             // Gauss-Markov Mobility Memory Level
             double alpha;
             double speedMean;
-            double speedVariance;
+            double speedStandardDeviation;
             double headingMean;
-            double headingVariance;
+            double headingStandardDeviation;
 
             double topMargin, rightMargin, bottomMargin, leftMargin;
 

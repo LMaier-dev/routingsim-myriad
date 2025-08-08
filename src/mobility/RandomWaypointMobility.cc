@@ -34,7 +34,7 @@ void RandomWaypointMobility::move() {
       // Missed target by overshooting
       lastPosition = targetPosition;
       // Calculate the time we still need to wait at the target
-      waitTime = defaultWaitTime - (direction.distance() / speed);
+      waitTime = std::max(defaultWaitTime - (direction.distance() / speed), 0.0);
     } else {
       waitTime = defaultWaitTime;
     }

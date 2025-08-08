@@ -16,6 +16,7 @@ void AntennaBase::initialize() {
   systemNoise = DB(par("systemNoise").doubleValue());
   frequency = MHz(uniform(par("minFreq").doubleValue(), par("maxFreq").doubleValue(), 1));
   bandwidth = MHz(par("bandwidth").doubleValue());
+  datarate = par("averageDatarate").doubleValue();
   range = calcRange();
 }
 

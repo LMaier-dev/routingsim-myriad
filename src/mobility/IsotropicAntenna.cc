@@ -20,6 +20,11 @@ double IsotropicAntenna::distance_from_pathloss(DB pathloss) {
 
 
 double IsotropicAntenna::calcDatarate(double distance) {
+  if (datarate != -1) {
+    EV_INFO << "Overwriting datarate with config value " << datarate << endl;
+    return datarate;
+  }
+
   DB PL = pathloss(distance);
   DB S = signalPower;
   double N = systemNoise.toDouble();

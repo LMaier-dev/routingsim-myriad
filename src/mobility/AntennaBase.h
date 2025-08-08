@@ -29,6 +29,7 @@ protected:
   MHz frequency = MHz(0);
   MHz bandwidth = MHz(0);
   double range = 0;
+  double datarate;
 
 public:
   void initialize() override;

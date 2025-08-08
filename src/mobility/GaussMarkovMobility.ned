@@ -8,11 +8,11 @@ simple GaussMarkovMobility extends MobilityBase {
         // mu_|v|
         double speedMean @unit(mps);
         // sigma_|v|
-        double speedVariance @unit(mps);
+        double speedStandardDeviation @unit(mps);
         // mu_theta
         double headingMean = default(0);
         // simga_theta
-        double headingVariance;
+        double headingStandardDeviation;
         // border margins
         double borderMarginX @unit(m);
         double borderMarginY @unit(m);
