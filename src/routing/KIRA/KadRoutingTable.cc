@@ -806,6 +806,7 @@ bool KadRoutingTable::handleNewContact(const OverlayKey& key, kad_path path, sta
 bool
 KadRoutingTable::replaceContact(KadBucket::BucketType& contacts, KadBucket::BucketType::iterator replacementCandidate, std::unique_ptr<KadContact> contact, bool path_verified)
 {
+	// we do not trust certain contacts. Those in the vicinity are trusted as the information should be more current due to the vicinity
 	if (not path_verified and (contact->getPathLength() > nodeVicinityGraph::vicinityDiscoveryRadius or contact->getPathAge() > R2Kademlia::PathInfoAgeThreshold)) {
 		EV_TRACE << "contact candidate untrusted: " << *contact << endl;
 		policy->onContactCandidate(std::move(contact));

@@ -40,7 +40,7 @@ void GaussMarkovMobility::initialize() {
 
 Coord2D GaussMarkovMobility::getRandomPosition() {
     // Chose random position inside margins
-    return {uniform(leftMargin, rightMargin, 1), uniform(bottomMargin, topMargin, 1)};
+    return {uniform(leftMargin, rightMargin, MOBILITY_RNG), uniform(bottomMargin, topMargin, MOBILITY_RNG)};
 }
 
 void GaussMarkovMobility::move() {
@@ -57,9 +57,9 @@ void GaussMarkovMobility::updateDirection() {
     // Speed
     double speed = alpha * velocity.distance() + (1 - alpha) * speedMean + speedStandardDeviation * sqrt(1 - alpha*alpha) * normal(0, 1, MOBILITY_RNG);
     // Heading
-    double rand_heading = normal(0, 1, MOBILITY_RNG);
+    double rand_heading = normal(0.0, 1.0, MOBILITY_RNG);
     double old_heading = heading.getRadius();
-    heading = Rad2D(alpha * heading.getRadius() + (1 - alpha) * headingMean + headingStandardDeviation * sqrt(1 - alpha*alpha) * rand_heading);
+    heading = Rad2D(alpha * heading.getRadius() + (1.0 - alpha) * headingMean + headingStandardDeviation * sqrt(1.0 - alpha*alpha) * rand_heading);
     EV_DEBUG << heading.getRadius() << " = " << alpha << " * " << old_heading << " + (1 -" << alpha << ") * " << headingMean << " + " << headingStandardDeviation << " * sqrt(1 -" << alpha*alpha << ") * " << rand_heading << endl;
     // Velocity
     velocity = heading.toVector() * speed;

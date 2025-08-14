@@ -21,7 +21,6 @@ namespace routingsim {
             void updateDirection();
             void handleBorderMargin();
         protected:
-            const int MOBILITY_RNG = 1;
             // Move the node to the targetPosition and update the lastPosition of the node.
             void move() override;
             //

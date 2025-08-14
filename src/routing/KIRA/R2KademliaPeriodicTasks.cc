@@ -154,7 +154,7 @@ void R2Kademlia::resetTimer(short timerId, simtime_t duration)
 		}
 		else {
 			fixedTimerMsg[timerIdx]= nullptr;
-                        fixedTimerDuration[timerIdx] = omnetpp::SimTime::ZERO;
+			fixedTimerDuration[timerIdx] = omnetpp::SimTime::ZERO;
 			delete timermsg;
 		}
 	}

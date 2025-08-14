@@ -154,9 +154,9 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 			fwdtableentry.setUsed();
  			EV_TRACE << " already present/ignored. " << fwdtableentry.str() << endl;
 
-                        if (linkFailureNotifications == lfn_none)
+			if (linkFailureNotifications == lfn_none)
 				return false;
-                        // PID may be known, but probably not the source of the first segment
+			// PID may be known, but probably not the source of the first segment
 			if (auto it= notifyFirstSegmentSources.find(incomingPID); it != notifyFirstSegmentSources.end()) {
 				it->second.insert(packet.getSource());
 				EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources PID:"
@@ -165,7 +165,7 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 			else {
 				notifyFirstSegmentSources.insert({incomingPID,{packet.getSource()}});
 				EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources PID:"
-					 << incomingPID << endl;
+						 << incomingPID << endl;
 			}
 
 			return false;
@@ -173,7 +173,7 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 	}
 	else
 	if (packet.hopsLeft() >= 2*(nodeVicinityGraph::vicinityDiscoveryRadius+1)) {
-                // at least six hops left to destination: install PID to node three hops before destination (begin of 2nd segment)
+		// at least six hops left to destination: install PID to node three hops before destination (begin of 2nd segment)
 		const auto target(packet.getRoute(overallPathLengthHops-nodeVicinityGraph::vicinityDiscoveryRadius-1));
 		const auto pathtoadd(packet.getSrcPath(packet.getProgress()+1, overallPathLengthHops-nodeVicinityGraph::vicinityDiscoveryRadius));
 		// PID must be installed if hops > vicinityDiscoveryRadius
@@ -194,6 +194,12 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 
 			return false;
 		}
+	} else { // otherwise PID to end of first segment has been precalculated (<=2 hops till end of first segement)
+		// touch entry and reset obsolete flag / refresh entry
+		auto& fwdtableentry= fwdTablePathID.PIDFwdTable.at(incomingPID);
+		fwdtableentry.setForeign();
+		fwdtableentry.unsetObsolete(); // this includes a refresh
+		fwdtableentry.setUsed();
 	}
 
 	return false;

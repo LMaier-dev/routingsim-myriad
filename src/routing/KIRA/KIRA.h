@@ -325,7 +325,7 @@ private:
         std::vector<TimerMsg *> fixedTimerMsg;
 	static constexpr short oneShotTimerId = std::numeric_limits<short int>::max();
 	static constexpr short fixedTimerIdBase = std::numeric_limits<short int>::max()/2;
-	short PNHelloTimerId= 0;
+	short ULNHelloTimerId= 0;
 	//@}
 
 	/** @name message generation */
@@ -691,15 +691,15 @@ public:
 	static constexpr unsigned long ProbeSelfMinInterval = 250; // ms
 	static constexpr unsigned long notifyLinkFailureWaitTime = 10UL; // ms
 	static constexpr unsigned long RediscoveryNextTryWaitTime = 100UL; // ms
-	static constexpr unsigned long ULNDiscoverInitialWaitTime = 20'000UL; // µs (20ms)
-	static constexpr unsigned long ULNDiscoverWaitTime = 100'000UL; // µs (100ms ~ 10 Requests/s)
+	static constexpr unsigned long ULNDiscoverInitialWaitTime = 5'000UL; // µs (5ms)
+	static constexpr unsigned long ULNDiscoverWaitTime = 10'000UL; // µs (10ms ~ 100 Requests/s)
 	static constexpr unsigned long GetPNInitialWaitTime = 25'000UL; // µs (25ms)
-	static constexpr unsigned long GetPNWaitTime = 100'000UL; // µs (10 Requests/s)
+	static constexpr unsigned long GetPNWaitTime = 20'000UL; // µs (50 Requests/s)
 	static constexpr unsigned long GetONInitialWaitTime = 20'000UL; // µs
 	static constexpr unsigned long GetONWaitTime = 40'000UL; // µs (25 Requests/s)
-	static constexpr unsigned long ContactCandidateInitialWaitTime = 40'000UL; // µs (40ms)
+	static constexpr unsigned long ContactCandidateInitialWaitTime = 40'000UL; // µs (40ms, 25 Requests/s)
 	static constexpr unsigned long OnDemandPathProbeReqInitialWaitTime = 100'000UL; // µs (100ms)
-	static constexpr unsigned long OnDemandPathProbeReqWaitTime = 100'000UL; // µs (100ms ~ 10 Requests/s)
+	static constexpr unsigned long OnDemandPathProbeReqWaitTime = 40'000UL; // µs (40ms ~ 25 Requests/s)
 	static constexpr unsigned long notifyLinkFailurePauseTime = 2'500UL; // µs (2.5ms ~ 400 Requests/s)
 	static constexpr unsigned long revPathFloodPauseTime = 1'000UL; // µs (1ms ~ 1000 Requests/s)
 

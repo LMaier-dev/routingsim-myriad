@@ -3,6 +3,7 @@
 #include "checkandcast.h"
 #include "coutvector.h"
 #include "mobility/MobilityNode.h"
+#include <format>
 
 namespace routingsim {
 
@@ -16,9 +17,11 @@ void MobilityBase::initialize() {
 
   nodeid_t nodeId = check_and_cast<MobilityNode*>(getParentModule()->getSubmodule("node"))->getNodeId();
   EV_DEBUG << "MobilityBase of Node: " << nodeId << endl;
-  posX = new cOutVector("posX");
+
+  auto prefix= std::format("MobilityNode_{}",nodeId);
+  posX = new cOutVector((prefix+"_posX").c_str());
   take(posX);
-  posY = new cOutVector("posY");
+  posY = new cOutVector((prefix+"_posY").c_str());
   take(posY);
 }
 
@@ -30,7 +33,7 @@ void MobilityBase::preDelete(cComponent *root) {
 void MobilityBase::initializePosition() { lastPosition = getRandomPosition(); }
 
 void MobilityBase::initializeHeading() {
-  heading.setRadius(getRNG(1)->doubleRand() * 360);
+  heading.setRadius(getRNG(MOBILITY_RNG)->doubleRand() * 360);
 }
 
 void MobilityBase::updatePosition() {

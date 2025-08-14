@@ -2,7 +2,7 @@
 
 /*********************************************************
  * This file contains code that is related to the discovery
- * of the physical neighbors and vicinity from the 
+ * of the underlay neighbors (ULN) and vicinity from the
  * R2Kademlia main class
  *********************************************************/
 

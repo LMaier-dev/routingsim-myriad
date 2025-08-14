@@ -60,6 +60,7 @@ namespace routingsim {
         void preDelete(cComponent *root) override;
 
     public:
+        static constexpr int MOBILITY_RNG = 1;
         // Sets initial position and heading of the node.
         void initialize() override;
 

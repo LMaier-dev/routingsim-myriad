@@ -189,7 +189,7 @@ void R2Kademlia::onInitialize() {
 	if (exploreInterval > 0)
 		addRandomizedTimer(exploreInterval*1.5, exploreInterval, std::bind(&R2Kademlia::doSendExplorePathPacket, this, ph::_1));
 	// resend Hello packets to keep state sequence numbers in synch, note that is includes an exponential backoff (until maxHelloInteral, usually 30s max)
-	PNHelloTimerId= addRandomizedTimer(minHelloInterval, minHelloInterval, std::bind(&R2Kademlia::doSendHello, this, ph::_1));
+	ULNHelloTimerId= addRandomizedTimer(minHelloInterval, minHelloInterval, std::bind(&R2Kademlia::doSendHello, this, ph::_1));
 
 	// when we do not have link layer indications, we need to regularly check for dead ULNs
 	if (not useLinkLayerIndication)
@@ -241,8 +241,9 @@ void R2Kademlia::onConnect( nodeid_t nid ) {
 		return true;
 	} );
 	// additionally, reset ULNHello timer if this fires too far away in the future
-	if (randomTimerDuration[PNHelloTimerId] > 3*minHelloInterval)
-		resetTimer(PNHelloTimerId, minHelloInterval);
+	// to let the new node know that we are there
+	if (randomTimerDuration[ULNHelloTimerId] > 3*minHelloInterval)
+		resetTimer(ULNHelloTimerId, minHelloInterval);
 }
 
 
@@ -292,8 +293,8 @@ void R2Kademlia::nodeDisconnect(nodeid_t nid) {
 		EV_TRACE << "invalidated " << counter << " contacts" << endl;
 
 	// since an Underlay Neighbor has been changed, we notify our other neighbors if any left
-	if (not neighborTable.empty() and randomTimerDuration[PNHelloTimerId] > minHelloInterval) {
-		resetTimer(PNHelloTimerId, minHelloInterval);
+	if (not neighborTable.empty() and randomTimerDuration[ULNHelloTimerId] > minHelloInterval) {
+		resetTimer(ULNHelloTimerId, minHelloInterval);
 	}
 
 	// if this option is enabled, we flood a notification in reverse path directions
