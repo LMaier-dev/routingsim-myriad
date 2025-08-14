@@ -244,7 +244,7 @@ void NetworkTopology::readTopology(const string& topofilename, string topologyty
 
 			// determine size of max partition and its index
 			nodeid_t maxPartitionSize = *(max_element(partitionSizes.begin(), partitionSizes.end()));
-			int maxPartitionId;
+			int maxPartitionId= 0;
 
 			for (int i=0; i<numComponents; i++) {
 				if ( partitionSizes[i] == maxPartitionSize ) {

@@ -199,7 +199,7 @@ void KadRoutingTable::addPNContact(const OverlayKey& key, stateseqno_t stateseqn
 			auto it = bucket.findContactWrite(key);
 			if (it != bucket.getContacts().end()) {
 				bucket.insertPNContact(std::move(*it));
-                                bucket.removeContact(it);
+				bucket.removeContact(it);
 			}
 			else
 				EV_ERROR << "Contact existed already, but not found" << endl;
@@ -219,10 +219,10 @@ void KadRoutingTable::addPNContact(const OverlayKey& key, stateseqno_t stateseqn
 		       // next PNHello from this PN should fix that
 		}
 
-                // contact will be validated from Rediscovering or Invalid which is an improvement
-                if (contact->isNotValid()) {
-                    improved = true;
-                }
+		// contact will be validated from Rediscovering or Invalid which is an improvement
+		if (contact->isNotValid()) {
+			improved = true;
+		}
 
 		// set the current path irrespective of the sequence number to empty
 		// as we heard a direct message from the neighbor NOW

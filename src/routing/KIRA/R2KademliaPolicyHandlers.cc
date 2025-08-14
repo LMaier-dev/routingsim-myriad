@@ -200,6 +200,9 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 		}
 		else { // actually a new neighbor -> increase sequence number
 			incLSSeqNo();
+			// probably reset the Hello Interval to let vicinity know
+			if (randomTimerDuration[ULNHelloTimerId] > 5*minHelloInterval)
+				resetTimer(ULNHelloTimerId, minHelloInterval);
 		}
 	}
 
@@ -267,10 +270,6 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 					// PID was added, it can directly be used, because no path setup necessary within 5 hops
 					EV_TRACE << "added local NID " << contact->getKey() << " and PID entry " << incomingPID << " 2ndPID: " << secondSegmentPID <<  endl;
 					fwdTablePathID.setNIDtoPIDmapping(contact->getKey(), incomingPID, secondSegmentPID);
-					if (contact->getPathLength() < nodeVicinityGraph::vicinityDiscoveryRadius) {
-						auto& parentNodeKey= contact->getPath().empty() ? myOverlayKey : contact->getPath().back();
-						//vicinityPathIDCompletion(parentNodeKey, contact->getKey());
-					}
 				}
 			}
 			else {
@@ -330,6 +329,9 @@ void R2Kademlia::onImprovement(const KadContact& contact) {
 		}
 		// now increase the sequence number
 		incLSSeqNo();
+		// probably reset the Hello Interval to let vicinity know
+		if (randomTimerDuration[ULNHelloTimerId] > 5*minHelloInterval)
+			resetTimer(ULNHelloTimerId, minHelloInterval);
 		scheduleUpdate(contact, KAD_Announce);
 	}
 	else

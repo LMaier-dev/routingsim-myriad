@@ -346,8 +346,10 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadULNDiscReq> packet) {
 		if (packet->getPhyNeighborArraySize() > 0) {
 			if (packet->getStateSeqNo() > contact_p->getSyncPNSeqNo())
 				contact_p->setSyncPNSeqNo(packet->getStateSeqNo());
-		}
-		else {
+		} else {
+			// for initial contact set the syncPNSeqNo to 0 if no neighbors have been reported, next ULNHello will trigger resynch
+			if (contact_p->getSyncPNSeqNo().isInvalid())
+				contact_p->setSyncPNSeqNo(packet->getStateSeqNo());
 			// if no PN list given we may want to resync
 			checkForResync(packet->getSource(), packet->getStateSeqNo());
 		}

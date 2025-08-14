@@ -117,7 +117,7 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 
 			if (linkFailureNotifications != lfn_none) {
 				if (auto it= notifyFirstSegmentSources.find(incomingPID); it != notifyFirstSegmentSources.end()) {
-					// just add the source to an existing entry for the PID
+					// just add the source to an existing entry for the PIDq
 					it->second.insert(packet.getSource());
 					EV_TRACE << " added " << packet.getSource().shortStr() << " to notifyFirstSegmentSources PID=" << incomingPID << endl;
 				}
@@ -194,12 +194,16 @@ bool R2Kademlia::checkForPathIDInstallation(const KadPacket& packet)
 
 			return false;
 		}
-	} else { // otherwise PID to end of first segment has been precalculated (<=2 hops till end of first segement)
+	}
+	else { // otherwise PID to end of first segment has been precalculated (<=2 hops till end of first segement)
+		// it may be the case that the PID has not yet been calculated, because the adjacency is not up yet
 		// touch entry and reset obsolete flag / refresh entry
-		auto& fwdtableentry= fwdTablePathID.PIDFwdTable.at(incomingPID);
-		fwdtableentry.setForeign();
-		fwdtableentry.unsetObsolete(); // this includes a refresh
-		fwdtableentry.setUsed();
+		if (auto it= fwdTablePathID.PIDFwdTable.find(incomingPID); it != fwdTablePathID.PIDFwdTable.end()) {
+			auto& fwdtableentry= it->second;
+			fwdtableentry.setForeign();
+			fwdtableentry.unsetObsolete(); // this includes a refresh
+			fwdtableentry.setUsed();
+		}
 	}
 
 	return false;
