@@ -1,5 +1,3 @@
-
-
 #ifndef ROUTINGSIM_GAUSSMARKOV_H
 #define ROUTINGSIM_GAUSSMARKOV_H
 
@@ -11,6 +9,8 @@ namespace routingsim {
         private:
             // Gauss-Markov Mobility Memory Level
             double alpha;
+            double one_minus_alpha;
+            double sqrt_one_minus_alpha_square;
             double speedMean;
             double speedStandardDeviation;
             double headingMean;

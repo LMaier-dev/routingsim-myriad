@@ -80,6 +80,7 @@ void MobilityDynamics::updateMobility() {
       oldNodesMapping[node] = grid->getNodesNear(node);
     }
   }
+  EV_TRACE << "MobilityDynamics::updateMobility()" << endl;
 
   // first update all positions
   for (cModule *node_wrapper : mobilityTopology->getNodeMods()) {
