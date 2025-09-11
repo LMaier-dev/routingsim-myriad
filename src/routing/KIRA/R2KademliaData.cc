@@ -128,7 +128,7 @@ bool R2Kademlia::forwardDataPacketToNextHop(KadDataPacket_p& packet, NodePkt_p& 
 	// lookup outgoing PathID (next hop) based on incoming PathID
 	auto& incomingPathID = is_detour ? packet->getDetourPathID() : packet->getFirstPathID();
 
-    auto fwdentry = fwdTablePathID.PIDFwdTable.find(incomingPathID);
+	auto fwdentry = fwdTablePathID.PIDFwdTable.find(incomingPathID);
 	if (fwdentry == fwdTablePathID.PIDFwdTable.end())
 	{ // no entry found, there is probably some inconsistency (e.g., path not yet setup)
 		EV_WARN << "forwardDataPacket: incoming PathID " << incomingPathID << " not found in FwdPIDTable. Dropping packet" << endl;
@@ -213,7 +213,7 @@ bool R2Kademlia::forwardDataPacketToNextHop(KadDataPacket_p& packet, NodePkt_p& 
 	// (fast next hop detour)
 	// the idea is to have at least one installed backup path for each next hop (if possible)
 	if (auto [found,newpath]= vicinity.findPath(nh.nextHopNode); found) {
-		EV_TRACE << "found alternative path to " << nh.nextHopNode.shortStr() << " in vicinity: " << newpath << endl;
+		EV_TRACE << "found alternative path (fast next hop detour) to " << nh.nextHopNode.shortStr() << " in vicinity: " << newpath << endl;
 		//EV_TRACE << "vicinity:" << vicinity.str() << endl;
 		// find outgoing pathID for detour
 		newpath.push_back(nh.nextHopNode);
@@ -251,8 +251,10 @@ bool R2Kademlia::forwardDataPacketToNextHop(KadDataPacket_p& packet, NodePkt_p& 
 			}
 		} // endif detourPIDEntry found
 		else {
-			EV_WARN << "detour PID " << newpid << " not found!" << endl;
+			EV_WARN << "Detour PID " << newpid << " not found!" << endl;
 		}
+	} else {
+		EV_TRACE << "cannot find Fast Next Hop Detour in vicinity"	<< endl;
 	}
 
 	// forwarding to next hop failed so far
@@ -390,8 +392,8 @@ bool R2Kademlia::forwardDataPacketToNextHop(KadDataPacket_p& packet, NodePkt_p& 
 		onMissingNeighbor(std::move(packet), nh.nextHopNode);
 		return false;
 	}
-	else { // else: next hop not found (TODO: this cannot happen during data packet forwarding)
-		EV_ERROR << "forwardDataPacketToNextHop: wrong next hop"
+	else { // else: next hop not found (this may happen during data packet forwarding if next hop failed meanwhile, e.g., in MANETs)
+		EV_ERROR << "forwardDataPacketToNextHop: next hop not found "
 				 << nh.nextHopNode.shortStr() << endl;
 
 		packet->setControlInfo(nodePkt.release());
@@ -523,6 +525,7 @@ void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 
 	// if we find a NIDPIDTable entry directly, try to use this
 	// this may help with broken links and detours on the last overlay hop (finaldest is in deepest bucket)
+	// although this does not make sense if the next hop link is broken
 	if (routingTable.isInLastBucket(finaldest)) {
 		if (tryForwardToNextOverlayHopWithPID(packet, nodePkt, finaldest)) {
 			// forwarding was successful or failed during forwarding to next hop, we need to terminate here

@@ -22,7 +22,7 @@ public:
 	
 	uint64_t pathId;
 	
-        PathID(uint64_t pid= UndefinedPathID_u64) : pathId(pid) {};
+    PathID(uint64_t pid= UndefinedPathID_u64) : pathId(pid) {};
 	PathID(const kad_path& path);
 	bool isUndefined() const { return pathId == UndefinedPathID_u64; };
         operator uint64_t() const { return pathId; };
