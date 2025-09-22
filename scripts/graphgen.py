@@ -64,8 +64,16 @@ def main():
     parser_plc.add_argument('X', type=int, help='')
     parser_plc.add_argument('Y', type=int, help='')
 
+    parser_f16 = subparsers.add_parser('f16', help='facebooks f16 fabric topology: https://engineering.fb.com/2019/03/14/data-center-engineering/f16-minipack/')
+    parser_f16.add_argument('S', type=int, choices=(range(1,117)), help='how many slices of ToR switches (max 116)')
+    parser_f16.add_argument('T', type=int, choices=(range(1, 113)), help='how many ToRs per slice (max 112)')
+    parser_f16.add_argument('I', type=int, choices=(range(0, 113)), help='how many instances per ToR (max 112)')
+
     parser_plc = subparsers.add_parser('graphml', help='read graphml file')
     parser_plc.add_argument('PATH', help='path to graphml file')
+
+    gml_plc = subparsers.add_parser('gml', help='read graphml file')
+    gml_plc.add_argument('PATH', help='path to gml file')
 
     parser_plc_cc = subparsers.add_parser('plc_cc', help='two power law cluster graphs (Holme-Kim), connected with D edges')
     parser_plc_cc.add_argument('N', type=int, help='number of nodes')
@@ -198,13 +206,48 @@ def main():
                     G.add_edge(i+x*j,i+x*j+x+1)
         G = networkx.convert_node_labels_to_integers(G)
         G.graph['info'] = [["time", datetime.now()]]
-        G.graph['filename'] = f"hexgrid_{','.join(str(a) for a in [x,y])}.txt"
+        G.graph['filename'] = f"f16_{','.join(str(a) for a in [x,y])}.txt"
+    elif(opt.type == 'f16'):
+        G = networkx.Graph()
+        slices=opt.S
+        tors=opt.T
+        instances=opt.I
+        #Spine switches
+        for i in range(256):
+            G.add_node(i)
+
+        for slice in range(slices):
+            # fabric switches connected to 16 spine switches each
+            for i in range(16):
+                for j in range(16):
+                    G.add_edge(256+slice*16+i, 16*i + j)
+            for tor in range(tors):
+                for i in range(16):
+                    G.add_edge(256+slices*16+slice*tors+tor, 256+slice*16+i) 
+                for instance in range(instances):
+                    G.add_edge(256+slices*16+slice*tors+tor, 256+slices*16+slices*tors+slice*tors*instances+tor*instances+instance) 
+        G = networkx.convert_node_labels_to_integers(G)
+        G.graph['info'] = [["time", datetime.now()],
+            ["", f"f16 with 256 spine switches in 16 planes"],
+            ["", f"\t{16*slices} fabric switches in {slices} slices"],
+            ["", f"\t{tors*slices} tors"],
+            ["", f"\t{tors*slices*instances} instances"],
+            ["", f"In total {len(G.nodes)} nodes and {len(G.edges)} edges."]]
+        G.graph['filename'] = f"f16_slices{slices}_tors{tors}_instances{instances}.txt"
     # CONVERSION
     elif(opt.type == 'graphml'):
         G = networkx.Graph(networkx.read_graphml(opt.PATH, node_type=int))
         p = pathlib.Path(opt.PATH)
         G.graph['info'] = [
             ["", f"converted with NetworkX {networkx.__version__}, networkx.read_graphml"],
+            ["", f"input file: {p}"],
+            ["time", datetime.now()]]
+        G.graph['filename'] = f"{p.name}.txt"
+    elif(opt.type == 'gml'):
+        G = networkx.Graph(networkx.read_gml(opt.PATH))
+        p = pathlib.Path(opt.PATH)
+        G.graph['info'] = [
+            ["", f"converted with NetworkX {networkx.__version__}, networkx.read_gml"],
             ["", f"input file: {p}"],
             ["time", datetime.now()]]
         G.graph['filename'] = f"{p.name}.txt"
