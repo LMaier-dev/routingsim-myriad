@@ -240,6 +240,8 @@ public:
 
 	// returns false if path to contact contains a broken or inactive link in the underlay and true otherwise
 	bool pathToContactIsIntact(const KadContact &contact) const;
+	// returns false if path to contact contains a broken link in the underlay for the next hop and true otherwise
+	bool nextHopToContactIsIntact(const OverlayKey& destkey) const;
 
 	/// diagnostic output of paths with failedlink
 	void getBrokenPaths() const;

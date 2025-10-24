@@ -331,7 +331,7 @@ void R2Kademlia::onImprovement(const KadContact& contact) {
 		incLSSeqNo();
 		// probably reset the Hello Interval to let vicinity know
 		if (randomTimerDuration[ULNHelloTimerId] > 5*minHelloInterval)
-			resetTimer(ULNHelloTimerId, minHelloInterval);
+				resetTimer(ULNHelloTimerId, minHelloInterval);
 		scheduleUpdate(contact, KAD_Announce);
 	}
 	else

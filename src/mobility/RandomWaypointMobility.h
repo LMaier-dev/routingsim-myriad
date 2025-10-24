@@ -24,10 +24,10 @@ namespace routingsim {
 
     class RandomWaypointMobility : public MobilityBase {
     private:
-        simtime_t lastUpdate;
-        simtime_t nextChange;
+        simtime_t lastUpdate; // last time when the position was updated
+        simtime_t nextChange; // point in time when next target is reached (ETA) or when the waiting time is over
         double timeToNextPeriod = 0.0;
-        bool waitNextPeriod = false;
+        bool inWaitingState = false;
         double speed = 0.0;
 
       // Calculates the simtime needed, to reach targetPosition from lastPosition.

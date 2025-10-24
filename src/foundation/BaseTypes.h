@@ -221,8 +221,9 @@ public:
     radius = atan2(vector_normalized.y, vector_normalized.x);
   }
 
+  // returns a normalized vector
   Coord2D toVector() const {
-    return Coord2D(cos(2*std::numbers::pi*radius/360), sin(2*std::numbers::pi*radius/360));
+    return Coord2D(cos((std::numbers::pi*radius)/180.0), sin((std::numbers::pi*radius)/180.0));
   }
 
   Rad2D operator=(double d) {

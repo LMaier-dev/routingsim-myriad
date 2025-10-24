@@ -56,7 +56,7 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 					contact_p->updateLastDirectULContact();
 				}
 			}
-                } else {
+		} else {
 			// update lastseen
 			if (KadContact *contact_p = const_cast<KadContact *>(routingTable.getContact(packet->getSource()));
 			    contact_p != nullptr and contact_p->isPhysicalNeighbor()) {
@@ -100,6 +100,10 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 			) {
 			// schedule ULNDiscReq
 			scheduleULNDiscReq({myOverlayKey, packet->getSource(), {}, stateseqno_t::invalidSeqNo});
+		} else {
+			// other side has to wait for our ULNHello, but if it will take long, we'll take the initiative
+			if (randomTimerDuration[ULNHelloTimerId] > 5*minHelloInterval)
+				scheduleULNDiscReq({myOverlayKey, packet->getSource(), {}, stateseqno_t::invalidSeqNo});
 		}
 	}
 
@@ -746,7 +750,7 @@ R2Kademlia::sendScheduledRequests(ContactRequestQueue& q) {
 }
 
 
-// check whether we need to resync with physical neighbor, update lastseen
+// check whether we need to resync with direct underlay neighbor, update lastseen
 // normal stateSeqNo not sufficient, because it may have been updated by another message already
 // getSyncPNSeqNo() tells us when we received the last full PN list from this PN
 bool R2Kademlia::checkForResync(const OverlayKey& contact, stateseqno_t newseqno) {

@@ -1721,6 +1721,22 @@ KadRoutingTable::pathToContactIsIntact(const KadContact &contact) const {
 }
 
 
+
+// returns false if path to contact contains a broken next hop link in the underlay and true otherwise
+// simply traverses the path in the underlay and checks the corresponding edge
+bool
+KadRoutingTable::nextHopToContactIsIntact(const OverlayKey& destkey) const {
+  auto contactp = getContact(destkey);
+  if (!contactp)
+	  return false;
+  auto active_path = contactp->getRawActivePath();
+  const OverlayKey &next_hop = active_path.empty() ? contactp->getKey() : active_path.front();
+  // if ULN is present in neighbor table, next hop link should be intact
+  return neighbortable.isNeighbor(next_hop);
+}
+
+
+
 /** invalidate all contacts with paths that contain a failed link otherNodeKey <-> failedNodeKey */
 void KadRoutingTable::invalidateContacts(const link_t& failedLink, age_t failedLinkAge)
 {

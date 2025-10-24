@@ -3,6 +3,7 @@
 #include "GaussMarkovMobility.h"
 #include "BaseTypes.h"
 #include "clog.h"
+#include "csimulation.h"
 
 namespace routingsim {
 
@@ -12,10 +13,11 @@ void GaussMarkovMobility::initialize() {
     MobilityBase::initialize();
     double beta = par("beta").doubleValue();
 
-    alpha = exp(-beta * updateInterval);
+    positionUpdateInterval= SimTime(1000,SIMTIME_MS);
+    alpha = exp(-beta * positionUpdateInterval.dbl());
     ASSERT(0 <= alpha && alpha <= 1);
     EV_DEBUG << "alpha: " << alpha << ", beta: " << beta << endl;
-    sqrt_one_minus_alpha_square= sqrt(1 - alpha*alpha);
+    sqrt_one_minus_alpha_square= sqrt(1.0 - alpha*alpha);
     one_minus_alpha= 1.0-alpha;
     speedMean = par("speedMean");
     speedStandardDeviation = par("speedStandardDeviation");
@@ -35,6 +37,7 @@ void GaussMarkovMobility::initialize() {
 
     lastPosition = getRandomPosition();
     targetPosition = lastPosition;
+    lastPositionUpdate = simTime();
 
     EV_DEBUG << "initialize gauss-markov with memory level alpha: " << alpha << endl;
 }
@@ -47,8 +50,11 @@ Coord2D GaussMarkovMobility::getRandomPosition() {
 void GaussMarkovMobility::move() {
     // Update position
     EV_DEBUG << "MOVE" << endl;
-    handleBorderMargin();
-    updateDirection();
+    if ( (simTime() - lastPositionUpdate) >= positionUpdateInterval) {
+        handleBorderMargin();
+        updateDirection();
+        lastPositionUpdate = simTime();
+    }
     targetPosition = lastPosition + velocity;
     lastPosition = targetPosition;
 }
@@ -56,14 +62,14 @@ void GaussMarkovMobility::move() {
 void GaussMarkovMobility::updateDirection() {
     EV_DEBUG << "Old Velocity: " << velocity.toString() << " Old Heading: " << heading.getRadius() << " Old Heading Mean: " << Rad2D(headingMean).toVector().toString() << endl;
     // Speed
-    double speed = alpha * velocity.distance() + one_minus_alpha * speedMean + speedStandardDeviation * sqrt_one_minus_alpha_square * normal(0, 1, MOBILITY_RNG);
+    double newspeed = alpha * velocity.distance() + one_minus_alpha * speedMean + speedStandardDeviation * sqrt_one_minus_alpha_square * normal(0, 1, MOBILITY_RNG);
     // Heading
     double rand_heading = normal(0.0, 1.0, MOBILITY_RNG)*360.0;
     double old_heading = heading.getRadius();
-    heading = Rad2D(alpha * heading.getRadius() + one_minus_alpha * headingMean + headingStandardDeviation * sqrt_one_minus_alpha_square * rand_heading);
+    heading = Rad2D(alpha * old_heading + one_minus_alpha * headingMean + headingStandardDeviation * sqrt_one_minus_alpha_square * rand_heading);
     EV_DEBUG << heading.getRadius() << " = " << alpha << " * " << old_heading << " + (1 -" << alpha << ") * " << headingMean << " + " << headingStandardDeviation << " * sqrt(1 -" << alpha*alpha << ") * " << rand_heading << endl;
     // Velocity
-    velocity = heading.toVector() * speed;
+    velocity = heading.toVector() * newspeed;
     EV_DEBUG << "Velocity: " << velocity.toString() << " Heading: " << heading.getRadius() << ", " << heading.toVector().toString() << " Heading Mean: " << Rad2D(headingMean).toVector().toString() << endl;
 }
 

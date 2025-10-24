@@ -1,6 +1,7 @@
 
 #include "RandomWaypointMobility.h"
 #include "BaseTypes.h"
+#include "cenvir.h"
 
 namespace routingsim {
 
@@ -16,31 +17,49 @@ void RandomWaypointMobility::initialize() {
 
 void RandomWaypointMobility::move() {
   simtime_t now = simTime();
+
   if (now >= nextChange) {
-    EV_TRACE << "Should reached current target position = " << targetPosition.toString()
-             << " with current position " << lastPosition.toString()
-             << " at t=" << simTime()
-             << endl;
-    lastPosition = targetPosition;
+    // either has reached/overshoot target position or waiting time is over
+
+    if (!inWaitingState) {
+      // we probably moved beyond the target position, so stop at target
+      Coord2D direction = targetPosition - lastPosition;
+      EV_TRACE << "Should reached current target position = "
+               << targetPosition.toString() << " with current position "
+               << lastPosition.toString() << " at t=" << now
+               << " distance:" << direction.distance() << endl;
+
+      // vectors would opposite directions if overshot target
+      if (direction.get_normalized() != heading.toVector()) {
+        lastPosition = targetPosition;
+        // Calculate the time we still need to wait at the target
+        waitTime = std::max(defaultWaitTime - (direction.distance() / speed), 0.0);
+      } else {
+        waitTime = defaultWaitTime;
+      }
+    }
+
+    // state transition from waiting to move or other way round
+    inWaitingState = !inWaitingState;
     setNextTarget();
     EV_TRACE << "new target position = " << targetPosition.toString()
-            << ", next change t=" << nextChange << endl;
-  } else if (now > lastUpdate) {
-    ASSERT(nextChange == -1 || now < nextChange);
-    lastPosition += velocity * (now - lastUpdate).dbl();
+             << ", next change t=" << nextChange << " inWaitingState=" << (inWaitingState ? 'T' : 'F')  << endl;
+    lastUpdate = now;
+    return;
+  }
 
-    Coord2D direction = targetPosition - lastPosition;
-    if (direction.get_normalized() != heading.toVector()) {
-      // Missed target by overshooting
-      lastPosition = targetPosition;
-      // Calculate the time we still need to wait at the target
-      waitTime = std::max(defaultWaitTime - (direction.distance() / speed), 0.0);
-    } else {
-      waitTime = defaultWaitTime;
-    }
+  if (now > lastUpdate) {
+    ASSERT(nextChange == -1 || now < nextChange);
+    EV_TRACE << "Updating position from " << lastPosition.toString();
+    lastPosition += velocity * (now - lastUpdate).dbl();
+    EV_TRACE << " to " << lastPosition.toString() << " next change: "
+             << nextChange << endl;
+
+    EV_TRACE << " targetpos=" << targetPosition.toString() << " inWaitingState=" << (inWaitingState ? 'T' : 'F') <<  endl;
     lastUpdate = now;
   }
 }
+
 
 void RandomWaypointMobility::setNextTarget() {
   setTargetPosition();
@@ -48,20 +67,17 @@ void RandomWaypointMobility::setNextTarget() {
   setTargetVelocity();
   setHeading();
   setTargetNextPeriod();
-  waitNextPeriod = !waitNextPeriod;
 }
 
 void RandomWaypointMobility::setTargetPosition() {
-  if (waitNextPeriod) {
-    targetPosition = lastPosition;
-  } else {
+  if (not inWaitingState) {
     targetPosition = Coord2D(uniform(borderMin.x, borderMax.x, 1),
                              uniform(borderMin.y, borderMax.y, 1));
   }
 }
 
 void RandomWaypointMobility::setTargetVelocity() {
-  if (waitNextPeriod) {
+  if (inWaitingState) {
     velocity = Coord2D::ZERO;
     timeToNextPeriod = waitTime;
   } else {

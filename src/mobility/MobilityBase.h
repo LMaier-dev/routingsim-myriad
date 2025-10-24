@@ -37,7 +37,7 @@ namespace routingsim {
         // The position of the last update of the node.
         Coord2D lastPosition;
 
-        // The velocity of the node.
+        // The velocity of the node as vector: magnitude (speed) and direction
         Coord2D velocity = Coord2D::ZERO;
 
         // Initialize the position of the node.

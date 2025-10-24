@@ -2,6 +2,7 @@
 #define ROUTINGSIM_GAUSSMARKOV_H
 
 #include "MobilityBase.h"
+#include "simtime_t.h"
 
 namespace routingsim {
 
@@ -15,6 +16,8 @@ namespace routingsim {
             double speedStandardDeviation;
             double headingMean;
             double headingStandardDeviation;
+            simtime_t positionUpdateInterval; // when to change the velocity and direction
+            simtime_t lastPositionUpdate;
 
             double topMargin, rightMargin, bottomMargin, leftMargin;
 

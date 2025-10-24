@@ -73,6 +73,14 @@ enum reasoncode : uint8_t {
 	unhandledType= 128
 };
 
+
+enum fwd_result : uint8_t {
+  success = 0,
+  nexthop_failed = 1,
+  no_pidentry_found = 2
+};
+
+
 enum linkFailureNotificationType : uint8_t {
 	lfn_none = 0, // do not send linkFailureNotifications
 	lfn_floodonly= 1, // only flood LFNs to the direct neighbors
@@ -518,7 +526,7 @@ private:
 	void forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt);
 	/// forwards a data packet based on PathID present in the packet
 	bool forwardDataPacketToNextHop(KadDataPacket_p& packet, NodePkt_p& nodePkt);
-	bool tryForwardToNextOverlayHopWithPID(KadDataPacket_p& packet, NodePkt_p& nodePkt, const OverlayKey& nextOverlayHop);
+	fwd_result tryForwardToNextOverlayHopWithPID(KadDataPacket_p& packet, NodePkt_p& nodePkt, const OverlayKey& nextOverlayHop);
 
     /// replicate the flood packet in respective id range, returns number of replications sent
     uint32_t replicateFloodPacket(std::unique_ptr<KadFloodPacket>& packet);

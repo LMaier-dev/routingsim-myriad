@@ -406,9 +406,10 @@ bool R2Kademlia::forwardDataPacketToNextHop(KadDataPacket_p& packet, NodePkt_p& 
 }
 
 
-// @returns true in case the packets were either forwarded or dropped and false if no PID mapping was found
+// @returns success in case the packets was forwarded or nexthop_failed when packet was dropped and no_pidentry_found if no PID mapping was found
 // the latter may be the case when a path setup is in progress
-bool
+// NOTE: in the first two cases, the packet is destroyed
+fwd_result
 R2Kademlia::tryForwardToNextOverlayHopWithPID(KadDataPacket_p& packet, NodePkt_p& nodePkt, const OverlayKey& nextOverlayHop) {
 	if (auto pidentry= fwdTablePathID.NIDPIDTable.find(nextOverlayHop);
 		pidentry != fwdTablePathID.NIDPIDTable.end() ) { // pidentry.second is incomingPathID
@@ -428,11 +429,11 @@ R2Kademlia::tryForwardToNextOverlayHopWithPID(KadDataPacket_p& packet, NodePkt_p
 
 		if (forwardDataPacketToNextHop(packet, nodePkt))
 		{ // forwardDataPacketToNextHop had success
-			return true;
+			return success;
 		} else {
 			// in this case nodePkt will be nullptr, because it has been dropped
 			EV_WARN << "PID based forwarding failed while trying to forward to next hop." << endl;
-			return true;
+			return nexthop_failed;
 		}
 	}
 	else {
@@ -440,7 +441,7 @@ R2Kademlia::tryForwardToNextOverlayHopWithPID(KadDataPacket_p& packet, NodePkt_p
 		// try next contact instead
 		EV_TRACE << "No NIDtoPID entry found for " << nextOverlayHop.shortStr() << endl;
 	}
-	return false;
+	return no_pidentry_found;
 }
 
 
@@ -526,12 +527,14 @@ void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 	// if we find a NIDPIDTable entry directly, try to use this
 	// this may help with broken links and detours on the last overlay hop (finaldest is in deepest bucket)
 	// although this does not make sense if the next hop link is broken
-	if (routingTable.isInLastBucket(finaldest)) {
-		if (tryForwardToNextOverlayHopWithPID(packet, nodePkt, finaldest)) {
-			// forwarding was successful or failed during forwarding to next hop, we need to terminate here
-			return;
+	if (routingTable.isInLastBucket(finaldest) and routingTable.nextHopToContactIsIntact(finaldest)) {
+		if (auto fwd_result = tryForwardToNextOverlayHopWithPID(packet, nodePkt, finaldest);
+              fwd_result != no_pidentry_found) {
+			  // forwarding was successful or packet dropped
+			  return;
 		}
 		else {
+			// failed during forwarding to next hop, we need to terminate here
 			EV_TRACE << "Forwarding to " << finaldest.shortStr() << " failed, trying next contact" << endl;
 		}
 	}
@@ -563,8 +566,8 @@ void R2Kademlia::forwardDataPacket(KadDataPacket_p packet, NodePkt_p nodePkt) {
 					 << " (" << contact.getPathLength()+1 << " hops)" << endl;
 
 			// now try to find a PathID to the next overlay hop
-			if (tryForwardToNextOverlayHopWithPID(packet, nodePkt, contact.getKey())) {
-				// forwarding was successful or failed during forwarding to next hop, we need to terminate here
+			if (tryForwardToNextOverlayHopWithPID(packet, nodePkt, contact.getKey()) != no_pidentry_found) {
+				// forwarding was successful
 				return;
 			}
 			else {
