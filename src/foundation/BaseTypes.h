@@ -218,7 +218,9 @@ public:
 
   void setFromVector(Coord2D vector) {
     Coord2D vector_normalized = vector.get_normalized();
-    radius = atan2(vector_normalized.y, vector_normalized.x);
+    radius = 180.0 / std::numbers::pi * std::atan2(vector_normalized.y, vector_normalized.x);
+    if (radius < 0)
+      radius+= 360.0;
   }
 
   // returns a normalized vector

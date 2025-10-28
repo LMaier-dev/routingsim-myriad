@@ -33,7 +33,7 @@ void MobilityBase::preDelete(cComponent *root) {
 void MobilityBase::initializePosition() { lastPosition = getRandomPosition(); }
 
 void MobilityBase::initializeHeading() {
-  heading.setRadius(getRNG(MOBILITY_RNG)->doubleRand() * 360);
+  heading.setRadius(getRNG(MOBILITY_RNG)->doubleRand() * 360.0);
 }
 
 void MobilityBase::updatePosition() {
@@ -48,7 +48,7 @@ void MobilityBase::updatePosition() {
   ASSERT(borderMin.y <= lastPosition.y && lastPosition.y <= borderMax.y);
 
   EV_DEBUG << "Prev node pos: (" << prevPosition.x << "," << prevPosition.y << ")"
-    << " New pos: (" << lastPosition.x << "," << lastPosition.y << ")" << endl;
+    << " New pos: (" << lastPosition.x << "," << lastPosition.y << ") heading: " << heading.getRadius() << " speed: " << velocity.distance() << "[m/s]"<< endl;
 
   if (prevPosition != lastPosition) {
     // Only record changes in position
@@ -65,10 +65,12 @@ void MobilityBase::reflectIfOutside() {
   if (lastPosition.x < borderMin.x || borderMax.x < lastPosition.x) {
     sign = reflect(borderMin.x, borderMax.x, lastPosition.x, velocity.x);
     heading.setRadius(90 + (heading.getRadius() - 90) * sign);
+    velocity = heading.toVector() * velocity.distance();
   }
   if (lastPosition.y < borderMin.y || borderMax.y < lastPosition.y) {
     sign = reflect(borderMin.y, borderMax.y, lastPosition.y, velocity.y);
     heading.setRadius(heading.getRadius() * sign);
+    velocity = heading.toVector() * velocity.distance();
   }
 }
 

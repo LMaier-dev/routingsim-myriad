@@ -1,9 +1,6 @@
-
-
 #include "GaussMarkovMobility.h"
 #include "BaseTypes.h"
 #include "clog.h"
-#include "csimulation.h"
 
 namespace routingsim {
 
@@ -13,7 +10,7 @@ void GaussMarkovMobility::initialize() {
     MobilityBase::initialize();
     double beta = par("beta").doubleValue();
 
-    positionUpdateInterval= SimTime(1000,SIMTIME_MS);
+    positionUpdateInterval= SimTime(2500,SIMTIME_MS);
     alpha = exp(-beta * positionUpdateInterval.dbl());
     ASSERT(0 <= alpha && alpha <= 1);
     EV_DEBUG << "alpha: " << alpha << ", beta: " << beta << endl;
@@ -33,7 +30,7 @@ void GaussMarkovMobility::initialize() {
     rightMargin = borderMax.x - borderMarginX;
     topMargin = borderMax.y - borderMarginY;
     bottomMargin = borderMin.y + borderMarginY;
-    EV_DEBUG << "Border Margin: (" << topMargin << "," << rightMargin << "," << bottomMargin << "," << leftMargin << ")" << endl;
+    EV_DEBUG << "Border Margin: (" << leftMargin << "," << bottomMargin << "," << rightMargin << "," << topMargin << ")" << endl;
 
     lastPosition = getRandomPosition();
     targetPosition = lastPosition;
@@ -50,8 +47,10 @@ Coord2D GaussMarkovMobility::getRandomPosition() {
 void GaussMarkovMobility::move() {
     // Update position
     EV_DEBUG << "MOVE" << endl;
-    if ( (simTime() - lastPositionUpdate) >= positionUpdateInterval) {
-        handleBorderMargin();
+    double oldheadingMean= headingMean;
+    bool in_margin = handleBorderMargin();
+    // update/change direction and speed if next interval has been reached
+    if ( ((simTime() - lastPositionUpdate) >= positionUpdateInterval) or in_margin ) {
         updateDirection();
         lastPositionUpdate = simTime();
     }
@@ -59,21 +58,24 @@ void GaussMarkovMobility::move() {
     lastPosition = targetPosition;
 }
 
+
 void GaussMarkovMobility::updateDirection() {
-    EV_DEBUG << "Old Velocity: " << velocity.toString() << " Old Heading: " << heading.getRadius() << " Old Heading Mean: " << Rad2D(headingMean).toVector().toString() << endl;
+    EV_DEBUG << "Old Velocity: " << velocity.toString() << " Old Heading: " << heading.getRadius() << " Old Heading Mean: " << headingMean << endl;
     // Speed
-    double newspeed = alpha * velocity.distance() + one_minus_alpha * speedMean + speedStandardDeviation * sqrt_one_minus_alpha_square * normal(0, 1, MOBILITY_RNG);
+    double newspeed = alpha * velocity.distance() + one_minus_alpha * speedMean + speedStandardDeviation * sqrt_one_minus_alpha_square * normal(0.0, 1.0, MOBILITY_RNG);
     // Heading
-    double rand_heading = normal(0.0, 1.0, MOBILITY_RNG)*360.0;
+    double rand_heading = normal(0.0, 1.0, MOBILITY_RNG);
     double old_heading = heading.getRadius();
     heading = Rad2D(alpha * old_heading + one_minus_alpha * headingMean + headingStandardDeviation * sqrt_one_minus_alpha_square * rand_heading);
-    EV_DEBUG << heading.getRadius() << " = " << alpha << " * " << old_heading << " + (1 -" << alpha << ") * " << headingMean << " + " << headingStandardDeviation << " * sqrt(1 -" << alpha*alpha << ") * " << rand_heading << endl;
+    EV_DEBUG << "heading: " << heading.getRadius() << " = " << alpha << " * " << old_heading << " + " << (1 - alpha ) <<  "*" << headingMean << " + " << headingStandardDeviation << "*" << sqrt_one_minus_alpha_square << " * " << rand_heading << endl;
     // Velocity
     velocity = heading.toVector() * newspeed;
-    EV_DEBUG << "Velocity: " << velocity.toString() << " Heading: " << heading.getRadius() << ", " << heading.toVector().toString() << " Heading Mean: " << Rad2D(headingMean).toVector().toString() << endl;
+    EV_DEBUG << "Velocity: " << velocity.toString() << " Speed: " << newspeed << "[m/s] Heading: " << heading.getRadius() << ", " << heading.toVector().toString() << " Heading Mean: " << headingMean << endl;
 }
 
-void GaussMarkovMobility::handleBorderMargin() {
+
+// returns true if inside margin, false otherwise
+bool GaussMarkovMobility::handleBorderMargin() {
     bool inLeftMargin = lastPosition.x <= leftMargin;
     bool inRightMargin = lastPosition.x >= rightMargin;
     bool inTopMargin = lastPosition.y >= topMargin;
@@ -98,7 +100,16 @@ void GaussMarkovMobility::handleBorderMargin() {
         headingMean = 180; // Head left
     } else if (inBottomMargin) {
         headingMean = 90; // Head up
+    } else { // not in margin
+        //ASSERT(not inTopMargin and not inRightMargin and not inBottomMargin and not inLeftMargin);
+        return false;
     }
+    //ASSERT(inTopMargin or inRightMargin or inBottomMargin or inLeftMargin);
+    // need fast turn around, so set also "oldheading" to new value
+    heading = headingMean;
+    velocity = heading.toVector() * velocity.distance();
+
+    return true;
 }
 
-};
+} // end namespace

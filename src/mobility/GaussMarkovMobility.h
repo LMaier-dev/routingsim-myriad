@@ -2,7 +2,6 @@
 #define ROUTINGSIM_GAUSSMARKOV_H
 
 #include "MobilityBase.h"
-#include "simtime_t.h"
 
 namespace routingsim {
 
@@ -22,7 +21,7 @@ namespace routingsim {
             double topMargin, rightMargin, bottomMargin, leftMargin;
 
             void updateDirection();
-            void handleBorderMargin();
+            bool handleBorderMargin();
         protected:
             // Move the node to the targetPosition and update the lastPosition of the node.
             void move() override;
