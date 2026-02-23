@@ -14,6 +14,7 @@ from random import seed as rd_seed, choice, choices, sample
 
 import networkx
 
+from dragonfly_plus_topology import DragonflyPlusTopology
 
 def main():
     parser = argparse.ArgumentParser(description='Tool to generate topologies for RoutingSim')
@@ -39,6 +40,10 @@ def main():
 
     parser_cft = subparsers.add_parser('cft', help='clos network fat tree')
     parser_cft.add_argument('K', type=int, help='node degree')
+    parser_cft.add_argument('--hosts', help='include hosts (degree 1)', action='store_true')
+
+    parser_cft = subparsers.add_parser('dfp', help='Dragonfly+ topology (large mode)')
+    parser_cft.add_argument('k', type=int, help='router radix')
     parser_cft.add_argument('--hosts', help='include hosts (degree 1)', action='store_true')
 
     parser_plc = subparsers.add_parser('tree', help='perfectly balance R-tree with height H')
@@ -176,6 +181,16 @@ def main():
             ["", f"\tmakes {(opt.K//2)**2 + opt.K**2} nodes and up to {opt.K**3 // 4} hosts"],
             ["time", datetime.now()]]
         G.graph['filename'] = f"clos_fat_tree_{opt.K}_with{'out' if not opt.hosts else ''}_hosts.txt"
+    elif(opt.type == 'dfp'):
+        dfp_topo = DragonflyPlusTopology((opt.k*opt.k)//4+1,opt.k//2,'large',opt.hosts)
+        G = dfp_topo.graph
+        G.graph['info'] = [
+            ["", f"generated with NetworkX {networkx.__version__} (custom DragonflyPlus generator)"],
+            ["", f"Dragonfly+ topology, k = {opt.k}, with{'out' if not opt.hosts else ''} hosts"],
+            ["", f"\t{dfp_topo.num_groups} groups, with {opt.k} routers each"],
+            ["", f"\tmakes {dfp_topo.total_routers} routers and up to {dfp_topo.total_hosts} hosts"],
+            ["time", datetime.now()]]
+        G.graph['filename'] = f"dragonflyplus_{opt.k}_with{'out' if not opt.hosts else ''}_hosts.txt"
     elif(opt.type == 'tree'):
         G = networkx.balanced_tree(opt.R, opt.H)
         G.graph['info'] = [

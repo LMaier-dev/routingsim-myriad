@@ -1237,14 +1237,14 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadFindNodeReq> packet) {
 	if (packet->isTracked()) {
 		EV_TRACE << "packet was tracked, setTracked for answer" << endl;
 		answer->markTracked();
-        }
+	}
 	countReceived(*packet);
 
 	// add valid randomly chosen contacts from all other buckets to improve connectivity
-        if (addGratuitousContacts)
+	if (addGratuitousContacts)
 	  routingTable.addRandomGratuitousContacts(contacts);
 
-        fillRTableRsp(*answer, contacts);
+	fillRTableRsp(*answer, contacts);
 	if (is_rediscovery) // rediscovery request successfully arrived at the destination
 		succeededRediscovery++;
 
@@ -1277,14 +1277,14 @@ bool R2Kademlia::handleFindNodeResponse(KadPacket_p answer_, RPCState& rpcState)
 				// fanout set to one, because each failed rediscovery request
 				// should only trigger a single new retry
 				//ASSERT(contactp->getRDS().rediscoverQtype != RediscoveryState::rediscoverQ_type::undefined);
-                                simtime_t rediscoveryWaitTime(
-                                    (contactp->getRDS().rediscoverQtype == RediscoveryState::rediscoverQ_type::physicalneighbors) ? PNRediscoveryWaitTime :
+				simtime_t rediscoveryWaitTime(
+					(contactp->getRDS().rediscoverQtype == RediscoveryState::rediscoverQ_type::physicalneighbors) ? PNRediscoveryWaitTime :
 				    (contactp->getRDS().rediscoverQtype == RediscoveryState::rediscoverQ_type::urgent) ? urgentRediscoveryWaitTime :
 				    (contactp->getRDS().rediscoverQtype == RediscoveryState::rediscoverQ_type::regular) ? regularRediscoveryWaitTime : slowRediscoveryWaitTime);
 
 				addOneShotTimer(SimTime(RediscoveryNextTryWaitTime,SIMTIME_MS), std::bind(&R2Kademlia::sendRediscovery, this, contactp->getKey(), 1, rediscoveryWaitTime));
 				//sendRediscovery(contactp->getKey(), 1, rediscoverQ, rediscoveryWaitTime);
-                        }
+			}
 		}
 	}
 	return true;
@@ -1321,7 +1321,7 @@ bool R2Kademlia::handleRPCTimeOut(KadPacket_p answer_, RPCState& rpcState) {
 	// nothing to do, RPC state will be deleted
 
 	EV_TRACE << "RPC Timeout for msg: " << rpcState.original_packet->getId()
-		 << " nonce:" << rpcState.nonce << endl;
+			 << " nonce:" << rpcState.nonce << endl;
 
 	return true;
 }
@@ -1333,19 +1333,19 @@ void R2Kademlia::sampleStatistics (Statistics &stats) {
 	// every value here will contribute to the average, min, max,
 	// avgDiffQuot and quantiles, a histogram is also created
 
-        // for link statistics we need to access the underlying node
-        auto linkusagemap = node().getLinkUsageMap();
+	// for link statistics we need to access the underlying node
+	auto linkusagemap = node().getLinkUsageMap();
 	for ( auto lu : linkusagemap) {
 		stats.value("linkUsageMsgCount", lu.second.msgcount);
                 stats.value("linkUsageReceivedBytes", lu.second.bytecount);
 	}
 
-        stats.value("forwardedPackets", forwardedPackets);
+	stats.value("forwardedPackets", forwardedPackets);
 	stats.value("sentPackets", sentPackets);
 	stats.value("receivedPackets", receivedPackets);
 	stats.value("sentVolume", sentVolume);
 	stats.value("receivedVolume", receivedVolume);
-        stats.value("forwardedVolume", forwardedVolume);
+	stats.value("forwardedVolume", forwardedVolume);
 	if (detailedKIRAMessageStats) {
 		for (auto msgtype : msgStats) {
 			stats.value(msgStatsNames.getName(msgtype.first,msg_stats_subtype::msg_stat_sentCount), msgtype.second.sentCount);
@@ -1396,9 +1396,9 @@ void R2Kademlia::sampleStatistics (Statistics &stats) {
 	stats.value("fwdTableUpdates", fwdTablePathID.getNumUpdates());
 	stats.value("floodQueueMaxLength", FloodQueue.getMaxLength());
 	stats.value("notifyQueueMaxLength", NotifyQueue.getMaxLength());
-        if (getBoundProtocolPacketQueue(KAD_CTRL_PACKET_TYPE)) {
+	if (getBoundProtocolPacketQueue(KAD_CTRL_PACKET_TYPE)) {
 		stats.value("CPoverloadDiscard", getBoundProtocolPacketQueue(KAD_CTRL_PACKET_TYPE)->getOverloadDiscardedPackets());
-                stats.value("CPmaxSojournTime", getBoundProtocolPacketQueue(KAD_CTRL_PACKET_TYPE)->getMaxSojournTime().dbl());
+		stats.value("CPmaxSojournTime", getBoundProtocolPacketQueue(KAD_CTRL_PACKET_TYPE)->getMaxSojournTime().dbl());
 	}
     stats.value("floodPacketReplications", floodPacketReplications);
 }
@@ -1699,7 +1699,13 @@ void R2Kademlia::returnToSender(uint8_t errorType, KadPacket_p packet, const Ove
 	EV_TRACE << endl;
 	answer->setDstNodeID(packet->getSource());
 	answer->setFailedNextHopNodeID(failedNextHopNodeID);
-	answer->setOrigDstNodeID(packet->getTarget());
+	if (packet->getType() == KAD_UpdateRouteReq) {
+		const auto findNodeReq(dynamic_cast<KadFindNodeReq*>(packet.get()));
+		answer->setOrigDstNodeID(findNodeReq->getDstNodeID());
+	}
+	else {
+		answer->setOrigDstNodeID(packet->getTarget());
+	}
 	answer->encapsulate(packet.release());
 	if (answer->hasRemainingHops())
 		sendPacket(std::move(answer));

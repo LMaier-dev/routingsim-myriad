@@ -25,13 +25,13 @@ parameters:
     @class(MixedFailure);
     
     /// warmup phase (failures start after warmup)
-   	double warmup @unit(s) = default(100s);
+    double warmup @unit(s) = default(100s);
     
     /// whether nodes should fail
 	bool nodeFailure = default(true);
 	/// fraction of nodes that fail at the beginning of each interval
-   	double nodeFraction = default(0.01);
-   	/// periodic occurrence of node failures
+    double nodeFraction = default(0.01);
+    /// periodic occurrence of node failures
     double nodeFailPeriod @unit(s) = default(320s);
     /// duration of each node failure
     double nodeFailDuration @unit(s) = default(480s);
@@ -42,7 +42,7 @@ parameters:
     /// whether links should fail
 	bool linkFailure = default(true);
 	/// fraction of links that fail at the beginning of each interval
-   	double linkFraction = default(0.01);
+    double linkFraction = default(0.01);
     /// periodic occurrence of link failures
     double linkFailPeriod @unit(s) = default(30s);
     /// duration of each link failure

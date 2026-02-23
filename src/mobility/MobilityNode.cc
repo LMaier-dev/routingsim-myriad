@@ -2,6 +2,7 @@
 #include "RandomWaypointMobility.h"
 #include "GaussMarkovMobility.h"
 #include "IsotropicAntenna.h"
+#include <format>
 
 namespace routingsim {
 
@@ -44,7 +45,8 @@ void MobilityNode::initialize(int stage) {
     antenna_model->finalizeParameters();
     antenna_model->initialize();
 
-    nodeDegreeV = new cOutVector("nodeDegree");
+    auto prefix= std::format("MobilityNode_{}",getNodeId());
+    nodeDegreeV = new cOutVector((prefix+"_nodeDegree").c_str());
     take(nodeDegreeV);
   }
 

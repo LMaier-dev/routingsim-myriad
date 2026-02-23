@@ -72,8 +72,8 @@ R2Kademlia::onErrorPacket(KadError& error) {
 			EV_INFO << "RouteFailureDeadEnd";
 			break;
 	}
-	EV_INFO	<< endl;
-	
+	EV_INFO	<< " Orig Dst: " << error.getOrigDstNodeID().shortStr() << endl;
+
 	switch (error.getErrorType()) {
 
 		// the following errors indicate a problem with the route to the contact

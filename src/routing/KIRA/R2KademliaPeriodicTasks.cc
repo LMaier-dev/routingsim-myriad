@@ -469,7 +469,7 @@ bool R2Kademlia::doProbeRandomly(short timerId)
 bool R2Kademlia::doProbeSelf(short timerId)
 {
 	ASSERT(timerId >= 0 and timerId < fixedTimerIdBase);
-	static const simtime_t maxDuration(SimTime(300,SIMTIME_S)); // check every 5 minutes
+	static const simtime_t maxDuration(3 * maxHelloInterval);
 
 	// exponential backoff double duration until we reached maxDuration
 	if (randomTimerDuration[timerId] < maxDuration)
