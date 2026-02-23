@@ -11,7 +11,7 @@ doi:10.1109/ICON.2011.6168493
 https://ieeexplore.ieee.org/document/6168493
 
 The current version has been tested with 
-OMNeT++ 6.1.0, 6.0.3 and 5.7 
+OMNeT++ 6.3.0, 6.2.0, 6.1.0, 6.0.3 and 5.7 
 (older versions will not work due to .msg and .ned
 format incompatibilities).
 
