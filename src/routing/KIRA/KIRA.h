@@ -577,6 +577,8 @@ private:
 	void sendData(const OverlayKey& key, NodePkt_ps payload = nullptr);
 	//@}
 
+	void reSyncULNUnconditionally(const KadContact& contact, stateseqno_t expected_seqno);
+
 	/// schedule rediscovery
 	void scheduleULNRediscovery(const OverlayKey& contactkey) override { scheduleRediscovery(contactkey, ULNRediscoverQueue, PNRediscoveryWaitTime); };
 	void scheduleUrgentRediscovery(const OverlayKey& contactkey) override { scheduleRediscovery(contactkey, urgentRediscoverQueue, urgentRediscoveryWaitTime); };
@@ -586,7 +588,9 @@ private:
 	ContactRequestQueue::iterator scheduleRequest(ContactRequestQueue& q, KadContact&& tmpcontact);
 	/// schedule sending ULNDiscReq
 	void scheduleULNDiscReq(KadContact&& tmpcontact) { scheduleRequest(ULNDiscoverQueue, std::move(tmpcontact)); };
+	/// schedule sending QueryRouteReq with radius 1
 	void scheduleGetULNReq(KadContact&& tmpcontact) { scheduleRequest(GetULNQueue, std::move(tmpcontact)); };
+	/// schedule sending QueryRouteReq for getting overlay neighbor
 	void scheduleGetONReq(const KadContact& tmpcontact);
 	void scheduleContactCandidateProbe(KadContact&& tmpcontact) { scheduleRequest(ContactCandidateProbeQueue, std::move(tmpcontact)); }
         // schedule on demand ProbeReq

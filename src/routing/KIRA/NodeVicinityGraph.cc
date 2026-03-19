@@ -32,7 +32,7 @@ std::string nodeVicinityGraph::str() const {
 // also updates distance if childnode already known
 // @returns (node added, link added, node*)
 std::tuple<bool, bool, nodeVicinityNode*>
-nodeVicinityGraph::addNode(const OverlayKey& parentNodeKey, const OverlayKey& childNodeKey, unsigned short distance) {
+nodeVicinityGraph::addNode(const OverlayKey& parentNodeKey, const OverlayKey& childNodeKey, unsigned short distance, const OverlayKey& node_xorsum) {
 	ASSERT(distance > 0U);
 
 	nodeVicinityNode* foundnode(nullptr);
@@ -61,20 +61,33 @@ nodeVicinityGraph::addNode(const OverlayKey& parentNodeKey, const OverlayKey& ch
 			// must create new node for child
 			auto result= graph.insert(std::make_pair(childNodeKey, nodeVicinityNode()));
 			graph[childNodeKey].nodeKey= &(result.first)->first; // add pointer to overlay key at index
-			graph[childNodeKey].distance= distance;
+			graph[childNodeKey].distance = distance;
+			if (not node_xorsum.isUnspecified())
+				graph[childNodeKey].twoHopULNXorSum = node_xorsum;
 			//EV_TRACE << "vicinity.addNode(): added new node " <<  childNodeKey.shortStr() << endl;
 			childnodeptr= &graph[childNodeKey];
-			node_added= true;
+			node_added = true;
+			// update XORsum for two-hop ULNs
+			if (distance == 2) {
+				xorsum = xorsum ^ childNodeKey;
+			}
 		}
 		else { // entry for child exists already
 			childnodeptr= &(child_it->second);
 			// in case this node is closer than before, update the distance
 			unsigned int old_distance= child_it->second.distance;
+			// update xorsum
+			if (not node_xorsum.isUnspecified())
+				child_it->second.twoHopULNXorSum = node_xorsum;
 			//EV_TRACE << "vicinity.addNode(): node exists already, distance " <<  old_distance << endl;
 			// smallest distance determines level of node
+			// e.g., formerly known two-hop ULN may also be direct ULN
 			if (distance < old_distance) {
 				child_it->second.distance= distance;
 				link_added= true;
+			} else if (distance > old_distance and distance == 2) {
+				// this node is a direct ULN, but also a two-hop ULN, so update the xorsum
+				xorsum = xorsum ^ childNodeKey;
 			}
 		}
 
@@ -117,6 +130,10 @@ nodeVicinityGraph::removeNode(const OverlayKey& nodeKey)
 	// lookup node
 	if (auto it= graph.find(nodeKey); it != graph.end()) {
 		const nodeVicinityNode* node(&it->second);
+		// update xorsum of two hop neighbors
+		if (node->distance == 2) {
+			xorsum = xorsum ^ nodeKey;
+		}
 		// now find all nodes at node.distance-1, because they may point to this node as being its child
 		for (auto graphit= graph.begin(); graphit != graph.end(); graphit++) {
 		  // remove any potential referrals to this node
@@ -164,9 +181,15 @@ nodeVicinityGraph::removeLink(const OverlayKey &parentNodeKey, const OverlayKey 
 					if (childnode->parents > 0) {
 						childnode->parents--;
 						if (childnode->parents == 0) {
+							// if node is in two hop neighborhood, remove it from the xorsum
+							if (childnode->distance == 2) {
+								xorsum = xorsum ^ childNodeKey;
+							}
 							// last parent removed we can delete this node now
 							EV_TRACE << "nodeVicinity: removing node " << childnode->nodeKey->shortStr() << " has no parents anymore" << endl;
 							graph.erase(graphit);
+
+
 							return true;
 						}
 					} else {

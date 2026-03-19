@@ -145,8 +145,15 @@ void R2Kademlia::onContactRemoval(KadContact_p contact)
 	if (contact->getPathLength() < nodeVicinityGraph::vicinityDiscoveryRadius and contact->getState() == KadContact::State::dead) {
 		// need to remove precomputed PathIDs
 		removePathIDsOfNode(contact->getKey());
+
+		auto oldxorsum = vicinity.xorsumtwohopULNs();
 		// remove node from vicinity
 		vicinity.removeNode(contact->getKey());
+		// in case of change in two hop neighborhood, let other nodes know by earlier ULNHello
+		if (oldxorsum != vicinity.xorsumtwohopULNs()) {
+			if (randomTimerDuration[ULNHelloTimerId] > 4*minHelloInterval)
+				resetTimer(ULNHelloTimerId, 4*minHelloInterval);
+		}
 	}
 }
 
@@ -221,9 +228,17 @@ void R2Kademlia::onNewContact(KadContact_p contact) {
 		}
 		else // maybe just on the radius, check to add contact for vicinity
 		if (contact->getPathLength()+1 == nodeVicinityGraph::vicinityDiscoveryRadius) {
-			vicinity.addNode(contact->getPath().back(), // parent, path not empty, see precondition of outer if
-					 contact->getKey(), // new child
-					 contact->getPathLength()+1);
+			auto oldxorsum = vicinity.xorsumtwohopULNs();
+			vicinity.addNode(
+				contact->getPath().back(), // parent, path not empty, see precondition of outer if
+				contact->getKey(),         // new child
+				contact->getPathLength() + 1,
+				OverlayKey::UNSPECIFIED_KEY);
+			// in case of change in two hop neighborhood, let other nodes know by earlier ULNHello
+			if (oldxorsum != vicinity.xorsumtwohopULNs()) {
+				if (randomTimerDuration[ULNHelloTimerId] > 5*minHelloInterval)
+					resetTimer(ULNHelloTimerId, 5*minHelloInterval);
+			}
 		}
 	}
 
@@ -382,6 +397,17 @@ R2Kademlia::reSyncULN(const KadContact& contact, stateseqno_t expected_seqno) {
 	EV_TRACE << "reSyncULN scheduled for " << contact.getKey().shortStr() << " expected seqno: " << expected_seqno << endl;
 
 	scheduleULNDiscReq({myOverlayKey, contact.getKey(), {}, expected_seqno});
+}
+
+
+void
+R2Kademlia::reSyncULNUnconditionally(const KadContact& contact, stateseqno_t expected_seqno) {
+	// simply trigger a ULNDiscReq to discovery changes in two hop vicinity
+	EV_TRACE << "reSyncULN (unconditionally) scheduled for " << contact.getKey().shortStr() << " expected seqno: " << expected_seqno << endl;
+	KadContact tmpcontact(myOverlayKey, contact.getKey(), {}, expected_seqno);
+	// _get_PN is set to send ULNDiscReq irrespective of current state seq numbers
+	tmpcontact.setState(KadContact::State::_get_PN);
+	scheduleULNDiscReq(std::move(tmpcontact));
 }
 
 

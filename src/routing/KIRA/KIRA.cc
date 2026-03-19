@@ -1552,6 +1552,8 @@ void R2Kademlia::readRTableRsp(const KadRTableRsp& packet) {
 	// should shorten path here already so that the in loop condition fits
 	routingTable.shortenPath(viaPath,0);
 
+	auto oldxorsum = vicinity.xorsumtwohopULNs();
+
 	for (size_t i = 0; i < packet.getContactArraySize(); i++) {
 		// TODO optimization: isPathInteresting
 		// Examples: contact 0779b9 via path < ee2741 0de89c > + <->
@@ -1583,9 +1585,12 @@ void R2Kademlia::readRTableRsp(const KadRTableRsp& packet) {
 							       packet.getSeqNo(i));
 				auto& parentNodeKey= neighborhoodContact.getPath().empty() ? myOverlayKey : neighborhoodContact.getPath().back();
 				// try to add node to vicinity, but maybe already there
-				auto [nodeAdded, linkAdded, vn]= vicinity.addNode(parentNodeKey, // parent node
-								  neighborhoodContact.getKey(), // new child node
-								  neighborhoodContact.getPathLength()+1); // distance of child node to us
+				auto [nodeAdded, linkAdded, vn] =
+					vicinity.addNode(
+						parentNodeKey, // parent node
+						neighborhoodContact.getKey(), // new child node
+						neighborhoodContact.getPathLength() + 1, // distance of child node to us
+						OverlayKey::UNSPECIFIED_KEY);
 				if (nodeAdded) {
 					// newly put into vicinity, so get its ULNs (unconditionally, therefore store invalid seq no)
 					querynode= true;
@@ -1620,6 +1625,13 @@ void R2Kademlia::readRTableRsp(const KadRTableRsp& packet) {
 			}
 		} // endif: new path not added
 	} // end for each reported contact
+
+	// in case of change in two hop neighborhood, let other nodes know by earlier ULNHello
+	if (oldxorsum != vicinity.xorsumtwohopULNs()) {
+		if (randomTimerDuration[ULNHelloTimerId] > 4*minHelloInterval)
+			resetTimer(ULNHelloTimerId, 4*minHelloInterval);
+	}
+
 }
 
 

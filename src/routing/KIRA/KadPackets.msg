@@ -126,6 +126,7 @@ packet KadHello extends KadPacket {
 	type = KAD_ULNHello;
 	//@str({"ULNHello"});
 	nodeid_t sourceId;
+	OverlayKey twoHopULNXORSum;
 }
 
 
@@ -134,6 +135,7 @@ packet KadULNDiscReq extends KadRTableReq {
 	type = KAD_ULNDiscReq;
 	//@str({"ULNDiscReq"});
 	nodeid_t sourceId;
+	OverlayKey twoHopULNXORSum;
 	OverlayKey phyNeighbor[];
 	stateseqno_t phyNeighborSeqNo[];
 	age_t phyNeighborAge[];

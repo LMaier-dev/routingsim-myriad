@@ -19,6 +19,7 @@ NodePkt_p R2Kademlia::makeHelloPacket()
 	hello->setSrcNodeDegree(neighborTable.size());
 	hello->setNonce(0);
 	hello->setStateSeqNo(getLSSeqNo());
+	hello->setTwoHopULNXORSum(vicinity.xorsumtwohopULNs());
 	NodePkt_p nodePkt = std::make_unique<NodePkt>(hello->getName());
 	nodePkt->setType(KAD_CTRL_PACKET_TYPE);
 	nodePkt->encapsulate(hello.release());
@@ -56,6 +57,14 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 					contact_p->updateLastDirectULContact();
 				}
 			}
+			// if twohopXORsum has changed schedule sending a ULNDiscReq
+			if (nodep->twoHopULNXorSum != packet->getTwoHopULNXORSum()) {
+				if (KadContact *contact_p = const_cast<KadContact *>(routingTable.getContact(packet->getSource()));
+				    contact_p != nullptr and contact_p->isPhysicalNeighbor()) {
+					EV_TRACE << "found modified XORsum of ULN, scheduling resynch" << endl;
+					reSyncULN(*contact_p, packet->getStateSeqNo());
+				}
+			}
 		} else {
 			// update lastseen
 			if (KadContact *contact_p = const_cast<KadContact *>(routingTable.getContact(packet->getSource()));
@@ -79,9 +88,10 @@ void R2Kademlia::handlePacket(KadHello_p packet) {
 
 		// add node to vicinity
 		auto [node_added, link_added, nodeptr] =
-			vicinity.addNode(myOverlayKey, // parent
-							 packet->getSource(), // new child
-							 1);
+                    vicinity.addNode(myOverlayKey,        // parent
+                                     packet->getSource(), // new child
+                                     1,
+                                     packet->getTwoHopULNXORSum());
 
 		if (usePathIDs and (node_added or link_added)) {
 			fwdTablePathID.addPrecalcEntry({neighborcontact.getKey()});
@@ -151,18 +161,28 @@ simtime_t R2Kademlia::sendGetPhysicalNeighbors(const KadContact& contact, Reques
 
 	LastPNQueryRouteReq= simTime()+delay;
 
+	auto oldxorsum = vicinity.xorsumtwohopULNs();
 	// update vicinity to avoid future redundant requests
 	// NOTE this is potentially a problem because the path may not have been verified yet!
 	auto parentNodeKey= contact.getPath().empty() ? myOverlayKey : contact.getPath().back();
 	auto [nodeAdded, linkAdded, nodeptr] =
-		vicinity.addNode(parentNodeKey, // parent
+		vicinity.addNode(parentNodeKey,    // parent
 						 contact.getKey(), // new child
-						 contact.getPathLength()+1);
+						 contact.getPathLength() + 1,
+                         OverlayKey::UNSPECIFIED_KEY);
 	if (usePathIDs and (nodeAdded or linkAdded)) {
 		auto newpath(contact.getPath());
 		newpath.push_back(contact.getKey());
 		fwdTablePathID.addPrecalcEntry(newpath);
 		//vicinityPathIDCompletion(parentNodeKey, contact.getKey());
+	}
+
+	// in case of change in two hop neighborhood, let other nodes know by earlier ULNHello
+	if (contact.getPathLength() == 1 and oldxorsum != vicinity.xorsumtwohopULNs()) {
+
+		if (randomTimerDuration[ULNHelloTimerId] > 4*minHelloInterval)
+			resetTimer(ULNHelloTimerId, 4*minHelloInterval);
+
 	}
 	// return delay for next call
 	return delay;
@@ -219,7 +239,7 @@ simtime_t R2Kademlia::sendGetOverlayNeighbors(const KadContact& contact, Request
 // Send ULNDiscReq
 // the 2nd parameter is currently ignored (only required by unified interface)
 // @returns a delay value for the next call of this method
-simtime_t R2Kademlia::sendDiscoveryReq(const KadContact& contact, RequestQueueElementActionType _unused_arg)
+simtime_t R2Kademlia::sendDiscoveryReq(const KadContact& contact, [[maybe_unused]] RequestQueueElementActionType _unused_arg)
 {
 	EV_TRACE << "sending ULNDiscReq to " << contact << " mySSeq#: " << getLSSeqNo();
 
@@ -229,6 +249,7 @@ simtime_t R2Kademlia::sendDiscoveryReq(const KadContact& contact, RequestQueueEl
 	req->setSourceId(node().getNodeId());
 	req->setNeighborhood(1); // get only physical neighbors (1 hop away)
 	req->setContactsOnly(false);
+	req->setTwoHopULNXORSum(vicinity.xorsumtwohopULNs());
 	// send my own physical neighbors
 	if (auto neighbors = neighborTable.getTable(); neighbors.size() > 0) {
 
@@ -303,7 +324,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadULNDiscReq> packet) {
 	neighborTable.addNeighbor(packet->getSource(), packet->getSourceId());
 
 	// add physical neighbor to my vicinity
-	auto [node_added, link_added, nodeptr]= vicinity.addNode(myOverlayKey, packet->getSource(), 1);
+	auto [node_added, link_added, nodeptr]= vicinity.addNode(myOverlayKey, packet->getSource(), 1, packet->getTwoHopULNXORSum());
 	if (nodeptr != nullptr) {
 		// set or update the sequence number
 		nodeptr->stateseqno= packet->getStateSeqNo();
@@ -319,6 +340,7 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadULNDiscReq> packet) {
 	// check for physical neighbors sent with
 	kad_path path{packet->getSource()};
 	if (packet->getPhyNeighborArraySize() > 0) {
+		auto oldxorsum= vicinity.xorsumtwohopULNs();
 		for (uint i = 0; i < packet->getPhyNeighborArraySize(); i++) {
 
 			// this addPath cannot be trusted, because the ULN's neighbor may have not been contacted recently
@@ -328,9 +350,11 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadULNDiscReq> packet) {
 						     packet->getPhyNeighborDegree(i),
 						     false)) {
 				// if not put into routing table, add ULN's neighbor to vicinity nevertheless
-				auto [node_added, link_added, nodeptr]= vicinity.addNode(packet->getSource(),
-								  packet->getPhyNeighbor(i),
-								  2);
+				auto [node_added, link_added, nodeptr] =
+					vicinity.addNode(packet->getSource(),
+									 packet->getPhyNeighbor(i),
+									 2,
+									 OverlayKey::UNSPECIFIED_KEY);
 				if (usePathIDs and (node_added or link_added)) {
 					auto newpath(path);
 					newpath.push_back(packet->getPhyNeighbor(i));
@@ -338,6 +362,11 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadULNDiscReq> packet) {
 					//vicinityPathIDCompletion(packet->getSource(), packet->getPhyNeighbor(i));
 				}
 			}
+		} // end for
+		// in case of change in two hop neighborhood, let other nodes know by earlier ULNHello
+		if (oldxorsum != vicinity.xorsumtwohopULNs()) {
+			if (randomTimerDuration[ULNHelloTimerId] > 4*minHelloInterval)
+				resetTimer(ULNHelloTimerId, 4*minHelloInterval);
 		}
 	}
 
@@ -356,6 +385,12 @@ void R2Kademlia::handlePacket(std::unique_ptr<KadULNDiscReq> packet) {
 				contact_p->setSyncPNSeqNo(packet->getStateSeqNo());
 			// if no PN list given we may want to resync
 			checkForResync(packet->getSource(), packet->getStateSeqNo());
+		}
+
+		// if twohopXORsum has changed schedule sending a ULNDiscReq
+		if (nodeptr and nodeptr->twoHopULNXorSum != packet->getTwoHopULNXORSum()) {
+			EV_TRACE << "found modified XORsum of ULN, scheduling resynch" << endl;
+			reSyncULNUnconditionally(*contact_p, packet->getStateSeqNo());
 		}
 	}
 
@@ -542,6 +577,7 @@ bool R2Kademlia::handleULNDiscResponse(KadPacket_p answer, RPCState& rpcState)
 			}
 		}
 
+		auto oldxorsum = vicinity.xorsumtwohopULNs();
 		// the remaining contacts in list_of_children must have been deleted
 		for (auto nodekey : list_of_children) {
 			if (vicinity.removeLink(response->getSource(),nodekey)) {
@@ -551,6 +587,12 @@ bool R2Kademlia::handleULNDiscResponse(KadPacket_p answer, RPCState& rpcState)
 				fwdTablePathID.delPrecalcEntry(pathtoremove);
 			}
 		} // end for
+
+		// in case of change in two hop neighborhood, let other nodes know by earlier ULNHello
+		if (oldxorsum != vicinity.xorsumtwohopULNs()) {
+			if (randomTimerDuration[ULNHelloTimerId] > 4*minHelloInterval)
+				resetTimer(ULNHelloTimerId, 4*minHelloInterval);
+		}
 	}
 
 	return true;
@@ -592,6 +634,7 @@ bool R2Kademlia::handleQueryRouteResponse(KadPacket_p answer, RPCState& rpcState
 			}
 		} // end for
 
+		auto oldxorsum = vicinity.xorsumtwohopULNs();
 		// the remaining contacts in list_of_children must have been deleted
 		for (auto nodekey : list_of_children) {
 
@@ -602,6 +645,12 @@ bool R2Kademlia::handleQueryRouteResponse(KadPacket_p answer, RPCState& rpcState
 				fwdTablePathID.delPrecalcEntry(pathtoremove);
 			}
 		} // end for
+
+		// in case of change in two hop neighborhood, let other nodes know by earlier ULNHello
+		if (oldxorsum != vicinity.xorsumtwohopULNs()) {
+			if (randomTimerDuration[ULNHelloTimerId] > 4*minHelloInterval)
+				resetTimer(ULNHelloTimerId, 4*minHelloInterval);
+		}
 	}
 	return true;
 }
@@ -630,7 +679,7 @@ R2Kademlia::scheduleRequest(ContactRequestQueue& q, KadContact&& tmpcontact)
 	}
 	else
 	{ // it == q.end() or it->getKey() != tmpcontact.getKey()
-                // entry does not exist yet, so insert it at the right place
+		// entry does not exist yet, so insert it at the right place
 		it= q.insert(it, std::move(tmpcontact));
 	}
 
@@ -713,9 +762,11 @@ R2Kademlia::sendScheduledRequests(ContactRequestQueue& q) {
 
 		auto expected_seqno(tmpcontact.getStateSeqNo());
 		auto getOverlayNeighborsSource(tmpcontact.getState() == KadContact::State::_get_ON ? true : false);
+		// if _get_PN is set it means that we should send a ULNReq irrespective of the sequence numbers
+		auto getULNNeighbors(tmpcontact.getState() == KadContact::State::_get_PN ? true : false);
 		// check whether update is needed (invalidSeqNo means unconditionally update)
 		// this makes no sense for querying overlay neighbors as this is not reflected in sequence numbers
-		if (getOverlayNeighborsSource or lastseenseqno.isInvalid() or expected_seqno.isInvalid() or expected_seqno > lastseenseqno) {
+		if (getOverlayNeighborsSource or getULNNeighbors or lastseenseqno.isInvalid() or expected_seqno.isInvalid() or expected_seqno > lastseenseqno) {
 			if (isULN and not neighborTable.isNeighbor(tmpcontact.getKey())) {
 				EV_ERROR << q.getDescription() << " cannot be sent, because contact " << tmpcontact.getKey().shortStr() << " not in neighbor table anymore" << endl;
 			}
