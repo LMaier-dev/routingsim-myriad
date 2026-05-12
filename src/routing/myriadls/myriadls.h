@@ -13,6 +13,10 @@ protected:
     void onDisconnect(nodeid_t nid) override;
     void onMessage(NodePkt_p pkt) override;
     void reset() override;
+
+private:
+    nodeid_t myId;
+    std::string rings;
 };
 
 } // namespace routingsim
