@@ -1,0 +1,22 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "${workspaceFolder}/src/**",
+                "/opt/omnetpp-6.3.0/include",
+                "/opt/omnetpp-6.3.0/include/omnetpp"
+            ],
+            "forcedInclude": [
+                "/opt/omnetpp-6.3.0/include/omnetpp.h"
+            ],
+            "defines": [
+                "AUTOIMPORT_OMNETPP_NAMESPACE"
+            ],
+            "compilerPath": "/usr/bin/g++",
+            "cppStandard": "c++20",
+            "intelliSenseMode": "linux-gcc-x64"
+        }
+    ],
+    "version": 4
+}
