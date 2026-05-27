@@ -1,27 +1,51 @@
 @property[castFunction](type=bool; usage=class; desc="If false: Do not specialize the fromAnyPtr<T>(any_ptr) function for this class. Useful for preventing compile errors if the function already exists, e.g. in hand-written form, or generated for another type (think aliased typedefs).");
 
+import foundation.NodePkt;
+
 cplusplus {{
 #include "BaseTypes.h"
 #include "NodePkt_m.h"
+#include "MyriadLsTypes.h"
+
+namespace routingsim {
+// new "types"
+
+} // end namespace
+
 }}
 
+// the following will be defined in namespace routingsim
 namespace routingsim;
 
 enum MyriadPDUType {
-    MYRIAD_HELLO = 0x01;
-    MYRIAD_DD = 0x02;
-    MYRIAD_LSR = 0x03;
-    MYRIAD_LSU = 0x04;
-    MYRIAD_ACK = 0x05;
+    MYRIAD_HELLO = 0;
+    MYRIAD_DBD = 1;
+    MYRIAD_LSR = 2;
+    MYRIAD_LSU = 3;
+    MYRIAD_ACK = 4;
 }
 
-packet MyriadPacket {
+# directly from Kira
+class nodeid_t {
+      @cppType(routingsim::nodeid_t);
+      @opaque;
+      @subclassable(false);
+      @supportsPtr(false);
+      @editable(false);
+      @castFunction(false);
+      @byValue;
+      @existingClass;
+      @toValue((omnetpp::intval_t)($));
+      @fromValue(omnetpp::checked_int_cast<unsigned short>($.intValue()));
+}
+
+packet MyriadHeader {
     MyriadPDUType type;
-    nodeid_t source;
+    nodeid_t router_id_src;
 }
 
-packet MyriadHello extends MyriadPacket {
+packet MyriadHello extends MyriadHeader {
     type = MYRIAD_HELLO;
     nodeid_t knownNeighbors[];
-    std::string rings;
+    r_chain rings;
 }
