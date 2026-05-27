@@ -1,4 +1,4 @@
-package routingsim.routing.myriadls;
+package routingsim.routing.MyriadLs;
 
 simple myriadls extends routingsim.foundation.Protocol
 {

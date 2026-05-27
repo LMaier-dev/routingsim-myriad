@@ -16,7 +16,7 @@ cd ../ && make makefiles && cd src
 
 Rerun on .cc .h changes or for .ned .ini use touch
 ```
-touch routing/myriadls/myriadls.cc && make -j$(nproc) && 
+touch routing/myriadls/MyriadLs.cc && make -j$(nproc)
 ```
 
 # Running
@@ -34,5 +34,5 @@ Ring A: `{0,1,3}`  Ring B: `{1,2,3,4,6}`  Ring C: `{2,5,6}`
 ```
 Run within `/src` directory
 ```
-./RoutingSim -u Cmdenv ../simulations/myriadls/myriadls.ini -c PaperTopology
+./RoutingSim -u Cmdenv ../simulations/myriadls/MyriadLs.ini -c PaperTopology
 ```
