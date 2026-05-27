@@ -25,7 +25,7 @@ enum MyriadPDUType {
     MYRIAD_ACK = 4;
 }
 
-# directly from Kira
+// directly from Kira
 class nodeid_t {
       @cppType(routingsim::nodeid_t);
       @opaque;
@@ -39,6 +39,19 @@ class nodeid_t {
       @fromValue(omnetpp::checked_int_cast<unsigned short>($.intValue()));
 }
 
+class r_chain {
+      @cppType(routingsim::r_chain);
+      @opaque;
+      @subclassable(false);
+      @supportsPtr(false);
+      @editable(false);
+      @castFunction(false);
+      @byValue;
+      @existingClass;
+      @toValue($.c_str());
+      @fromValue($.stringValue());
+}
+
 packet MyriadHeader {
     MyriadPDUType type;
     nodeid_t router_id_src;
@@ -46,6 +59,8 @@ packet MyriadHeader {
 
 packet MyriadHello extends MyriadHeader {
     type = MYRIAD_HELLO;
+    simtime_t helloInterval;
+    simtime_t deadInterval;
     nodeid_t knownNeighbors[];
     r_chain rings;
 }

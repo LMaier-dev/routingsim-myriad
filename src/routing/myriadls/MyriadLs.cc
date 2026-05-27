@@ -6,7 +6,10 @@ Define_Module(MyriadLS);
 
 void MyriadLS::onInitialize() {
     myId = node().getNodeId();
-    helloInterval = uint64_t(1); // 1s
+    helloInterval = par("helloInterval");
+    deadInterval = par("deadInterval");
+
+    node().bind(MYRIADLS_PACKET_TYPE, this);
 
     switch (myId)
     {
@@ -51,7 +54,22 @@ void MyriadLS::onConnect(nodeid_t nid) {
 }
 
 void MyriadLS::onDisconnect(nodeid_t nid) {}
-void MyriadLS::onMessage(NodePkt_p pkt) {}
+
+void MyriadLS::onMessage(NodePkt_p pkt) {
+    myId = node().getNodeId();
+    auto header = std::unique_ptr<MyriadHeader>(check_and_cast<MyriadHeader*>(pkt->decapsulate()));
+    nodeid_t from = header->getRouter_id_src();    
+    switch (header->getType()) {
+        case MYRIAD_HELLO: {
+            auto hello = check_and_cast<MyriadHello*>(header.get());
+            EV << myId << " received hello from " << from << "\n";
+            break;
+        }
+        default:
+            EV << myId << " received unknown packet type: " << header->getType() << "\n";
+    }
+
+}
 
 void MyriadLS::onSelfMessage(cMessage_p msg) {
       auto* timer = dynamic_cast<TimerMsg*>(msg.get());
@@ -75,23 +93,23 @@ void MyriadLS::scheduleHello(simtime_t delay) {
 }
 
 void MyriadLS::sendHello() {
-    EV << "Hello There\n";
-    // auto hello = std::make_unique<MyriadHello>("Myriad_Hello");
-    // hello->setSource(myId);
-    // hello->setKnownNeighborsArraySize(neighbors.size());
-    // int idx = 0;
-    // for (auto& [nid, nbr] : neighbors) {
-    //     hello->setKnownNeighbors(idx++, nid);
-    // }
-    // hello->setByteLength(40 + 36 + 4 * neighbors.size());
-
-    // for (const auto& [nid, nbr] : neighbors) {
-    //     auto np = std::make_unique<NodePkt>("OSPF");
-    //     np->setType(OSPF_PACKET_TYPE);
-    //     np->encapsulate(hello->dup());
-    //     sendToNode(nid, std::move(np));
-    // }
-
+    // EV << "Hello There\n";
+    auto hello = std::make_unique<MyriadHello>("Myriad_Hello");
+    hello->setRouter_id_src(myId);
+    hello->setHelloInterval(helloInterval);
+    hello->setDeadInterval(deadInterval);
+    hello->setKnownNeighborsArraySize(neighbors.size());
+    int idx = 0;
+    for (auto& [nid, nbr] : neighbors) {
+        hello->setKnownNeighbors(idx++, nid);
+    }
+    // TODO set hello->setByteLength
+    for (const auto& [nid, nbr] : neighbors) {
+        auto np = std::make_unique<NodePkt>("Myriad_Hello_Pkt");
+        np->setType(MYRIADLS_PACKET_TYPE);
+        np->encapsulate(hello->dup());
+        sendToNode(nid, std::move(np));
+    }
     scheduleHello(helloInterval);
 }
 

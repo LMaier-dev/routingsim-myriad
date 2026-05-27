@@ -4,6 +4,7 @@
 #include "foundation.h"
 // use kira timer for now
 #include "routing/KIRA/TimerMsg.h"
+#include "routing/myriadls/MyriadLsPkt_m.h"
 
 namespace routingsim {
 
@@ -47,6 +48,9 @@ namespace routingsim {
 
     class MyriadLS : public Protocol
     {
+
+        static constexpr int MYRIADLS_PACKET_TYPE = 55;
+
         protected:
             void onInitialize() override;
             void onConnect(nodeid_t nid) override;
@@ -65,6 +69,7 @@ namespace routingsim {
             std::unordered_map<nodeid_t, NeighborEntry> neighbors;
 
             simtime_t helloInterval;
+            simtime_t deadInterval;
 
             // Timer helper
             TimerMsg* addOneShotTimer(simtime_t delay, TimerMsg::cbfunc_t callback);
