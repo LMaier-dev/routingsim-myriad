@@ -5,7 +5,6 @@ import foundation.NodePkt;
 cplusplus {{
 #include "BaseTypes.h"
 #include "NodePkt_m.h"
-#include "MyriadLsTypes.h"
 
 namespace routingsim {
 // new "types"
@@ -25,6 +24,12 @@ enum MyriadPDUType {
     MYRIAD_ACK = 4;
 }
 
+enum MyriadLSAType {
+    LSA_ADJACENCIES = 0; // list of neighbors the origin is adjacent to
+    LSA_SUBNETS = 1; // connected subnets to the origin
+    LSA_RINGS = 2; // origin is member of rings
+}
+
 // directly from Kira
 class nodeid_t {
       @cppType(routingsim::nodeid_t);
@@ -39,19 +44,6 @@ class nodeid_t {
       @fromValue(omnetpp::checked_int_cast<unsigned short>($.intValue()));
 }
 
-class r_chain {
-      @cppType(routingsim::r_chain);
-      @opaque;
-      @subclassable(false);
-      @supportsPtr(false);
-      @editable(false);
-      @castFunction(false);
-      @byValue;
-      @existingClass;
-      @toValue($.c_str());
-      @fromValue($.stringValue());
-}
-
 packet MyriadHeader {
     MyriadPDUType type;
     nodeid_t router_id_src;
@@ -62,9 +54,51 @@ packet MyriadHello extends MyriadHeader {
     simtime_t helloInterval;
     simtime_t deadInterval;
     nodeid_t knownNeighbors[];
-    r_chain rings;
 }
 
 packet MyriadDBD extends MyriadHeader {
     type = MYRIAD_DBD;
+    uint16_t seq_no; // of the exchange (not of the LSA) masters seq_no wins
+    bool init; // set on first dbd packet only
+    bool master; // Both set this initally, the one with the higher id wins and will keep this
+    bool more; // indicates to receiving node that there will be more DBDs
+    LsaHeader ls_dbds[];
+}
+
+class LsaHeader {
+    MyriadLSAType type;
+    uint16_t seq_no;
+    uint32_t age; // flush if too old TODO set max-age protocol parameter
+    nodeid_t lsa_origin;
+}
+
+packet MyriadLSR extends MyriadHeader {
+    type = MYRIAD_LSR;
+    LsaHeader requested[];
+}
+
+// TODO check if this pointer approach works for the polymorphic LSAs
+packet MyriadLSU extends MyriadHeader {
+    type = MYRIAD_LSU;
+    LsaHeader *lsas[] @owned;
+}
+
+packet MyriadAck extends MyriadHeader {
+    type = MYRIAD_ACK;
+    LsaHeader acked[];
+}
+
+class AdjacenciesLsa extends LsaHeader{
+    type = LSA_ADJACENCIES;
+    nodeid_t adjacencies[];
+}
+
+class SubnetsLsa extends LsaHeader{
+    type = LSA_SUBNETS;
+    uint64_t subnets[];
+}
+
+class RingsLsa extends LsaHeader{
+    type = LSA_RINGS;
+    uint64_t rings[]; // TODO decide on how to store rings
 }
