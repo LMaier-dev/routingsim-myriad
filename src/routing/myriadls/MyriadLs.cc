@@ -47,7 +47,7 @@ void MyriadLS::onInitialize() {
 
 void MyriadLS::onConnect(nodeid_t nid) {
     EV << "Node " << myId << " connected to " << nid << "\n";
-
+    // Retrieve OR create neighbor entry
     NeighborEntry& nbr = neighbors[nid];
     nbr.id = nid;
     nbr.state = NSTATE_INIT;
@@ -60,11 +60,12 @@ void MyriadLS::onMessage(NodePkt_p pkt) {
     auto header = std::unique_ptr<MyriadHeader>(check_and_cast<MyriadHeader*>(pkt->decapsulate()));
     nodeid_t from = header->getRouter_id_src();    
     switch (header->getType()) {
-        case MYRIAD_HELLO: {
-            auto hello = check_and_cast<MyriadHello*>(header.get());
-            EV << myId << " received hello from " << from << "\n";
+        case MYRIAD_HELLO:
+            handleHello(check_and_cast<MyriadHello*>(header.get()), from);
             break;
-        }
+        case MYRIAD_DBD:
+            handleDBD(check_and_cast<MyriadDBD*>(header.get()), from);
+            break;
         default:
             EV << myId << " received unknown packet type: " << header->getType() << "\n";
     }
@@ -93,7 +94,6 @@ void MyriadLS::scheduleHello(simtime_t delay) {
 }
 
 void MyriadLS::sendHello() {
-    // EV << "Hello There\n";
     auto hello = std::make_unique<MyriadHello>("Myriad_Hello");
     hello->setRouter_id_src(myId);
     hello->setHelloInterval(helloInterval);
@@ -111,6 +111,29 @@ void MyriadLS::sendHello() {
         sendToNode(nid, std::move(np));
     }
     scheduleHello(helloInterval);
+}
+
+void MyriadLS::handleHello(MyriadHello* hello, nodeid_t from) {
+    NeighborEntry& nbr = neighbors[from];
+    if (nbr.state == NSTATE_TWOWAY) return; // TODO reset deadTimer
+    EV << myId << " received first hello from " << from << "\n";
+    int size = hello->getKnownNeighborsArraySize();
+    for (size_t i = 0; i < size; i++)
+    {
+        if (hello->getKnownNeighbors(i) == myId) {
+            // Two-way state
+            nbr.id = from;
+            nbr.state = NSTATE_TWOWAY;
+            EV << myId << " and " << from << " are now in TWO-WAY state\n";
+            break;
+        }
+    }
+}
+
+void MyriadLS::handleDBD(MyriadDBD* dbd, nodeid_t from) {
+    NeighborEntry& nbr = neighbors[from];
+    if (nbr.state == NSTATE_TWOWAY) return; // already in two-way, no state change
+    EV << myId << " received first DBD from " << from << "\n";
 }
 
 

@@ -64,3 +64,7 @@ packet MyriadHello extends MyriadHeader {
     nodeid_t knownNeighbors[];
     r_chain rings;
 }
+
+packet MyriadDBD extends MyriadHeader {
+    type = MYRIAD_DBD;
+}

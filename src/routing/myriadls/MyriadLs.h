@@ -12,9 +12,7 @@ namespace routingsim {
     enum NeighborState {
         // No connectivity to this node
         NSTATE_DOWN,
-        // No connectivity to the direct neighbor -> send hellos
-        NSTATE_DOWN_CONNECTED,
-        // Initial state after connection, before Hello exchange
+        // No relation with the neighbor yet -> send hellos
         NSTATE_INIT,
         // Two-way because my id in his hello
         NSTATE_TWOWAY,
@@ -44,6 +42,8 @@ namespace routingsim {
         nodeid_t id;
         std::string rings;
         NeighborState state = NSTATE_DOWN;
+        //deadTimer
+        TimerMsg* deadTimer = nullptr;
     };
 
     class MyriadLS : public Protocol
@@ -61,6 +61,8 @@ namespace routingsim {
 
             void scheduleHello(simtime_t delay);
             void sendHello();
+            void handleHello(MyriadHello* hello, nodeid_t from);
+            void handleDBD(MyriadDBD* dbd, nodeid_t from);
 
         private:
             nodeid_t myId;
