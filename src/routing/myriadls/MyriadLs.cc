@@ -46,14 +46,15 @@ void MyriadLS::onInitialize() {
 }
 
 void MyriadLS::onConnect(nodeid_t nid) {
-    EV << "Node " << myId << " connected to " << nid << "\n";
     // Retrieve OR create neighbor entry
     NeighborEntry& nbr = neighbors[nid];
     nbr.id = nid;
-    nbr.state = NSTATE_INIT;
+    nbr.state = NSTATE_DOWN;
 }
 
-void MyriadLS::onDisconnect(nodeid_t nid) {}
+void MyriadLS::onDisconnect(nodeid_t nid) {
+    handleDead(nid);
+}
 
 void MyriadLS::onMessage(NodePkt_p pkt) {
     myId = node().getNodeId();
@@ -76,9 +77,7 @@ void MyriadLS::onSelfMessage(cMessage_p msg) {
       auto* timer = dynamic_cast<TimerMsg*>(msg.get());
       if (timer) {
           auto* cb = static_cast<TimerMsg::cbfunc_t*>(timer->getContextPointer());
-          if ((*cb)(timer->getKind())) {
-              delete timer;
-          }
+          (*cb)(timer->getKind());
       }
   }
 
@@ -98,11 +97,18 @@ void MyriadLS::sendHello() {
     hello->setRouter_id_src(myId);
     hello->setHelloInterval(helloInterval);
     hello->setDeadInterval(deadInterval);
-    hello->setKnownNeighborsArraySize(neighbors.size());
-    int idx = 0;
+
+    // Only advertise neighbors we've actually heard a hello from
+    std::vector<nodeid_t> heard;
+    heard.reserve(neighbors.size());
     for (auto& [nid, nbr] : neighbors) {
-        hello->setKnownNeighbors(idx++, nid);
+        if (nbr.state >= NSTATE_INIT) heard.push_back(nid);
     }
+    hello->setKnownNeighborsArraySize(heard.size());
+    for (size_t i = 0; i < heard.size(); ++i) {
+        hello->setKnownNeighbors(i, heard[i]);
+    }
+
     // TODO set hello->setByteLength
     for (const auto& [nid, nbr] : neighbors) {
         auto np = std::make_unique<NodePkt>("Myriad_Hello_Pkt");
@@ -115,14 +121,21 @@ void MyriadLS::sendHello() {
 
 void MyriadLS::handleHello(MyriadHello* hello, nodeid_t from) {
     NeighborEntry& nbr = neighbors[from];
-    if (nbr.state == NSTATE_TWOWAY) return; // TODO reset deadTimer
-    EV << myId << " received first hello from " << from << "\n";
+    resetDead(from);
+
+    // HelloReceived: DOWN -> INIT (can subsequently go into TWOWAY if my id is in their hello)
+    if (nbr.state == NSTATE_DOWN) {
+        nbr.id = from;
+        nbr.state = NSTATE_INIT;
+        EV << myId << " received first hello from " << from << " (INIT)\n";
+    }
+
+    if (nbr.state >= NSTATE_TWOWAY) return; // already past two-way
+
+    // 2-WayReceived: INIT -> TWOWAY
     int size = hello->getKnownNeighborsArraySize();
-    for (size_t i = 0; i < size; i++)
-    {
+    for (size_t i = 0; i < size; i++) {
         if (hello->getKnownNeighbors(i) == myId) {
-            // Two-way state
-            nbr.id = from;
             nbr.state = NSTATE_TWOWAY;
             EV << myId << " and " << from << " are now in TWO-WAY state\n";
             break;
@@ -136,7 +149,27 @@ void MyriadLS::handleDBD(MyriadDBD* dbd, nodeid_t from) {
     EV << myId << " received first DBD from " << from << "\n";
 }
 
+void MyriadLS::resetDead(nodeid_t nid) {
+    auto it = neighbors.find(nid);
+    if (it == neighbors.end()) return;
+    NeighborEntry& nbr = it->second;
+    // nullptr is accepted (i.e. on first hello)
+    cancelAndDelete(nbr.deadTimer);
+    nbr.deadTimer = addOneShotTimer(deadInterval, [this, nid](short) {
+        handleDead(nid);
+        return false;
+    });
+}
 
+void MyriadLS::handleDead(nodeid_t nid) {
+    auto it = neighbors.find(nid);
+    if (it == neighbors.end()) return;
+    NeighborEntry& nbr = it->second;
+
+    EV << myId << " neighbor " << nid << " timed out (DEAD)\n";
+    nbr.deadTimer = nullptr;
+    nbr.state = NSTATE_DOWN;
+}
 
 } // namespace routingsim
 

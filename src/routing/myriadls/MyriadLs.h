@@ -63,6 +63,8 @@ namespace routingsim {
             void sendHello();
             void handleHello(MyriadHello* hello, nodeid_t from);
             void handleDBD(MyriadDBD* dbd, nodeid_t from);
+            void resetDead(nodeid_t nid);
+            void handleDead(nodeid_t nid);
 
         private:
             nodeid_t myId;
