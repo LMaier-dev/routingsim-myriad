@@ -5,7 +5,8 @@ namespace routingsim {
 Define_Module(MyriadLS);
 
 void MyriadLS::onInitialize() {
-    myId = node().getNodeId();
+    MyriadHelper::onInitialize();
+    packetType = MYRIADLS_PACKET_TYPE;
     helloInterval = par("helloInterval");
     deadInterval = par("deadInterval");
     rxmtInterval = par("rxmtInterval");
@@ -39,11 +40,17 @@ void MyriadLS::onInitialize() {
         break;
     }
 
-    EV << "Node " << node().getNodeId() << " rings: " << rings << "\n";
+    MLOG_INFO() << "rings: " << rings << "\n";
 
     // periodically send hellos to all neighbors
     scheduleHello(helloInterval);
 
+}
+
+NeighborState MyriadLS::getNeighborState(nodeid_t nbr) const {
+    auto it = neighbors.find(nbr);
+    if (it == neighbors.end()) return NSTATE_DOWN;
+    return it->second.state;
 }
 
 void MyriadLS::onConnect(nodeid_t nid) {
@@ -69,19 +76,10 @@ void MyriadLS::onMessage(NodePkt_p pkt) {
             handleDBD(check_and_cast<MyriadDBD*>(header.get()), from);
             break;
         default:
-            EV << myId << " received unknown packet type: " << header->getType() << "\n";
+            MLOG_WARN() << "received unknown packet type: " << header->getType() << "\n";
     }
 
 }
-
-void MyriadLS::onSelfMessage(cMessage_p msg) {
-      auto* timer = dynamic_cast<TimerMsg*>(msg.get());
-      if (timer) {
-          auto* cb = static_cast<TimerMsg::cbfunc_t*>(timer->getContextPointer());
-          (*cb)(timer->getKind());
-      }
-  }
-
 
 void MyriadLS::reset() {}
 
@@ -129,7 +127,7 @@ void MyriadLS::handleHello(MyriadHello* hello, nodeid_t from) {
     if (nbr.state == NSTATE_DOWN) {
         nbr.id = from;
         nbr.state = NSTATE_INIT;
-        EV << myId << " received first hello from " << from << " (INIT)\n";
+        MLOG_N_INFO(from) << "received first hello (INIT)\n";
     }
 
     if (nbr.state >= NSTATE_TWOWAY) return; // already past two-way
@@ -139,7 +137,7 @@ void MyriadLS::handleHello(MyriadHello* hello, nodeid_t from) {
     for (size_t i = 0; i < size; i++) {
         if (hello->getKnownNeighbors(i) == myId) {
             nbr.state = NSTATE_TWOWAY;
-            EV << myId << " and " << from << " are now in TWO-WAY state\n";
+            MLOG_N_INFO(from) << "now in TWO-WAY state\n";
             nbr.ddSeq = 0; // arbitrary starting seq no based on node ids
             nbr.amMaster = true;
             nbr.haveMore = true; // for testing
@@ -162,19 +160,19 @@ void MyriadLS::handleDBD(MyriadDBD* dbd, nodeid_t from) {
         } else {
             if (!dbd->getMaster() && dbd->getSeq_no() == nbr.ddSeq && nbr.state < NSTATE_FULL) {
                 cancelReliable(nbr.pendingDbd);
-                EV << myId << " received expected DBD from slave " << from << ", seq NO " << dbd->getSeq_no() << "\n";
+                MLOG_N_DEBUG(from) << "received expected DBD from slave, seq=" << dbd->getSeq_no() << "\n";
                 nbr.ddSeq++; // master increments before response
                 sendDBD(from, /*init=*/false, nbr.amMaster, /*more=*/nbr.haveMore, nbr.ddSeq);
                 nbr.haveMore = false;
                 if (!dbd->getMore()) {
-                    EV << myId << " slave " << from << " has no more DBDs to send, neighbor is now FULL\n";
+                    MLOG_N_INFO(from) << "slave has no more DBDs, going FULL\n";
                     nbr.state = NSTATE_FULL;
                     cancelReliable(nbr.pendingDbd);
                 }
             } else if (!dbd->getMaster() && nbr.state == NSTATE_FULL) {
-                EV << myId << " received additional DBD from slave " << from << " after FULL, seq NO " << dbd->getSeq_no() << "\n";
+                MLOG_N_DEBUG(from) << "received additional DBD from slave after FULL, seq=" << dbd->getSeq_no() << "\n";
             } else {
-                EV << myId << " received unexpected DBD from slave " << from;
+                MLOG_N_WARN(from) << "received unexpected DBD from slave\n";
             }
         }
     } else { // slave
@@ -189,16 +187,16 @@ void MyriadLS::handleDBD(MyriadDBD* dbd, nodeid_t from) {
             cancelReliable(nbr.pendingDbd);
             // Phase 2 response by slave
             if (dbd->getMaster() && dbd->getSeq_no() == nbr.ddSeq && nbr.state < NSTATE_FULL) {
-                EV << myId << " received expected DBD from master " << from << ", seq NO " << dbd->getSeq_no() << "\n";
+                MLOG_N_DEBUG(from) << "received expected DBD from master, seq=" << dbd->getSeq_no() << "\n";
                 sendDBD(from, /*init=*/false, nbr.amMaster, /*more=*/nbr.haveMore, nbr.ddSeq);
                 nbr.haveMore = false;
                 if (!dbd->getMore()) {
-                    EV << myId << " master " << from << " has no more DBDs to send, neighbor is now FULL\n";
+                    MLOG_N_INFO(from) << "master has no more DBDs, going FULL\n";
                     nbr.state = NSTATE_FULL;
                 }
                 nbr.ddSeq++; // slave increments after response
             } else {
-                EV << myId << " received unexpected DBD from master " << from;
+                MLOG_N_WARN(from) << "received unexpected DBD from master\n";
             }
         }
     }
@@ -229,42 +227,6 @@ void MyriadLS::sendDBD(nodeid_t to, bool init, bool master, bool more, uint16_t 
     sendToNode(to, std::move(np));
 }
 
-PendingTx* MyriadLS::sendReliable(nodeid_t to, cPacket* pkt, simtime_t interval) {
-    auto* h = new PendingTx{pkt, to, interval, nullptr};
-
-    // First send: dup() so we keep the template for retransmits
-    auto np = std::make_unique<NodePkt>(pkt->getName());
-    np->setType(MYRIADLS_PACKET_TYPE);
-    np->encapsulate(pkt->dup());
-    sendToNode(to, std::move(np));
-
-    h->timer = addOneShotTimer(interval, [this, h](short) {
-        retxFire(h);
-        return false;
-    });
-    return h;
-}
-
-void MyriadLS::retxFire(PendingTx* h) {
-    auto np = std::make_unique<NodePkt>(h->pkt->getName());
-    np->setType(MYRIADLS_PACKET_TYPE);
-    np->encapsulate(h->pkt->dup());
-    sendToNode(h->dest, std::move(np));
-
-    h->timer = addOneShotTimer(h->interval, [this, h](short) {
-        retxFire(h);
-        return false;
-    });
-}
-
-void MyriadLS::cancelReliable(PendingTx*& h) {
-    if (!h) return;
-    if (h->timer) cancelAndDelete(h->timer);
-    delete h->pkt;
-    delete h;
-    h = nullptr;
-}
-
 void MyriadLS::resetDead(nodeid_t nid) {
     auto it = neighbors.find(nid);
     if (it == neighbors.end()) return;
@@ -282,7 +244,7 @@ void MyriadLS::handleDead(nodeid_t nid) {
     if (it == neighbors.end()) return;
     NeighborEntry& nbr = it->second;
 
-    EV << myId << " neighbor " << nid << " timed out (DEAD)\n";
+    MLOG_N_WARN(nid) << "neighbor timed out (DEAD)\n";
     nbr.deadTimer = nullptr;
     nbr.state = NSTATE_DOWN;
     cancelReliable(nbr.pendingDbd);

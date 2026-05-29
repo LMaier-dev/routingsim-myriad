@@ -9,4 +9,7 @@ simple myriadls extends routingsim.foundation.Protocol
         double helloInterval @unit(s) = default(10s);
         double deadInterval @unit(s) = default(40s);
         double rxmtInterval @unit(s) = default(5s);
+
+        // logging: DEBUG | INFO | WARN | ERROR
+        string logLevel = default("DEBUG");
 }
