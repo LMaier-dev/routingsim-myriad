@@ -3,6 +3,7 @@
 
 #include "foundation.h"
 #include "routing/KIRA/TimerMsg.h"
+#include <cstring>
 #include <sstream>
 #include <string>
 
@@ -44,6 +45,7 @@ class MyriadHelper : public Protocol {
     protected:
         nodeid_t myId;
         MyriadLogLevel logLevel = MLOG_LEVEL_DEBUG;
+        bool colorLog = false;
         // Subclass must set this (e.g., in onInitialize) before calling sendReliable.
         // Used as the NodePkt type when the helper wraps reliable payloads.
         int packetType = -1;
@@ -51,6 +53,7 @@ class MyriadHelper : public Protocol {
         void onInitialize() override {
             myId = node().getNodeId();
             logLevel = parseLogLevel(par("logLevel").stringValue());
+            colorLog = par("colorLog").boolValue();
         }
 
         // Default dispatch for TimerMsg callbacks (used by addOneShotTimer and
@@ -73,6 +76,7 @@ class MyriadHelper : public Protocol {
         std::string logPrefix(const char* level, nodeid_t nbr) const;
 
         static MyriadLogLevel parseLogLevel(const char* s);
+        static const char* levelColor(const char* level);
 
         TimerMsg* addOneShotTimer(simtime_t delay, TimerMsg::cbfunc_t callback) {
             auto* msg = new TimerMsg(-1, callback);
@@ -101,11 +105,11 @@ class MyriadHelper : public Protocol {
 
 #define MLOG_INFO() \
     for (bool _mlog_once = this->logEnabled(::routingsim::MLOG_LEVEL_INFO); _mlog_once; _mlog_once = false) \
-        EV << this->logPrefix("INFO ")
+        EV << this->logPrefix("INFO")
 
 #define MLOG_WARN() \
     for (bool _mlog_once = this->logEnabled(::routingsim::MLOG_LEVEL_WARN); _mlog_once; _mlog_once = false) \
-        EV << this->logPrefix("WARN ")
+        EV << this->logPrefix("WARN")
 
 #define MLOG_ERROR() \
     for (bool _mlog_once = this->logEnabled(::routingsim::MLOG_LEVEL_ERROR); _mlog_once; _mlog_once = false) \
@@ -117,11 +121,11 @@ class MyriadHelper : public Protocol {
 
 #define MLOG_N_INFO(n) \
     for (bool _mlog_once = this->logEnabled(::routingsim::MLOG_LEVEL_INFO); _mlog_once; _mlog_once = false) \
-        EV << this->logPrefix("INFO ", (n))
+        EV << this->logPrefix("INFO", (n))
 
 #define MLOG_N_WARN(n) \
     for (bool _mlog_once = this->logEnabled(::routingsim::MLOG_LEVEL_WARN); _mlog_once; _mlog_once = false) \
-        EV << this->logPrefix("WARN ", (n))
+        EV << this->logPrefix("WARN", (n))
 
 #define MLOG_N_ERROR(n) \
     for (bool _mlog_once = this->logEnabled(::routingsim::MLOG_LEVEL_ERROR); _mlog_once; _mlog_once = false) \

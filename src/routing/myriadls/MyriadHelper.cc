@@ -13,21 +13,35 @@ MyriadLogLevel MyriadHelper::parseLogLevel(const char* s) {
     return MLOG_LEVEL_DEBUG;
 }
 
+const char* MyriadHelper::levelColor(const char* level) {
+    if (!std::strncmp(level, "DEBUG", 5)) return "\033[2;37m"; // dim grey
+    if (!std::strncmp(level, "INFO",  4)) return "\033[36m";   // cyan
+    if (!std::strncmp(level, "WARN",  4)) return "\033[33m";   // yellow
+    if (!std::strncmp(level, "ERROR", 5)) return "\033[31m";   // red
+    return "";
+}
+
 std::string MyriadHelper::logPrefix(const char* level) const {
     std::ostringstream o;
+    if (colorLog) o << levelColor(level);
     o << "[t=" << omnetpp::simTime()
       << " n=" << (int) myId
-      << " " << level << "] ";
+      << " " << level << "]";
+    if (colorLog) o << "\033[0m";
+    o << " ";
     return o.str();
 }
 
 std::string MyriadHelper::logPrefix(const char* level, nodeid_t nbr) const {
     NeighborState state = getNeighborState(nbr);
     std::ostringstream o;
+    if (colorLog) o << levelColor(level);
     o << "[t=" << omnetpp::simTime()
       << " n=" << (int) myId
       << " nbr=" << (int) nbr << "/" << nstateName(state)
-      << " " << level << "] ";
+      << "]";
+    if (colorLog) o << "\033[0m";
+    o << " ";
     return o.str();
 }
 

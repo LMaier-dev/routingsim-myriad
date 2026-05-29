@@ -12,4 +12,6 @@ simple myriadls extends routingsim.foundation.Protocol
 
         // logging: DEBUG | INFO | WARN | ERROR
         string logLevel = default("DEBUG");
+        // ANSI-color the log prefix by level (Cmdenv terminal only; off for log files / Qtenv)
+        bool colorLog = default(false);
 }
