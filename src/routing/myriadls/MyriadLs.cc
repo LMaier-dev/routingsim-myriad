@@ -81,12 +81,27 @@ void MyriadLS::onMessage(NodePkt_p pkt) {
 
 }
 
-void MyriadLS::reset() {}
+void MyriadLS::reset() {
+    for (auto& [nid, nbr] : neighbors) {
+        if (nbr.deadTimer) {
+            cancelAndDelete(nbr.deadTimer);
+            nbr.deadTimer = nullptr;
+        }
+        cancelReliable(nbr.pendingDbd);
+    }
+    neighbors.clear();
+
+    if (helloTimer) {
+        cancelAndDelete(helloTimer);
+        helloTimer = nullptr;
+    }
+}
 
 
 void MyriadLS::scheduleHello(simtime_t delay) {
-    addOneShotTimer(delay, [this](short) {
-        sendHello();
+    helloTimer = addOneShotTimer(delay, [this](short) {
+        helloTimer = nullptr; // framework deletes this TimerMsg after we return
+        sendHello();          // reschedules and assigns the new helloTimer
         return false;
     });
 }

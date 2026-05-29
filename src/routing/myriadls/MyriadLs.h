@@ -72,6 +72,9 @@ namespace routingsim {
             simtime_t helloInterval;
             simtime_t deadInterval;
             simtime_t rxmtInterval;
+
+            // Handle to the currently-pending hello self-message so it can be cancelled on reset.
+            TimerMsg* helloTimer = nullptr;
     };
 
 } // namespace routingsim
