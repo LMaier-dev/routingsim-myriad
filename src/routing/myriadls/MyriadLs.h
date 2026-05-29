@@ -38,12 +38,29 @@ namespace routingsim {
         EXCHANGE_OUT_DONE,
     };
 
+    // Tracks an in-flight reliable transmission so it can be retransmitted or cancelled.
+    struct PendingTx {
+        cPacket* pkt;        // template; dup()'d on each (re)send
+        nodeid_t dest;
+        simtime_t interval;
+        TimerMsg* timer;
+    };
+
     struct NeighborEntry {
         nodeid_t id;
         std::string rings;
         NeighborState state = NSTATE_DOWN;
         //deadTimer
         TimerMsg* deadTimer = nullptr;
+
+        // DBD exchange state (initially both assume master)
+        bool amMaster = true;
+        // TODO add actual pending List
+        bool haveMore = true;
+        uint16_t ddSeq = 0;
+        PendingTx* pendingDbd = nullptr;
+        // DBD pending list
+        
     };
 
     class MyriadLS : public Protocol
@@ -62,6 +79,7 @@ namespace routingsim {
             void scheduleHello(simtime_t delay);
             void sendHello();
             void handleHello(MyriadHello* hello, nodeid_t from);
+            void sendDBD(nodeid_t to, bool init, bool master, bool more, uint16_t seq_no);
             void handleDBD(MyriadDBD* dbd, nodeid_t from);
             void resetDead(nodeid_t nid);
             void handleDead(nodeid_t nid);
@@ -74,6 +92,12 @@ namespace routingsim {
 
             simtime_t helloInterval;
             simtime_t deadInterval;
+            simtime_t rxmtInterval;
+
+            // Reliable-tx helpers (used for DBD master, will also fit LSU later)
+            PendingTx* sendReliable(nodeid_t to, cPacket* pkt, simtime_t interval);
+            void cancelReliable(PendingTx*& handle);
+            void retxFire(PendingTx* h);
 
             // Timer helper
             TimerMsg* addOneShotTimer(simtime_t delay, TimerMsg::cbfunc_t callback);
