@@ -93,6 +93,8 @@ void MyriadLS::reset() {
             nbr.deadTimer = nullptr;
         }
         cancelReliable(nbr.pendingDbd);
+        delete nbr.lastSentDbd;
+        nbr.lastSentDbd = nullptr;
     }
     neighbors.clear();
     lsdb.clear();
@@ -276,6 +278,16 @@ void MyriadLS::processDBD(MyriadDBD* dbd, NeighborEntry& nbr) {
     }
 }
 
+void MyriadLS::tryGoFull(NeighborEntry& nbr) {
+    if (nbr.state == NSTATE_FULL) return;
+    if (!nbr.dbdPending.empty()) return;
+    if (nbr.pendingDbd != nullptr) return;
+    if (!nbr.peerDbdDone) return;
+    if (!nbr.lsrPending.empty()) return;
+    nbr.state = NSTATE_FULL;
+    MLOG_N_INFO(nbr.id) << "going FULL\n";
+}
+
 void MyriadLS::handleDBD(MyriadDBD* dbd, nodeid_t from) {
     NeighborEntry& nbr = neighbors[from];
     logDbd(dbd, from);
@@ -291,17 +303,18 @@ void MyriadLS::handleDBD(MyriadDBD* dbd, nodeid_t from) {
                 processDBD(dbd, nbr); // expected DBD, process and respond with next one
                 cancelReliable(nbr.pendingDbd);
                 MLOG_N_DEBUG(from) << "received expected DBD from slave, seq=" << dbd->getSeq_no() << "\n";
+                if (!dbd->getMore()) nbr.peerDbdDone = true;
                 nbr.ddSeq++; // master increments before response
-                // If both sides are out of LSAs, go FULL without sending another DBD.
-                if (!dbd->getMore() && nbr.dbdPending.empty()) {
-                    MLOG_N_INFO(from) << "slave has no more DBDs, going FULL\n";
-                    nbr.state = NSTATE_FULL;
-                } else {
+                // If both sides are out of LSAs, skip the empty follow-up DBD.
+                if (!(nbr.peerDbdDone && nbr.dbdPending.empty())) {
                     sendDBD(from, /*init=*/false, nbr.amMaster, nbr.ddSeq);
                 }
+                tryGoFull(nbr);
             } else if (!dbd->getMaster() && nbr.state == NSTATE_FULL) {
                 MLOG_N_DEBUG(from) << "received additional DBD from slave after FULL, seq=" << dbd->getSeq_no() << "\n";
             } else {
+                // TODO: Generate SeqNumberMismatch: clear DBD/LSR
+                // state and restart from ExStart. Currently we just drop the packet.
                 MLOG_N_WARN(from) << "received unexpected DBD from slave\n";
             }
         }
@@ -318,13 +331,21 @@ void MyriadLS::handleDBD(MyriadDBD* dbd, nodeid_t from) {
             if (dbd->getMaster() && dbd->getSeq_no() == nbr.ddSeq && nbr.state < NSTATE_FULL) {
                 processDBD(dbd, nbr); // expected DBD, process and respond with next one
                 MLOG_N_DEBUG(from) << "received expected DBD from master, seq=" << dbd->getSeq_no() << "\n";
+                if (!dbd->getMore()) nbr.peerDbdDone = true;
                 sendDBD(from, /*init=*/false, nbr.amMaster, nbr.ddSeq);
-                if (!dbd->getMore()) {
-                    MLOG_N_INFO(from) << "master has no more DBDs, going FULL\n";
-                    nbr.state = NSTATE_FULL;
-                }
                 nbr.ddSeq++; // slave increments after response
+                tryGoFull(nbr);
+            } else if (dbd->getMaster() && dbd->getSeq_no() + 1 == nbr.ddSeq && nbr.lastSentDbd) {
+                // Slave repeats its last DBD on master's retransmit.
+                MLOG_N_DEBUG(from) << "duplicate DBD from master seq=" << dbd->getSeq_no()
+                                   << ", repeating last response\n";
+                auto np = std::make_unique<NodePkt>("Myriad_DBD_Pkt");
+                np->setType(MYRIADLS_PACKET_TYPE);
+                np->encapsulate(nbr.lastSentDbd->dup());
+                sendToNode(from, std::move(np));
             } else {
+                // TODO: Generate SeqNumberMismatch: clear DBD/LSR
+                // state and restart from ExStart. Currently we just drop the packet.
                 MLOG_N_WARN(from) << "received unexpected DBD from master\n";
             }
         }
@@ -368,6 +389,12 @@ void MyriadLS::sendDBD(nodeid_t to, bool init, bool master, uint16_t seq_no) {
             return;
         }
     }
+    // Slave path: cache so we can repeat on a duplicate DBD from master (§10.6).
+    auto sit = neighbors.find(to);
+    if (sit != neighbors.end()) {
+        delete sit->second.lastSentDbd;
+        sit->second.lastSentDbd = dbd->dup();
+    }
     auto np = std::make_unique<NodePkt>("Myriad_DBD_Pkt");
     np->setType(MYRIADLS_PACKET_TYPE);
     np->encapsulate(dbd);
@@ -399,6 +426,9 @@ void MyriadLS::handleDead(nodeid_t nid) {
     nbr.ddSeq = 0;
     nbr.dbdPending.clear();
     nbr.lsrPending.clear();
+    nbr.peerDbdDone = false;
+    delete nbr.lastSentDbd;
+    nbr.lastSentDbd = nullptr;
 }
 
 } // namespace routingsim

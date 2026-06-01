@@ -7,24 +7,15 @@
 
 namespace routingsim {
 
-
-    enum ExchangeInState {
-        // Database description (LSDB summary) received -> send LSR
-        DD_RECEIVED,
-        // Link state update received -> send ack
-        LSU_RECEIVED,
-        // Exchange done after sending ack
-        EXCHANGE_IN_DONE,
-    };
-
-    enum ExchangeOutState {
-        // Database description (LSDB summary) sent -> wait for LSR
-        SENDING_DD,
-        // Link state update sent -> wait for ack
-        LSR_RECEIVED,
-        // Exchange done after receiving ack
-        EXCHANGE_OUT_DONE,
-    };
+    // Design simplifications vs. RFC 2328:
+    //   - During initial sync (Exchange/Loading), LSU response to an LSR is
+    //     fire-and-forget. Reliability is provided by the LSR retransmit timer
+    //     on the requester side (one outstanding LSR per neighbor). Real OSPF
+    //     acks every LSU regardless of phase; we only emit LSAcks for unsolicited
+    //     (flooded) LSUs after the adjacency is FULL.
+    //   - On DBD sequence mismatch we currently drop the packet; RFC §10.3
+    //     prescribes a SeqNumberMismatch event that tears the adjacency back
+    //     to ExStart. See TODOs in handleDBD.
 
     // LSDB key: at most one LSA per (origin, type). Storing unique_ptr<LsaHeader>
     // relies on LsaHeader being a cObject so dup() clones the actual derived LSA.
@@ -58,6 +49,11 @@ namespace routingsim {
         std::deque<LsaKey> dbdPending;
         // Link State Request list: LSAs we want to fetch from this neighbor.
         std::deque<LsaKey> lsrPending;
+        // Set when peer sent a non-init DBD with M=0.
+        bool peerDbdDone = false;
+        // Slave-only: cached last DBD response so we can repeat it if the
+        // master retransmits its previous DBD (RFC 2328 §10.6).
+        cPacket* lastSentDbd = nullptr;
     };
 
     class MyriadLS : public MyriadHelper
@@ -84,6 +80,7 @@ namespace routingsim {
             void sendDBD(nodeid_t to, bool init, bool master, uint16_t seq_no);
             void handleDBD(MyriadDBD* dbd, nodeid_t from);
             void processDBD(MyriadDBD* dbd, NeighborEntry& nbr);
+            void tryGoFull(NeighborEntry& nbr);
             void resetDead(nodeid_t nid);
             void handleDead(nodeid_t nid);
 
