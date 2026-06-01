@@ -74,6 +74,8 @@ namespace routingsim {
 
             void scheduleHello(simtime_t delay);
             void sendHello();
+            void installSelfLsas();
+            void logLsdb();
             void handleHello(MyriadHello* hello, nodeid_t from);
             void sendDBD(nodeid_t to, bool init, bool master, bool more, uint16_t seq_no);
             void handleDBD(MyriadDBD* dbd, nodeid_t from);

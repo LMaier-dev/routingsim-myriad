@@ -42,6 +42,9 @@ void MyriadLS::onInitialize() {
 
     MLOG_INFO() << "rings: " << rings << "\n";
 
+    installSelfLsas();
+    logLsdb();
+
     // periodically send hellos to all neighbors
     scheduleHello(helloInterval);
 
@@ -91,6 +94,7 @@ void MyriadLS::reset() {
     }
     neighbors.clear();
     lsdb.clear();
+    installSelfLsas();
 
     if (helloTimer) {
         cancelAndDelete(helloTimer);
@@ -98,6 +102,73 @@ void MyriadLS::reset() {
     }
 }
 
+
+void MyriadLS::installSelfLsas() {
+    // Rings LSA: ring string char code as a uint64 entry
+    auto ringsLsa = std::make_unique<RingsLsa>();
+    ringsLsa->setSeq_no(1);
+    ringsLsa->setLsa_origin(myId);
+
+    std::vector<uint64_t> ringIds;
+    std::stringstream ss(rings);
+    std::string tok;
+    while (std::getline(ss, tok, ',')) {
+        if (!tok.empty()) ringIds.push_back(static_cast<uint64_t>(tok[0]));
+    }
+    ringsLsa->setRingsArraySize(ringIds.size());
+    for (size_t i = 0; i < ringIds.size(); ++i)
+        ringsLsa->setRings(i, ringIds[i]);
+
+    lsdb[LsaKey{myId, LSA_RINGS}] = std::move(ringsLsa);
+
+    // Subnets LSA: bogus subnets derived from node id
+    auto subnetsLsa = std::make_unique<SubnetsLsa>();
+    subnetsLsa->setSeq_no(1);
+    subnetsLsa->setLsa_origin(myId);
+    subnetsLsa->setSubnetsArraySize(2);
+    subnetsLsa->setSubnets(0, (static_cast<uint64_t>(myId) << 8) | 0x01);
+    subnetsLsa->setSubnets(1, (static_cast<uint64_t>(myId) << 8) | 0x02);
+
+    lsdb[LsaKey{myId, LSA_SUBNETS}] = std::move(subnetsLsa);
+}
+
+void MyriadLS::logLsdb() {
+    if (!logEnabled(MLOG_LEVEL_DEBUG)) return;
+    MLOG_DEBUG() << "LSDB (" << lsdb.size() << " entries):\n";
+    for (const auto& [key, lsa] : lsdb) {
+        MLOG_DEBUG() << "  origin=" << (int)key.origin
+                     << " type=" << key.type
+                     << " seq=" << lsa->getSeq_no()
+                     << " age=" << lsa->getAge();
+        switch (lsa->getType()) {
+            case LSA_RINGS: {
+                auto* r = check_and_cast<RingsLsa*>(lsa.get());
+                EV << " rings=[";
+                for (size_t i = 0; i < r->getRingsArraySize(); ++i)
+                    EV << (i ? "," : "") << (char)r->getRings(i);
+                EV << "]";
+                break;
+            }
+            case LSA_SUBNETS: {
+                auto* s = check_and_cast<SubnetsLsa*>(lsa.get());
+                EV << " subnets=[";
+                for (size_t i = 0; i < s->getSubnetsArraySize(); ++i)
+                    EV << (i ? "," : "") << s->getSubnets(i);
+                EV << "]";
+                break;
+            }
+            case LSA_ADJACENCIES: {
+                auto* a = check_and_cast<AdjacenciesLsa*>(lsa.get());
+                EV << " adjacencies=[";
+                for (size_t i = 0; i < a->getAdjacenciesArraySize(); ++i)
+                    EV << (i ? "," : "") << (int)a->getAdjacencies(i);
+                EV << "]";
+                break;
+            }
+        }
+        EV << "\n";
+    }
+}
 
 void MyriadLS::scheduleHello(simtime_t delay) {
     helloTimer = addOneShotTimer(delay, [this](short) {
