@@ -44,6 +44,8 @@ namespace routingsim {
         bool amMaster = true;
         uint16_t ddSeq = 0;
         PendingTx* pendingDbd = nullptr;
+        // At most one outstanding LSR per neighbors
+        PendingTx* pendingLsr = nullptr;
 
         // DBD send queue: LsaKeys we still owe this neighbor as DBD summaries.
         std::deque<LsaKey> dbdPending;
@@ -80,6 +82,9 @@ namespace routingsim {
             void sendDBD(nodeid_t to, bool init, bool master, uint16_t seq_no);
             void handleDBD(MyriadDBD* dbd, nodeid_t from);
             void processDBD(MyriadDBD* dbd, NeighborEntry& nbr);
+            void sendNextLsr(NeighborEntry& nbr);
+            void handleLSR(MyriadLSR* lsr, nodeid_t from);
+            void handleLSU(MyriadLSU* lsu, nodeid_t from);
             void tryGoFull(NeighborEntry& nbr);
             void resetDead(nodeid_t nid);
             void handleDead(nodeid_t nid);
@@ -93,7 +98,7 @@ namespace routingsim {
             simtime_t helloInterval;
             simtime_t deadInterval;
             simtime_t rxmtInterval;
-            int dbdMaxLsasPerPacket = 10;
+            int dbExchangeBatchSize = 10;
 
             // Handle to the currently-pending hello self-message so it can be cancelled on reset.
             TimerMsg* helloTimer = nullptr;

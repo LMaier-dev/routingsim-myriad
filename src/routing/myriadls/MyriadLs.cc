@@ -11,7 +11,7 @@ void MyriadLS::onInitialize() {
     helloInterval = par("helloInterval");
     deadInterval = par("deadInterval");
     rxmtInterval = par("rxmtInterval");
-    dbdMaxLsasPerPacket = par("dbdMaxLsasPerPacket");
+    dbExchangeBatchSize = par("dbExchangeBatchSize");
 
     node().bind(MYRIADLS_PACKET_TYPE, this);
 
@@ -45,7 +45,6 @@ void MyriadLS::onInitialize() {
     MLOG_INFO() << "rings: " << rings << "\n";
 
     installSelfLsas();
-    logLsdb();
 
     // periodically send hellos to all neighbors
     scheduleHello(helloInterval);
@@ -80,6 +79,12 @@ void MyriadLS::onMessage(NodePkt_p pkt) {
         case MYRIAD_DBD:
             handleDBD(check_and_cast<MyriadDBD*>(header.get()), from);
             break;
+        case MYRIAD_LSR:
+            handleLSR(check_and_cast<MyriadLSR*>(header.get()), from);
+            break;
+        case MYRIAD_LSU:
+            handleLSU(check_and_cast<MyriadLSU*>(header.get()), from);
+            break;
         default:
             MLOG_WARN() << "received unknown packet type: " << header->getType() << "\n";
     }
@@ -93,6 +98,7 @@ void MyriadLS::reset() {
             nbr.deadTimer = nullptr;
         }
         cancelReliable(nbr.pendingDbd);
+        cancelReliable(nbr.pendingLsr);
         delete nbr.lastSentDbd;
         nbr.lastSentDbd = nullptr;
     }
@@ -160,13 +166,13 @@ void MyriadLS::logDbd(const MyriadDBD* dbd, nodeid_t from) {
 }
 
 void MyriadLS::logLsdb() {
-    if (!logEnabled(MLOG_LEVEL_DEBUG)) return;
-    MLOG_DEBUG() << "LSDB (" << lsdb.size() << " entries):\n";
+    if (!logEnabled(MLOG_LEVEL_INFO)) return;
+    MLOG_INFO() << "LSDB (" << lsdb.size() << " entries):\n";
     for (const auto& [key, lsa] : lsdb) {
-        MLOG_DEBUG() << "  origin=" << (int)key.origin
-                     << " type=" << key.type
-                     << " seq=" << lsa->getSeq_no()
-                     << " age=" << lsa->getAge();
+        MLOG_INFO() << "  origin=" << (int)key.origin
+                    << " type=" << key.type
+                    << " seq=" << lsa->getSeq_no()
+                    << " age=" << lsa->getAge();
         switch (lsa->getType()) {
             case LSA_RINGS: {
                 auto* r = check_and_cast<RingsLsa*>(lsa.get());
@@ -276,6 +282,95 @@ void MyriadLS::processDBD(MyriadDBD* dbd, NeighborEntry& nbr) {
                 << (int)key.origin << "/" << key.type << ", queued for LSR\n";
         nbr.lsrPending.push_back(key);
     }
+    // RFC §10.9: requests can be sent concurrently with the DBD exchange.
+    // sendNextLsr is a no-op if there's already an LSR in flight; the new keys
+    // will go out in the next LSR after the current one is acked by an LSU.
+    sendNextLsr(nbr);
+}
+
+void MyriadLS::sendNextLsr(NeighborEntry& nbr) {
+    if (nbr.lsrPending.empty()) {
+        // Drained: this is also the natural close-out point after an LSU
+        // satisfied the last outstanding requests.
+        tryGoFull(nbr);
+        return;
+    }
+    // RFC §10.9: at most one outstanding LSR per neighbor.
+    if (nbr.pendingLsr) return;
+
+    auto* lsr = new MyriadLSR("Myriad_LSR");
+    lsr->setRouter_id_src(myId);
+
+    size_t batch = std::min(nbr.lsrPending.size(), static_cast<size_t>(dbExchangeBatchSize));
+    lsr->setReqsArraySize(batch);
+    auto it = nbr.lsrPending.begin();
+    for (size_t i = 0; i < batch; ++i, ++it) {
+        LsaRequest r;
+        r.origin = it->origin;
+        r.type = it->type;
+        lsr->setReqs(i, r);
+    }
+    MLOG_N_DEBUG(nbr.id) << "sending LSR with " << batch << " request(s)\n";
+    nbr.pendingLsr = sendReliable(nbr.id, lsr, rxmtInterval);
+}
+
+void MyriadLS::handleLSR(MyriadLSR* lsr, nodeid_t from) {
+    auto* lsu = new MyriadLSU("Myriad_LSU");
+    lsu->setRouter_id_src(myId);
+
+    size_t n = lsr->getReqsArraySize();
+    std::vector<LsaHeader*> dups;
+    dups.reserve(n);
+    for (size_t i = 0; i < n; ++i) {
+        const LsaRequest& r = lsr->getReqs(i);
+        LsaKey key{r.origin, r.type};
+        auto it = lsdb.find(key);
+        if (it == lsdb.end()) {
+            // TODO: BadLSReq — should reset the adjacency.
+            MLOG_N_WARN(from) << "received LSR for unknown LSA "
+                              << (int)key.origin << "/" << key.type << "\n";
+            continue;
+        }
+        dups.push_back(check_and_cast<LsaHeader*>(it->second->dup()));
+    }
+
+    lsu->setLsasArraySize(dups.size());
+    for (size_t i = 0; i < dups.size(); ++i) {
+        lsu->setLsas(i, dups[i]); // @owned: LSU adopts the pointer
+    }
+
+    MLOG_N_DEBUG(from) << "sending LSU with " << dups.size() << " LSA(s)\n";
+    auto np = std::make_unique<NodePkt>("Myriad_LSU_Pkt");
+    np->setType(MYRIADLS_PACKET_TYPE);
+    np->encapsulate(lsu);
+    sendToNode(from, std::move(np));
+}
+
+void MyriadLS::handleLSU(MyriadLSU* lsu, nodeid_t from) {
+    NeighborEntry& nbr = neighbors[from];
+    size_t n = lsu->getLsasArraySize();
+    MLOG_N_DEBUG(from) << "received LSU with " << n << " LSA(s)\n";
+
+    for (size_t i = 0; i < n; ++i) {
+        const LsaHeader* h = lsu->getLsas(i);
+        LsaKey key{h->getLsa_origin(), h->getType()};
+        // Install if missing or strictly newer; ties leave the LSDB unchanged.
+        auto it = lsdb.find(key);
+        if (it == lsdb.end() || it->second->getSeq_no() < h->getSeq_no()) {
+            lsdb[key] = std::unique_ptr<LsaHeader>(check_and_cast<LsaHeader*>(h->dup()));
+            MLOG_N_DEBUG(from) << "installed LSA " << (int)key.origin
+                               << "/" << key.type << " seq=" << h->getSeq_no() << "\n";
+        }
+        // Drain matched key from the request list — independent of install
+        // decision (a stale-but-acceptable LSA still satisfies the request).
+        auto pit = std::find(nbr.lsrPending.begin(), nbr.lsrPending.end(), key);
+        if (pit != nbr.lsrPending.end()) nbr.lsrPending.erase(pit);
+    }
+    // TODO: distinguish solicited from flooded LSU.
+    // Currently every LSU is treated as the response to our outstanding LSR
+    // TODO: cancel pendingLsr only if at least one LSA matched lsrPending and forward to the flooding-ack path otherwise.
+    cancelReliable(nbr.pendingLsr);
+    sendNextLsr(nbr); // sends next batch, or tryGoFull if drained
 }
 
 void MyriadLS::tryGoFull(NeighborEntry& nbr) {
@@ -284,8 +379,10 @@ void MyriadLS::tryGoFull(NeighborEntry& nbr) {
     if (nbr.pendingDbd != nullptr) return;
     if (!nbr.peerDbdDone) return;
     if (!nbr.lsrPending.empty()) return;
+    if (nbr.pendingLsr != nullptr) return;
     nbr.state = NSTATE_FULL;
     MLOG_N_INFO(nbr.id) << "going FULL\n";
+    logLsdb();
 }
 
 void MyriadLS::handleDBD(MyriadDBD* dbd, nodeid_t from) {
@@ -360,14 +457,14 @@ void MyriadLS::sendDBD(nodeid_t to, bool init, bool master, uint16_t seq_no) {
     dbd->setSeq_no(seq_no);
 
     // Init DBD carries no LSA summaries (negotiation only). Phase-2 DBDs drain
-    // up to dbdMaxLsasPerPacket headers off the per-neighbor queue; `more` is
+    // up to dbExchangeBatchSize headers off the per-neighbor queue; `more` is
     // true iff anything still remains after this batch.
     bool more = true;
     if (!init) {
         auto it = neighbors.find(to);
         if (it != neighbors.end()) {
             auto& q = it->second.dbdPending;
-            size_t batch = std::min(q.size(), static_cast<size_t>(dbdMaxLsasPerPacket));
+            size_t batch = std::min(q.size(), static_cast<size_t>(dbExchangeBatchSize));
             dbd->setLs_dbdsArraySize(batch);
             for (size_t i = 0; i < batch; ++i) {
                 auto lit = lsdb.find(q.front());
@@ -422,6 +519,7 @@ void MyriadLS::handleDead(nodeid_t nid) {
     nbr.deadTimer = nullptr;
     nbr.state = NSTATE_DOWN;
     cancelReliable(nbr.pendingDbd);
+    cancelReliable(nbr.pendingLsr);
     nbr.amMaster = false;
     nbr.ddSeq = 0;
     nbr.dbdPending.clear();

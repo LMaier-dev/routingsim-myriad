@@ -74,9 +74,16 @@ class LsaHeader extends cObject {
     nodeid_t lsa_origin;
 }
 
+// LSR request entry: just enough to identify an LSDB row. Plain value struct,
+// no cObject — never stored polymorphically and never @owned.
+struct LsaRequest {
+    nodeid_t origin;
+    MyriadLSAType type;
+}
+
 packet MyriadLSR extends MyriadHeader {
     type = MYRIAD_LSR;
-    LsaHeader requested[];
+    LsaRequest reqs[];
 }
 
 // TODO check if this pointer approach works for the polymorphic LSAs
