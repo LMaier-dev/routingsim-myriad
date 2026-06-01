@@ -1,4 +1,5 @@
 #include "routing/myriadls/MyriadLs.h"
+#include <algorithm>
 
 namespace routingsim {
 
@@ -258,6 +259,23 @@ void MyriadLS::handleHello(MyriadHello* hello, nodeid_t from) {
     }
 }
 
+void MyriadLS::processDBD(MyriadDBD* dbd, NeighborEntry& nbr) {
+    // iterate over dbds compare to lsdb with the key and add newer seq no to the lsr_pending
+    for (size_t i = 0; i < dbd->getLs_dbdsArraySize(); ++i) {
+        const LsaHeader& h = dbd->getLs_dbds(i);
+        if (h.getLsa_origin() == myId) continue;
+        LsaKey key{h.getLsa_origin(), h.getType()};
+        auto it = lsdb.find(key);
+        // dont insert if our LSDB is at least same age
+        if (it != lsdb.end() && it->second->getSeq_no() >= h.getSeq_no()) continue;
+        // dont insert if its already there
+        if (std::find(nbr.lsrPending.begin(), nbr.lsrPending.end(), key) != nbr.lsrPending.end()) continue;
+        MLOG_N_DEBUG(nbr.id) << "LSDB missing or stale for "
+                << (int)key.origin << "/" << key.type << ", queued for LSR\n";
+        nbr.lsrPending.push_back(key);
+    }
+}
+
 void MyriadLS::handleDBD(MyriadDBD* dbd, nodeid_t from) {
     NeighborEntry& nbr = neighbors[from];
     logDbd(dbd, from);
@@ -270,6 +288,7 @@ void MyriadLS::handleDBD(MyriadDBD* dbd, nodeid_t from) {
             sendDBD(from, /*init=*/false, nbr.amMaster, nbr.ddSeq);
         } else {
             if (!dbd->getMaster() && dbd->getSeq_no() == nbr.ddSeq && nbr.state < NSTATE_FULL) {
+                processDBD(dbd, nbr); // expected DBD, process and respond with next one
                 cancelReliable(nbr.pendingDbd);
                 MLOG_N_DEBUG(from) << "received expected DBD from slave, seq=" << dbd->getSeq_no() << "\n";
                 nbr.ddSeq++; // master increments before response
@@ -290,7 +309,6 @@ void MyriadLS::handleDBD(MyriadDBD* dbd, nodeid_t from) {
         if (dbd->getInit()) { // Phase 1 master negotioation
             nbr.amMaster = false;
             nbr.ddSeq = dbd->getSeq_no() + 1;
-            buildPendingDbd(nbr);
             // slave does not retransmit
             cancelReliable(nbr.pendingDbd);
         } else {
@@ -298,6 +316,7 @@ void MyriadLS::handleDBD(MyriadDBD* dbd, nodeid_t from) {
             cancelReliable(nbr.pendingDbd);
             // Phase 2 response by slave
             if (dbd->getMaster() && dbd->getSeq_no() == nbr.ddSeq && nbr.state < NSTATE_FULL) {
+                processDBD(dbd, nbr); // expected DBD, process and respond with next one
                 MLOG_N_DEBUG(from) << "received expected DBD from master, seq=" << dbd->getSeq_no() << "\n";
                 sendDBD(from, /*init=*/false, nbr.amMaster, nbr.ddSeq);
                 if (!dbd->getMore()) {

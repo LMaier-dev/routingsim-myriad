@@ -55,10 +55,8 @@ namespace routingsim {
         PendingTx* pendingDbd = nullptr;
 
         // DBD send queue: LsaKeys we still owe this neighbor as DBD summaries.
-        // Drained `dbdMaxLsasPerPacket` at a time inside sendDBD.
         std::deque<LsaKey> dbdPending;
         // Link State Request list: LSAs we want to fetch from this neighbor.
-        // Stub for now — populated in a future step from received DBD summaries.
         std::deque<LsaKey> lsrPending;
     };
 
@@ -85,6 +83,7 @@ namespace routingsim {
             void handleHello(MyriadHello* hello, nodeid_t from);
             void sendDBD(nodeid_t to, bool init, bool master, uint16_t seq_no);
             void handleDBD(MyriadDBD* dbd, nodeid_t from);
+            void processDBD(MyriadDBD* dbd, NeighborEntry& nbr);
             void resetDead(nodeid_t nid);
             void handleDead(nodeid_t nid);
 
