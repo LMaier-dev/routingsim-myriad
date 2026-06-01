@@ -9,6 +9,8 @@ simple myriadls extends routingsim.foundation.Protocol
         double helloInterval @unit(s) = default(10s);
         double deadInterval @unit(s) = default(40s);
         double rxmtInterval @unit(s) = default(5s);
+        // Max number of LSA headers carried in a single DBD packet.
+        int dbdMaxLsasPerPacket = default(10);
 
         // logging: DEBUG | INFO | WARN | ERROR
         string logLevel = default("DEBUG");

@@ -10,6 +10,7 @@ void MyriadLS::onInitialize() {
     helloInterval = par("helloInterval");
     deadInterval = par("deadInterval");
     rxmtInterval = par("rxmtInterval");
+    dbdMaxLsasPerPacket = par("dbdMaxLsasPerPacket");
 
     node().bind(MYRIADLS_PACKET_TYPE, this);
 
@@ -132,6 +133,29 @@ void MyriadLS::installSelfLsas() {
     lsdb[LsaKey{myId, LSA_SUBNETS}] = std::move(subnetsLsa);
 }
 
+void MyriadLS::buildPendingDbd(NeighborEntry& nbr) {
+    nbr.dbdPending.clear();
+    for (const auto& kv : lsdb) {
+        nbr.dbdPending.push_back(kv.first);
+    }
+}
+
+void MyriadLS::logDbd(const MyriadDBD* dbd, nodeid_t from) {
+    if (!logEnabled(MLOG_LEVEL_DEBUG)) return;
+    MLOG_N_DEBUG(from) << "DBD seq=" << dbd->getSeq_no()
+                       << " I=" << dbd->getInit()
+                       << " M=" << dbd->getMore()
+                       << " MS=" << dbd->getMaster()
+                       << " entries=" << dbd->getLs_dbdsArraySize() << "\n";
+    for (size_t i = 0; i < dbd->getLs_dbdsArraySize(); ++i) {
+        const LsaHeader& h = dbd->getLs_dbds(i);
+        MLOG_N_DEBUG(from) << "  origin=" << (int)h.getLsa_origin()
+                           << " type=" << h.getType()
+                           << " seq=" << h.getSeq_no()
+                           << " age=" << h.getAge() << "\n";
+    }
+}
+
 void MyriadLS::logLsdb() {
     if (!logEnabled(MLOG_LEVEL_DEBUG)) return;
     MLOG_DEBUG() << "LSDB (" << lsdb.size() << " entries):\n";
@@ -227,34 +251,34 @@ void MyriadLS::handleHello(MyriadHello* hello, nodeid_t from) {
             MLOG_N_INFO(from) << "now in TWO-WAY state\n";
             nbr.ddSeq = 0; // arbitrary starting seq no based on node ids
             nbr.amMaster = true;
-            nbr.haveMore = true; // for testing
-            sendDBD(from, /*init=*/true, nbr.amMaster, /*more=*/true, nbr.ddSeq);
+            buildPendingDbd(nbr);
+            sendDBD(from, /*init=*/true, nbr.amMaster, nbr.ddSeq);
             break;
         }
     }
 }
 
 void MyriadLS::handleDBD(MyriadDBD* dbd, nodeid_t from) {
-    NeighborEntry& nbr = neighbors[from];    
+    NeighborEntry& nbr = neighbors[from];
+    logDbd(dbd, from);
     if (myId > from) { // master
         if (dbd->getInit()) { // Phase 1 master negotioation
             nbr.amMaster = true;
             nbr.ddSeq = nbr.ddSeq + 1;
-            // TODO build pending DBD list instead of using haveMore
             // Phase 2 intiated by master
             cancelReliable(nbr.pendingDbd);
-            sendDBD(from, /*init=*/false, nbr.amMaster, /*more=*/true, nbr.ddSeq);
+            sendDBD(from, /*init=*/false, nbr.amMaster, nbr.ddSeq);
         } else {
             if (!dbd->getMaster() && dbd->getSeq_no() == nbr.ddSeq && nbr.state < NSTATE_FULL) {
                 cancelReliable(nbr.pendingDbd);
                 MLOG_N_DEBUG(from) << "received expected DBD from slave, seq=" << dbd->getSeq_no() << "\n";
                 nbr.ddSeq++; // master increments before response
-                sendDBD(from, /*init=*/false, nbr.amMaster, /*more=*/nbr.haveMore, nbr.ddSeq);
-                nbr.haveMore = false;
-                if (!dbd->getMore()) {
+                // If both sides are out of LSAs, go FULL without sending another DBD.
+                if (!dbd->getMore() && nbr.dbdPending.empty()) {
                     MLOG_N_INFO(from) << "slave has no more DBDs, going FULL\n";
                     nbr.state = NSTATE_FULL;
-                    cancelReliable(nbr.pendingDbd);
+                } else {
+                    sendDBD(from, /*init=*/false, nbr.amMaster, nbr.ddSeq);
                 }
             } else if (!dbd->getMaster() && nbr.state == NSTATE_FULL) {
                 MLOG_N_DEBUG(from) << "received additional DBD from slave after FULL, seq=" << dbd->getSeq_no() << "\n";
@@ -266,17 +290,16 @@ void MyriadLS::handleDBD(MyriadDBD* dbd, nodeid_t from) {
         if (dbd->getInit()) { // Phase 1 master negotioation
             nbr.amMaster = false;
             nbr.ddSeq = dbd->getSeq_no() + 1;
+            buildPendingDbd(nbr);
             // slave does not retransmit
             cancelReliable(nbr.pendingDbd);
-            // TODO build pending DBD list
         } else {
             // slaves never retransmit (cancel just in case, but it should be null)
             cancelReliable(nbr.pendingDbd);
             // Phase 2 response by slave
             if (dbd->getMaster() && dbd->getSeq_no() == nbr.ddSeq && nbr.state < NSTATE_FULL) {
                 MLOG_N_DEBUG(from) << "received expected DBD from master, seq=" << dbd->getSeq_no() << "\n";
-                sendDBD(from, /*init=*/false, nbr.amMaster, /*more=*/nbr.haveMore, nbr.ddSeq);
-                nbr.haveMore = false;
+                sendDBD(from, /*init=*/false, nbr.amMaster, nbr.ddSeq);
                 if (!dbd->getMore()) {
                     MLOG_N_INFO(from) << "master has no more DBDs, going FULL\n";
                     nbr.state = NSTATE_FULL;
@@ -289,14 +312,32 @@ void MyriadLS::handleDBD(MyriadDBD* dbd, nodeid_t from) {
     }
 }
 
-void MyriadLS::sendDBD(nodeid_t to, bool init, bool master, bool more, uint16_t seq_no) {
+void MyriadLS::sendDBD(nodeid_t to, bool init, bool master, uint16_t seq_no) {
     auto* dbd = new MyriadDBD("Myriad_DBD");
     dbd->setRouter_id_src(myId);
     dbd->setInit(init);
     dbd->setMaster(master);
-    dbd->setMore(more);
     dbd->setSeq_no(seq_no);
-    // TODO ls_dbds left empty for now
+
+    // Init DBD carries no LSA summaries (negotiation only). Phase-2 DBDs drain
+    // up to dbdMaxLsasPerPacket headers off the per-neighbor queue; `more` is
+    // true iff anything still remains after this batch.
+    bool more = true;
+    if (!init) {
+        auto it = neighbors.find(to);
+        if (it != neighbors.end()) {
+            auto& q = it->second.dbdPending;
+            size_t batch = std::min(q.size(), static_cast<size_t>(dbdMaxLsasPerPacket));
+            dbd->setLs_dbdsArraySize(batch);
+            for (size_t i = 0; i < batch; ++i) {
+                auto lit = lsdb.find(q.front());
+                if (lit != lsdb.end()) dbd->setLs_dbds(i, *lit->second); // slicing copy
+                q.pop_front();
+            }
+            more = !q.empty();
+        }
+    }
+    dbd->setMore(more);
 
     // MS=1 is the side that retransmits.
     // MS=0 (slave response) is fire and forget
@@ -337,6 +378,8 @@ void MyriadLS::handleDead(nodeid_t nid) {
     cancelReliable(nbr.pendingDbd);
     nbr.amMaster = false;
     nbr.ddSeq = 0;
+    nbr.dbdPending.clear();
+    nbr.lsrPending.clear();
 }
 
 } // namespace routingsim

@@ -3,6 +3,7 @@
 
 #include "routing/myriadls/MyriadHelper.h"
 #include "routing/myriadls/MyriadLsPkt_m.h"
+#include <deque>
 
 namespace routingsim {
 
@@ -50,12 +51,15 @@ namespace routingsim {
 
         // DBD exchange state (initially both assume master)
         bool amMaster = true;
-        // TODO add actual pending List
-        bool haveMore = true;
         uint16_t ddSeq = 0;
         PendingTx* pendingDbd = nullptr;
-        // DBD pending list
 
+        // DBD send queue: LsaKeys we still owe this neighbor as DBD summaries.
+        // Drained `dbdMaxLsasPerPacket` at a time inside sendDBD.
+        std::deque<LsaKey> dbdPending;
+        // Link State Request list: LSAs we want to fetch from this neighbor.
+        // Stub for now — populated in a future step from received DBD summaries.
+        std::deque<LsaKey> lsrPending;
     };
 
     class MyriadLS : public MyriadHelper
@@ -76,8 +80,10 @@ namespace routingsim {
             void sendHello();
             void installSelfLsas();
             void logLsdb();
+            void buildPendingDbd(NeighborEntry& nbr);
+            void logDbd(const MyriadDBD* dbd, nodeid_t from);
             void handleHello(MyriadHello* hello, nodeid_t from);
-            void sendDBD(nodeid_t to, bool init, bool master, bool more, uint16_t seq_no);
+            void sendDBD(nodeid_t to, bool init, bool master, uint16_t seq_no);
             void handleDBD(MyriadDBD* dbd, nodeid_t from);
             void resetDead(nodeid_t nid);
             void handleDead(nodeid_t nid);
@@ -91,6 +97,7 @@ namespace routingsim {
             simtime_t helloInterval;
             simtime_t deadInterval;
             simtime_t rxmtInterval;
+            int dbdMaxLsasPerPacket = 10;
 
             // Handle to the currently-pending hello self-message so it can be cancelled on reset.
             TimerMsg* helloTimer = nullptr;
