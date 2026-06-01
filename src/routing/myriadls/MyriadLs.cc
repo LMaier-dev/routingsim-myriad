@@ -90,6 +90,7 @@ void MyriadLS::reset() {
         cancelReliable(nbr.pendingDbd);
     }
     neighbors.clear();
+    lsdb.clear();
 
     if (helloTimer) {
         cancelAndDelete(helloTimer);

@@ -65,7 +65,9 @@ packet MyriadDBD extends MyriadHeader {
     LsaHeader ls_dbds[];
 }
 
-class LsaHeader {
+// extends cObject so dup() is virtual: lets MyriadLSU's `@owned` array deep-copy
+// the right derived LSA, and lets the LSDB store unique_ptr<LsaHeader> polymorphically.
+class LsaHeader extends cObject {
     MyriadLSAType type;
     uint16_t seq_no;
     uint32_t age; // flush if too old TODO set max-age protocol parameter

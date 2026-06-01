@@ -25,6 +25,22 @@ namespace routingsim {
         EXCHANGE_OUT_DONE,
     };
 
+    // LSDB key: at most one LSA per (origin, type). Storing unique_ptr<LsaHeader>
+    // relies on LsaHeader being a cObject so dup() clones the actual derived LSA.
+    struct LsaKey {
+        nodeid_t origin;
+        MyriadLSAType type;
+        bool operator==(const LsaKey& o) const { return origin == o.origin && type == o.type; }
+    };
+
+    struct LsaKeyHash {
+        size_t operator()(const LsaKey& k) const noexcept {
+            return std::hash<nodeid_t>()(k.origin) ^ (static_cast<size_t>(k.type) << 16);
+        }
+    };
+
+    using Lsdb = std::unordered_map<LsaKey, std::unique_ptr<LsaHeader>, LsaKeyHash>;
+
     struct NeighborEntry {
         nodeid_t id;
         std::string rings;
@@ -68,6 +84,7 @@ namespace routingsim {
             std::string rings;
 
             std::unordered_map<nodeid_t, NeighborEntry> neighbors;
+            Lsdb lsdb;
 
             simtime_t helloInterval;
             simtime_t deadInterval;
