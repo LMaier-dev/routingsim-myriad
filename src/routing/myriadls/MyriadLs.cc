@@ -140,6 +140,31 @@ void MyriadLS::installSelfLsas() {
     subnetsLsa->setSubnets(1, (static_cast<uint64_t>(myId) << 8) | 0x02);
 
     lsdb[LsaKey{myId, LSA_SUBNETS}] = std::move(subnetsLsa);
+    
+    originateAdjacenciesLsa();
+}
+
+void MyriadLS::originateAdjacenciesLsa() {
+    std::vector<nodeid_t> adj;
+    for (const auto& [nid, nbr] : neighbors) {
+        if (nbr.state == NSTATE_FULL) adj.push_back(nid);
+    }
+
+    LsaKey key{myId, LSA_ADJACENCIES};
+    uint16_t newSeq = 1;
+    auto it = lsdb.find(key);
+    if (it != lsdb.end()) newSeq = it->second->getSeq_no() + 1;
+
+    auto lsa = std::make_unique<AdjacenciesLsa>();
+    lsa->setLsa_origin(myId);
+    lsa->setSeq_no(newSeq);
+    lsa->setAdjacenciesArraySize(adj.size());
+    for (size_t i = 0; i < adj.size(); ++i) lsa->setAdjacencies(i, adj[i]);
+
+    lsdb[key] = std::move(lsa);
+    MLOG_INFO() << "originated AdjacenciesLsa seq=" << newSeq
+                << " with " << adj.size() << " adjacent neighbor(s)\n";
+    // TODO: flood this LSA to every FULL neighbor via a sendReliable LSU
 }
 
 void MyriadLS::buildPendingDbd(NeighborEntry& nbr) {
@@ -382,6 +407,8 @@ void MyriadLS::tryGoFull(NeighborEntry& nbr) {
     if (nbr.pendingLsr != nullptr) return;
     nbr.state = NSTATE_FULL;
     MLOG_N_INFO(nbr.id) << "going FULL\n";
+    // TODO: In handleDead remove the dead neighbor and flood to other FULL neighbors.
+    originateAdjacenciesLsa();
     logLsdb();
 }
 
