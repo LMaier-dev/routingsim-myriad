@@ -4,6 +4,7 @@
 #include "routing/myriadls/MyriadHelper.h"
 #include "routing/myriadls/MyriadLsPkt_m.h"
 #include <deque>
+#include <memory>
 
 namespace routingsim {
 
@@ -55,7 +56,7 @@ namespace routingsim {
         bool peerDbdDone = false;
         // Slave-only: cached last DBD response so we can repeat it if the
         // master retransmits its previous DBD (RFC 2328 §10.6).
-        cPacket* lastSentDbd = nullptr;
+        std::unique_ptr<cPacket> lastSentDbd;
     };
 
     class MyriadLS : public MyriadHelper

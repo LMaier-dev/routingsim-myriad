@@ -99,8 +99,7 @@ void MyriadLS::reset() {
         }
         cancelReliable(nbr.pendingDbd);
         cancelReliable(nbr.pendingLsr);
-        delete nbr.lastSentDbd;
-        nbr.lastSentDbd = nullptr;
+        nbr.lastSentDbd.reset();
     }
     neighbors.clear();
     lsdb.clear();
@@ -519,8 +518,7 @@ void MyriadLS::sendDBD(nodeid_t to, bool init, bool master, uint16_t seq_no) {
     // Slave path: cache so we can repeat on a duplicate DBD from master (§10.6).
     auto sit = neighbors.find(to);
     if (sit != neighbors.end()) {
-        delete sit->second.lastSentDbd;
-        sit->second.lastSentDbd = dbd->dup();
+        sit->second.lastSentDbd.reset(dbd->dup());
     }
     auto np = std::make_unique<NodePkt>("Myriad_DBD_Pkt");
     np->setType(MYRIADLS_PACKET_TYPE);
@@ -555,8 +553,7 @@ void MyriadLS::handleDead(nodeid_t nid) {
     nbr.dbdPending.clear();
     nbr.lsrPending.clear();
     nbr.peerDbdDone = false;
-    delete nbr.lastSentDbd;
-    nbr.lastSentDbd = nullptr;
+    nbr.lastSentDbd.reset();
 }
 
 } // namespace routingsim
