@@ -409,6 +409,9 @@ void MyriadLS::tryGoFull(NeighborEntry& nbr) {
     MLOG_N_INFO(nbr.id) << "going FULL\n";
     // TODO: In handleDead remove the dead neighbor and flood to other FULL neighbors.
     originateAdjacenciesLsa();
+}
+
+void MyriadLS::finish() {
     logLsdb();
 }
 

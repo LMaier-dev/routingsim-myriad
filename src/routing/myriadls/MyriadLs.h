@@ -69,6 +69,7 @@ namespace routingsim {
             void onDisconnect(nodeid_t nid) override;
             void onMessage(NodePkt_p pkt) override;
             void reset() override;
+            void finish() override;
 
             NeighborState getNeighborState(nodeid_t nbr) const override;
 
