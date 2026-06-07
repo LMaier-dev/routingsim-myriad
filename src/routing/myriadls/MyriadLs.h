@@ -57,6 +57,13 @@ namespace routingsim {
         // Slave-only: cached last DBD response so we can repeat it if the
         // master retransmits its previous DBD (RFC 2328 §10.6).
         std::unique_ptr<cPacket> lastSentDbd;
+
+        // Per-neighbor flooding queue
+        std::deque<LsaKey> floodQueue;
+        PendingTx* inflightFloodLsu = nullptr;
+        // The seq tag in inflightFloodKeys lets us ignore stale LSAcks
+        // The ones we aleady updated
+        std::unordered_map<LsaKey, uint16_t, LsaKeyHash> inflightFloodKeys;
     };
 
     class MyriadLS : public MyriadHelper
@@ -77,7 +84,7 @@ namespace routingsim {
             void scheduleHello(simtime_t delay);
             void sendHello();
             void installSelfLsas();
-            void originateAdjacenciesLsa();
+            void originateSelfLsa(MyriadLSAType type, uint16_t minSeq = 0);
             void logLsdb();
             void buildPendingDbd(NeighborEntry& nbr);
             void logDbd(const MyriadDBD* dbd, nodeid_t from);
@@ -88,6 +95,8 @@ namespace routingsim {
             void sendNextLsr(NeighborEntry& nbr);
             void handleLSR(MyriadLSR* lsr, nodeid_t from);
             void handleLSU(MyriadLSU* lsu, nodeid_t from);
+            void handleAck(MyriadAck* ack, nodeid_t from);
+            void sendAck(nodeid_t to, const std::vector<const LsaHeader*>& headers);
             void tryGoFull(NeighborEntry& nbr);
             void resetDead(nodeid_t nid);
             void handleDead(nodeid_t nid);
@@ -102,6 +111,12 @@ namespace routingsim {
             simtime_t deadInterval;
             simtime_t rxmtInterval;
             int dbExchangeBatchSize = 10;
+
+            void buildSelfRingsLsa(uint16_t seq);
+            void buildSelfSubnetsLsa(uint16_t seq);
+            void buildSelfAdjacenciesLsa(uint16_t seq);
+            void enqueueFlood(NeighborEntry& nbr, const LsaKey& key);
+            void sendNextFloodBatch(NeighborEntry& nbr);
 
             // Handle to the currently-pending hello self-message so it can be cancelled on reset.
             TimerMsg* helloTimer = nullptr;

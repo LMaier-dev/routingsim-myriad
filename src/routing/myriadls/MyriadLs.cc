@@ -85,6 +85,9 @@ void MyriadLS::onMessage(NodePkt_p pkt) {
         case MYRIAD_LSU:
             handleLSU(check_and_cast<MyriadLSU*>(header.get()), from);
             break;
+        case MYRIAD_ACK:
+            handleAck(check_and_cast<MyriadAck*>(header.get()), from);
+            break;
         default:
             MLOG_WARN() << "received unknown packet type: " << header->getType() << "\n";
     }
@@ -99,6 +102,9 @@ void MyriadLS::reset() {
         }
         cancelReliable(nbr.inflightDbd);
         cancelReliable(nbr.inflightLsr);
+        cancelReliable(nbr.inflightFloodLsu);
+        nbr.inflightFloodKeys.clear();
+        nbr.floodQueue.clear();
         nbr.lastSentDbd.reset();
     }
     neighbors.clear();
@@ -112,11 +118,10 @@ void MyriadLS::reset() {
 }
 
 
-void MyriadLS::installSelfLsas() {
-    // Rings LSA: ring string char code as a uint64 entry
-    auto ringsLsa = std::make_unique<RingsLsa>();
-    ringsLsa->setSeq_no(1);
-    ringsLsa->setLsa_origin(myId);
+void MyriadLS::buildSelfRingsLsa(uint16_t seq) {
+    auto lsa = std::make_unique<RingsLsa>();
+    lsa->setSeq_no(seq);
+    lsa->setLsa_origin(myId);
 
     std::vector<uint64_t> ringIds;
     std::stringstream ss(rings);
@@ -124,46 +129,64 @@ void MyriadLS::installSelfLsas() {
     while (std::getline(ss, tok, ',')) {
         if (!tok.empty()) ringIds.push_back(static_cast<uint64_t>(tok[0]));
     }
-    ringsLsa->setRingsArraySize(ringIds.size());
-    for (size_t i = 0; i < ringIds.size(); ++i)
-        ringsLsa->setRings(i, ringIds[i]);
+    lsa->setRingsArraySize(ringIds.size());
+    for (size_t i = 0; i < ringIds.size(); ++i) lsa->setRings(i, ringIds[i]);
 
-    lsdb[LsaKey{myId, LSA_RINGS}] = std::move(ringsLsa);
-
-    // Subnets LSA: bogus subnets derived from node id
-    auto subnetsLsa = std::make_unique<SubnetsLsa>();
-    subnetsLsa->setSeq_no(1);
-    subnetsLsa->setLsa_origin(myId);
-    subnetsLsa->setSubnetsArraySize(2);
-    subnetsLsa->setSubnets(0, (static_cast<uint64_t>(myId) << 8) | 0x01);
-    subnetsLsa->setSubnets(1, (static_cast<uint64_t>(myId) << 8) | 0x02);
-
-    lsdb[LsaKey{myId, LSA_SUBNETS}] = std::move(subnetsLsa);
-    
-    originateAdjacenciesLsa();
+    lsdb[LsaKey{myId, LSA_RINGS}] = std::move(lsa);
 }
 
-void MyriadLS::originateAdjacenciesLsa() {
+void MyriadLS::buildSelfSubnetsLsa(uint16_t seq) {
+    auto lsa = std::make_unique<SubnetsLsa>();
+    lsa->setSeq_no(seq);
+    lsa->setLsa_origin(myId);
+    // Bogus subnets derived from node id: <id>.1 and <id>.2
+    lsa->setSubnetsArraySize(2);
+    lsa->setSubnets(0, (static_cast<uint64_t>(myId) << 8) | 0x01);
+    lsa->setSubnets(1, (static_cast<uint64_t>(myId) << 8) | 0x02);
+
+    lsdb[LsaKey{myId, LSA_SUBNETS}] = std::move(lsa);
+}
+
+void MyriadLS::buildSelfAdjacenciesLsa(uint16_t seq) {
     std::vector<nodeid_t> adj;
     for (const auto& [nid, nbr] : neighbors) {
         if (nbr.state == NSTATE_FULL) adj.push_back(nid);
     }
 
-    LsaKey key{myId, LSA_ADJACENCIES};
-    uint16_t newSeq = 1;
-    auto it = lsdb.find(key);
-    if (it != lsdb.end()) newSeq = it->second->getSeq_no() + 1;
-
     auto lsa = std::make_unique<AdjacenciesLsa>();
+    lsa->setSeq_no(seq);
     lsa->setLsa_origin(myId);
-    lsa->setSeq_no(newSeq);
     lsa->setAdjacenciesArraySize(adj.size());
     for (size_t i = 0; i < adj.size(); ++i) lsa->setAdjacencies(i, adj[i]);
 
-    lsdb[key] = std::move(lsa);
-    MLOG_INFO() << "originated AdjacenciesLsa seq=" << newSeq
-                << " with " << adj.size() << " adjacent neighbor(s)\n";
-    // TODO: flood this LSA to every FULL neighbor via a sendReliable LSU
+    lsdb[LsaKey{myId, LSA_ADJACENCIES}] = std::move(lsa);
+}
+
+void MyriadLS::installSelfLsas() {
+    originateSelfLsa(LSA_RINGS);
+    originateSelfLsa(LSA_SUBNETS);
+    originateSelfLsa(LSA_ADJACENCIES);
+}
+
+void MyriadLS::originateSelfLsa(MyriadLSAType type, uint16_t minSeq) {
+    LsaKey key{myId, type};
+    auto it = lsdb.find(key);
+    uint16_t newSeq = (it != lsdb.end()) ? it->second->getSeq_no() + 1 : 1;
+    if (static_cast<uint16_t>(minSeq + 1) > newSeq) newSeq = minSeq + 1;
+
+    switch (type) {
+        case LSA_RINGS:       buildSelfRingsLsa(newSeq);       break;
+        case LSA_SUBNETS:     buildSelfSubnetsLsa(newSeq);     break;
+        case LSA_ADJACENCIES: buildSelfAdjacenciesLsa(newSeq); break;
+    }
+
+    MLOG_INFO() << "originated self-LSA type=" << type << " seq=" << newSeq << "\n";
+
+    for (auto& [nid, nbr] : neighbors) {
+        if (nbr.state != NSTATE_FULL) continue;
+        enqueueFlood(nbr, key);
+        sendNextFloodBatch(nbr);
+    }
 }
 
 void MyriadLS::buildPendingDbd(NeighborEntry& nbr) {
@@ -374,29 +397,141 @@ void MyriadLS::handleLSU(MyriadLSU* lsu, nodeid_t from) {
     MLOG_N_DEBUG(from) << "received LSU with " << n << " LSA(s)\n";
 
     bool drainedAny = false;
+    std::vector<const LsaHeader*> toAck;
+    std::vector<LsaKey> toReflood;
+
     for (size_t i = 0; i < n; ++i) {
         const LsaHeader* h = lsu->getLsas(i);
         LsaKey key{h->getLsa_origin(), h->getType()};
-        // Install if missing or strictly newer; ties leave the LSDB unchanged.
-        auto it = lsdb.find(key);
-        if (it == lsdb.end() || it->second->getSeq_no() < h->getSeq_no()) {
-            lsdb[key] = std::unique_ptr<LsaHeader>(check_and_cast<LsaHeader*>(h->dup()));
-            MLOG_N_DEBUG(from) << "installed LSA " << (int)key.origin
-                               << "/" << key.type << " seq=" << h->getSeq_no() << "\n";
+        bool isSelf = (h->getLsa_origin() == myId);
+        bool installed = false;
+
+        if (isSelf) {
+            // Self-LSA loopback: someone propagated a higher-SN
+            // Re-originate fresh from current state with bigger SN
+            auto it = lsdb.find(key);
+            if (it != lsdb.end() && h->getSeq_no() > it->second->getSeq_no()) {
+                MLOG_N_INFO(from) << "self-LSA loopback for " << (int)key.origin
+                                  << "/" << key.type << " received seq=" << h->getSeq_no()
+                                  << "; re-originating\n";
+                originateSelfLsa(key.type, h->getSeq_no());
+            }
+        } else {
+            auto it = lsdb.find(key);
+            if (it == lsdb.end() || it->second->getSeq_no() < h->getSeq_no()) {
+                lsdb[key] = std::unique_ptr<LsaHeader>(check_and_cast<LsaHeader*>(h->dup()));
+                installed = true;
+                MLOG_N_DEBUG(from) << "installed LSA " << (int)key.origin
+                                   << "/" << key.type << " seq=" << h->getSeq_no() << "\n";
+            }
         }
+
+        // LSR response vs flooded LSU
         auto pit = std::find(nbr.lsrQueue.begin(), nbr.lsrQueue.end(), key);
         if (pit != nbr.lsrQueue.end()) {
-            // This was a response to our LSR
             nbr.lsrQueue.erase(pit);
             drainedAny = true;
         } else {
-            // TODO: With flooding, emit an LSAck back to sender
+            // Flooded: ack to sender, and reflood if we just installed newer.
+            toAck.push_back(h);
+            if (installed) toReflood.push_back(key);
         }
     }
-    // Pure flood must not cancel an in-flight LSR.
+
+    // Reflood all newly-installed keys to FULL neighbors except sender.
+    // They get bundled into one LSU per neighbor (per-queue)
+    if (!toReflood.empty()) {
+        for (auto& [nid, nb] : neighbors) {
+            if (nb.state != NSTATE_FULL) continue;
+            if (nid == from) continue;
+            for (const auto& k : toReflood) enqueueFlood(nb, k);
+            sendNextFloodBatch(nb);
+        }
+    }
+
+    // pass pointer to packtet for slice reply
+    if (!toAck.empty()) sendAck(from, toAck);
+
     if (drainedAny) {
         cancelReliable(nbr.inflightLsr);
         sendNextLsr(nbr);
+    }
+}
+
+void MyriadLS::enqueueFlood(NeighborEntry& nbr, const LsaKey& key) {
+    // Dedup against the queue
+    if (std::find(nbr.floodQueue.begin(), nbr.floodQueue.end(), key) != nbr.floodQueue.end()) return;
+    nbr.floodQueue.push_back(key);
+}
+
+void MyriadLS::sendNextFloodBatch(NeighborEntry& nbr) {
+    if (nbr.inflightFloodLsu != nullptr) return; // wait for current batch's ack
+    if (nbr.floodQueue.empty()) return;
+
+    auto* lsu = new MyriadLSU("Myriad_LSU_Flood");
+    lsu->setRouter_id_src(myId);
+
+    size_t batch = std::min(nbr.floodQueue.size(), static_cast<size_t>(dbExchangeBatchSize));
+    std::vector<LsaHeader*> dups;
+    dups.reserve(batch);
+    nbr.inflightFloodKeys.clear();
+    for (size_t i = 0; i < batch; ++i) {
+        LsaKey key = nbr.floodQueue.front();
+        nbr.floodQueue.pop_front();
+        auto lit = lsdb.find(key);
+        if (lit == lsdb.end()) continue; // defensive: LSA dropped from LSDB
+        dups.push_back(check_and_cast<LsaHeader*>(lit->second->dup()));
+        nbr.inflightFloodKeys[key] = lit->second->getSeq_no();
+    }
+
+    if (dups.empty()) {
+        delete lsu;
+        return;
+    }
+
+    lsu->setLsasArraySize(dups.size());
+    for (size_t i = 0; i < dups.size(); ++i) lsu->setLsas(i, dups[i]); // @owned
+
+    nbr.inflightFloodLsu = sendReliable(nbr.id, lsu, rxmtInterval);
+    MLOG_N_DEBUG(nbr.id) << "flooding LSU with " << dups.size() << " LSA(s)\n";
+}
+
+void MyriadLS::sendAck(nodeid_t to, const std::vector<const LsaHeader*>& headers) {
+    auto* ack = new MyriadAck("Myriad_LSAck");
+    ack->setRouter_id_src(myId);
+    ack->setAckedArraySize(headers.size());
+    // slice only header fields
+    for (size_t i = 0; i < headers.size(); ++i) ack->setAcked(i, *headers[i]);
+
+    auto np = std::make_unique<NodePkt>("Myriad_LSAck_Pkt");
+    np->setType(MYRIADLS_PACKET_TYPE);
+    np->encapsulate(ack);
+    sendToNode(to, std::move(np));
+    MLOG_N_DEBUG(to) << "sent LSAck for " << headers.size() << " LSA(s)\n";
+}
+
+void MyriadLS::handleAck(MyriadAck* ack, nodeid_t from) {
+    auto it = neighbors.find(from);
+    if (it == neighbors.end()) return;
+    NeighborEntry& nbr = it->second;
+
+    size_t n = ack->getAckedArraySize();
+    MLOG_N_DEBUG(from) << "received LSAck for " << n << " LSA(s)\n";
+
+    for (size_t i = 0; i < n; ++i) {
+        const LsaHeader& h = ack->getAcked(i);
+        LsaKey key{h.getLsa_origin(), h.getType()};
+        auto kit = nbr.inflightFloodKeys.find(key);
+        if (kit == nbr.inflightFloodKeys.end()) continue;
+        // Ignore stale acks for an LSA we've since superseded.
+        if (kit->second != h.getSeq_no()) continue;
+        nbr.inflightFloodKeys.erase(kit);
+    }
+
+    // free to send next batch if we acked all LSAs in the current batch
+    if (nbr.inflightFloodKeys.empty() && nbr.inflightFloodLsu != nullptr) {
+        cancelReliable(nbr.inflightFloodLsu);
+        sendNextFloodBatch(nbr);
     }
 }
 
@@ -409,8 +544,7 @@ void MyriadLS::tryGoFull(NeighborEntry& nbr) {
     if (nbr.inflightLsr != nullptr) return;
     nbr.state = NSTATE_FULL;
     MLOG_N_INFO(nbr.id) << "going FULL\n";
-    // TODO: In handleDead remove the dead neighbor and flood to other FULL neighbors.
-    originateAdjacenciesLsa();
+    originateSelfLsa(LSA_ADJACENCIES);
 }
 
 void MyriadLS::finish() {
@@ -517,7 +651,7 @@ void MyriadLS::sendDBD(nodeid_t to, bool init, bool master, uint16_t seq_no) {
             return;
         }
     }
-    // Slave path: cache so we can repeat on a duplicate DBD from master (§10.6).
+    // Slave path: cache so we can repeat on a duplicate DBD from master.
     auto sit = neighbors.find(to);
     if (sit != neighbors.end()) {
         sit->second.lastSentDbd.reset(dbd->dup());
@@ -544,18 +678,25 @@ void MyriadLS::handleDead(nodeid_t nid) {
     auto it = neighbors.find(nid);
     if (it == neighbors.end()) return;
     NeighborEntry& nbr = it->second;
+    bool wasFull = (nbr.state == NSTATE_FULL);
 
     MLOG_N_WARN(nid) << "neighbor timed out (DEAD)\n";
     nbr.deadTimer = nullptr;
     nbr.state = NSTATE_DOWN;
     cancelReliable(nbr.inflightDbd);
     cancelReliable(nbr.inflightLsr);
+    cancelReliable(nbr.inflightFloodLsu);
+    nbr.inflightFloodKeys.clear();
+    nbr.floodQueue.clear();
     nbr.amMaster = false;
     nbr.ddSeq = 0;
     nbr.dbdQueue.clear();
     nbr.lsrQueue.clear();
     nbr.peerDbdDone = false;
     nbr.lastSentDbd.reset();
+
+    // Lost a FULL adjacency: re-originate AdjacenciesLsa
+    if (wasFull) originateSelfLsa(LSA_ADJACENCIES);
 }
 
 } // namespace routingsim
