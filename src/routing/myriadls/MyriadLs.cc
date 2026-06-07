@@ -306,20 +306,18 @@ void MyriadLS::processDBD(MyriadDBD* dbd, NeighborEntry& nbr) {
                 << (int)key.origin << "/" << key.type << ", queued for LSR\n";
         nbr.lsrQueue.push_back(key);
     }
-    // RFC §10.9: requests can be sent concurrently with the DBD exchange.
-    // sendNextLsr is a no-op if there's already an LSR in flight; the new keys
-    // will go out in the next LSR after the current one is acked by an LSU.
+    // Requests can be sent concurrently with the DBD exchange.
     sendNextLsr(nbr);
 }
 
 void MyriadLS::sendNextLsr(NeighborEntry& nbr) {
     if (nbr.lsrQueue.empty()) {
-        // Drained: this is also the natural close-out point after an LSU
-        // satisfied the last outstanding requests.
+        // satisfied the last outstanding requests. 
+        // But go full only if no DBDs exchange finished
         tryGoFull(nbr);
         return;
     }
-    // RFC §10.9: at most one outstanding LSR per neighbor.
+    // At most one inflight LSR per neighbor.
     if (nbr.inflightLsr) return;
 
     auto* lsr = new MyriadLSR("Myriad_LSR");
@@ -375,6 +373,7 @@ void MyriadLS::handleLSU(MyriadLSU* lsu, nodeid_t from) {
     size_t n = lsu->getLsasArraySize();
     MLOG_N_DEBUG(from) << "received LSU with " << n << " LSA(s)\n";
 
+    bool drainedAny = false;
     for (size_t i = 0; i < n; ++i) {
         const LsaHeader* h = lsu->getLsas(i);
         LsaKey key{h->getLsa_origin(), h->getType()};
@@ -385,16 +384,20 @@ void MyriadLS::handleLSU(MyriadLSU* lsu, nodeid_t from) {
             MLOG_N_DEBUG(from) << "installed LSA " << (int)key.origin
                                << "/" << key.type << " seq=" << h->getSeq_no() << "\n";
         }
-        // Drain matched key from the request list — independent of install
-        // decision (a stale-but-acceptable LSA still satisfies the request).
         auto pit = std::find(nbr.lsrQueue.begin(), nbr.lsrQueue.end(), key);
-        if (pit != nbr.lsrQueue.end()) nbr.lsrQueue.erase(pit);
+        if (pit != nbr.lsrQueue.end()) {
+            // This was a response to our LSR
+            nbr.lsrQueue.erase(pit);
+            drainedAny = true;
+        } else {
+            // TODO: With flooding, emit an LSAck back to sender
+        }
     }
-    // TODO: distinguish solicited from flooded LSU.
-    // Currently every LSU is treated as the response to our outstanding LSR
-    // TODO: cancel inflightLsr only if at least one LSA matched lsrQueue and forward to the flooding-ack path otherwise.
-    cancelReliable(nbr.inflightLsr);
-    sendNextLsr(nbr); // sends next batch, or tryGoFull if drained
+    // Pure flood must not cancel an in-flight LSR.
+    if (drainedAny) {
+        cancelReliable(nbr.inflightLsr);
+        sendNextLsr(nbr);
+    }
 }
 
 void MyriadLS::tryGoFull(NeighborEntry& nbr) {
@@ -485,9 +488,8 @@ void MyriadLS::sendDBD(nodeid_t to, bool init, bool master, uint16_t seq_no) {
     dbd->setMaster(master);
     dbd->setSeq_no(seq_no);
 
-    // Init DBD carries no LSA summaries (negotiation only). Phase-2 DBDs drain
-    // up to dbExchangeBatchSize headers off the per-neighbor queue; `more` is
-    // true iff anything still remains after this batch.
+    // Init DBD carries no LSA summaries (negotiation only). Phase-2 DBDs pick
+    // up to dbExchangeBatchSize headers off the per-neighbor queue.
     bool more = true;
     if (!init) {
         auto it = neighbors.find(to);

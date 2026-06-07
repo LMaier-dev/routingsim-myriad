@@ -86,7 +86,6 @@ packet MyriadLSR extends MyriadHeader {
     LsaRequest reqs[];
 }
 
-// TODO check if this pointer approach works for the polymorphic LSAs
 packet MyriadLSU extends MyriadHeader {
     type = MYRIAD_LSU;
     LsaHeader *lsas[] @owned;
@@ -109,5 +108,5 @@ class SubnetsLsa extends LsaHeader{
 
 class RingsLsa extends LsaHeader{
     type = LSA_RINGS;
-    uint64_t rings[]; // TODO decide on how to store rings
+    uint64_t rings[];
 }
