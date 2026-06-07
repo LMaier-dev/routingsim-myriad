@@ -44,14 +44,14 @@ namespace routingsim {
         // DBD exchange state (initially both assume master)
         bool amMaster = true;
         uint16_t ddSeq = 0;
-        PendingTx* pendingDbd = nullptr;
+        PendingTx* inflightDbd = nullptr;
         // At most one outstanding LSR per neighbors
-        PendingTx* pendingLsr = nullptr;
+        PendingTx* inflightLsr = nullptr;
 
         // DBD send queue: LsaKeys we still owe this neighbor as DBD summaries.
-        std::deque<LsaKey> dbdPending;
+        std::deque<LsaKey> dbdQueue;
         // Link State Request list: LSAs we want to fetch from this neighbor.
-        std::deque<LsaKey> lsrPending;
+        std::deque<LsaKey> lsrQueue;
         // Set when peer sent a non-init DBD with M=0.
         bool peerDbdDone = false;
         // Slave-only: cached last DBD response so we can repeat it if the

@@ -97,8 +97,8 @@ void MyriadLS::reset() {
             cancelAndDelete(nbr.deadTimer);
             nbr.deadTimer = nullptr;
         }
-        cancelReliable(nbr.pendingDbd);
-        cancelReliable(nbr.pendingLsr);
+        cancelReliable(nbr.inflightDbd);
+        cancelReliable(nbr.inflightLsr);
         nbr.lastSentDbd.reset();
     }
     neighbors.clear();
@@ -167,9 +167,9 @@ void MyriadLS::originateAdjacenciesLsa() {
 }
 
 void MyriadLS::buildPendingDbd(NeighborEntry& nbr) {
-    nbr.dbdPending.clear();
+    nbr.dbdQueue.clear();
     for (const auto& kv : lsdb) {
-        nbr.dbdPending.push_back(kv.first);
+        nbr.dbdQueue.push_back(kv.first);
     }
 }
 
@@ -301,10 +301,10 @@ void MyriadLS::processDBD(MyriadDBD* dbd, NeighborEntry& nbr) {
         // dont insert if our LSDB is at least same age
         if (it != lsdb.end() && it->second->getSeq_no() >= h.getSeq_no()) continue;
         // dont insert if its already there
-        if (std::find(nbr.lsrPending.begin(), nbr.lsrPending.end(), key) != nbr.lsrPending.end()) continue;
+        if (std::find(nbr.lsrQueue.begin(), nbr.lsrQueue.end(), key) != nbr.lsrQueue.end()) continue;
         MLOG_N_DEBUG(nbr.id) << "LSDB missing or stale for "
                 << (int)key.origin << "/" << key.type << ", queued for LSR\n";
-        nbr.lsrPending.push_back(key);
+        nbr.lsrQueue.push_back(key);
     }
     // RFC §10.9: requests can be sent concurrently with the DBD exchange.
     // sendNextLsr is a no-op if there's already an LSR in flight; the new keys
@@ -313,21 +313,21 @@ void MyriadLS::processDBD(MyriadDBD* dbd, NeighborEntry& nbr) {
 }
 
 void MyriadLS::sendNextLsr(NeighborEntry& nbr) {
-    if (nbr.lsrPending.empty()) {
+    if (nbr.lsrQueue.empty()) {
         // Drained: this is also the natural close-out point after an LSU
         // satisfied the last outstanding requests.
         tryGoFull(nbr);
         return;
     }
     // RFC §10.9: at most one outstanding LSR per neighbor.
-    if (nbr.pendingLsr) return;
+    if (nbr.inflightLsr) return;
 
     auto* lsr = new MyriadLSR("Myriad_LSR");
     lsr->setRouter_id_src(myId);
 
-    size_t batch = std::min(nbr.lsrPending.size(), static_cast<size_t>(dbExchangeBatchSize));
+    size_t batch = std::min(nbr.lsrQueue.size(), static_cast<size_t>(dbExchangeBatchSize));
     lsr->setReqsArraySize(batch);
-    auto it = nbr.lsrPending.begin();
+    auto it = nbr.lsrQueue.begin();
     for (size_t i = 0; i < batch; ++i, ++it) {
         LsaRequest r;
         r.origin = it->origin;
@@ -335,7 +335,7 @@ void MyriadLS::sendNextLsr(NeighborEntry& nbr) {
         lsr->setReqs(i, r);
     }
     MLOG_N_DEBUG(nbr.id) << "sending LSR with " << batch << " request(s)\n";
-    nbr.pendingLsr = sendReliable(nbr.id, lsr, rxmtInterval);
+    nbr.inflightLsr = sendReliable(nbr.id, lsr, rxmtInterval);
 }
 
 void MyriadLS::handleLSR(MyriadLSR* lsr, nodeid_t from) {
@@ -387,23 +387,23 @@ void MyriadLS::handleLSU(MyriadLSU* lsu, nodeid_t from) {
         }
         // Drain matched key from the request list — independent of install
         // decision (a stale-but-acceptable LSA still satisfies the request).
-        auto pit = std::find(nbr.lsrPending.begin(), nbr.lsrPending.end(), key);
-        if (pit != nbr.lsrPending.end()) nbr.lsrPending.erase(pit);
+        auto pit = std::find(nbr.lsrQueue.begin(), nbr.lsrQueue.end(), key);
+        if (pit != nbr.lsrQueue.end()) nbr.lsrQueue.erase(pit);
     }
     // TODO: distinguish solicited from flooded LSU.
     // Currently every LSU is treated as the response to our outstanding LSR
-    // TODO: cancel pendingLsr only if at least one LSA matched lsrPending and forward to the flooding-ack path otherwise.
-    cancelReliable(nbr.pendingLsr);
+    // TODO: cancel inflightLsr only if at least one LSA matched lsrQueue and forward to the flooding-ack path otherwise.
+    cancelReliable(nbr.inflightLsr);
     sendNextLsr(nbr); // sends next batch, or tryGoFull if drained
 }
 
 void MyriadLS::tryGoFull(NeighborEntry& nbr) {
     if (nbr.state == NSTATE_FULL) return;
-    if (!nbr.dbdPending.empty()) return;
-    if (nbr.pendingDbd != nullptr) return;
+    if (!nbr.dbdQueue.empty()) return;
+    if (nbr.inflightDbd != nullptr) return;
     if (!nbr.peerDbdDone) return;
-    if (!nbr.lsrPending.empty()) return;
-    if (nbr.pendingLsr != nullptr) return;
+    if (!nbr.lsrQueue.empty()) return;
+    if (nbr.inflightLsr != nullptr) return;
     nbr.state = NSTATE_FULL;
     MLOG_N_INFO(nbr.id) << "going FULL\n";
     // TODO: In handleDead remove the dead neighbor and flood to other FULL neighbors.
@@ -422,17 +422,17 @@ void MyriadLS::handleDBD(MyriadDBD* dbd, nodeid_t from) {
             nbr.amMaster = true;
             nbr.ddSeq = nbr.ddSeq + 1;
             // Phase 2 intiated by master
-            cancelReliable(nbr.pendingDbd);
+            cancelReliable(nbr.inflightDbd);
             sendDBD(from, /*init=*/false, nbr.amMaster, nbr.ddSeq);
         } else {
             if (!dbd->getMaster() && dbd->getSeq_no() == nbr.ddSeq && nbr.state < NSTATE_FULL) {
                 processDBD(dbd, nbr); // expected DBD, process and respond with next one
-                cancelReliable(nbr.pendingDbd);
+                cancelReliable(nbr.inflightDbd);
                 MLOG_N_DEBUG(from) << "received expected DBD from slave, seq=" << dbd->getSeq_no() << "\n";
                 if (!dbd->getMore()) nbr.peerDbdDone = true;
                 nbr.ddSeq++; // master increments before response
                 // If both sides are out of LSAs, skip the empty follow-up DBD.
-                if (!(nbr.peerDbdDone && nbr.dbdPending.empty())) {
+                if (!(nbr.peerDbdDone && nbr.dbdQueue.empty())) {
                     sendDBD(from, /*init=*/false, nbr.amMaster, nbr.ddSeq);
                 }
                 tryGoFull(nbr);
@@ -449,10 +449,10 @@ void MyriadLS::handleDBD(MyriadDBD* dbd, nodeid_t from) {
             nbr.amMaster = false;
             nbr.ddSeq = dbd->getSeq_no() + 1;
             // slave does not retransmit
-            cancelReliable(nbr.pendingDbd);
+            cancelReliable(nbr.inflightDbd);
         } else {
             // slaves never retransmit (cancel just in case, but it should be null)
-            cancelReliable(nbr.pendingDbd);
+            cancelReliable(nbr.inflightDbd);
             // Phase 2 response by slave
             if (dbd->getMaster() && dbd->getSeq_no() == nbr.ddSeq && nbr.state < NSTATE_FULL) {
                 processDBD(dbd, nbr); // expected DBD, process and respond with next one
@@ -492,7 +492,7 @@ void MyriadLS::sendDBD(nodeid_t to, bool init, bool master, uint16_t seq_no) {
     if (!init) {
         auto it = neighbors.find(to);
         if (it != neighbors.end()) {
-            auto& q = it->second.dbdPending;
+            auto& q = it->second.dbdQueue;
             size_t batch = std::min(q.size(), static_cast<size_t>(dbExchangeBatchSize));
             dbd->setLs_dbdsArraySize(batch);
             for (size_t i = 0; i < batch; ++i) {
@@ -510,8 +510,8 @@ void MyriadLS::sendDBD(nodeid_t to, bool init, bool master, uint16_t seq_no) {
     if (master) {
         auto it = neighbors.find(to);
         if (it != neighbors.end()) {
-            cancelReliable(it->second.pendingDbd);
-            it->second.pendingDbd = sendReliable(to, dbd, rxmtInterval);
+            cancelReliable(it->second.inflightDbd);
+            it->second.inflightDbd = sendReliable(to, dbd, rxmtInterval);
             return;
         }
     }
@@ -546,12 +546,12 @@ void MyriadLS::handleDead(nodeid_t nid) {
     MLOG_N_WARN(nid) << "neighbor timed out (DEAD)\n";
     nbr.deadTimer = nullptr;
     nbr.state = NSTATE_DOWN;
-    cancelReliable(nbr.pendingDbd);
-    cancelReliable(nbr.pendingLsr);
+    cancelReliable(nbr.inflightDbd);
+    cancelReliable(nbr.inflightLsr);
     nbr.amMaster = false;
     nbr.ddSeq = 0;
-    nbr.dbdPending.clear();
-    nbr.lsrPending.clear();
+    nbr.dbdQueue.clear();
+    nbr.lsrQueue.clear();
     nbr.peerDbdDone = false;
     nbr.lastSentDbd.reset();
 }

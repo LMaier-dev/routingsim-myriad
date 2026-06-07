@@ -74,8 +74,8 @@ class LsaHeader extends cObject {
     nodeid_t lsa_origin;
 }
 
-// LSR request entry: just enough to identify an LSDB row. Plain value struct,
-// no cObject — never stored polymorphically and never @owned.
+// LSR request entry: just enough to identify an LSDB row.
+// no need for SN or age
 struct LsaRequest {
     nodeid_t origin;
     MyriadLSAType type;
