@@ -1,4 +1,4 @@
-#include "routing/myriadls/MyriadLs.h"
+#include "routing/MYRIAD/MyriadLs.h"
 #include <algorithm>
 
 namespace routingsim {
@@ -6,11 +6,8 @@ namespace routingsim {
 Define_Module(MyriadLS);
 
 void MyriadLS::onInitialize() {
-    MyriadHelper::onInitialize();
+    MyriadHelloProto::onInitialize();
     packetType = MYRIADLS_PACKET_TYPE;
-    helloInterval = par("helloInterval");
-    deadInterval = par("deadInterval");
-    rxmtInterval = par("rxmtInterval");
     dbExchangeBatchSize = par("dbExchangeBatchSize");
 
     node().bind(MYRIADLS_PACKET_TYPE, this);
@@ -51,27 +48,60 @@ void MyriadLS::onInitialize() {
 
 }
 
-NeighborState MyriadLS::getNeighborState(nodeid_t nbr) const {
-    auto it = neighbors.find(nbr);
-    if (it == neighbors.end()) return NSTATE_DOWN;
-    return it->second.state;
-}
-
-void MyriadLS::onConnect(nodeid_t nid) {
-    // Retrieve OR create neighbor entry
+HelloNeighbor& MyriadLS::findOrCreateHello(nodeid_t nid) {
     NeighborEntry& nbr = neighbors[nid];
     nbr.id = nid;
-    nbr.state = NSTATE_DOWN;
+    return nbr;
 }
 
-void MyriadLS::onDisconnect(nodeid_t nid) {
-    handleDead(nid);
+HelloNeighbor* MyriadLS::findHello(nodeid_t nid) {
+    auto it = neighbors.find(nid);
+    return it == neighbors.end() ? nullptr : &it->second;
+}
+
+const HelloNeighbor* MyriadLS::findHello(nodeid_t nid) const {
+    auto it = neighbors.find(nid);
+    return it == neighbors.end() ? nullptr : &it->second;
+}
+
+void MyriadLS::forEachHello(std::function<void(HelloNeighbor&)> fn) {
+    for (auto& [nid, nbr] : neighbors) fn(nbr);
+}
+
+void MyriadLS::forEachHello(std::function<void(const HelloNeighbor&)> fn) const {
+    for (const auto& [nid, nbr] : neighbors) fn(nbr);
+}
+
+void MyriadLS::onTwoWayReached(HelloNeighbor& base) {
+    auto& nbr = static_cast<NeighborEntry&>(base);
+    nbr.ddSeq = 0; // arbitrary starting seq no based on node ids
+    nbr.amMaster = true;
+    buildPendingDbd(nbr);
+    sendDBD(nbr.id, /*init=*/true, nbr.amMaster, nbr.ddSeq);
+}
+
+void MyriadLS::onNeighborDead(HelloNeighbor& base, bool wasFull) {
+    auto& nbr = static_cast<NeighborEntry&>(base);
+    cancelReliable(nbr.inflightDbd);
+    cancelReliable(nbr.inflightLsr);
+    cancelReliable(nbr.inflightFloodLsu);
+    nbr.inflightFloodKeys.clear();
+    nbr.floodQueue.clear();
+    nbr.amMaster = false;
+    nbr.ddSeq = 0;
+    nbr.dbdQueue.clear();
+    nbr.lsrQueue.clear();
+    nbr.peerDbdDone = false;
+    nbr.lastSentDbd.reset();
+
+    // Lost a FULL adjacency: re-originate AdjacenciesLsa
+    if (wasFull) originateSelfLsa(LSA_ADJACENCIES);
 }
 
 void MyriadLS::onMessage(NodePkt_p pkt) {
     myId = node().getNodeId();
     auto header = std::unique_ptr<MyriadHeader>(check_and_cast<MyriadHeader*>(pkt->decapsulate()));
-    nodeid_t from = header->getRouter_id_src();    
+    nodeid_t from = header->getRouter_id_src();
     switch (header->getType()) {
         case MYRIAD_HELLO:
             handleHello(check_and_cast<MyriadHello*>(header.get()), from);
@@ -111,10 +141,7 @@ void MyriadLS::reset() {
     lsdb.clear();
     installSelfLsas();
 
-    if (helloTimer) {
-        cancelAndDelete(helloTimer);
-        helloTimer = nullptr;
-    }
+    cancelHelloTimer();
 }
 
 
@@ -250,70 +277,6 @@ void MyriadLS::logLsdb() {
     }
 }
 
-void MyriadLS::scheduleHello(simtime_t delay) {
-    helloTimer = addOneShotTimer(delay, [this](short) {
-        helloTimer = nullptr; // framework deletes this TimerMsg after we return
-        sendHello();          // reschedules and assigns the new helloTimer
-        return false;
-    });
-}
-
-void MyriadLS::sendHello() {
-    auto hello = std::make_unique<MyriadHello>("Myriad_Hello");
-    hello->setRouter_id_src(myId);
-    // Currently not read on the receiving end, but set it anyway for completeness
-    hello->setHelloInterval(helloInterval);
-    hello->setDeadInterval(deadInterval);
-
-    // Only advertise neighbors we've actually heard a hello from
-    std::vector<nodeid_t> heard;
-    heard.reserve(neighbors.size());
-    for (auto& [nid, nbr] : neighbors) {
-        if (nbr.state >= NSTATE_INIT) heard.push_back(nid);
-    }
-    hello->setKnownNeighborsArraySize(heard.size());
-    for (size_t i = 0; i < heard.size(); ++i) {
-        hello->setKnownNeighbors(i, heard[i]);
-    }
-
-    // TODO set hello->setByteLength
-    for (const auto& [nid, nbr] : neighbors) {
-        auto np = std::make_unique<NodePkt>("Myriad_Hello_Pkt");
-        np->setType(MYRIADLS_PACKET_TYPE);
-        np->encapsulate(hello->dup());
-        sendToNode(nid, std::move(np));
-    }
-    scheduleHello(helloInterval);
-}
-
-void MyriadLS::handleHello(MyriadHello* hello, nodeid_t from) {
-    NeighborEntry& nbr = neighbors[from];
-    resetDead(from);
-
-    // HelloReceived: DOWN -> INIT (can subsequently go into TWOWAY if my id is in their hello)
-    if (nbr.state == NSTATE_DOWN) {
-        nbr.id = from;
-        nbr.state = NSTATE_INIT;
-        MLOG_N_INFO(from) << "received first hello (INIT)\n";
-    }
-
-    if (nbr.state >= NSTATE_TWOWAY) return; // already past two-way
-
-    // 2-WayReceived: INIT -> TWOWAY
-    int size = hello->getKnownNeighborsArraySize();
-    for (size_t i = 0; i < size; i++) {
-        if (hello->getKnownNeighbors(i) == myId) {
-            nbr.state = NSTATE_TWOWAY;
-            MLOG_N_INFO(from) << "now in TWO-WAY state\n";
-            nbr.ddSeq = 0; // arbitrary starting seq no based on node ids
-            nbr.amMaster = true;
-            buildPendingDbd(nbr);
-            sendDBD(from, /*init=*/true, nbr.amMaster, nbr.ddSeq);
-            break;
-        }
-    }
-}
-
 void MyriadLS::processDBD(MyriadDBD* dbd, NeighborEntry& nbr) {
     // iterate over dbds compare to lsdb with the key and add newer seq no to the lsr_pending
     for (size_t i = 0; i < dbd->getLs_dbdsArraySize(); ++i) {
@@ -335,7 +298,7 @@ void MyriadLS::processDBD(MyriadDBD* dbd, NeighborEntry& nbr) {
 
 void MyriadLS::sendNextLsr(NeighborEntry& nbr) {
     if (nbr.lsrQueue.empty()) {
-        // satisfied the last outstanding requests. 
+        // satisfied the last outstanding requests.
         // But go full only if no DBDs exchange finished
         tryGoFull(nbr);
         return;
@@ -662,42 +625,4 @@ void MyriadLS::sendDBD(nodeid_t to, bool init, bool master, uint16_t seq_no) {
     sendToNode(to, std::move(np));
 }
 
-void MyriadLS::resetDead(nodeid_t nid) {
-    auto it = neighbors.find(nid);
-    if (it == neighbors.end()) return;
-    NeighborEntry& nbr = it->second;
-    // nullptr is accepted (i.e. on first hello)
-    cancelAndDelete(nbr.deadTimer);
-    nbr.deadTimer = addOneShotTimer(deadInterval, [this, nid](short) {
-        handleDead(nid);
-        return false;
-    });
-}
-
-void MyriadLS::handleDead(nodeid_t nid) {
-    auto it = neighbors.find(nid);
-    if (it == neighbors.end()) return;
-    NeighborEntry& nbr = it->second;
-    bool wasFull = (nbr.state == NSTATE_FULL);
-
-    MLOG_N_WARN(nid) << "neighbor timed out (DEAD)\n";
-    nbr.deadTimer = nullptr;
-    nbr.state = NSTATE_DOWN;
-    cancelReliable(nbr.inflightDbd);
-    cancelReliable(nbr.inflightLsr);
-    cancelReliable(nbr.inflightFloodLsu);
-    nbr.inflightFloodKeys.clear();
-    nbr.floodQueue.clear();
-    nbr.amMaster = false;
-    nbr.ddSeq = 0;
-    nbr.dbdQueue.clear();
-    nbr.lsrQueue.clear();
-    nbr.peerDbdDone = false;
-    nbr.lastSentDbd.reset();
-
-    // Lost a FULL adjacency: re-originate AdjacenciesLsa
-    if (wasFull) originateSelfLsa(LSA_ADJACENCIES);
-}
-
 } // namespace routingsim
-

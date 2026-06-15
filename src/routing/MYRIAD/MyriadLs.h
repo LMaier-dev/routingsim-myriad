@@ -1,8 +1,8 @@
 #ifndef __ROUTINGSIM_MYRIADLS_H_
 #define __ROUTINGSIM_MYRIADLS_H_
 
-#include "routing/myriadls/MyriadHelper.h"
-#include "routing/myriadls/MyriadLsPkt_m.h"
+#include "routing/MYRIAD/MyriadHello.h"
+#include "routing/MYRIAD/MyriadLsPkt_m.h"
 #include <deque>
 #include <memory>
 
@@ -34,12 +34,9 @@ namespace routingsim {
 
     using Lsdb = std::unordered_map<LsaKey, std::unique_ptr<LsaHeader>, LsaKeyHash>;
 
-    struct NeighborEntry {
-        nodeid_t id;
+    // id/state/deadTimer are inherited from HelloNeighbor.
+    struct NeighborEntry : HelloNeighbor {
         std::string rings;
-        NeighborState state = NSTATE_DOWN;
-        //deadTimer
-        TimerMsg* deadTimer = nullptr;
 
         // DBD exchange state (initially both assume master)
         bool amMaster = true;
@@ -66,29 +63,31 @@ namespace routingsim {
         std::unordered_map<LsaKey, uint16_t, LsaKeyHash> inflightFloodKeys;
     };
 
-    class MyriadLS : public MyriadHelper
+    class MyriadLS : public MyriadHelloProto
     {
 
         static constexpr int MYRIADLS_PACKET_TYPE = 55;
 
         protected:
             void onInitialize() override;
-            void onConnect(nodeid_t nid) override;
-            void onDisconnect(nodeid_t nid) override;
             void onMessage(NodePkt_p pkt) override;
             void reset() override;
             void finish() override;
 
-            NeighborState getNeighborState(nodeid_t nbr) const override;
+            HelloNeighbor& findOrCreateHello(nodeid_t nid) override;
+            HelloNeighbor* findHello(nodeid_t nid) override;
+            const HelloNeighbor* findHello(nodeid_t nid) const override;
+            void forEachHello(std::function<void(HelloNeighbor&)> fn) override;
+            void forEachHello(std::function<void(const HelloNeighbor&)> fn) const override;
 
-            void scheduleHello(simtime_t delay);
-            void sendHello();
+            void onTwoWayReached(HelloNeighbor& nbr) override;
+            void onNeighborDead(HelloNeighbor& nbr, bool wasFull) override;
+
             void installSelfLsas();
             void originateSelfLsa(MyriadLSAType type, uint16_t minSeq = 0);
             void logLsdb();
             void buildPendingDbd(NeighborEntry& nbr);
             void logDbd(const MyriadDBD* dbd, nodeid_t from);
-            void handleHello(MyriadHello* hello, nodeid_t from);
             void sendDBD(nodeid_t to, bool init, bool master, uint16_t seq_no);
             void handleDBD(MyriadDBD* dbd, nodeid_t from);
             void processDBD(MyriadDBD* dbd, NeighborEntry& nbr);
@@ -98,8 +97,6 @@ namespace routingsim {
             void handleAck(MyriadAck* ack, nodeid_t from);
             void sendAck(nodeid_t to, const std::vector<const LsaHeader*>& headers);
             void tryGoFull(NeighborEntry& nbr);
-            void resetDead(nodeid_t nid);
-            void handleDead(nodeid_t nid);
 
         private:
             std::string rings;
@@ -107,9 +104,6 @@ namespace routingsim {
             std::unordered_map<nodeid_t, NeighborEntry> neighbors;
             Lsdb lsdb;
 
-            simtime_t helloInterval;
-            simtime_t deadInterval;
-            simtime_t rxmtInterval;
             int dbExchangeBatchSize = 10;
 
             void buildSelfRingsLsa(uint16_t seq);
@@ -117,9 +111,6 @@ namespace routingsim {
             void buildSelfAdjacenciesLsa(uint16_t seq);
             void enqueueFlood(NeighborEntry& nbr, const LsaKey& key);
             void sendNextFloodBatch(NeighborEntry& nbr);
-
-            // Handle to the currently-pending hello self-message so it can be cancelled on reset.
-            TimerMsg* helloTimer = nullptr;
     };
 
 } // namespace routingsim

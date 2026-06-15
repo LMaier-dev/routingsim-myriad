@@ -1,4 +1,4 @@
-#include "routing/myriadls/MyriadHelper.h"
+#include "routing/MYRIAD/MyriadHelper.h"
 #include <cctype>
 
 namespace routingsim {

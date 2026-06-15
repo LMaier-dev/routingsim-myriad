@@ -16,7 +16,7 @@ cd ../ && make makefiles && cd src
 
 Rerun on .cc .h changes or for .ned .ini use touch
 ```
-touch routing/myriadls/MyriadLs.cc && make -j$(nproc)
+touch routing/MYRIAD/MyriadLs.cc && make -j$(nproc)
 ```
 
 # Running
