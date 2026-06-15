@@ -1,4 +1,5 @@
 #include "routing/MYRIAD/MyriadHello.h"
+#include <sstream>
 
 namespace routingsim {
 
@@ -7,6 +8,27 @@ void MyriadHelloProto::onInitialize() {
     helloInterval = par("helloInterval");
     deadInterval = par("deadInterval");
     rxmtInterval = par("rxmtInterval");
+    initSelfRings();
+}
+
+void MyriadHelloProto::initSelfRings() {
+    switch (myId) {
+        case 0: selfRingsLabel = "A";   break;
+        case 1: selfRingsLabel = "A,B"; break;
+        case 2: selfRingsLabel = "B,C"; break;
+        case 3: selfRingsLabel = "A,B"; break;
+        case 4: selfRingsLabel = "B";   break;
+        case 5: selfRingsLabel = "C";   break;
+        case 6: selfRingsLabel = "B,C"; break;
+        default: selfRingsLabel = "";   break;
+    }
+    selfRings.clear();
+    std::stringstream ss(selfRingsLabel);
+    std::string tok;
+    while (std::getline(ss, tok, ',')) {
+        if (!tok.empty()) selfRings.push_back(static_cast<uint64_t>(tok[0]));
+    }
+    MLOG_INFO() << "rings: " << selfRingsLabel << "\n";
 }
 
 NeighborState MyriadHelloProto::getNeighborState(nodeid_t nbr) const {
@@ -38,6 +60,10 @@ void MyriadHelloProto::sendHello() {
     // Currently not read on the receiving end, but set it anyway for completeness
     hello->setHelloInterval(helloInterval);
     hello->setDeadInterval(deadInterval);
+    hello->setRingsArraySize(selfRings.size());
+    for (size_t i = 0; i < selfRings.size(); ++i) {
+        hello->setRings(i, selfRings[i]);
+    }
 
     // Only advertise neighbors we've actually heard a hello from
     std::vector<nodeid_t> heard;
@@ -63,11 +89,22 @@ void MyriadHelloProto::handleHello(MyriadHello* hello, nodeid_t from) {
     HelloNeighbor& nbr = findOrCreateHello(from);
     nbr.id = from;
     resetDead(from);
+    
+    size_t nr = hello->getRingsArraySize();
+    nbr.rings.assign(nr, 0);
+    for (size_t i = 0; i < nr; ++i) nbr.rings[i] = hello->getRings(i);
 
     // HelloReceived: DOWN -> INIT (can subsequently go into TWOWAY if my id is in their hello)
     if (nbr.state == NSTATE_DOWN) {
         nbr.state = NSTATE_INIT;
-        MLOG_N_INFO(from) << "received first hello (INIT)\n";
+        MLOG_N_INFO(from) << "received first hello (INIT)";
+        if (!nbr.rings.empty()) {
+            EV << " rings=[";
+            for (size_t i = 0; i < nbr.rings.size(); ++i)
+                EV << (i ? "," : "") << (char)nbr.rings[i];
+            EV << "]";
+        }
+        EV << "\n";
     }
 
     if (nbr.state >= NSTATE_TWOWAY) return; // already past two-way

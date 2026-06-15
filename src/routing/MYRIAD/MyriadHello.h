@@ -11,6 +11,7 @@ namespace routingsim {
         nodeid_t id;
         NeighborState state = NSTATE_DOWN;
         TimerMsg* deadTimer = nullptr;
+        std::vector<uint64_t> rings;
     };
 
     class MyriadHelloProto : public MyriadHelper {
@@ -37,6 +38,9 @@ namespace routingsim {
             void resetDead(nodeid_t nid);
             void handleDead(nodeid_t nid);
             void cancelHelloTimer();
+            std::vector<uint64_t> selfRings;
+            std::string selfRingsLabel;
+            void initSelfRings();
 
             simtime_t helloInterval;
             simtime_t deadInterval;

@@ -54,6 +54,7 @@ packet MyriadHello extends MyriadHeader {
     simtime_t helloInterval;
     simtime_t deadInterval;
     nodeid_t knownNeighbors[];
+    uint64_t rings[];
 }
 
 packet MyriadDBD extends MyriadHeader {

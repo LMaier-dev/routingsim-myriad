@@ -12,34 +12,6 @@ void MyriadLS::onInitialize() {
 
     node().bind(MYRIADLS_PACKET_TYPE, this);
 
-    switch (myId)
-    {
-    case 0:
-        rings = "A";
-        break;
-    case 1:
-        rings = "A,B";
-        break;
-    case 2:
-        rings = "B,C";
-        break;
-    case 3:
-        rings = "A,B";
-        break;
-    case 4:
-        rings = "B";
-        break;
-    case 5:
-        rings = "C";
-        break;
-    case 6:
-        rings = "B,C";
-        break;
-    default:
-        break;
-    }
-
-    MLOG_INFO() << "rings: " << rings << "\n";
 
     installSelfLsas();
 
@@ -149,15 +121,8 @@ void MyriadLS::buildSelfRingsLsa(uint16_t seq) {
     auto lsa = std::make_unique<RingsLsa>();
     lsa->setSeq_no(seq);
     lsa->setLsa_origin(myId);
-
-    std::vector<uint64_t> ringIds;
-    std::stringstream ss(rings);
-    std::string tok;
-    while (std::getline(ss, tok, ',')) {
-        if (!tok.empty()) ringIds.push_back(static_cast<uint64_t>(tok[0]));
-    }
-    lsa->setRingsArraySize(ringIds.size());
-    for (size_t i = 0; i < ringIds.size(); ++i) lsa->setRings(i, ringIds[i]);
+    lsa->setRingsArraySize(selfRings.size());
+    for (size_t i = 0; i < selfRings.size(); ++i) lsa->setRings(i, selfRings[i]);
 
     lsdb[LsaKey{myId, LSA_RINGS}] = std::move(lsa);
 }

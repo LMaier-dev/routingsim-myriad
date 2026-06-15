@@ -34,10 +34,8 @@ namespace routingsim {
 
     using Lsdb = std::unordered_map<LsaKey, std::unique_ptr<LsaHeader>, LsaKeyHash>;
 
-    // id/state/deadTimer are inherited from HelloNeighbor.
+    // id/state/deadTimer/rings are inherited from HelloNeighbor.
     struct NeighborEntry : HelloNeighbor {
-        std::string rings;
-
         // DBD exchange state (initially both assume master)
         bool amMaster = true;
         uint16_t ddSeq = 0;
@@ -99,8 +97,6 @@ namespace routingsim {
             void tryGoFull(NeighborEntry& nbr);
 
         private:
-            std::string rings;
-
             std::unordered_map<nodeid_t, NeighborEntry> neighbors;
             Lsdb lsdb;
 
