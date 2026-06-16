@@ -16,17 +16,11 @@ namespace routingsim {
 // the following will be defined in namespace routingsim
 namespace routingsim;
 
-// MyriadGP — path-vector variant. Hello packets are shared with MyriadLS
-// (see MyriadLsPkt.msg / MyriadHello.{h,cc}). The PDUs below are the
-// path-vector–specific ones (UPDATE / WITHDRAW / ACK) and use a Gp-prefixed
-// class hierarchy so they don't collide with MyriadLsPkt_m's symbols when
-// both modules are linked into the same binary.
-
 enum MyriadGpPDUType {
-    MYRIADGP_HELLO = 0;       // reuses LS MyriadHello on the wire
-    MYRIADGP_UPDATE = 1;      // advertise one or more path-vector entries
-    MYRIADGP_WITHDRAW = 2;    // retract previously-advertised destinations
-    MYRIADGP_ACK = 3;         // ack an UPDATE/WITHDRAW
+    MYRIADGP_HELLO = 0;
+    MYRIADGP_COLLECT = 1;
+    MYRIADGP_UPDATE = 2;
+    MYRIADGP_DEGRADE = 3;
 }
 
 // directly from Kira (mirrors MyriadLsPkt.msg)
@@ -45,30 +39,29 @@ class nodeid_t {
 
 packet MyriadGpHeader {
     MyriadGpPDUType type;
+    // router_id_src/ringking: I receive my packet back -> ack in current ring
     nodeid_t router_id_src;
+    // Also I only have one inflight packet for each ring so we have simple data structure of retransmission timers for each ring we are in.
+    // for external forwards we may need another data structure to cache packets or retx
+    uint32_t seq_no;
+    uint64_t random_no; // for dedup
+    uint64_t current_ring; // only fwd unconditionally here
 }
 
-// One path-vector entry: destination plus the AS_PATH-style hop list of
-// router ids the announcement traversed (used for loop detection).
-// cObject so dup() is virtual and the @owned array can deep-copy entries.
-class MyriadGpPath extends cObject {
-    nodeid_t dest;
-    uint32_t seq_no;       // monotonic per (origin, dest); newer wins
-    nodeid_t path[];       // ordered list, origin first
+packet MyriadGpCollect extends MyriadGpHeader {
+    type = MYRIADGP_COLLECT;
+    uint64_t nlri[]; // subnets each node inserts its own subnetsOUTSIDE
 }
 
-packet MyriadGpUpdate extends MyriadGpHeader {
+packet MyriadGpUpdate extends MyriadGpCollect {
     type = MYRIADGP_UPDATE;
-    MyriadGpPath *paths[] @owned;
+    nodeid_t chain[]; // one chain per update as the whole ring share subnet reachability
+    // when we forward externally we attach current_ring to the chain
+    // and also set router_id_src (ringking) to our id then send reliable
 }
 
-packet MyriadGpWithdraw extends MyriadGpHeader {
-    type = MYRIADGP_WITHDRAW;
-    nodeid_t dests[];
-    uint32_t seq_no;       // matches the UPDATE that originated the path
-}
-
-packet MyriadGpAck extends MyriadGpHeader {
-    type = MYRIADGP_ACK;
-    uint32_t seq_no;       // ack covers everything up to and including this
+packet MyriadGpDegrade extends MyriadGpHeader {
+    type = MYRIADGP_DEGRADE;
+    // TODO: I think theres no path needed since I dont think we need loop prevention here (since we dedup I think we may not)
+    uint64_t ring;
 }

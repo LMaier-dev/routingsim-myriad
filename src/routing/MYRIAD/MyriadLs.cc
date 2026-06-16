@@ -72,7 +72,7 @@ void MyriadLS::onNeighborDead(HelloNeighbor& base, bool wasFull) {
 
 void MyriadLS::onMessage(NodePkt_p pkt) {
     myId = node().getNodeId();
-    auto header = std::unique_ptr<MyriadHeader>(check_and_cast<MyriadHeader*>(pkt->decapsulate()));
+    auto header = std::unique_ptr<MyriadLsHeader>(check_and_cast<MyriadLsHeader*>(pkt->decapsulate()));
     nodeid_t from = header->getRouter_id_src();
     switch (header->getType()) {
         case MYRIAD_HELLO:

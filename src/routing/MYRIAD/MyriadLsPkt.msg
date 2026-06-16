@@ -16,7 +16,7 @@ namespace routingsim {
 // the following will be defined in namespace routingsim
 namespace routingsim;
 
-enum MyriadPDUType {
+enum MyriadLsPDUType {
     MYRIAD_HELLO = 0;
     MYRIAD_DBD = 1;
     MYRIAD_LSR = 2;
@@ -44,12 +44,12 @@ class nodeid_t {
       @fromValue(omnetpp::checked_int_cast<unsigned short>($.intValue()));
 }
 
-packet MyriadHeader {
-    MyriadPDUType type;
+packet MyriadLsHeader {
+    MyriadLsPDUType type;
     nodeid_t router_id_src;
 }
 
-packet MyriadHello extends MyriadHeader {
+packet MyriadHello extends MyriadLsHeader {
     type = MYRIAD_HELLO;
     simtime_t helloInterval;
     simtime_t deadInterval;
@@ -57,7 +57,7 @@ packet MyriadHello extends MyriadHeader {
     uint64_t rings[];
 }
 
-packet MyriadDBD extends MyriadHeader {
+packet MyriadDBD extends MyriadLsHeader {
     type = MYRIAD_DBD;
     uint16_t seq_no; // of the exchange (not of the LSA) masters seq_no wins
     bool init; // set on first dbd packet only
@@ -82,17 +82,17 @@ struct LsaRequest {
     MyriadLSAType type;
 }
 
-packet MyriadLSR extends MyriadHeader {
+packet MyriadLSR extends MyriadLsHeader {
     type = MYRIAD_LSR;
     LsaRequest reqs[];
 }
 
-packet MyriadLSU extends MyriadHeader {
+packet MyriadLSU extends MyriadLsHeader {
     type = MYRIAD_LSU;
     LsaHeader *lsas[] @owned;
 }
 
-packet MyriadAck extends MyriadHeader {
+packet MyriadAck extends MyriadLsHeader {
     type = MYRIAD_ACK;
     LsaHeader acked[];
 }

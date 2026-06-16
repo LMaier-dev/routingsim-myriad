@@ -3,6 +3,7 @@
 
 #include "routing/MYRIAD/MyriadHelper.h"
 #include "routing/MYRIAD/MyriadLsPkt_m.h"
+#include "routing/MYRIAD/MyriadGpPkt_m.h"
 #include <functional>
 
 namespace routingsim {

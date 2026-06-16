@@ -2,7 +2,7 @@
 #define __ROUTINGSIM_MYRIADGP_H_
 
 #include "routing/MYRIAD/MyriadHello.h"
-#include "routing/MYRIAD/MyriadLsPkt_m.h"
+#include "routing/MYRIAD/MyriadGpPkt_m.h"
 #include <unordered_map>
 
 namespace routingsim {
