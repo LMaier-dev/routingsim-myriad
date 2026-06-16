@@ -21,6 +21,7 @@ enum MyriadGpPDUType {
     MYRIADGP_COLLECT = 1;
     MYRIADGP_UPDATE = 2;
     MYRIADGP_DEGRADE = 3;
+    MYRIADGP_WIDTH = 4;
 }
 
 // directly from Kira (mirrors MyriadLsPkt.msg)
@@ -45,18 +46,18 @@ packet MyriadGpHeader {
     // for external forwards we may need another data structure to cache packets or retx
     uint32_t seq_no;
     uint64_t random_no; // for dedup (wouldnt need it for collect but its easier to use it for all packets)
-    uint64_t current_ring; // only fwd unconditionally here
+    uint32_t current_ring; // only fwd unconditionally here
 }
 
 // tracks if the neighbor ring of the currentRing is connected over two routers or just one
 struct MyriadGpRingTransition {
-    uint64_t ring;
+    uint32_t ring;
     bool doubled;
 }
 
 packet MyriadGpNLRI extends MyriadGpHeader {
     type = MYRIADGP_COLLECT;
-    uint64_t nlri[]; // subnets each node inserts its own subnets
+    uint32_t nlri[]; // subnets each node inserts its own subnets
 }
 
 packet MyriadGpCollect extends MyriadGpNLRI {
@@ -86,5 +87,5 @@ packet MyriadGpDegrade extends MyriadGpHeader {
     // meaning it takes the half circle back to the ringking
     type = MYRIADGP_DEGRADE;
     // TODO: I think theres no path needed since I dont think we need loop prevention here (since we dedup I think we may not)
-    uint64_t ring;
+    uint32_t ring;
 }

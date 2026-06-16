@@ -16,9 +16,9 @@ namespace routingsim {
         nodeid_t id;
         NeighborState state = NSTATE_DOWN;
         TimerMsg* deadTimer = nullptr;
-        std::vector<uint64_t> rings;
+        std::vector<uint32_t> rings;
         // Intersection of `rings` and the local node's selfRings
-        std::vector<uint64_t> sharedRings;
+        std::vector<uint32_t> sharedRings;
     };
 
     template <class N>
@@ -28,7 +28,7 @@ namespace routingsim {
 
             // Rings this node belongs to (ASCII-char-as-uint64 encoding).
             // Populated by initSelfRings()
-            std::vector<uint64_t> selfRings;
+            std::vector<uint32_t> selfRings;
             std::string selfRingsLabel;
 
             simtime_t helloInterval;
@@ -78,7 +78,7 @@ namespace routingsim {
                 std::stringstream ss(selfRingsLabel);
                 std::string tok;
                 while (std::getline(ss, tok, ',')) {
-                    if (!tok.empty()) selfRings.push_back(static_cast<uint64_t>(tok[0]));
+                    if (!tok.empty()) selfRings.push_back(static_cast<uint32_t>(tok[0]));
                 }
                 MLOG_INFO() << "rings: " << selfRingsLabel << "\n";
             }
@@ -133,8 +133,8 @@ namespace routingsim {
                 for (size_t i = 0; i < nr; ++i) nbr.rings[i] = hello->getRings(i);
 
                 nbr.sharedRings.clear();
-                for (uint64_t r : nbr.rings) {
-                    for (uint64_t sr : selfRings) {
+                for (uint32_t r : nbr.rings) {
+                    for (uint32_t sr : selfRings) {
                         if (r == sr) { nbr.sharedRings.push_back(r); break; }
                     }
                 }

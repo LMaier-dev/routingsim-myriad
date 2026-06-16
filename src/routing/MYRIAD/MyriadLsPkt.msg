@@ -54,7 +54,7 @@ packet MyriadHello extends MyriadLsHeader {
     simtime_t helloInterval;
     simtime_t deadInterval;
     nodeid_t knownNeighbors[];
-    uint64_t rings[];
+    uint32_t rings[];
 }
 
 packet MyriadDBD extends MyriadLsHeader {
@@ -104,10 +104,10 @@ class AdjacenciesLsa extends LsaHeader{
 
 class SubnetsLsa extends LsaHeader{
     type = LSA_SUBNETS;
-    uint64_t subnets[];
+    uint32_t subnets[];
 }
 
 class RingsLsa extends LsaHeader{
     type = LSA_RINGS;
-    uint64_t rings[];
+    uint32_t rings[];
 }

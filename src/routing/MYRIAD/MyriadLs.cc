@@ -107,8 +107,8 @@ void MyriadLS::buildSelfSubnetsLsa(uint16_t seq) {
     lsa->setLsa_origin(myId);
     // Bogus subnets derived from node id: <id>.1 and <id>.2
     lsa->setSubnetsArraySize(2);
-    lsa->setSubnets(0, (static_cast<uint64_t>(myId) << 8) | 0x01);
-    lsa->setSubnets(1, (static_cast<uint64_t>(myId) << 8) | 0x02);
+    lsa->setSubnets(0, (static_cast<uint32_t>(myId) << 8) | 0x01);
+    lsa->setSubnets(1, (static_cast<uint32_t>(myId) << 8) | 0x02);
 
     lsdb[LsaKey{myId, LSA_SUBNETS}] = std::move(lsa);
 }
