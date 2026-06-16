@@ -31,6 +31,10 @@ namespace routingsim {
 
             void onTwoWayReached(GpNeighbor& nbr) override;
             void onNeighborDead(GpNeighbor& nbr, bool wasFull) override;
+
+            void handleCollect(MyriadGpCollect* collect, nodeid_t from);
+            void handleUpdate(MyriadGpUpdate* update, nodeid_t from);
+            void handleDegrade(MyriadGpDegrade* degrade, nodeid_t from);
     };
 
 } // namespace routingsim

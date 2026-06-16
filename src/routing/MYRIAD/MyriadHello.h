@@ -17,6 +17,8 @@ namespace routingsim {
         NeighborState state = NSTATE_DOWN;
         TimerMsg* deadTimer = nullptr;
         std::vector<uint64_t> rings;
+        // Intersection of `rings` and the local node's selfRings
+        std::vector<uint64_t> sharedRings;
     };
 
     template <class N>
@@ -129,6 +131,13 @@ namespace routingsim {
                 size_t nr = hello->getRingsArraySize();
                 nbr.rings.assign(nr, 0);
                 for (size_t i = 0; i < nr; ++i) nbr.rings[i] = hello->getRings(i);
+
+                nbr.sharedRings.clear();
+                for (uint64_t r : nbr.rings) {
+                    for (uint64_t sr : selfRings) {
+                        if (r == sr) { nbr.sharedRings.push_back(r); break; }
+                    }
+                }
 
                 if (nbr.state == NSTATE_DOWN) {
                     nbr.state = NSTATE_INIT;

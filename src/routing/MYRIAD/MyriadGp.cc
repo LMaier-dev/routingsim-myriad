@@ -19,7 +19,7 @@ void MyriadGP::onInitialize() {
 void MyriadGP::onTwoWayReached(GpNeighbor& nbr) {
     nbr.state = NSTATE_FULL;
     MLOG_N_INFO(nbr.id) << "Starting Collect phase\n";
-    // TODO: collect phase now
+    // TODO: collect phase now send Collect to this neighbor
 }
 
 void MyriadGP::onNeighborDead(GpNeighbor& nbr, bool /*wasFull*/) {
@@ -40,10 +40,37 @@ void MyriadGP::onMessage(NodePkt_p pkt) {
     auto* header = check_and_cast<MyriadGpHeader*>(inner.get());
     nodeid_t from = header->getRouter_id_src();
     switch (header->getType()) {
-        // TODO: path-vector collect / update / degrade PDUs.
+        case MYRIADGP_COLLECT:
+            handleCollect(check_and_cast<MyriadGpCollect*>(header), from);
+            break;
+        case MYRIADGP_UPDATE:
+            handleUpdate(check_and_cast<MyriadGpUpdate*>(header), from);
+            break;
+        case MYRIADGP_DEGRADE:
+            handleDegrade(check_and_cast<MyriadGpDegrade*>(header), from);
+            break;
         default:
             MLOG_WARN() << "received unknown packet type: " << header->getType() << "\n";
     }
+}
+
+void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t from) {
+    GpNeighbor& nbr = neighbors[from];
+    MLOG_N_INFO(from) << "Received Collect seq=" << collect->getSeq_no()
+                      << " shared rings=[";
+    for (size_t i = 0; i < nbr.sharedRings.size(); ++i)
+        EV << (i ? "," : "") << (char)nbr.sharedRings[i];
+    EV << "]\n";
+}
+
+void MyriadGP::handleUpdate(MyriadGpUpdate* /*update*/, nodeid_t from) {
+    // TODO: install / dedup / forward path-vector update.
+    MLOG_N_DEBUG(from) << "Received Update (handler stub)\n";
+}
+
+void MyriadGP::handleDegrade(MyriadGpDegrade* /*degrade*/, nodeid_t from) {
+    // TODO: process ring-degrade event.
+    MLOG_N_DEBUG(from) << "Received Degrade (handler stub)\n";
 }
 
 void MyriadGP::reset() {
