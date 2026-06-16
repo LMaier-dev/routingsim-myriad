@@ -44,23 +44,46 @@ packet MyriadGpHeader {
     // Also I only have one inflight packet for each ring so we have simple data structure of retransmission timers for each ring we are in.
     // for external forwards we may need another data structure to cache packets or retx
     uint32_t seq_no;
-    uint64_t random_no; // for dedup
+    uint64_t random_no; // for dedup (wouldnt need it for collect but its easier to use it for all packets)
     uint64_t current_ring; // only fwd unconditionally here
 }
 
-packet MyriadGpCollect extends MyriadGpHeader {
-    type = MYRIADGP_COLLECT;
-    uint64_t nlri[]; // subnets each node inserts its own subnetsOUTSIDE
+// tracks if the neighbor ring of the currentRing is connected over two routers or just one
+struct MyriadGpRingTransition {
+    uint64_t ring;
+    bool doubled;
 }
 
-packet MyriadGpUpdate extends MyriadGpCollect {
+packet MyriadGpNLRI extends MyriadGpHeader {
+    type = MYRIADGP_COLLECT;
+    uint64_t nlri[]; // subnets each node inserts its own subnets
+}
+
+packet MyriadGpCollect extends MyriadGpNLRI {
+    // every collection the ringking checks if transition widths changed
+    type = MYRIADGP_COLLECT;
+    MyriadGpRingTransition transitions[];
+}
+
+packet MyriadGpWidth extends MyriadGpHeader {
+    // If transition widths changed this is sent reliably around the ring and
+    // only after ack of that the UDPATE originated
+    type = MYRIADGP_WIDTH;
+    MyriadGpRingTransition transitions[];
+}
+
+packet MyriadGpUpdate extends MyriadGpNLRI {
     type = MYRIADGP_UPDATE;
     nodeid_t chain[]; // one chain per update as the whole ring share subnet reachability
     // when we forward externally we attach current_ring to the chain
     // and also set router_id_src (ringking) to our id then send reliable
+    uint32_t transition_sum; // divide by chain length then choose a "wider" chain by default
 }
 
 packet MyriadGpDegrade extends MyriadGpHeader {
+    // Cant ACK itself currently since at least one link is broken we could just repeat it like hello
+    // OR we could send ack if theres no neighbor of that ring other than the one we received it from 
+    // meaning it takes the half circle back to the ringking
     type = MYRIADGP_DEGRADE;
     // TODO: I think theres no path needed since I dont think we need loop prevention here (since we dedup I think we may not)
     uint64_t ring;
