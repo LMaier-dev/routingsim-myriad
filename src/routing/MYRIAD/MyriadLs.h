@@ -8,16 +8,6 @@
 
 namespace routingsim {
 
-    // Design simplifications vs. RFC 2328:
-    //   - During initial sync (Exchange/Loading), LSU response to an LSR is
-    //     fire-and-forget. Reliability is provided by the LSR retransmit timer
-    //     on the requester side (one outstanding LSR per neighbor). Real OSPF
-    //     acks every LSU regardless of phase; we only emit LSAcks for unsolicited
-    //     (flooded) LSUs after the adjacency is FULL.
-    //   - On DBD sequence mismatch we currently drop the packet; RFC §10.3
-    //     prescribes a SeqNumberMismatch event that tears the adjacency back
-    //     to ExStart. See TODOs in handleDBD.
-
     // LSDB key: at most one LSA per (origin, type). Storing unique_ptr<LsaHeader>
     // relies on LsaHeader being a cObject so dup() clones the actual derived LSA.
     struct LsaKey {
@@ -61,7 +51,7 @@ namespace routingsim {
         std::unordered_map<LsaKey, uint16_t, LsaKeyHash> inflightFloodKeys;
     };
 
-    class MyriadLS : public MyriadHelloProto
+    class MyriadLS : public MyriadHelloProto<NeighborEntry>
     {
 
         static constexpr int MYRIADLS_PACKET_TYPE = 55;
@@ -72,14 +62,8 @@ namespace routingsim {
             void reset() override;
             void finish() override;
 
-            HelloNeighbor& findOrCreateHello(nodeid_t nid) override;
-            HelloNeighbor* findHello(nodeid_t nid) override;
-            const HelloNeighbor* findHello(nodeid_t nid) const override;
-            void forEachHello(std::function<void(HelloNeighbor&)> fn) override;
-            void forEachHello(std::function<void(const HelloNeighbor&)> fn) const override;
-
-            void onTwoWayReached(HelloNeighbor& nbr) override;
-            void onNeighborDead(HelloNeighbor& nbr, bool wasFull) override;
+            void onTwoWayReached(NeighborEntry& nbr) override;
+            void onNeighborDead(NeighborEntry& nbr, bool wasFull) override;
 
             void installSelfLsas();
             void originateSelfLsa(MyriadLSAType type, uint16_t minSeq = 0);
@@ -97,7 +81,8 @@ namespace routingsim {
             void tryGoFull(NeighborEntry& nbr);
 
         private:
-            std::unordered_map<nodeid_t, NeighborEntry> neighbors;
+            // `neighbors` (typed std::unordered_map<nodeid_t, NeighborEntry>)
+            // is inherited from MyriadHelloProto<NeighborEntry>.
             Lsdb lsdb;
 
             int dbExchangeBatchSize = 10;

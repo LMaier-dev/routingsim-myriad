@@ -16,49 +16,31 @@ void MyriadGP::onInitialize() {
     scheduleHello(helloInterval);
 }
 
-HelloNeighbor& MyriadGP::findOrCreateHello(nodeid_t nid) {
-    GpNeighbor& nbr = neighbors[nid];
-    nbr.id = nid;
-    return nbr;
-}
-
-HelloNeighbor* MyriadGP::findHello(nodeid_t nid) {
-    auto it = neighbors.find(nid);
-    return it == neighbors.end() ? nullptr : &it->second;
-}
-
-const HelloNeighbor* MyriadGP::findHello(nodeid_t nid) const {
-    auto it = neighbors.find(nid);
-    return it == neighbors.end() ? nullptr : &it->second;
-}
-
-void MyriadGP::forEachHello(std::function<void(HelloNeighbor&)> fn) {
-    for (auto& [nid, nbr] : neighbors) fn(nbr);
-}
-
-void MyriadGP::forEachHello(std::function<void(const HelloNeighbor&)> fn) const {
-    for (const auto& [nid, nbr] : neighbors) fn(nbr);
-}
-
-void MyriadGP::onTwoWayReached(HelloNeighbor& nbr) {
+void MyriadGP::onTwoWayReached(GpNeighbor& nbr) {
     nbr.state = NSTATE_FULL;
-    MLOG_N_INFO(nbr.id) << "going FULL (path-vector adjacency up)\n";
-    // TODO: send initial path-vector advertisement
+    MLOG_N_INFO(nbr.id) << "Starting Collect phase\n";
+    // TODO: collect phase now
 }
 
-void MyriadGP::onNeighborDead(HelloNeighbor& nbr, bool /*wasFull*/) {
-    // TODO: withdraw paths learned from this neighbor and retract any best-paths that depended on it.
+void MyriadGP::onNeighborDead(GpNeighbor& nbr, bool /*wasFull*/) {
+    MLOG_N_INFO(nbr.id) << "Send Degrade now\n";
+    // TODO: Degrade this ring
 }
 
 void MyriadGP::onMessage(NodePkt_p pkt) {
     myId = node().getNodeId();
-    auto header = std::unique_ptr<MyriadGpHeader>(check_and_cast<MyriadGpHeader*>(pkt->decapsulate()));
+    auto inner = std::unique_ptr<cPacket>(pkt->decapsulate());
+
+    // Hello packets come from MyriadHello so dont go through gpheader path
+    if (auto* hello = dynamic_cast<MyriadHello*>(inner.get())) {
+        handleHello(hello, hello->getRouter_id_src());
+        return;
+    }
+
+    auto* header = check_and_cast<MyriadGpHeader*>(inner.get());
     nodeid_t from = header->getRouter_id_src();
     switch (header->getType()) {
-        case MYRIAD_HELLO:
-            handleHello(check_and_cast<MyriadHello*>(header.get()), from);
-            break;
-        // TODO: path-vector update / withdraw / ack PDUs.
+        // TODO: path-vector collect / update / degrade PDUs.
         default:
             MLOG_WARN() << "received unknown packet type: " << header->getType() << "\n";
     }

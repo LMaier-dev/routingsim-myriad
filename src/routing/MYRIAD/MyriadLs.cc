@@ -20,40 +20,14 @@ void MyriadLS::onInitialize() {
 
 }
 
-HelloNeighbor& MyriadLS::findOrCreateHello(nodeid_t nid) {
-    NeighborEntry& nbr = neighbors[nid];
-    nbr.id = nid;
-    return nbr;
-}
-
-HelloNeighbor* MyriadLS::findHello(nodeid_t nid) {
-    auto it = neighbors.find(nid);
-    return it == neighbors.end() ? nullptr : &it->second;
-}
-
-const HelloNeighbor* MyriadLS::findHello(nodeid_t nid) const {
-    auto it = neighbors.find(nid);
-    return it == neighbors.end() ? nullptr : &it->second;
-}
-
-void MyriadLS::forEachHello(std::function<void(HelloNeighbor&)> fn) {
-    for (auto& [nid, nbr] : neighbors) fn(nbr);
-}
-
-void MyriadLS::forEachHello(std::function<void(const HelloNeighbor&)> fn) const {
-    for (const auto& [nid, nbr] : neighbors) fn(nbr);
-}
-
-void MyriadLS::onTwoWayReached(HelloNeighbor& base) {
-    auto& nbr = static_cast<NeighborEntry&>(base);
+void MyriadLS::onTwoWayReached(NeighborEntry& nbr) {
     nbr.ddSeq = 0; // arbitrary starting seq no based on node ids
     nbr.amMaster = true;
     buildPendingDbd(nbr);
     sendDBD(nbr.id, /*init=*/true, nbr.amMaster, nbr.ddSeq);
 }
 
-void MyriadLS::onNeighborDead(HelloNeighbor& base, bool wasFull) {
-    auto& nbr = static_cast<NeighborEntry&>(base);
+void MyriadLS::onNeighborDead(NeighborEntry& nbr, bool wasFull) {
     cancelReliable(nbr.inflightDbd);
     cancelReliable(nbr.inflightLsr);
     cancelReliable(nbr.inflightFloodLsu);

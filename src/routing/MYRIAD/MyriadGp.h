@@ -18,7 +18,7 @@ namespace routingsim {
         // updates, withdraw queue, reliable-tx handles).
     };
 
-    class MyriadGP : public MyriadHelloProto
+    class MyriadGP : public MyriadHelloProto<GpNeighbor>
     {
         // Distinct from MYRIADLS_PACKET_TYPE so both protocols can coexist.
         static constexpr int MYRIADGP_PACKET_TYPE = 56;
@@ -29,18 +29,8 @@ namespace routingsim {
             void reset() override;
             void finish() override;
 
-            // Hello-base bridge (subclass owns the typed neighbor map).
-            HelloNeighbor& findOrCreateHello(nodeid_t nid) override;
-            HelloNeighbor* findHello(nodeid_t nid) override;
-            const HelloNeighbor* findHello(nodeid_t nid) const override;
-            void forEachHello(std::function<void(HelloNeighbor&)> fn) override;
-            void forEachHello(std::function<void(const HelloNeighbor&)> fn) const override;
-
-            void onTwoWayReached(HelloNeighbor& nbr) override;
-            void onNeighborDead(HelloNeighbor& nbr, bool wasFull) override;
-
-        private:
-            std::unordered_map<nodeid_t, GpNeighbor> neighbors;
+            void onTwoWayReached(GpNeighbor& nbr) override;
+            void onNeighborDead(GpNeighbor& nbr, bool wasFull) override;
     };
 
 } // namespace routingsim
