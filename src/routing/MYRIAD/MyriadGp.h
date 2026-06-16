@@ -45,9 +45,6 @@ namespace routingsim {
         uint32_t currentWidth = 0;
     };
 
-    // Reverse lookup: subnet → ring(s) that advertise it
-    std::unordered_map<uint32_t /*subnet*/, std::vector<uint32_t> /*ring_ids*/> subnetToRing;
-
     // TODO: random numbers Myriad Construction for data and control plane
 
     class MyriadGP : public MyriadHelloProto<GpNeighbor>
@@ -72,6 +69,9 @@ namespace routingsim {
             // Rings im a member of
             boost::container::flat_map<uint32_t /*ring*/, MyRingState> myRings;
             std::unordered_map<uint32_t /*ring*/, ForeignRingState> foreignRings;
+            // Reverse lookup: subnet → ring(s) that advertise it
+            std::unordered_map<uint32_t /*subnet*/, std::vector<uint32_t> /*ring_ids*/> subnetToRing;
+            std::vector<uint32_t /*subnet*/> keys; // only for simulation later to pick destinations at random
     };
 
 } // namespace routingsim
