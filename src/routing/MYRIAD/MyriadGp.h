@@ -28,6 +28,14 @@ namespace routingsim {
         uint32_t seq_no = 0;
     };
 
+    // Collect phase fills this for adjacent rings
+    // false: single router on this ring also in `ring`
+    // true: at least two routers on this ring also in `ring` (dont care for more than two)
+    struct AdjacentRingState {
+        uint32_t ring;
+        bool isRedundant;
+    };
+
     struct RingState {
         std::vector<uint32_t> nlri; // subnets advertised in the latest update
         uint32_t lastUpdateSn = 0; // for supersede on incoming updates (or degrade)
@@ -37,6 +45,11 @@ namespace routingsim {
         std::vector<GpPath> ecmpPaths; // all paths at currentWidth (ECMP set)
         uint32_t currentWidth = 0; // width threshold defining the ECMP set
         std::vector<DegradationState> externalDegradation; // received degrade for degrade for rings on this path (could include itself)
+
+        // derived from recent Collect lap, diff against next one
+        // if different: width update this ring BEFORE emitting UPDATE
+        // when forwarding: decide to sum 1 or 2 to width_sum
+        std::vector<AdjacentRingState> adjacentRings;
     };
 
     // TODO: random numbers Myriad Construction for data and control plane

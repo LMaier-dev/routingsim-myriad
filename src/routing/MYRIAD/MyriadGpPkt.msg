@@ -52,7 +52,7 @@ packet MyriadGpHeader {
 // tracks if the neighbor ring of the currentRing is connected over two routers or just one
 struct MyriadGpRingTransition {
     uint32_t ring;
-    bool doubled;
+    bool isRedundant;
 }
 
 packet MyriadGpNLRI extends MyriadGpHeader {
