@@ -78,7 +78,9 @@ packet MyriadGpUpdate extends MyriadGpNLRI {
     nodeid_t chain[]; // one chain per update as the whole ring share subnet reachability
     // when we forward externally we attach current_ring to the chain
     // and also set router_id_src (ringking) to our id then send reliable
-    uint32_t transition_sum; // divide by chain length then choose a "wider" chain by default
+    // count Single Point of Failures on path and choose the more resilient one by default,
+    // tiebreaker is total length: both identical -> ECMP
+    uint32_t spof_count;
 }
 
 packet MyriadGpDegrade extends MyriadGpHeader {

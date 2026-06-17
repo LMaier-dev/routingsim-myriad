@@ -20,7 +20,9 @@ namespace routingsim {
 
     struct GpPath {
         std::vector<uint32_t> chain;
-        uint32_t width_sum = 0;
+        // count Single Point of Failures on path and choose the more resilient one by default,
+        // tiebreaker is total length: both identical -> ECMP
+        uint32_t spof_sum = 0;
     };
 
     struct DegradationState {
