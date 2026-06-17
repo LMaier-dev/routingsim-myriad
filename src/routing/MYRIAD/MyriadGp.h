@@ -28,21 +28,15 @@ namespace routingsim {
         uint32_t seq_no = 0;
     };
 
-    struct ForeignRingState {
+    struct RingState {
         std::vector<uint32_t> nlri; // subnets advertised in the latest update
         uint32_t lastUpdateSn = 0; // for supersede on incoming updates (or degrade)
-        RingInflight inflight; // update/degrade we're currently forwarding
+        // My Rings: either collect, width, or update that's currently circulating the ring
+        // Foreign Ring: update/degrade we're currently forwarding FOR THEM
+        RingInflight inflight;
         std::vector<GpPath> ecmpPaths; // all paths at currentWidth (ECMP set)
         uint32_t currentWidth = 0; // width threshold defining the ECMP set
-        DegradationState degradation;
-    };
-
-    struct MyRingState {
-        std::vector<uint32_t> nlri;
-        uint32_t lastUpdateSn = 0; // or degrade
-        RingInflight inflight;  // either collect, width, or update that's currently circulating the ring
-        // we dont send degrades reliably right now (since we cant theres no circlular ack), need to see how we handle this
-        uint32_t currentWidth = 0;
+        std::vector<DegradationState> externalDegradation; // received degrade for degrade for rings on this path (could include itself)
     };
 
     // TODO: random numbers Myriad Construction for data and control plane
@@ -66,9 +60,7 @@ namespace routingsim {
             void handleDegrade(MyriadGpDegrade* degrade, nodeid_t from);
 
         private:
-            // Rings im a member of
-            boost::container::flat_map<uint32_t /*ring*/, MyRingState> myRings;
-            std::unordered_map<uint32_t /*ring*/, ForeignRingState> foreignRings;
+            std::unordered_map<uint32_t /*ring*/, RingState> rings;
             // Reverse lookup: subnet → ring(s) that advertise it
             std::unordered_map<uint32_t /*subnet*/, std::vector<uint32_t> /*ring_ids*/> subnetToRing;
             std::vector<uint32_t /*subnet*/> keys; // only for simulation later to pick destinations at random
