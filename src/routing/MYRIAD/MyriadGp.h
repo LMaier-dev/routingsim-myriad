@@ -15,7 +15,13 @@ namespace routingsim {
     // When packet is superseeded by a newer SN, also cancel RTX and flood this one.
     struct RingInflight {
         PendingTx* tx = nullptr;
+        // seq_no is bumped per collection round and does NOT reset
+        // when tx clears, so stale returns from a completed round don't alias
+        // a new round's inflight.
         uint32_t seq_no = 0;
+        // Parallel budget timer of (retryLimit+0.5)*rxmtInterval; on fire while
+        // tx still set → ring declared broken.
+        TimerMsg* budgetTimer = nullptr;
     };
 
     struct GpPath {
@@ -39,7 +45,7 @@ namespace routingsim {
     };
 
     struct RingState {
-        std::vector<uint32_t> nlri; // subnets advertised in the latest update
+        std::vector<MyriadGpRr> rr; // (subnet, owner) pairs collected in the latest round
         uint32_t lastUpdateSn = 0; // for supersede on incoming updates (or degrade)
         // My Rings: either collect, width, or update that's currently circulating the ring
         // Foreign Ring: update/degrade we're currently forwarding FOR THEM
@@ -73,6 +79,12 @@ namespace routingsim {
             void handleCollect(MyriadGpCollect* collect, nodeid_t from);
             void handleUpdate(MyriadGpUpdate* update, nodeid_t from);
             void handleDegrade(MyriadGpDegrade* degrade, nodeid_t from);
+
+            //  Originate a COLLECT for ring R towards `to`.
+            void originateCollect(uint32_t ring, nodeid_t to);
+            // (subnet, myId) pairs derived once at onInitialize; reused as
+            // both the local-subnet source at origination and on insert.
+            std::vector<uint32_t> mySubnets;
 
         private:
             std::unordered_map<uint32_t /*ring*/, RingState> rings;

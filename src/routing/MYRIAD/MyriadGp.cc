@@ -10,6 +10,9 @@ void MyriadGP::onInitialize() {
 
     node().bind(MYRIADGP_PACKET_TYPE, this);
 
+    mySubnets = { (static_cast<uint32_t>(myId) << 8) | 0x01,
+                  (static_cast<uint32_t>(myId) << 8) | 0x02 };
+
     MLOG_INFO() << "MyriadGP up\n";
 
     // Periodically send hellos to all neighbors. The hello / dead / two-way
@@ -18,8 +21,58 @@ void MyriadGP::onInitialize() {
 
 void MyriadGP::onTwoWayReached(GpNeighbor& nbr) {
     nbr.state = NSTATE_FULL;
-    MLOG_N_INFO(nbr.id) << "Starting Collect phase\n";
-    // TODO: collect phase now send Collect to this neighbor
+
+    // For each ring we share with this neighbor: originate a collect iff this
+    // TWOWAY brings the count of TWOWAY-or-better ring-neighbors on R to
+    // exactly 2. The just-transitioned nbr counts.
+    for (uint32_t R : nbr.sharedRings) {
+        size_t count = 0;
+        for (auto& [nid, n] : neighbors) {
+            if (n.state < NSTATE_TWOWAY) continue;
+            for (uint32_t r : n.sharedRings) if (r == R) { ++count; break; }
+        }
+        if (count == 2 && rings[R].inflight.tx == nullptr) {
+            originateCollect(R, nbr.id);
+        } else if (count > 2) {
+            MLOG_N_WARN(nbr.id) << "ring '" << (char)R
+                << "' has >2 ring-neighbors (misconfig); ignoring\n";
+        }
+    }
+}
+
+void MyriadGP::originateCollect(uint32_t ring, nodeid_t to) {
+    RingState& rs = rings[ring];
+    rs.inflight.seq_no += 1;
+
+    auto* pkt = new MyriadGpCollect("Myriad_GP_Collect");
+    pkt->setType(MYRIADGP_COLLECT);
+    pkt->setRouter_id_src(myId);     // king_id
+    pkt->setSeq_no(rs.inflight.seq_no);
+    pkt->setCurrent_ring(ring);
+    pkt->setRandom_no(0);            // TODO: RN generation when dedup lands
+
+    // Insert my (subnet, myId) pairs.
+    pkt->setRrArraySize(mySubnets.size());
+    for (size_t i = 0; i < mySubnets.size(); ++i) {
+        MyriadGpRr e; e.subnet = mySubnets[i]; e.owner = myId;
+        pkt->setRr(i, e);
+    }
+
+    // Seed transitions with my OTHER rings, all isRedundant=false; the ring
+    // fills them in as members insert their own memberships.
+    std::vector<uint32_t> others;
+    for (uint32_t r : selfRings) if (r != ring) others.push_back(r);
+    pkt->setTransitionsArraySize(others.size());
+    for (size_t i = 0; i < others.size(); ++i) {
+        MyriadGpRingTransition t; t.ring = others[i]; t.isRedundant = false;
+        pkt->setTransitions(i, t);
+    }
+
+    rs.inflight.tx = sendReliable(to, pkt, rxmtInterval);
+    // TODO: budget timer — cancels inflight after 3 retries → DEGRADE.
+
+    MLOG_N_INFO(to) << "originate COLLECT ring='" << (char)ring
+        << "' seq=" << rs.inflight.seq_no << "\n";
 }
 
 void MyriadGP::onNeighborDead(GpNeighbor& nbr, bool /*wasFull*/) {
