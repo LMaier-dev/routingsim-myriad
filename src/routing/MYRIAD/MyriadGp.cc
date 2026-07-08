@@ -69,10 +69,39 @@ void MyriadGP::originateCollect(uint32_t ring, nodeid_t to) {
     }
 
     rs.inflight.tx = sendReliable(to, pkt, rxmtInterval);
-    // TODO: budget timer — cancels inflight after 3 retries → DEGRADE.
+    // Parallel budget: (retryLimit + 0.5) * rxmtInterval — fires halfway between
+    // the last retransmit and what would have been the next one, so a return
+    // that came back in time has already cancelled us.
+    rs.inflight.budgetTimer = addOneShotTimer(
+        (COLLECT_RETRY_LIMIT + 0.5) * rxmtInterval,
+        [this, ring](short) {
+            onCollectBudgetExpired(ring);
+            return false;
+        });
 
     MLOG_N_INFO(to) << "originate COLLECT ring='" << (char)ring
         << "' seq=" << rs.inflight.seq_no << "\n";
+}
+
+void MyriadGP::cancelInflight(uint32_t ring) {
+    auto it = rings.find(ring);
+    if (it == rings.end()) return;
+    RingInflight& fl = it->second.inflight;
+    if (fl.tx) cancelReliable(fl.tx);
+    if (fl.budgetTimer) {
+        cancelAndDelete(fl.budgetTimer);
+        fl.budgetTimer = nullptr;
+    }
+}
+
+void MyriadGP::onCollectBudgetExpired(uint32_t ring) {
+    RingState& rs = rings[ring];
+    rs.inflight.budgetTimer = nullptr;
+    if (rs.inflight.tx == nullptr) return; // already resolved
+    cancelReliable(rs.inflight.tx);
+    MLOG_WARN() << "COLLECT budget expired ring='" << (char)ring
+                << "' seq=" << rs.inflight.seq_no << " — ring broken\n";
+    // TODO: originate DEGRADE for this ring (beacon mode).
 }
 
 void MyriadGP::onNeighborDead(GpNeighbor& nbr, bool /*wasFull*/) {
@@ -116,8 +145,7 @@ void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t from) {
     // Own return — circular ACK completes the collection.
     if (king == myId) {
         if (rs.inflight.tx != nullptr && seq == rs.inflight.seq_no) {
-            cancelReliable(rs.inflight.tx);
-            // TODO: cancel budget timer
+            cancelInflight(R);
 
             // Snapshot the collected data onto ring state.
             rs.rr.clear();
@@ -157,8 +185,7 @@ void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t from) {
             // Yield: cancel my transmit and become a plain forwarder.
             MLOG_N_INFO(from) << "yield COLLECT ring='" << (char)R
                               << "' to king=" << (int)king << "\n";
-            cancelReliable(rs.inflight.tx);
-            // TODO: cancel budget timer
+            cancelInflight(R);
             insertAndForwardCollect(collect, R, from);
         } else {
             // Ignore lower-id king; my collection continues.
@@ -243,6 +270,14 @@ void MyriadGP::reset() {
         }
     }
     neighbors.clear();
+    for (auto& [rid, rs] : rings) {
+        if (rs.inflight.tx) cancelReliable(rs.inflight.tx);
+        if (rs.inflight.budgetTimer) {
+            cancelAndDelete(rs.inflight.budgetTimer);
+            rs.inflight.budgetTimer = nullptr;
+        }
+    }
+    rings.clear();
     cancelHelloTimer();
 }
 

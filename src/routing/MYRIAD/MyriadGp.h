@@ -88,6 +88,12 @@ namespace routingsim {
             // The other ring-neighbor for R (the one we did NOT receive from);
             // returns 0 if none exists.
             nodeid_t otherRingNeighbor(uint32_t ring, nodeid_t from);
+            // Cancel any inflight collect + budget timer for `ring`.
+            void cancelInflight(uint32_t ring);
+            // Budget-timer expiry: ring declared broken.
+            void onCollectBudgetExpired(uint32_t ring);
+            // Retransmit budget (retransmissions after the initial send).
+            static constexpr int COLLECT_RETRY_LIMIT = 3;
             // (subnet, myId) pairs derived once at onInitialize; reused as
             // both the local-subnet source at origination and on insert.
             std::vector<uint32_t> mySubnets;
