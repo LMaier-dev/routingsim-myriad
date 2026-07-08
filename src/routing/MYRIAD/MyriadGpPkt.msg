@@ -21,7 +21,6 @@ enum MyriadGpPDUType {
     MYRIADGP_COLLECT = 1;
     MYRIADGP_UPDATE = 2;
     MYRIADGP_DEGRADE = 3;
-    MYRIADGP_WIDTH = 4;
 }
 
 // directly from Kira (mirrors MyriadLsPkt.msg)
@@ -55,21 +54,21 @@ struct MyriadGpRingTransition {
     bool isRedundant;
 }
 
+// (subnet, owner) pair: owner is the router that inserted the subnet during
+// collect. Enables segment-routing lookup: subnet -> owner -> chain.
+struct MyriadGpRr {
+    uint32_t subnet;
+    nodeid_t owner;
+}
+
 packet MyriadGpNLRI extends MyriadGpHeader {
     type = MYRIADGP_COLLECT;
-    uint32_t nlri[]; // subnets each node inserts its own subnets
+    MyriadGpRr rr[]; // each node inserts its own (subnet, myId) pairs
 }
 
 packet MyriadGpCollect extends MyriadGpNLRI {
     // every collection the ringking checks if transition widths changed
     type = MYRIADGP_COLLECT;
-    MyriadGpRingTransition transitions[];
-}
-
-packet MyriadGpWidth extends MyriadGpHeader {
-    // If transition widths changed this is sent reliably around the ring and
-    // only after ack of that the UDPATE originated
-    type = MYRIADGP_WIDTH;
     MyriadGpRingTransition transitions[];
 }
 
