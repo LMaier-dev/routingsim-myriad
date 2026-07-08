@@ -83,11 +83,12 @@ namespace routingsim {
             //  Originate a COLLECT for ring R towards `to`.
             void originateCollect(uint32_t ring, nodeid_t to);
             // Insert my (subnet,myId) pairs + update transitions + forward to
-            // the other ring-neighbor for R. Used by plain-forward and yield.
-            void insertAndForwardCollect(MyriadGpCollect* pkt, uint32_t ring, nodeid_t from);
+            // the other ring-neighbor for R. `sender` is the immediate hop we
+            // received from (NOT the king), used to pick the other neighbor.
+            void insertAndForwardCollect(MyriadGpCollect* pkt, uint32_t ring, nodeid_t sender);
             // The other ring-neighbor for R (the one we did NOT receive from);
-            // returns 0 if none exists.
-            nodeid_t otherRingNeighbor(uint32_t ring, nodeid_t from);
+            // returns undefined_node if none exists.
+            nodeid_t otherRingNeighbor(uint32_t ring, nodeid_t sender);
             // Cancel any inflight collect + budget timer for `ring`.
             void cancelInflight(uint32_t ring);
             // Budget-timer expiry: ring declared broken.

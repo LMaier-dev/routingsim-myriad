@@ -105,12 +105,22 @@ void MyriadGP::onCollectBudgetExpired(uint32_t ring) {
 }
 
 void MyriadGP::onNeighborDead(GpNeighbor& nbr, bool /*wasFull*/) {
-    MLOG_N_INFO(nbr.id) << "Send Degrade now\n";
-    // TODO: Degrade this ring
+    // For each ring shared with the dead neighbor: if no inflight for that
+    // ring, originate a probe COLLECT to the dead neighbor. Its retransmits
+    // act as the liveness grace period — if the neighbor recovers within the
+    // budget, the collect completes; otherwise the budget timer fires DEGRADE.
+    // If an inflight already exists, do nothing and let its budget run.
+    for (uint32_t R : nbr.sharedRings) {
+        if (rings[R].inflight.tx != nullptr) continue;
+        MLOG_N_INFO(nbr.id) << "grace COLLECT ring='" << (char)R
+                            << "' to dead neighbor\n";
+        originateCollect(R, nbr.id);
+    }
 }
 
 void MyriadGP::onMessage(NodePkt_p pkt) {
     myId = node().getNodeId();
+    nodeid_t sender = pkt->getHop().from;  // immediate hop, not the king
     auto inner = std::unique_ptr<cPacket>(pkt->decapsulate());
 
     // Hello packets come from MyriadHello so dont go through gpheader path
@@ -120,23 +130,22 @@ void MyriadGP::onMessage(NodePkt_p pkt) {
     }
 
     auto* header = check_and_cast<MyriadGpHeader*>(inner.get());
-    nodeid_t from = header->getRouter_id_src();
     switch (header->getType()) {
         case MYRIADGP_COLLECT:
-            handleCollect(check_and_cast<MyriadGpCollect*>(header), from);
+            handleCollect(check_and_cast<MyriadGpCollect*>(header), sender);
             break;
         case MYRIADGP_UPDATE:
-            handleUpdate(check_and_cast<MyriadGpUpdate*>(header), from);
+            handleUpdate(check_and_cast<MyriadGpUpdate*>(header), sender);
             break;
         case MYRIADGP_DEGRADE:
-            handleDegrade(check_and_cast<MyriadGpDegrade*>(header), from);
+            handleDegrade(check_and_cast<MyriadGpDegrade*>(header), sender);
             break;
         default:
             MLOG_WARN() << "received unknown packet type: " << header->getType() << "\n";
     }
 }
 
-void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t from) {
+void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t sender) {
     uint32_t R = collect->getCurrent_ring();
     nodeid_t king = collect->getRouter_id_src();
     uint32_t seq = collect->getSeq_no();
@@ -173,8 +182,8 @@ void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t from) {
             // TODO: originate UPDATE for R (rr map, chain=[R], spof_count=0;
             //       piggyback widths trailer if adjacentRings changed).
         } else {
-            MLOG_N_WARN(from) << "stale own COLLECT return ring='" << (char)R
-                              << "' seq=" << seq << " (cur=" << rs.inflight.seq_no << ")\n";
+            MLOG_N_WARN(sender) << "stale own COLLECT return ring='" << (char)R
+                                << "' seq=" << seq << " (cur=" << rs.inflight.seq_no << ")\n";
         }
         return;
     }
@@ -183,32 +192,32 @@ void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t from) {
     if (rs.inflight.tx != nullptr) {
         if (king > myId) {
             // Yield: cancel my transmit and become a plain forwarder.
-            MLOG_N_INFO(from) << "yield COLLECT ring='" << (char)R
-                              << "' to king=" << (int)king << "\n";
+            MLOG_N_INFO(sender) << "yield COLLECT ring='" << (char)R
+                                << "' to king=" << (int)king << "\n";
             cancelInflight(R);
-            insertAndForwardCollect(collect, R, from);
+            insertAndForwardCollect(collect, R, sender);
         } else {
             // Ignore lower-id king; my collection continues.
-            MLOG_N_DEBUG(from) << "ignore COLLECT ring='" << (char)R
-                               << "' from lower king=" << (int)king << "\n";
+            MLOG_N_DEBUG(sender) << "ignore COLLECT ring='" << (char)R
+                                 << "' from lower king=" << (int)king << "\n";
         }
         return;
     }
 
     // Plain forwarder: insert and pass on.
-    insertAndForwardCollect(collect, R, from);
+    insertAndForwardCollect(collect, R, sender);
 }
 
-nodeid_t MyriadGP::otherRingNeighbor(uint32_t ring, nodeid_t from) {
+nodeid_t MyriadGP::otherRingNeighbor(uint32_t ring, nodeid_t sender) {
     for (auto& [nid, n] : neighbors) {
-        if (nid == from) continue;
+        if (nid == sender) continue;
         if (n.state < NSTATE_TWOWAY) continue;
         for (uint32_t r : n.sharedRings) if (r == ring) return nid;
     }
-    return 0;
+    return undefined_node;
 }
 
-void MyriadGP::insertAndForwardCollect(MyriadGpCollect* pkt, uint32_t R, nodeid_t from) {
+void MyriadGP::insertAndForwardCollect(MyriadGpCollect* pkt, uint32_t R, nodeid_t sender) {
     // 1. Append my (subnet, myId) pairs.
     size_t n = pkt->getRrArraySize();
     pkt->setRrArraySize(n + mySubnets.size());
@@ -237,10 +246,10 @@ void MyriadGP::insertAndForwardCollect(MyriadGpCollect* pkt, uint32_t R, nodeid_
     }
 
     // 3. Forward to the OTHER ring-neighbor for R.
-    nodeid_t to = otherRingNeighbor(R, from);
-    if (to == 0) {
-        MLOG_N_WARN(from) << "no other ring-neighbor for ring='" << (char)R
-                          << "'; dropping COLLECT\n";
+    nodeid_t to = otherRingNeighbor(R, sender);
+    if (to == undefined_node) {
+        MLOG_N_WARN(sender) << "no other ring-neighbor for ring='" << (char)R
+                            << "'; dropping COLLECT\n";
         return;
     }
     auto np = std::make_unique<NodePkt>("Myriad_GP_Collect_Pkt");
