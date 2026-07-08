@@ -108,12 +108,121 @@ void MyriadGP::onMessage(NodePkt_p pkt) {
 }
 
 void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t from) {
-    GpNeighbor& nbr = neighbors[from];
-    MLOG_N_INFO(from) << "Received Collect seq=" << collect->getSeq_no()
-                      << " shared rings=[";
-    for (size_t i = 0; i < nbr.sharedRings.size(); ++i)
-        EV << (i ? "," : "") << (char)nbr.sharedRings[i];
-    EV << "]\n";
+    uint32_t R = collect->getCurrent_ring();
+    nodeid_t king = collect->getRouter_id_src();
+    uint32_t seq = collect->getSeq_no();
+    RingState& rs = rings[R];
+
+    // Own return — circular ACK completes the collection.
+    if (king == myId) {
+        if (rs.inflight.tx != nullptr && seq == rs.inflight.seq_no) {
+            cancelReliable(rs.inflight.tx);
+            // TODO: cancel budget timer
+
+            // Snapshot the collected data onto ring state.
+            rs.rr.clear();
+            rs.rr.reserve(collect->getRrArraySize());
+            for (size_t i = 0; i < collect->getRrArraySize(); ++i)
+                rs.rr.push_back(collect->getRr(i));
+
+            rs.adjacentRings.clear();
+            rs.adjacentRings.reserve(collect->getTransitionsArraySize());
+            for (size_t i = 0; i < collect->getTransitionsArraySize(); ++i) {
+                auto& t = collect->getTransitions(i);
+                rs.adjacentRings.push_back({ t.ring, t.isRedundant });
+            }
+
+            MLOG_INFO() << "COLLECT complete ring='" << (char)R
+                        << "' seq=" << seq
+                        << " rr=" << rs.rr.size()
+                        << " transitions=[";
+            for (size_t i = 0; i < rs.adjacentRings.size(); ++i) {
+                auto& a = rs.adjacentRings[i];
+                EV << (i ? "," : "") << (char)a.ring << (a.isRedundant ? "=D" : "=S");
+            }
+            EV << "]\n";
+
+            // TODO: originate UPDATE for R (rr map, chain=[R], spof_count=0;
+            //       piggyback widths trailer if adjacentRings changed).
+        } else {
+            MLOG_N_WARN(from) << "stale own COLLECT return ring='" << (char)R
+                              << "' seq=" << seq << " (cur=" << rs.inflight.seq_no << ")\n";
+        }
+        return;
+    }
+
+    // Contention: I have an inflight for this ring → someone else is also King.
+    if (rs.inflight.tx != nullptr) {
+        if (king > myId) {
+            // Yield: cancel my transmit and become a plain forwarder.
+            MLOG_N_INFO(from) << "yield COLLECT ring='" << (char)R
+                              << "' to king=" << (int)king << "\n";
+            cancelReliable(rs.inflight.tx);
+            // TODO: cancel budget timer
+            insertAndForwardCollect(collect, R, from);
+        } else {
+            // Ignore lower-id king; my collection continues.
+            MLOG_N_DEBUG(from) << "ignore COLLECT ring='" << (char)R
+                               << "' from lower king=" << (int)king << "\n";
+        }
+        return;
+    }
+
+    // Plain forwarder: insert and pass on.
+    insertAndForwardCollect(collect, R, from);
+}
+
+nodeid_t MyriadGP::otherRingNeighbor(uint32_t ring, nodeid_t from) {
+    for (auto& [nid, n] : neighbors) {
+        if (nid == from) continue;
+        if (n.state < NSTATE_TWOWAY) continue;
+        for (uint32_t r : n.sharedRings) if (r == ring) return nid;
+    }
+    return 0;
+}
+
+void MyriadGP::insertAndForwardCollect(MyriadGpCollect* pkt, uint32_t R, nodeid_t from) {
+    // 1. Append my (subnet, myId) pairs.
+    size_t n = pkt->getRrArraySize();
+    pkt->setRrArraySize(n + mySubnets.size());
+    for (size_t i = 0; i < mySubnets.size(); ++i) {
+        MyriadGpRr e; e.subnet = mySubnets[i]; e.owner = myId;
+        pkt->setRr(n + i, e);
+    }
+
+    // 2. Update transitions for each of my OTHER rings.
+    for (uint32_t R2 : selfRings) {
+        if (R2 == R) continue;
+        bool found = false;
+        for (size_t i = 0; i < pkt->getTransitionsArraySize(); ++i) {
+            auto& t = pkt->getTransitionsForUpdate(i);
+            if (t.ring != R2) continue;
+            found = true;
+            if (!t.isRedundant) t.isRedundant = true; // second contributor confirms double
+            break;
+        }
+        if (!found) {
+            size_t k = pkt->getTransitionsArraySize();
+            pkt->setTransitionsArraySize(k + 1);
+            MyriadGpRingTransition t; t.ring = R2; t.isRedundant = false;
+            pkt->setTransitions(k, t);
+        }
+    }
+
+    // 3. Forward to the OTHER ring-neighbor for R.
+    nodeid_t to = otherRingNeighbor(R, from);
+    if (to == 0) {
+        MLOG_N_WARN(from) << "no other ring-neighbor for ring='" << (char)R
+                          << "'; dropping COLLECT\n";
+        return;
+    }
+    auto np = std::make_unique<NodePkt>("Myriad_GP_Collect_Pkt");
+    np->setType(MYRIADGP_PACKET_TYPE);
+    np->encapsulate(pkt->dup());
+    sendToNode(to, std::move(np));
+    MLOG_N_DEBUG(to) << "forward COLLECT ring='" << (char)R
+                     << "' seq=" << pkt->getSeq_no()
+                     << " king=" << (int)pkt->getRouter_id_src() << "\n";
 }
 
 void MyriadGP::handleUpdate(MyriadGpUpdate* /*update*/, nodeid_t from) {

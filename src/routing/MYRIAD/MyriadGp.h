@@ -82,6 +82,12 @@ namespace routingsim {
 
             //  Originate a COLLECT for ring R towards `to`.
             void originateCollect(uint32_t ring, nodeid_t to);
+            // Insert my (subnet,myId) pairs + update transitions + forward to
+            // the other ring-neighbor for R. Used by plain-forward and yield.
+            void insertAndForwardCollect(MyriadGpCollect* pkt, uint32_t ring, nodeid_t from);
+            // The other ring-neighbor for R (the one we did NOT receive from);
+            // returns 0 if none exists.
+            nodeid_t otherRingNeighbor(uint32_t ring, nodeid_t from);
             // (subnet, myId) pairs derived once at onInitialize; reused as
             // both the local-subnet source at origination and on insert.
             std::vector<uint32_t> mySubnets;
