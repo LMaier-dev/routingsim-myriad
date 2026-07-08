@@ -60,8 +60,6 @@ namespace routingsim {
         std::vector<AdjacentRingState> adjacentRings;
     };
 
-    // TODO: random numbers Myriad Construction for data and control plane
-
     class MyriadGP : public MyriadHelloProto<GpNeighbor>
     {
         // Distinct from MYRIADLS_PACKET_TYPE so both protocols can coexist.

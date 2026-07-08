@@ -44,7 +44,6 @@ packet MyriadGpHeader {
     // Also I only have one inflight packet for each ring so we have simple data structure of retransmission timers for each ring we are in.
     // for external forwards we may need another data structure to cache packets or retx
     uint32_t seq_no;
-    uint64_t random_no; // for dedup (wouldnt need it for collect but its easier to use it for all packets)
     uint32_t current_ring; // only fwd unconditionally here
 }
 

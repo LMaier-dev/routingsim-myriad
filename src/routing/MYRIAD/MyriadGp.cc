@@ -49,7 +49,6 @@ void MyriadGP::originateCollect(uint32_t ring, nodeid_t to) {
     pkt->setRouter_id_src(myId);     // king_id
     pkt->setSeq_no(currentRingState.inflight.seq_no);
     pkt->setCurrent_ring(ring);
-    pkt->setRandom_no(0);            // TODO: RN generation when dedup lands
 
     // Insert my (subnet, myId) pairs.
     pkt->setRrArraySize(mySubnets.size());
