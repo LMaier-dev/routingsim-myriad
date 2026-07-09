@@ -73,19 +73,19 @@ packet MyriadGpCollect extends MyriadGpNLRI {
 
 packet MyriadGpUpdate extends MyriadGpNLRI {
     type = MYRIADGP_UPDATE;
-    nodeid_t chain[]; // one chain per update as the whole ring share subnet reachability
-    // when we forward externally we attach current_ring to the chain
-    // and also set router_id_src (ringking) to our id then send reliable
-    // count Single Point of Failures on path and choose the more resilient one by default,
-    // tiebreaker is total length: both identical -> ECMP
+    // Prepend-order chain of ring ids: chain[0] = latest ring visited,
+    // chain.back() = origin ring. Empty at origination (origin = current_ring).
+    uint32_t ring_chain[];
+    // Single-point-of-failure count along the chain (single-node transitions).
     uint32_t spof_count;
 }
 
-packet MyriadGpDegrade extends MyriadGpHeader {
-    // Cant ACK itself currently since at least one link is broken we could just repeat it like hello
-    // OR we could send ack if theres no neighbor of that ring other than the one we received it from 
-    // meaning it takes the half circle back to the ringking
-    type = MYRIADGP_DEGRADE;
-    // TODO: I think theres no path needed since I dont think we need loop prevention here (since we dedup I think we may not)
-    uint32_t ring;
+// DEGRADE is a direct-neighbor flood, not tied to the ring machinery.
+// Own root packet — does NOT extend MyriadGpHeader (no current_ring).
+packet MyriadGpDegrade {
+    MyriadGpPDUType type = MYRIADGP_DEGRADE;
+    nodeid_t router_id_src;   // last forwarder (for skip-sender flood)
+    uint32_t ring_id;         // culprit (broken) ring
+    uint32_t seq_no;          // culprit ring's seq at time of failure
+    uint32_t beacon_no;       // bumped by originator every beacon interval
 }

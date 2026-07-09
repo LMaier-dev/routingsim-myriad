@@ -129,6 +129,12 @@ void MyriadGP::onMessage(NodePkt_p pkt) {
         return;
     }
 
+    // DEGRADE is a standalone class (does not extend MyriadGpHeader).
+    if (auto* degrade = dynamic_cast<MyriadGpDegrade*>(inner.get())) {
+        handleDegrade(degrade, sender);
+        return;
+    }
+
     auto* header = check_and_cast<MyriadGpHeader*>(inner.get());
     switch (header->getType()) {
         case MYRIADGP_COLLECT:
@@ -136,9 +142,6 @@ void MyriadGP::onMessage(NodePkt_p pkt) {
             break;
         case MYRIADGP_UPDATE:
             handleUpdate(check_and_cast<MyriadGpUpdate*>(header), sender);
-            break;
-        case MYRIADGP_DEGRADE:
-            handleDegrade(check_and_cast<MyriadGpDegrade*>(header), sender);
             break;
         default:
             MLOG_WARN() << "received unknown packet type: " << header->getType() << "\n";
