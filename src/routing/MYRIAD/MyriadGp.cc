@@ -496,9 +496,6 @@ void MyriadGP::handleUpdate(MyriadGpUpdate* update, nodeid_t sender) {
                              << "' (" << widthLen << " transitions)\n";
     }
 
-    // Always forward within current_ring so the originator's lap can close.
-    forwardUpdateInRing(update, curRing, sender);
-
     RingState& originRs = rings[origin];
 
     // Full path identity = current_ring :: packet chain. The packet chain omits
@@ -509,56 +506,70 @@ void MyriadGP::handleUpdate(MyriadGpUpdate* update, nodeid_t sender) {
     fullChain.push_back(curRing);
     for (uint32_t c : chain) fullChain.push_back(c);
 
-    // Dedup on (origin, fullChain): already forwarded at >= seq → the intra-ring
-    // forward above is all that's needed.
+    // Decide whether to transition inter-ring. Regardless of the outcome we
+    // still forward intra-ring at the end (needed for the circular ACK, and to
+    // carry any handled-rings marks around the lap).
+    bool doInterRing = true;
+
+    // Dedup on (origin, fullChain): already forwarded at >= seq → intra-ring
+    // forward is all that's needed.
     RibEntry* entry = nullptr;
     for (auto& e : originRs.ribIn) if (e.chain == fullChain) { entry = &e; break; }
     if (entry && entry->seq_no >= seq) {
         MLOG_N_DEBUG(sender) << "UPDATE dup origin='" << (char)origin
                              << "' seq=" << seq << " chain=" << formatChain(fullChain)
                              << " (stored " << entry->seq_no << ")\n";
-        return;
+        doInterRing = false;
     }
 
-    // Seq advance: newer generation for this origin → purge older chains and
-    // refresh the authoritative rr from this packet.
-    if (seq > originRs.curSeq) {
-        originRs.curSeq = seq;
-        originRs.ribIn.erase(
-            std::remove_if(originRs.ribIn.begin(), originRs.ribIn.end(),
-                [seq](const RibEntry& e) { return e.seq_no < seq; }),
-            originRs.ribIn.end());
-        entry = nullptr;
-        for (auto& e : originRs.ribIn) if (e.chain == fullChain) { entry = &e; break; }
+    if (doInterRing) {
+        // Seq advance: newer generation for this origin → purge older chains and
+        // refresh the authoritative rr from this packet.
+        if (seq > originRs.curSeq) {
+            originRs.curSeq = seq;
+            originRs.ribIn.erase(
+                std::remove_if(originRs.ribIn.begin(), originRs.ribIn.end(),
+                    [seq](const RibEntry& e) { return e.seq_no < seq; }),
+                originRs.ribIn.end());
+            entry = nullptr;
+            for (auto& e : originRs.ribIn) if (e.chain == fullChain) { entry = &e; break; }
 
-        originRs.rr.clear();
-        originRs.rr.reserve(update->getRrArraySize());
-        for (size_t i = 0; i < update->getRrArraySize(); ++i)
-            originRs.rr.push_back(update->getRr(i));
+            originRs.rr.clear();
+            originRs.rr.reserve(update->getRrArraySize());
+            for (size_t i = 0; i < update->getRrArraySize(); ++i)
+                originRs.rr.push_back(update->getRr(i));
+        }
+
+        // Insert or replace the RIB entry for this chain.
+        if (entry) {
+            entry->seq_no = seq;
+            entry->spof_count = update->getSpof_count();
+        } else {
+            originRs.ribIn.push_back({ fullChain, seq, update->getSpof_count() });
+        }
+
+        MLOG_N_INFO(sender) << "UPDATE store origin='" << (char)origin
+                            << "' seq=" << seq << " chain=" << formatChain(fullChain)
+                            << " spof=" << update->getSpof_count()
+                            << " ribIn=" << originRs.ribIn.size() << "\n";
+
+        // TODO: policy → preferred + materialized routes.
+
+        // Loop prevention: if any of my rings is already in the packet chain,
+        // I've been here — don't transition again (intra-ring forward still
+        // happens below). Check the packet chain, NOT fullChain: current_ring
+        // is always my ring.
+        for (uint32_t myRing : selfRings)
+            for (uint32_t c : chain) if (c == myRing) { doInterRing = false; break; }
     }
 
-    // Insert or replace the RIB entry for this chain.
-    if (entry) {
-        entry->seq_no = seq;
-        entry->spof_count = update->getSpof_count();
-    } else {
-        originRs.ribIn.push_back({ fullChain, seq, update->getSpof_count() });
-    }
+    // Transition into my other rings first — this marks handled_rings on the
+    // packet so the intra-ring copy tells the other bridge not to duplicate.
+    if (doInterRing) forwardUpdateInterRing(update, curRing);
 
-    MLOG_N_INFO(sender) << "UPDATE store origin='" << (char)origin
-                        << "' seq=" << seq << " chain=" << formatChain(fullChain)
-                        << " spof=" << update->getSpof_count()
-                        << " ribIn=" << originRs.ribIn.size() << "\n";
-
-    // TODO: policy → preferred + materialized routes.
-
-    // Loop prevention: if any of my rings is already in the packet chain, I've
-    // been here — the intra-ring forward above suffices, don't transition again.
-    // (Check the packet chain, NOT fullChain: current_ring is always my ring.)
-    for (uint32_t myRing : selfRings)
-        for (uint32_t c : chain) if (c == myRing) return;
-
-    forwardUpdateInterRing(update, curRing);
+    // Always forward within current_ring so the originator's lap can close,
+    // carrying any handled-rings marks to downstream bridges.
+    forwardUpdateInRing(update, curRing, sender);
 }
 
 void MyriadGP::forwardUpdateInRing(MyriadGpUpdate* pkt, uint32_t ring, nodeid_t sender) {
@@ -581,6 +592,17 @@ void MyriadGP::forwardUpdateInterRing(MyriadGpUpdate* pkt, uint32_t curRing) {
         for (size_t i = 0; i < chainLen; ++i)
             if (pkt->getRing_chain(i) == R2) { inChain = true; break; }
         if (inChain) continue;
+
+        // Another bridge of this transition already flooded R2 on this lap
+        // (its mark rode the intra-ring copy to me) — don't duplicate.
+        bool alreadyHandled = false;
+        for (size_t i = 0; i < pkt->getHandled_ringsArraySize(); ++i)
+            if (pkt->getHandled_rings(i) == R2) { alreadyHandled = true; break; }
+        if (alreadyHandled) {
+            MLOG_DEBUG() << "UPDATE transition into ring='" << (char)R2
+                         << "' skipped: already flooded by another bridge this lap\n";
+            continue;
+        }
 
         RingState& rs2 = rings[R2];
 
@@ -637,6 +659,12 @@ void MyriadGP::forwardUpdateInterRing(MyriadGpUpdate* pkt, uint32_t curRing) {
         MLOG_N_INFO(nbrs[0]) << "UPDATE transition into ring='" << (char)R2
             << "' seq=" << pkt->getSeq_no() << " chain=" << formatChain(fwdChain)
             << " spof=" << fwd->getSpof_count() << "\n";
+
+        // Mark R2 handled on the incoming packet so the intra-ring copy tells
+        // the other bridge of this transition not to duplicate the flood.
+        size_t h = pkt->getHandled_ringsArraySize();
+        pkt->setHandled_ringsArraySize(h + 1);
+        pkt->setHandled_rings(h, R2);
     }
 }
 

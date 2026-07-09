@@ -82,6 +82,10 @@ packet MyriadGpUpdate extends MyriadGpNLRI {
     // Non-empty only on the origin UPDATE; members store it and strip on
     // inter-ring forward.
     MyriadGpRingTransition widths[];
+    // Rings already flooded into on this lap, so a second bridge node of a
+    // double transition doesn't duplicate the flood. Accumulates around the
+    // ring; reset (empty) on inter-ring transition.
+    uint32_t handled_rings[];
 }
 
 // DEGRADE is a direct-neighbor flood, not tied to the ring machinery.
