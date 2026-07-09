@@ -294,6 +294,8 @@ void MyriadGP::reset() {
         }
     }
     rings.clear();
+    degrades.clear();
+    routes.clear();
     cancelHelloTimer();
 }
 

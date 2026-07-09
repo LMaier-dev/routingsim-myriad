@@ -24,16 +24,12 @@ namespace routingsim {
         TimerMsg* budgetTimer = nullptr;
     };
 
-    struct GpPath {
+    // One learned path to an origin ring. chain is prepend-order:
+    // chain[0] = latest ring visited, chain.back() = origin.
+    struct RibEntry {
         std::vector<uint32_t> chain;
-        // count Single Point of Failures on path and choose the more resilient one by default,
-        // tiebreaker is total length: both identical -> ECMP
-        uint32_t spof_sum = 0;
-    };
-
-    struct DegradationState {
-        nodeid_t culprit = 0;
         uint32_t seq_no = 0;
+        uint32_t spof_count = 0;
     };
 
     // Collect phase fills this for adjacent rings
@@ -45,19 +41,23 @@ namespace routingsim {
     };
 
     struct RingState {
-        std::vector<MyriadGpRr> rr; // (subnet, owner) pairs collected in the latest round
-        uint32_t lastUpdateSn = 0; // for supersede on incoming updates (or degrade)
-        // My Rings: either collect, width, or update that's currently circulating the ring
-        // Foreign Ring: update/degrade we're currently forwarding FOR THEM
+        std::vector<MyriadGpRr> rr; // (subnet, owner) pairs; refreshed on curSeq advance
+        uint32_t curSeq = 0; // highest seq_no seen for this origin ring
+        // My Rings: the collect/update currently circulating the ring.
+        // Foreign Rings: the update we're currently forwarding for them.
         RingInflight inflight;
-        std::vector<GpPath> ecmpPaths; // all paths at currentWidth (ECMP set)
-        uint32_t currentWidth = 0; // width threshold defining the ECMP set
-        std::vector<DegradationState> externalDegradation; // received degrade for degrade for rings on this path (could include itself)
+        std::vector<RibEntry> ribIn; // all currently-valid chains for this origin
+        size_t preferred = SIZE_MAX; // index into ribIn; SIZE_MAX = none
 
-        // derived from recent Collect lap, diff against next one
-        // if different: width update this ring BEFORE emitting UPDATE
-        // when forwarding: decide to sum 1 or 2 to width_sum
+        // derived from recent Collect lap; used for spof_count on inter-ring forward
         std::vector<AdjacentRingState> adjacentRings;
+    };
+
+    // A materialized routing-table entry.
+    struct RouteEntry {
+        uint32_t origin_ring = 0;
+        std::vector<uint32_t> chain; // prepend-order, same as RibEntry
+        nodeid_t owner = 0;
     };
 
     class MyriadGP : public MyriadHelloProto<GpNeighbor>
@@ -99,6 +99,12 @@ namespace routingsim {
 
         private:
             std::unordered_map<uint32_t /*ring*/, RingState> rings;
+            // Degrade state per culprit ring: {seq_no, beacon_no}. Held here (not
+            // per-chain) so RIB-In purges don't lose it; chains re-mark from this.
+            std::unordered_map<uint32_t /*culprit ring*/,
+                               std::pair<uint32_t /*seq_no*/, uint32_t /*beacon_no*/>> degrades;
+            // Materialized routing table: subnet → preferred route.
+            std::unordered_map<uint32_t /*subnet*/, RouteEntry> routes;
             // Reverse lookup: subnet → ring(s) that advertise it
             std::unordered_map<uint32_t /*subnet*/, std::vector<uint32_t> /*ring_ids*/> subnetToRing;
             std::vector<uint32_t /*subnet*/> keys; // only for simulation later to pick destinations at random
