@@ -6,15 +6,28 @@
 #include <boost/container/flat_map.hpp>
 #include <unordered_map>
 #include <vector>
+#include <functional>
 
 namespace routingsim {
 
     struct GpNeighbor : HelloNeighbor {
     };
 
+    // In-flight reliable ring send. Retransmits alternate primary/fallback so
+    // one directional send covers both ring directions across retries; equal
+    // primary/fallback degenerates to same-neighbor retry (probe mode).
+    struct RingTx {
+        cPacket* pkt = nullptr;   // template; dup()'d on each (re)send
+        nodeid_t primary = 0;
+        nodeid_t fallback = 0;
+        simtime_t interval;
+        TimerMsg* timer = nullptr;
+        bool onFallback = false;  // which neighbor the next retransmit targets
+    };
+
     // When packet is superseeded by a newer SN, also cancel RTX and flood this one.
     struct RingInflight {
-        PendingTx* tx = nullptr;
+        RingTx* tx = nullptr;
         // seq_no is bumped per collection round and does NOT reset
         // when tx clears, so stale returns from a completed round don't alias
         // a new round's inflight.
@@ -93,6 +106,16 @@ namespace routingsim {
             void onCollectBudgetExpired(uint32_t ring);
             // Retransmit budget (retransmissions after the initial send).
             static constexpr int COLLECT_RETRY_LIMIT = 3;
+
+            // Reliable ring send: first send to `primary`, retransmits alternate
+            // to `fallback` (equal args = same-neighbor probe). Sets fl.tx and
+            // fl.budgetTimer; onBudgetExpired fires after retryLimit misses.
+            // Takes ownership of `pkt`.
+            void sendRingReliable(RingInflight& fl, nodeid_t primary, nodeid_t fallback,
+                                  cPacket* pkt, simtime_t interval, int retryLimit,
+                                  std::function<void()> onBudgetExpired);
+            void cancelRingReliable(RingInflight& fl);
+            void ringRetxFire(RingTx* h);
             // (subnet, myId) pairs derived once at onInitialize; reused as
             // both the local-subnet source at origination and on insert.
             std::vector<uint32_t> mySubnets;

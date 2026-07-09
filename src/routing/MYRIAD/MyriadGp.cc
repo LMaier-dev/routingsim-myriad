@@ -68,37 +68,81 @@ void MyriadGP::originateCollect(uint32_t ring, nodeid_t to) {
         pkt->setTransitions(i, t);
     }
 
-    currentRingState.inflight.tx = sendReliable(to, pkt, rxmtInterval);
-    // Parallel budget: (retryLimit + 0.5) * rxmtInterval — fires halfway between
-    // the last retransmit and what would have been the next one, so a return
-    // that came back in time has already cancelled us.
-    currentRingState.inflight.budgetTimer = addOneShotTimer(
-        (COLLECT_RETRY_LIMIT + 0.5) * rxmtInterval,
-        [this, ring](short) {
-            onCollectBudgetExpired(ring);
-            return false;
-        });
+    // Send one direction now; retransmits alternate to the other neighbor so a
+    // single directional send still reaches every ring member if one side breaks.
+    sendRingReliable(currentRingState.inflight, to, to, pkt, rxmtInterval,
+                     COLLECT_RETRY_LIMIT, [this, ring]() { onCollectBudgetExpired(ring); });
 
     MLOG_N_INFO(to) << "originate COLLECT ring='" << (char)ring
         << "' seq=" << currentRingState.inflight.seq_no << "\n";
 }
 
-void MyriadGP::cancelInflight(uint32_t ring) {
-    auto it = rings.find(ring);
-    if (it == rings.end()) return;
-    RingInflight& fl = it->second.inflight;
-    if (fl.tx) cancelReliable(fl.tx);
+void MyriadGP::sendRingReliable(RingInflight& fl, nodeid_t primary, nodeid_t fallback,
+                                cPacket* pkt, simtime_t interval, int retryLimit,
+                                std::function<void()> onBudgetExpired) {
+    auto* h = new RingTx{pkt, primary, fallback, interval, nullptr, false};
+
+    // First send goes to the primary neighbor.
+    auto np = std::make_unique<NodePkt>(pkt->getName());
+    np->setType(packetType);
+    np->encapsulate(pkt->dup());
+    sendToNode(primary, std::move(np));
+
+    h->timer = addOneShotTimer(interval, [this, h](short) {
+        ringRetxFire(h);
+        return false;
+    });
+    fl.tx = h;
+
+    // Parallel budget: (retryLimit + 0.5) * interval — fires halfway between the
+    // last retransmit and what would have been the next one, so a return that
+    // came back in time has already cancelled us.
+    fl.budgetTimer = addOneShotTimer((retryLimit + 0.5) * interval,
+        [onBudgetExpired](short) {
+            onBudgetExpired();
+            return false;
+        });
+}
+
+void MyriadGP::ringRetxFire(RingTx* h) {
+    h->onFallback = !h->onFallback;
+    nodeid_t to = h->onFallback ? h->fallback : h->primary;
+
+    auto np = std::make_unique<NodePkt>(h->pkt->getName());
+    np->setType(packetType);
+    np->encapsulate(h->pkt->dup());
+    sendToNode(to, std::move(np));
+
+    h->timer = addOneShotTimer(h->interval, [this, h](short) {
+        ringRetxFire(h);
+        return false;
+    });
+}
+
+void MyriadGP::cancelRingReliable(RingInflight& fl) {
+    if (fl.tx) {
+        if (fl.tx->timer) cancelAndDelete(fl.tx->timer);
+        delete fl.tx->pkt;
+        delete fl.tx;
+        fl.tx = nullptr;
+    }
     if (fl.budgetTimer) {
         cancelAndDelete(fl.budgetTimer);
         fl.budgetTimer = nullptr;
     }
 }
 
+void MyriadGP::cancelInflight(uint32_t ring) {
+    auto it = rings.find(ring);
+    if (it == rings.end()) return;
+    cancelRingReliable(it->second.inflight);
+}
+
 void MyriadGP::onCollectBudgetExpired(uint32_t ring) {
     RingState& currentRingState = rings[ring];
-    currentRingState.inflight.budgetTimer = nullptr;
     if (currentRingState.inflight.tx == nullptr) return; // already resolved
-    cancelReliable(currentRingState.inflight.tx);
+    // budgetTimer has already fired; clear the whole inflight.
+    cancelRingReliable(currentRingState.inflight);
     MLOG_WARN() << "COLLECT budget expired ring='" << (char)ring
                 << "' seq=" << currentRingState.inflight.seq_no << " — ring broken\n";
     // TODO: originate DEGRADE for this ring (beacon mode).
@@ -287,11 +331,7 @@ void MyriadGP::reset() {
     }
     neighbors.clear();
     for (auto& [rid, currentRingState] : rings) {
-        if (currentRingState.inflight.tx) cancelReliable(currentRingState.inflight.tx);
-        if (currentRingState.inflight.budgetTimer) {
-            cancelAndDelete(currentRingState.inflight.budgetTimer);
-            currentRingState.inflight.budgetTimer = nullptr;
-        }
+        cancelRingReliable(currentRingState.inflight);
     }
     rings.clear();
     degrades.clear();
