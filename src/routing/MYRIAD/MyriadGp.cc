@@ -140,10 +140,13 @@ void MyriadGP::cancelInflight(uint32_t ring) {
 
 void MyriadGP::onCollectBudgetExpired(uint32_t ring) {
     RingState& currentRingState = rings[ring];
+    // This runs from the budgetTimer's own callback; the harness frees that
+    // message after we return, so drop our handle before cancelRingReliable
+    // (which would otherwise cancelAndDelete the message we're executing).
+    currentRingState.inflight.budgetTimer = nullptr;
     if (currentRingState.inflight.tx == nullptr) return; // already resolved
-    // budgetTimer has already fired; clear the whole inflight.
     cancelRingReliable(currentRingState.inflight);
-    MLOG_WARN() << "COLLECT budget expired ring='" << (char)ring
+    MLOG_WARN() << "ring send budget expired ring='" << (char)ring
                 << "' seq=" << currentRingState.inflight.seq_no << " — ring broken\n";
     // TODO: originate DEGRADE for this ring (beacon mode).
 }
@@ -226,8 +229,7 @@ void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t sender) {
             }
             EV << "]\n";
 
-            // TODO: originate UPDATE for R (rr map, chain=[R], spof_count=0;
-            //       piggyback widths trailer if adjacentRings changed).
+            originateUpdate(R);
         } else {
             MLOG_N_WARN(sender) << "stale own COLLECT return ring='" << (char)R
                                 << "' seq=" << seq << " (cur=" << currentRingState.inflight.seq_no << ")\n";
@@ -262,6 +264,43 @@ nodeid_t MyriadGP::otherRingNeighbor(uint32_t ring, nodeid_t sender) {
         for (uint32_t r : n.sharedRings) if (r == ring) return nid;
     }
     return undefined_node;
+}
+
+std::vector<nodeid_t> MyriadGP::ringNeighbors(uint32_t ring) {
+    std::vector<nodeid_t> out;
+    for (auto& [nid, n] : neighbors) {
+        if (n.state < NSTATE_TWOWAY) continue;
+        for (uint32_t r : n.sharedRings) if (r == ring) { out.push_back(nid); break; }
+    }
+    return out;
+}
+
+void MyriadGP::originateUpdate(uint32_t ring) {
+    RingState& rs = rings[ring];
+
+    std::vector<nodeid_t> nbrs = ringNeighbors(ring);
+    if (nbrs.size() < 2) {
+        MLOG_WARN() << "originate UPDATE ring='" << (char)ring
+                    << "' but <2 ring-neighbors; skipping\n";
+        return;
+    }
+
+    auto* pkt = new MyriadGpUpdate("Myriad_GP_Update");
+    pkt->setType(MYRIADGP_UPDATE);
+    pkt->setRouter_id_src(myId);          // ringking for this ring traversal
+    pkt->setSeq_no(rs.inflight.seq_no);   // same seq as the collect round
+    pkt->setCurrent_ring(ring);
+    pkt->setRing_chainArraySize(0);       // origin: empty chain
+    pkt->setSpof_count(0);
+
+    pkt->setRrArraySize(rs.rr.size());
+    for (size_t i = 0; i < rs.rr.size(); ++i) pkt->setRr(i, rs.rr[i]);
+
+    sendRingReliable(rs.inflight, nbrs[0], nbrs[1], pkt, rxmtInterval,
+                     COLLECT_RETRY_LIMIT, [this, ring]() { onCollectBudgetExpired(ring); });
+
+    MLOG_N_INFO(nbrs[0]) << "originate UPDATE ring='" << (char)ring
+        << "' seq=" << rs.inflight.seq_no << " rr=" << rs.rr.size() << "\n";
 }
 
 void MyriadGP::insertAndForwardCollect(MyriadGpCollect* pkt, uint32_t R, nodeid_t sender) {

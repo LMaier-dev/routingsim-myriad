@@ -100,6 +100,10 @@ namespace routingsim {
             // The other ring-neighbor for R (the one we did NOT receive from);
             // returns undefined_node if none exists.
             nodeid_t otherRingNeighbor(uint32_t ring, nodeid_t sender);
+            // Both TWOWAY+ ring-neighbors for R (0, 1, or 2 entries).
+            std::vector<nodeid_t> ringNeighbors(uint32_t ring);
+            // Originate an UPDATE for a ring I just finished collecting.
+            void originateUpdate(uint32_t ring);
             // Cancel any inflight collect + budget timer for `ring`.
             void cancelInflight(uint32_t ring);
             // Budget-timer expiry: ring declared broken.
