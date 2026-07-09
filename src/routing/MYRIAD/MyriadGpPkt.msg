@@ -78,6 +78,10 @@ packet MyriadGpUpdate extends MyriadGpNLRI {
     uint32_t ring_chain[];
     // Single-point-of-failure count along the chain (single-node transitions).
     uint32_t spof_count;
+    // Transition-width trailer: the origin king's adjacentRings for current_ring.
+    // Non-empty only on the origin UPDATE; members store it and strip on
+    // inter-ring forward.
+    MyriadGpRingTransition widths[];
 }
 
 // DEGRADE is a direct-neighbor flood, not tied to the ring machinery.

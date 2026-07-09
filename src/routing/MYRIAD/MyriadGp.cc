@@ -312,6 +312,16 @@ void MyriadGP::originateUpdate(uint32_t ring) {
     pkt->setRrArraySize(rs.rr.size());
     for (size_t i = 0; i < rs.rr.size(); ++i) pkt->setRr(i, rs.rr[i]);
 
+    // Trailer: my (the king's) transition widths for this ring, so members can
+    // set spof_count correctly when they transition this update onward.
+    pkt->setWidthsArraySize(rs.adjacentRings.size());
+    for (size_t i = 0; i < rs.adjacentRings.size(); ++i) {
+        MyriadGpRingTransition t;
+        t.ring = rs.adjacentRings[i].ring;
+        t.isRedundant = rs.adjacentRings[i].isRedundant;
+        pkt->setWidths(i, t);
+    }
+
     // I'm a member of my other rings too: transition my own origin into them
     // now (using my adjacentRings for the width). Other members bridging the
     // same ring-pair also transition; the per-chain dup-guard absorbs overlap.
@@ -407,6 +417,21 @@ void MyriadGP::handleUpdate(MyriadGpUpdate* update, nodeid_t sender) {
                                  << "' seq=" << seq << " chain=" << formatChain(fullChain) << "\n";
         }
         return;
+    }
+
+    // Width trailer: only origin UPDATEs carry it, and its current_ring is the
+    // ring the widths describe. Overwrite my stored widths for this ring (the
+    // king's list is authoritative and complete).
+    size_t widthLen = update->getWidthsArraySize();
+    if (widthLen > 0) {
+        curRs.adjacentRings.clear();
+        curRs.adjacentRings.reserve(widthLen);
+        for (size_t i = 0; i < widthLen; ++i) {
+            auto& w = update->getWidths(i);
+            curRs.adjacentRings.push_back({ w.ring, w.isRedundant });
+        }
+        MLOG_N_DEBUG(sender) << "stored widths for ring='" << (char)curRing
+                             << "' (" << widthLen << " transitions)\n";
     }
 
     // Always forward within current_ring so the originator's lap can close.
@@ -520,8 +545,9 @@ void MyriadGP::forwardUpdateInterRing(MyriadGpUpdate* pkt, uint32_t curRing) {
             continue;
         }
 
-        // Single-node transition into R2 is an unprotected point. Until the
-        // width trailer lands, treat unknown transitions as single.
+        // Single-node transition into R2 is an unprotected point. Widths come
+        // from this ring's origin UPDATE trailer (stored in adjacentRings);
+        // unknown transitions default to single until that trailer arrives.
         bool doubleTransition = false;
         for (auto& a : rings[curRing].adjacentRings)
             if (a.ring == R2) { doubleTransition = a.isRedundant; break; }
