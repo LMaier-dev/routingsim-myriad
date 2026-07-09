@@ -5,6 +5,7 @@
 #include "routing/MYRIAD/MyriadGpPkt_m.h"
 #include <boost/container/flat_map.hpp>
 #include <unordered_map>
+#include <map>
 #include <vector>
 #include <functional>
 
@@ -28,9 +29,7 @@ namespace routingsim {
     // When packet is superseeded by a newer SN, also cancel RTX and flood this one.
     struct RingInflight {
         RingTx* tx = nullptr;
-        // seq_no is bumped per collection round and does NOT reset
-        // when tx clears, so stale returns from a completed round don't alias
-        // a new round's inflight.
+        // seq_no of the packet this inflight is circulating; matched on own-return.
         uint32_t seq_no = 0;
         // Parallel budget timer of (retryLimit+0.5)*rxmtInterval; on fire while
         // tx still set → ring declared broken.
@@ -56,9 +55,14 @@ namespace routingsim {
     struct RingState {
         std::vector<MyriadGpRr> rr; // (subnet, owner) pairs; refreshed on curSeq advance
         uint32_t curSeq = 0; // highest seq_no seen for this origin ring
-        // My Rings: the collect/update currently circulating the ring.
-        // Foreign Rings: the update we're currently forwarding for them.
-        RingInflight inflight;
+        // My own sequence for this ring, shared by COLLECT and origin-UPDATE.
+        uint32_t originSeq = 0;
+        // My collect for this ring (at most one at a time).
+        RingInflight collectInflight;
+        // Reliable UPDATE traversals I currently own in this ring, keyed by the
+        // packet's chain: empty chain = my origin-UPDATE; non-empty = a transit
+        // relay of another origin's UPDATE. Several can coexist (different chains).
+        std::map<std::vector<uint32_t>, RingInflight> updateInflights;
         std::vector<RibEntry> ribIn; // all currently-valid chains for this origin
         size_t preferred = SIZE_MAX; // index into ribIn; SIZE_MAX = none
 
@@ -104,10 +108,16 @@ namespace routingsim {
             std::vector<nodeid_t> ringNeighbors(uint32_t ring);
             // Originate an UPDATE for a ring I just finished collecting.
             void originateUpdate(uint32_t ring);
-            // Cancel any inflight collect + budget timer for `ring`.
-            void cancelInflight(uint32_t ring);
-            // Budget-timer expiry: ring declared broken.
+            // Forward an UPDATE within its current_ring (unconditional, for ACK).
+            void forwardUpdateInRing(MyriadGpUpdate* pkt, uint32_t ring, nodeid_t sender);
+            // Transition an UPDATE into each of my other rings not yet in chain.
+            void forwardUpdateInterRing(MyriadGpUpdate* pkt, uint32_t curRing);
+            // Cancel a collect inflight + its budget timer for `ring`.
+            void cancelCollect(uint32_t ring);
+            // Budget-timer expiry for a collect on `ring`: ring declared broken.
             void onCollectBudgetExpired(uint32_t ring);
+            // Budget-timer expiry for an UPDATE traversal (ring, chain).
+            void onUpdateBudgetExpired(uint32_t ring, std::vector<uint32_t> chain);
             // Retransmit budget (retransmissions after the initial send).
             static constexpr int COLLECT_RETRY_LIMIT = 3;
 

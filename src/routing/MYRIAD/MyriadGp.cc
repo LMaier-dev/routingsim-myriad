@@ -1,4 +1,5 @@
 #include "routing/MYRIAD/MyriadGp.h"
+#include <algorithm>
 
 namespace routingsim {
 
@@ -31,7 +32,7 @@ void MyriadGP::onTwoWayReached(GpNeighbor& nbr) {
             if (n.state < NSTATE_TWOWAY) continue;
             for (uint32_t r : n.sharedRings) if (r == R) { ++count; break; }
         }
-        if (count == 2 && rings[R].inflight.tx == nullptr) {
+        if (count == 2 && rings[R].collectInflight.tx == nullptr) {
             originateCollect(R, nbr.id);
         } else if (count > 2) {
             MLOG_N_WARN(nbr.id) << "ring '" << (char)R
@@ -42,12 +43,13 @@ void MyriadGP::onTwoWayReached(GpNeighbor& nbr) {
 
 void MyriadGP::originateCollect(uint32_t ring, nodeid_t to) {
     RingState& currentRingState = rings[ring];
-    currentRingState.inflight.seq_no += 1;
+    currentRingState.originSeq += 1;
+    currentRingState.collectInflight.seq_no = currentRingState.originSeq;
 
     auto* pkt = new MyriadGpCollect("Myriad_GP_Collect");
     pkt->setType(MYRIADGP_COLLECT);
     pkt->setRouter_id_src(myId);     // king_id
-    pkt->setSeq_no(currentRingState.inflight.seq_no);
+    pkt->setSeq_no(currentRingState.originSeq);
     pkt->setCurrent_ring(ring);
 
     // Insert my (subnet, myId) pairs.
@@ -70,11 +72,11 @@ void MyriadGP::originateCollect(uint32_t ring, nodeid_t to) {
 
     // Send one direction now; retransmits alternate to the other neighbor so a
     // single directional send still reaches every ring member if one side breaks.
-    sendRingReliable(currentRingState.inflight, to, to, pkt, rxmtInterval,
+    sendRingReliable(currentRingState.collectInflight, to, to, pkt, rxmtInterval,
                      COLLECT_RETRY_LIMIT, [this, ring]() { onCollectBudgetExpired(ring); });
 
     MLOG_N_INFO(to) << "originate COLLECT ring='" << (char)ring
-        << "' seq=" << currentRingState.inflight.seq_no << "\n";
+        << "' seq=" << currentRingState.originSeq << "\n";
 }
 
 void MyriadGP::sendRingReliable(RingInflight& fl, nodeid_t primary, nodeid_t fallback,
@@ -132,10 +134,10 @@ void MyriadGP::cancelRingReliable(RingInflight& fl) {
     }
 }
 
-void MyriadGP::cancelInflight(uint32_t ring) {
+void MyriadGP::cancelCollect(uint32_t ring) {
     auto it = rings.find(ring);
     if (it == rings.end()) return;
-    cancelRingReliable(it->second.inflight);
+    cancelRingReliable(it->second.collectInflight);
 }
 
 void MyriadGP::onCollectBudgetExpired(uint32_t ring) {
@@ -143,11 +145,25 @@ void MyriadGP::onCollectBudgetExpired(uint32_t ring) {
     // This runs from the budgetTimer's own callback; the harness frees that
     // message after we return, so drop our handle before cancelRingReliable
     // (which would otherwise cancelAndDelete the message we're executing).
-    currentRingState.inflight.budgetTimer = nullptr;
-    if (currentRingState.inflight.tx == nullptr) return; // already resolved
-    cancelRingReliable(currentRingState.inflight);
+    currentRingState.collectInflight.budgetTimer = nullptr;
+    if (currentRingState.collectInflight.tx == nullptr) return; // already resolved
+    cancelRingReliable(currentRingState.collectInflight);
     MLOG_WARN() << "ring send budget expired ring='" << (char)ring
-                << "' seq=" << currentRingState.inflight.seq_no << " — ring broken\n";
+                << "' seq=" << currentRingState.collectInflight.seq_no << " — ring broken\n";
+    // TODO: originate DEGRADE for this ring (beacon mode).
+}
+
+void MyriadGP::onUpdateBudgetExpired(uint32_t ring, std::vector<uint32_t> chain) {
+    auto rit = rings.find(ring);
+    if (rit == rings.end()) return;
+    auto it = rit->second.updateInflights.find(chain);
+    if (it == rit->second.updateInflights.end()) return;
+    // Drop the budget-timer handle first (see onCollectBudgetExpired).
+    it->second.budgetTimer = nullptr;
+    cancelRingReliable(it->second);
+    rit->second.updateInflights.erase(it);
+    MLOG_WARN() << "UPDATE traversal budget expired ring='" << (char)ring
+                << "' chain-len=" << chain.size() << " — ring broken\n";
     // TODO: originate DEGRADE for this ring (beacon mode).
 }
 
@@ -158,7 +174,7 @@ void MyriadGP::onNeighborDead(GpNeighbor& nbr, bool /*wasFull*/) {
     // budget, the collect completes; otherwise the budget timer fires DEGRADE.
     // If an inflight already exists, do nothing and let its budget run.
     for (uint32_t R : nbr.sharedRings) {
-        if (rings[R].inflight.tx != nullptr) continue;
+        if (rings[R].collectInflight.tx != nullptr) continue;
         MLOG_N_INFO(nbr.id) << "grace COLLECT ring='" << (char)R
                             << "' to dead neighbor\n";
         originateCollect(R, nbr.id);
@@ -203,8 +219,8 @@ void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t sender) {
 
     // Own return — circular ACK completes the collection.
     if (king == myId) {
-        if (currentRingState.inflight.tx != nullptr && seq == currentRingState.inflight.seq_no) {
-            cancelInflight(R);
+        if (currentRingState.collectInflight.tx != nullptr && seq == currentRingState.collectInflight.seq_no) {
+            cancelCollect(R);
 
             // Snapshot the collected data onto ring state.
             currentRingState.rr.clear();
@@ -232,18 +248,18 @@ void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t sender) {
             originateUpdate(R);
         } else {
             MLOG_N_WARN(sender) << "stale own COLLECT return ring='" << (char)R
-                                << "' seq=" << seq << " (cur=" << currentRingState.inflight.seq_no << ")\n";
+                                << "' seq=" << seq << " (cur=" << currentRingState.collectInflight.seq_no << ")\n";
         }
         return;
     }
 
-    // Contention: I have an inflight for this ring → someone else is also King.
-    if (currentRingState.inflight.tx != nullptr) {
+    // Contention: I have a collect inflight for this ring → someone else is also King.
+    if (currentRingState.collectInflight.tx != nullptr) {
         if (king > myId) {
             // Yield: cancel my transmit and become a plain forwarder.
             MLOG_N_INFO(sender) << "yield COLLECT ring='" << (char)R
                                 << "' to king=" << (int)king << "\n";
-            cancelInflight(R);
+            cancelCollect(R);
             insertAndForwardCollect(collect, R, sender);
         } else {
             // Ignore lower-id king; my collection continues.
@@ -288,7 +304,7 @@ void MyriadGP::originateUpdate(uint32_t ring) {
     auto* pkt = new MyriadGpUpdate("Myriad_GP_Update");
     pkt->setType(MYRIADGP_UPDATE);
     pkt->setRouter_id_src(myId);          // ringking for this ring traversal
-    pkt->setSeq_no(rs.inflight.seq_no);   // same seq as the collect round
+    pkt->setSeq_no(rs.originSeq);         // same seq as the collect round
     pkt->setCurrent_ring(ring);
     pkt->setRing_chainArraySize(0);       // origin: empty chain
     pkt->setSpof_count(0);
@@ -296,11 +312,20 @@ void MyriadGP::originateUpdate(uint32_t ring) {
     pkt->setRrArraySize(rs.rr.size());
     for (size_t i = 0; i < rs.rr.size(); ++i) pkt->setRr(i, rs.rr[i]);
 
-    sendRingReliable(rs.inflight, nbrs[0], nbrs[1], pkt, rxmtInterval,
-                     COLLECT_RETRY_LIMIT, [this, ring]() { onCollectBudgetExpired(ring); });
+    // I'm a member of my other rings too: transition my own origin into them
+    // now (using my adjacentRings for the width). Other members bridging the
+    // same ring-pair also transition; the per-chain dup-guard absorbs overlap.
+    forwardUpdateInterRing(pkt, ring);
+
+    // Origin-UPDATE lives in the empty-chain inflight slot.
+    std::vector<uint32_t> emptyChain;
+    RingInflight& fl = rs.updateInflights[emptyChain];
+    fl.seq_no = rs.originSeq;
+    sendRingReliable(fl, nbrs[0], nbrs[1], pkt, rxmtInterval, COLLECT_RETRY_LIMIT,
+                     [this, ring, emptyChain]() { onUpdateBudgetExpired(ring, emptyChain); });
 
     MLOG_N_INFO(nbrs[0]) << "originate UPDATE ring='" << (char)ring
-        << "' seq=" << rs.inflight.seq_no << " rr=" << rs.rr.size() << "\n";
+        << "' seq=" << rs.originSeq << " rr=" << rs.rr.size() << "\n";
 }
 
 void MyriadGP::insertAndForwardCollect(MyriadGpCollect* pkt, uint32_t R, nodeid_t sender) {
@@ -351,9 +376,180 @@ void MyriadGP::insertAndForwardCollect(MyriadGpCollect* pkt, uint32_t R, nodeid_
                      << " king=" << (int)pkt->getRouter_id_src() << "\n";
 }
 
-void MyriadGP::handleUpdate(MyriadGpUpdate* /*update*/, nodeid_t from) {
-    // TODO: install / dedup / forward path-vector update.
-    MLOG_N_DEBUG(from) << "Received Update (handler stub)\n";
+void MyriadGP::handleUpdate(MyriadGpUpdate* update, nodeid_t sender) {
+    uint32_t curRing = update->getCurrent_ring();
+    nodeid_t king = update->getRouter_id_src();
+    uint32_t seq = update->getSeq_no();
+
+    // Chain is prepend-order; origin = chain.back(), or curRing if chain empty.
+    size_t chainLen = update->getRing_chainArraySize();
+    uint32_t origin = chainLen ? update->getRing_chain(chainLen - 1) : curRing;
+
+    // Materialise the chain (the identity of this ring traversal).
+    std::vector<uint32_t> chain;
+    chain.reserve(chainLen);
+    for (size_t i = 0; i < chainLen; ++i) chain.push_back(update->getRing_chain(i));
+
+    RingState& curRs = rings[curRing];
+
+    // Own ACK: my own traversal (this chain, in this ring) returned on the other
+    // interface. Cancel that inflight, do NOT re-forward.
+    if (king == myId) {
+        auto it = curRs.updateInflights.find(chain);
+        if (it != curRs.updateInflights.end() && it->second.tx != nullptr
+                && seq == it->second.seq_no) {
+            cancelRingReliable(it->second);
+            curRs.updateInflights.erase(it);
+            std::vector<uint32_t> fullChain;
+            fullChain.push_back(curRing);
+            for (uint32_t c : chain) fullChain.push_back(c);
+            MLOG_N_DEBUG(sender) << "UPDATE circular-ACK ring='" << (char)curRing
+                                 << "' seq=" << seq << " chain=" << formatChain(fullChain) << "\n";
+        }
+        return;
+    }
+
+    // Always forward within current_ring so the originator's lap can close.
+    forwardUpdateInRing(update, curRing, sender);
+
+    RingState& originRs = rings[origin];
+
+    // Full path identity = current_ring :: packet chain. The packet chain omits
+    // current_ring (a router never appends its own ring within the ring); we
+    // prepend it so RIB entries are globally unique paths, not ring-relative.
+    std::vector<uint32_t> fullChain;
+    fullChain.reserve(chainLen + 1);
+    fullChain.push_back(curRing);
+    for (uint32_t c : chain) fullChain.push_back(c);
+
+    // Dedup on (origin, fullChain): already forwarded at >= seq → the intra-ring
+    // forward above is all that's needed.
+    RibEntry* entry = nullptr;
+    for (auto& e : originRs.ribIn) if (e.chain == fullChain) { entry = &e; break; }
+    if (entry && entry->seq_no >= seq) {
+        MLOG_N_DEBUG(sender) << "UPDATE dup origin='" << (char)origin
+                             << "' seq=" << seq << " chain=" << formatChain(fullChain)
+                             << " (stored " << entry->seq_no << ")\n";
+        return;
+    }
+
+    // Seq advance: newer generation for this origin → purge older chains and
+    // refresh the authoritative rr from this packet.
+    if (seq > originRs.curSeq) {
+        originRs.curSeq = seq;
+        originRs.ribIn.erase(
+            std::remove_if(originRs.ribIn.begin(), originRs.ribIn.end(),
+                [seq](const RibEntry& e) { return e.seq_no < seq; }),
+            originRs.ribIn.end());
+        entry = nullptr;
+        for (auto& e : originRs.ribIn) if (e.chain == fullChain) { entry = &e; break; }
+
+        originRs.rr.clear();
+        originRs.rr.reserve(update->getRrArraySize());
+        for (size_t i = 0; i < update->getRrArraySize(); ++i)
+            originRs.rr.push_back(update->getRr(i));
+    }
+
+    // Insert or replace the RIB entry for this chain.
+    if (entry) {
+        entry->seq_no = seq;
+        entry->spof_count = update->getSpof_count();
+    } else {
+        originRs.ribIn.push_back({ fullChain, seq, update->getSpof_count() });
+    }
+
+    MLOG_N_INFO(sender) << "UPDATE store origin='" << (char)origin
+                        << "' seq=" << seq << " chain=" << formatChain(fullChain)
+                        << " spof=" << update->getSpof_count()
+                        << " ribIn=" << originRs.ribIn.size() << "\n";
+
+    // TODO: policy → preferred + materialized routes.
+
+    // Loop prevention: if any of my rings is already in the packet chain, I've
+    // been here — the intra-ring forward above suffices, don't transition again.
+    // (Check the packet chain, NOT fullChain: current_ring is always my ring.)
+    for (uint32_t myRing : selfRings)
+        for (uint32_t c : chain) if (c == myRing) return;
+
+    forwardUpdateInterRing(update, curRing);
+}
+
+void MyriadGP::forwardUpdateInRing(MyriadGpUpdate* pkt, uint32_t ring, nodeid_t sender) {
+    nodeid_t to = otherRingNeighbor(ring, sender);
+    if (to == undefined_node) return; // no onward neighbor in this ring
+    auto np = std::make_unique<NodePkt>("Myriad_GP_Update_Pkt");
+    np->setType(MYRIADGP_PACKET_TYPE);
+    np->encapsulate(pkt->dup());
+    sendToNode(to, std::move(np));
+    MLOG_N_DEBUG(to) << "forward UPDATE in-ring='" << (char)ring
+                     << "' seq=" << pkt->getSeq_no() << "\n";
+}
+
+void MyriadGP::forwardUpdateInterRing(MyriadGpUpdate* pkt, uint32_t curRing) {
+    size_t chainLen = pkt->getRing_chainArraySize();
+
+    for (uint32_t R2 : selfRings) {
+        if (R2 == curRing) continue;
+        bool inChain = false;
+        for (size_t i = 0; i < chainLen; ++i)
+            if (pkt->getRing_chain(i) == R2) { inChain = true; break; }
+        if (inChain) continue;
+
+        RingState& rs2 = rings[R2];
+
+        std::vector<nodeid_t> nbrs = ringNeighbors(R2);
+        if (nbrs.size() < 2) {
+            // Need both ring-neighbors to traverse R2 (primary + fallback).
+            // Transient at boot; another bridge or a later round covers it.
+            MLOG_DEBUG() << "UPDATE transition into ring='" << (char)R2
+                         << "' skipped: only " << nbrs.size() << " ring-neighbor(s)\n";
+            continue;
+        }
+
+        // Prepend curRing to build the forwarded chain (also this traversal's key).
+        std::vector<uint32_t> fwdChain;
+        fwdChain.reserve(chainLen + 1);
+        fwdChain.push_back(curRing);
+        for (size_t i = 0; i < chainLen; ++i) fwdChain.push_back(pkt->getRing_chain(i));
+
+        // A traversal for this exact chain may already be inflight in R2 (e.g. a
+        // double transition where both bridges relay the same chain). Skip the dup.
+        if (rs2.updateInflights.count(fwdChain)) {
+            MLOG_N_DEBUG(nbrs[0]) << "UPDATE transition dup into ring='" << (char)R2
+                                  << "' chain-len=" << fwdChain.size() << "; skipping\n";
+            continue;
+        }
+
+        // Single-node transition into R2 is an unprotected point. Until the
+        // width trailer lands, treat unknown transitions as single.
+        bool doubleTransition = false;
+        for (auto& a : rings[curRing].adjacentRings)
+            if (a.ring == R2) { doubleTransition = a.isRedundant; break; }
+
+        auto* fwd = new MyriadGpUpdate("Myriad_GP_Update");
+        fwd->setType(MYRIADGP_UPDATE);
+        fwd->setRouter_id_src(myId);          // I own this new ring traversal
+        fwd->setSeq_no(pkt->getSeq_no());
+        fwd->setCurrent_ring(R2);
+        fwd->setSpof_count(pkt->getSpof_count() + (doubleTransition ? 0 : 1));
+
+        fwd->setRing_chainArraySize(fwdChain.size());
+        for (size_t i = 0; i < fwdChain.size(); ++i) fwd->setRing_chain(i, fwdChain[i]);
+
+        // Carry the same rr.
+        size_t rrLen = pkt->getRrArraySize();
+        fwd->setRrArraySize(rrLen);
+        for (size_t i = 0; i < rrLen; ++i) fwd->setRr(i, pkt->getRr(i));
+
+        RingInflight& fl = rs2.updateInflights[fwdChain];
+        fl.seq_no = pkt->getSeq_no();
+        sendRingReliable(fl, nbrs[0], nbrs[1], fwd, rxmtInterval, COLLECT_RETRY_LIMIT,
+                         [this, R2, fwdChain]() { onUpdateBudgetExpired(R2, fwdChain); });
+
+        MLOG_N_INFO(nbrs[0]) << "UPDATE transition into ring='" << (char)R2
+            << "' seq=" << pkt->getSeq_no() << " chain=" << formatChain(fwdChain)
+            << " spof=" << fwd->getSpof_count() << "\n";
+    }
 }
 
 void MyriadGP::handleDegrade(MyriadGpDegrade* /*degrade*/, nodeid_t from) {
@@ -370,7 +566,10 @@ void MyriadGP::reset() {
     }
     neighbors.clear();
     for (auto& [rid, currentRingState] : rings) {
-        cancelRingReliable(currentRingState.inflight);
+        cancelRingReliable(currentRingState.collectInflight);
+        for (auto& [chain, fl] : currentRingState.updateInflights)
+            cancelRingReliable(fl);
+        currentRingState.updateInflights.clear();
     }
     rings.clear();
     degrades.clear();

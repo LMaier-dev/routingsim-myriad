@@ -6,6 +6,7 @@
 #include <cstring>
 #include <sstream>
 #include <string>
+#include <vector>
 
 namespace routingsim {
 
@@ -77,6 +78,16 @@ class MyriadHelper : public Protocol {
 
         static MyriadLogLevel parseLogLevel(const char* s);
         static const char* levelColor(const char* level);
+        
+        static std::string formatChain(const std::vector<uint32_t>& chain) {
+            std::string s = "[";
+            for (size_t i = 0; i < chain.size(); ++i) {
+                if (i) s += ',';
+                s += (char)chain[i];
+            }
+            s += ']';
+            return s;
+        }
 
         TimerMsg* addOneShotTimer(simtime_t delay, TimerMsg::cbfunc_t callback) {
             auto* msg = new TimerMsg(-1, callback);
