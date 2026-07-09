@@ -14,6 +14,9 @@ void MyriadGP::onInitialize() {
     mySubnets = { (static_cast<uint32_t>(myId) << 8) | 0x01,
                   (static_cast<uint32_t>(myId) << 8) | 0x02 };
 
+    refreshInterval = par("refreshInterval");
+    refreshJitter = par("refreshJitter");
+
     MLOG_INFO() << "MyriadGP up\n";
 
     // Periodically send hellos to all neighbors. The hello / dead / two-way
@@ -77,6 +80,51 @@ void MyriadGP::originateCollect(uint32_t ring, nodeid_t to) {
 
     MLOG_N_INFO(to) << "originate COLLECT ring='" << (char)ring
         << "' seq=" << currentRingState.originSeq << "\n";
+}
+
+void MyriadGP::reoriginateCollect(uint32_t ring) {
+    // Pick either ring-neighbor as the send target (alternation covers the
+    // other direction on retransmit); skip if the ring isn't fully seen.
+    std::vector<nodeid_t> nbrs = ringNeighbors(ring);
+    if (nbrs.empty()) {
+        MLOG_DEBUG() << "re-collect ring='" << (char)ring
+                     << "' skipped: no ring-neighbors\n";
+        return;
+    }
+    if (rings[ring].collectInflight.tx != nullptr) return; // one at a time
+    originateCollect(ring, nbrs[0]);
+}
+
+void MyriadGP::startRefresh(uint32_t ring) {
+    RingState& rs = rings[ring];
+    if (rs.watchdogTimer) { cancelAndDelete(rs.watchdogTimer); rs.watchdogTimer = nullptr; }
+    if (rs.refreshTimer)  { cancelAndDelete(rs.refreshTimer);  rs.refreshTimer = nullptr; }
+    rs.refreshTimer = addOneShotTimer(refreshInterval, [this, ring](short) {
+        rings[ring].refreshTimer = nullptr;
+        reoriginateCollect(ring);
+        if (rings[ring].isKing) startRefresh(ring); // reschedule
+        return false;
+    });
+}
+
+void MyriadGP::startWatchdog(uint32_t ring) {
+    RingState& rs = rings[ring];
+    if (rs.watchdogTimer) { cancelAndDelete(rs.watchdogTimer); rs.watchdogTimer = nullptr; }
+    simtime_t delay = 2 * refreshInterval + uniform(0, refreshJitter);
+    rs.watchdogTimer = addOneShotTimer(delay, [this, ring](short) {
+        rings[ring].watchdogTimer = nullptr;
+        MLOG_INFO() << "watchdog fired for ring='" << (char)ring
+                    << "' — starting coup\n";
+        reoriginateCollect(ring); // become king only on own-return
+        return false;
+    });
+}
+
+void MyriadGP::cancelKingship(uint32_t ring) {
+    RingState& rs = rings[ring];
+    rs.isKing = false;
+    if (rs.refreshTimer) { cancelAndDelete(rs.refreshTimer); rs.refreshTimer = nullptr; }
+    startWatchdog(ring);
 }
 
 void MyriadGP::sendRingReliable(RingInflight& fl, nodeid_t primary, nodeid_t fallback,
@@ -246,6 +294,14 @@ void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t sender) {
             EV << "]\n";
 
             originateUpdate(R);
+
+            // Winning the lap makes me (or keeps me) king: run the refresh
+            // timer, stop watching for someone else.
+            if (!currentRingState.isKing) {
+                currentRingState.isKing = true;
+                MLOG_INFO() << "became king of ring='" << (char)R << "'\n";
+            }
+            startRefresh(R);
         } else {
             MLOG_N_WARN(sender) << "stale own COLLECT return ring='" << (char)R
                                 << "' seq=" << seq << " (cur=" << currentRingState.collectInflight.seq_no << ")\n";
@@ -253,16 +309,22 @@ void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t sender) {
         return;
     }
 
-    // Contention: I have a collect inflight for this ring → someone else is also King.
-    if (currentRingState.collectInflight.tx != nullptr) {
+    // A COLLECT from another node proves that ring's king is alive: reset my
+    // watchdog so I don't launch a coup. Kings don't watch (they originate).
+    if (!currentRingState.isKing) startWatchdog(R);
+
+    // Contention: I'm also asserting this ring if I have a collect inflight or
+    // I'm the established king. Higher id wins; I yield/demote to it, or I hold
+    // and ignore a lower id (my next collect makes them yield).
+    if (currentRingState.collectInflight.tx != nullptr || currentRingState.isKing) {
         if (king > myId) {
-            // Yield: cancel my transmit and become a plain forwarder.
             MLOG_N_INFO(sender) << "yield COLLECT ring='" << (char)R
                                 << "' to king=" << (int)king << "\n";
-            cancelCollect(R);
+            cancelCollect(R);                     // no-op if no inflight
+            if (currentRingState.isKing) cancelKingship(R);
             insertAndForwardCollect(collect, R, sender);
         } else {
-            // Ignore lower-id king; my collection continues.
+            // Ignore lower-id king; my collection/kingship stands.
             MLOG_N_DEBUG(sender) << "ignore COLLECT ring='" << (char)R
                                  << "' from lower king=" << (int)king << "\n";
         }
@@ -596,6 +658,14 @@ void MyriadGP::reset() {
         for (auto& [chain, fl] : currentRingState.updateInflights)
             cancelRingReliable(fl);
         currentRingState.updateInflights.clear();
+        if (currentRingState.refreshTimer) {
+            cancelAndDelete(currentRingState.refreshTimer);
+            currentRingState.refreshTimer = nullptr;
+        }
+        if (currentRingState.watchdogTimer) {
+            cancelAndDelete(currentRingState.watchdogTimer);
+            currentRingState.watchdogTimer = nullptr;
+        }
     }
     rings.clear();
     degrades.clear();

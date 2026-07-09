@@ -68,6 +68,11 @@ namespace routingsim {
 
         // derived from recent Collect lap; used for spof_count on inter-ring forward
         std::vector<AdjacentRingState> adjacentRings;
+
+        // Persistent kingship + periodic refresh (king) / liveness watchdog (member).
+        bool isKing = false;
+        TimerMsg* refreshTimer = nullptr;   // king only: periodic re-collect
+        TimerMsg* watchdogTimer = nullptr;  // member only: coup if king goes silent
     };
 
     // A materialized routing-table entry.
@@ -97,6 +102,12 @@ namespace routingsim {
 
             //  Originate a COLLECT for ring R towards `to`.
             void originateCollect(uint32_t ring, nodeid_t to);
+            // Originate a fresh COLLECT for a ring I own (picks a ring-neighbor).
+            void reoriginateCollect(uint32_t ring);
+            // Persistent-king refresh timer and member liveness watchdog.
+            void startRefresh(uint32_t ring);
+            void startWatchdog(uint32_t ring);
+            void cancelKingship(uint32_t ring);
             // Insert my (subnet,myId) pairs + update transitions + forward to
             // the other ring-neighbor for R. `sender` is the immediate hop we
             // received from (NOT the king), used to pick the other neighbor.
@@ -133,6 +144,9 @@ namespace routingsim {
             // (subnet, myId) pairs derived once at onInitialize; reused as
             // both the local-subnet source at origination and on insert.
             std::vector<uint32_t> mySubnets;
+            // King re-collect period, and member watchdog jitter bound.
+            simtime_t refreshInterval;
+            simtime_t refreshJitter;
 
         private:
             std::unordered_map<uint32_t /*ring*/, RingState> rings;
