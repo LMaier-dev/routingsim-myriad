@@ -35,7 +35,8 @@ void MyriadGP::onTwoWayReached(GpNeighbor& nbr) {
             if (n.state < NSTATE_TWOWAY) continue;
             for (uint32_t r : n.sharedRings) if (r == R) { ++count; break; }
         }
-        if (count == 2 && rings[R].collectInflight.tx == nullptr) {
+        if (count > rings[R].maxRingNeighbors) rings[R].maxRingNeighbors = count;
+        if (count >= 1 && count <= 2 && rings[R].collectInflight.tx == nullptr) {
             originateCollect(R, nbr.id);
         } else if (count > 2) {
             MLOG_N_WARN(nbr.id) << "ring '" << (char)R
@@ -357,11 +358,14 @@ void MyriadGP::originateUpdate(uint32_t ring) {
     RingState& rs = rings[ring];
 
     std::vector<nodeid_t> nbrs = ringNeighbors(ring);
-    if (nbrs.size() < 2) {
+    if (nbrs.empty()) {
         MLOG_WARN() << "originate UPDATE ring='" << (char)ring
-                    << "' but <2 ring-neighbors; skipping\n";
+                    << "' but no ring-neighbors; skipping\n";
         return;
     }
+    // 2-node ring has a single neighbor: probe mode (primary == fallback).
+    nodeid_t primary = nbrs[0];
+    nodeid_t fallback = nbrs.size() > 1 ? nbrs[1] : nbrs[0];
 
     auto* pkt = new MyriadGpUpdate("Myriad_GP_Update");
     pkt->setType(MYRIADGP_UPDATE);
@@ -393,7 +397,7 @@ void MyriadGP::originateUpdate(uint32_t ring) {
     std::vector<uint32_t> emptyChain;
     RingInflight& fl = rs.updateInflights[emptyChain];
     fl.seq_no = rs.originSeq;
-    sendRingReliable(fl, nbrs[0], nbrs[1], pkt, rxmtInterval, COLLECT_RETRY_LIMIT,
+    sendRingReliable(fl, primary, fallback, pkt, rxmtInterval, COLLECT_RETRY_LIMIT,
                      [this, ring, emptyChain]() { onUpdateBudgetExpired(ring, emptyChain); });
 
     MLOG_N_INFO(nbrs[0]) << "originate UPDATE ring='" << (char)ring
@@ -432,12 +436,21 @@ void MyriadGP::insertAndForwardCollect(MyriadGpCollect* pkt, uint32_t R, nodeid_
         }
     }
 
-    // 3. Forward to the OTHER ring-neighbor for R.
+    // 3. Forward to the OTHER ring-neighbor for R. A genuine 2-node ring has
+    // no other neighbor: echo back to the sender so the king still gets its
+    // circular ACK (with 2 spofs).
     nodeid_t to = otherRingNeighbor(R, sender);
     if (to == undefined_node) {
-        MLOG_N_WARN(sender) << "no other ring-neighbor for ring='" << (char)R
-                            << "'; dropping COLLECT\n";
-        return;
+        if (rings[R].maxRingNeighbors <= 1) {
+            to = sender;
+            MLOG_N_DEBUG(sender) << "echo COLLECT ring='" << (char)R
+                                 << "' (2-node ring)\n";
+        } else {
+            // using high-water ring neighbor count
+            MLOG_N_WARN(sender) << "no other ring-neighbor for degraded ring='"
+                                << (char)R << "'; dropping COLLECT\n";
+            return;
+        }
     }
     auto np = std::make_unique<NodePkt>("Myriad_GP_Collect_Pkt");
     np->setType(MYRIADGP_PACKET_TYPE);
@@ -574,7 +587,12 @@ void MyriadGP::handleUpdate(MyriadGpUpdate* update, nodeid_t sender) {
 
 void MyriadGP::forwardUpdateInRing(MyriadGpUpdate* pkt, uint32_t ring, nodeid_t sender) {
     nodeid_t to = otherRingNeighbor(ring, sender);
-    if (to == undefined_node) return; // no onward neighbor in this ring
+    if (to == undefined_node) {
+        // Genuine 2-node ring: echo back so the king's lap closes. Degraded
+        // larger ring: drop, let the budget expire → DEGRADE.
+        if (rings[ring].maxRingNeighbors > 1) return;
+        to = sender;
+    }
     auto np = std::make_unique<NodePkt>("Myriad_GP_Update_Pkt");
     np->setType(MYRIADGP_PACKET_TYPE);
     np->encapsulate(pkt->dup());
@@ -607,13 +625,15 @@ void MyriadGP::forwardUpdateInterRing(MyriadGpUpdate* pkt, uint32_t curRing) {
         RingState& rs2 = rings[R2];
 
         std::vector<nodeid_t> nbrs = ringNeighbors(R2);
-        if (nbrs.size() < 2) {
-            // Need both ring-neighbors to traverse R2 (primary + fallback).
-            // Transient at boot; another bridge or a later round covers it.
+        if (nbrs.empty()) {
+            // No neighbor in R2 yet: transient at boot; a later round covers it.
             MLOG_DEBUG() << "UPDATE transition into ring='" << (char)R2
-                         << "' skipped: only " << nbrs.size() << " ring-neighbor(s)\n";
+                         << "' skipped: no ring-neighbor\n";
             continue;
         }
+        // 2-node target ring: single neighbor, probe mode (primary == fallback).
+        nodeid_t primary = nbrs[0];
+        nodeid_t fallback = nbrs.size() > 1 ? nbrs[1] : nbrs[0];
 
         // Prepend curRing to build the forwarded chain (also this traversal's key).
         std::vector<uint32_t> fwdChain;
@@ -653,10 +673,10 @@ void MyriadGP::forwardUpdateInterRing(MyriadGpUpdate* pkt, uint32_t curRing) {
 
         RingInflight& fl = rs2.updateInflights[fwdChain];
         fl.seq_no = pkt->getSeq_no();
-        sendRingReliable(fl, nbrs[0], nbrs[1], fwd, rxmtInterval, COLLECT_RETRY_LIMIT,
+        sendRingReliable(fl, primary, fallback, fwd, rxmtInterval, COLLECT_RETRY_LIMIT,
                          [this, R2, fwdChain]() { onUpdateBudgetExpired(R2, fwdChain); });
 
-        MLOG_N_INFO(nbrs[0]) << "UPDATE transition into ring='" << (char)R2
+        MLOG_N_INFO(primary) << "UPDATE transition into ring='" << (char)R2
             << "' seq=" << pkt->getSeq_no() << " chain=" << formatChain(fwdChain)
             << " spof=" << fwd->getSpof_count() << "\n";
 

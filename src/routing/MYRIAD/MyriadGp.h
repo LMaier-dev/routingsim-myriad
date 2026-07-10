@@ -73,6 +73,10 @@ namespace routingsim {
         bool isKing = false;
         TimerMsg* refreshTimer = nullptr;   // king only: periodic re-collect
         TimerMsg* watchdogTimer = nullptr;  // member only: coup if king goes silent
+        // High-water mark of ring-neighbors ever seen. ==1 means a genuine
+        // 2-node ring (echo to close the lap); dropping from 2 to 1 is
+        // degradation (let the lap fail so DEGRADE fires).
+        size_t maxRingNeighbors = 0;
     };
 
     // A materialized routing-table entry.
