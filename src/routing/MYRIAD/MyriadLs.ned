@@ -12,6 +12,9 @@ simple myriadls extends routingsim.foundation.Protocol
         // Max number of LSA headers per DBD packet, or LsaRequests per LSR packet.
         int dbExchangeBatchSize = default(10);
 
+        // Ring membership, e.g. "A,B". Set per node via **.NodeN.*.ringLabel.
+        string ringLabel = default("");
+
         // logging: DEBUG | INFO | WARN | ERROR
         string logLevel = default("DEBUG");
         // ANSI-color the log prefix by level (Cmdenv terminal only; off for log files / Qtenv)

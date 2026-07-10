@@ -63,17 +63,9 @@ namespace routingsim {
             virtual void onNeighborDead(N& /*nbr*/, bool /*wasFull*/) {}
 
             void initSelfRings() {
-                // TODO: derive this from Daniels Ring Topo algorithm
-                switch (myId) {
-                    case 0: selfRingsLabel = "A";   break;
-                    case 1: selfRingsLabel = "A,B"; break;
-                    case 2: selfRingsLabel = "B,C"; break;
-                    case 3: selfRingsLabel = "A,B"; break;
-                    case 4: selfRingsLabel = "B";   break;
-                    case 5: selfRingsLabel = "C";   break;
-                    case 6: selfRingsLabel = "B,C"; break;
-                    default: selfRingsLabel = "";   break;
-                }
+                // Ring membership from the ringLabel param, e.g. "A,B".
+                // Set per node via **.NodeN.*.ringLabel
+                selfRingsLabel = hasPar("ringLabel") ? par("ringLabel").stdstringValue() : "";
                 selfRings.clear();
                 std::stringstream ss(selfRingsLabel);
                 std::string tok;

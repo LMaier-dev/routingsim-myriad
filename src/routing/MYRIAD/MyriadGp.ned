@@ -16,6 +16,11 @@ simple myriadgp extends routingsim.foundation.Protocol
         double refreshInterval @unit(s) = default(30s);
         double refreshJitter @unit(s) = default(5s);
 
+        // Ring membership override, e.g. "A,B". Empty = use the built-in
+        // per-id table. Set per node via **.NodeN.*.ringLabel or a topology
+        // node property.
+        string ringLabel = default("");
+
         // logging: DEBUG | INFO | WARN | ERROR
         string logLevel = default("DEBUG");
         // ANSI-color the log prefix by level (Cmdenv terminal only; off for log files / Qtenv)
