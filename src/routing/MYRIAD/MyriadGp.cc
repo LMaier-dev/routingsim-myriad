@@ -39,7 +39,7 @@ void MyriadGP::onTwoWayReached(GpNeighbor& nbr) {
         if (count >= 1 && count <= 2 && rings[R].collectInflight.tx == nullptr) {
             originateCollect(R, nbr.id);
         } else if (count > 2) {
-            MLOG_N_WARN(nbr.id) << "ring '" << (char)R
+            MLOG_N_WARN(nbr.id) << "ring '" << R
                 << "' has >2 ring-neighbors (misconfig); ignoring\n";
         }
     }
@@ -79,7 +79,7 @@ void MyriadGP::originateCollect(uint32_t ring, nodeid_t to) {
     sendRingReliable(currentRingState.collectInflight, to, to, pkt, rxmtInterval,
                      COLLECT_RETRY_LIMIT, [this, ring]() { onCollectBudgetExpired(ring); });
 
-    MLOG_N_INFO(to) << "originate COLLECT ring='" << (char)ring
+    MLOG_N_INFO(to) << "originate COLLECT ring='" << ring
         << "' seq=" << currentRingState.originSeq << "\n";
 }
 
@@ -88,7 +88,7 @@ void MyriadGP::reoriginateCollect(uint32_t ring) {
     // other direction on retransmit); skip if the ring isn't fully seen.
     std::vector<nodeid_t> nbrs = ringNeighbors(ring);
     if (nbrs.empty()) {
-        MLOG_DEBUG() << "re-collect ring='" << (char)ring
+        MLOG_DEBUG() << "re-collect ring='" << ring
                      << "' skipped: no ring-neighbors\n";
         return;
     }
@@ -114,7 +114,7 @@ void MyriadGP::startWatchdog(uint32_t ring) {
     simtime_t delay = 2 * refreshInterval + uniform(0, refreshJitter);
     rs.watchdogTimer = addOneShotTimer(delay, [this, ring](short) {
         rings[ring].watchdogTimer = nullptr;
-        MLOG_INFO() << "watchdog fired for ring='" << (char)ring
+        MLOG_INFO() << "watchdog fired for ring='" << ring
                     << "' — starting coup\n";
         reoriginateCollect(ring); // become king only on own-return
         return false;
@@ -197,7 +197,7 @@ void MyriadGP::onCollectBudgetExpired(uint32_t ring) {
     currentRingState.collectInflight.budgetTimer = nullptr;
     if (currentRingState.collectInflight.tx == nullptr) return; // already resolved
     cancelRingReliable(currentRingState.collectInflight);
-    MLOG_WARN() << "ring send budget expired ring='" << (char)ring
+    MLOG_WARN() << "ring send budget expired ring='" << ring
                 << "' seq=" << currentRingState.collectInflight.seq_no << " — ring broken\n";
     // TODO: originate DEGRADE for this ring (beacon mode).
 }
@@ -211,7 +211,7 @@ void MyriadGP::onUpdateBudgetExpired(uint32_t ring, std::vector<uint32_t> chain)
     it->second.budgetTimer = nullptr;
     cancelRingReliable(it->second);
     rit->second.updateInflights.erase(it);
-    MLOG_WARN() << "UPDATE traversal budget expired ring='" << (char)ring
+    MLOG_WARN() << "UPDATE traversal budget expired ring='" << ring
                 << "' chain-len=" << chain.size() << " — ring broken\n";
     // TODO: originate DEGRADE for this ring (beacon mode).
 }
@@ -224,7 +224,7 @@ void MyriadGP::onNeighborDead(GpNeighbor& nbr, bool /*wasFull*/) {
     // If an inflight already exists, do nothing and let its budget run.
     for (uint32_t R : nbr.sharedRings) {
         if (rings[R].collectInflight.tx != nullptr) continue;
-        MLOG_N_INFO(nbr.id) << "grace COLLECT ring='" << (char)R
+        MLOG_N_INFO(nbr.id) << "grace COLLECT ring='" << R
                             << "' to dead neighbor\n";
         originateCollect(R, nbr.id);
     }
@@ -284,13 +284,13 @@ void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t sender) {
                 currentRingState.adjacentRings.push_back({ t.ring, t.isRedundant });
             }
 
-            MLOG_INFO() << "COLLECT complete ring='" << (char)R
+            MLOG_INFO() << "COLLECT complete ring='" << R
                         << "' seq=" << seq
                         << " rr=" << currentRingState.rr.size()
                         << " transitions=[";
             for (size_t i = 0; i < currentRingState.adjacentRings.size(); ++i) {
                 auto& a = currentRingState.adjacentRings[i];
-                EV << (i ? "," : "") << (char)a.ring << (a.isRedundant ? "=D" : "=S");
+                EV << (i ? "," : "") << a.ring << (a.isRedundant ? "=D" : "=S");
             }
             EV << "]\n";
 
@@ -300,11 +300,11 @@ void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t sender) {
             // timer, stop watching for someone else.
             if (!currentRingState.isKing) {
                 currentRingState.isKing = true;
-                MLOG_INFO() << "became king of ring='" << (char)R << "'\n";
+                MLOG_INFO() << "became king of ring='" << R << "'\n";
             }
             startRefresh(R);
         } else {
-            MLOG_N_WARN(sender) << "stale own COLLECT return ring='" << (char)R
+            MLOG_N_WARN(sender) << "stale own COLLECT return ring='" << R
                                 << "' seq=" << seq << " (cur=" << currentRingState.collectInflight.seq_no << ")\n";
         }
         return;
@@ -319,14 +319,14 @@ void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t sender) {
     // and ignore a lower id (my next collect makes them yield).
     if (currentRingState.collectInflight.tx != nullptr || currentRingState.isKing) {
         if (king > myId) {
-            MLOG_N_INFO(sender) << "yield COLLECT ring='" << (char)R
+            MLOG_N_INFO(sender) << "yield COLLECT ring='" << R
                                 << "' to king=" << (int)king << "\n";
             cancelCollect(R);                     // no-op if no inflight
             if (currentRingState.isKing) cancelKingship(R);
             insertAndForwardCollect(collect, R, sender);
         } else {
             // Ignore lower-id king; my collection/kingship stands.
-            MLOG_N_DEBUG(sender) << "ignore COLLECT ring='" << (char)R
+            MLOG_N_DEBUG(sender) << "ignore COLLECT ring='" << R
                                  << "' from lower king=" << (int)king << "\n";
         }
         return;
@@ -359,7 +359,7 @@ void MyriadGP::originateUpdate(uint32_t ring) {
 
     std::vector<nodeid_t> nbrs = ringNeighbors(ring);
     if (nbrs.empty()) {
-        MLOG_WARN() << "originate UPDATE ring='" << (char)ring
+        MLOG_WARN() << "originate UPDATE ring='" << ring
                     << "' but no ring-neighbors; skipping\n";
         return;
     }
@@ -400,7 +400,7 @@ void MyriadGP::originateUpdate(uint32_t ring) {
     sendRingReliable(fl, primary, fallback, pkt, rxmtInterval, COLLECT_RETRY_LIMIT,
                      [this, ring, emptyChain]() { onUpdateBudgetExpired(ring, emptyChain); });
 
-    MLOG_N_INFO(nbrs[0]) << "originate UPDATE ring='" << (char)ring
+    MLOG_N_INFO(nbrs[0]) << "originate UPDATE ring='" << ring
         << "' seq=" << rs.originSeq << " rr=" << rs.rr.size() << "\n";
 }
 
@@ -443,12 +443,12 @@ void MyriadGP::insertAndForwardCollect(MyriadGpCollect* pkt, uint32_t R, nodeid_
     if (to == undefined_node) {
         if (rings[R].maxRingNeighbors <= 1) {
             to = sender;
-            MLOG_N_DEBUG(sender) << "echo COLLECT ring='" << (char)R
+            MLOG_N_DEBUG(sender) << "echo COLLECT ring='" << R
                                  << "' (2-node ring)\n";
         } else {
             // using high-water ring neighbor count
             MLOG_N_WARN(sender) << "no other ring-neighbor for degraded ring='"
-                                << (char)R << "'; dropping COLLECT\n";
+                                << R << "'; dropping COLLECT\n";
             return;
         }
     }
@@ -456,7 +456,7 @@ void MyriadGP::insertAndForwardCollect(MyriadGpCollect* pkt, uint32_t R, nodeid_
     np->setType(MYRIADGP_PACKET_TYPE);
     np->encapsulate(pkt->dup());
     sendToNode(to, std::move(np));
-    MLOG_N_DEBUG(to) << "forward COLLECT ring='" << (char)R
+    MLOG_N_DEBUG(to) << "forward COLLECT ring='" << R
                      << "' seq=" << pkt->getSeq_no()
                      << " king=" << (int)pkt->getRouter_id_src() << "\n";
 }
@@ -488,7 +488,7 @@ void MyriadGP::handleUpdate(MyriadGpUpdate* update, nodeid_t sender) {
             std::vector<uint32_t> fullChain;
             fullChain.push_back(curRing);
             for (uint32_t c : chain) fullChain.push_back(c);
-            MLOG_N_DEBUG(sender) << "UPDATE circular-ACK ring='" << (char)curRing
+            MLOG_N_DEBUG(sender) << "UPDATE circular-ACK ring='" << curRing
                                  << "' seq=" << seq << " chain=" << formatChain(fullChain) << "\n";
         }
         return;
@@ -505,7 +505,7 @@ void MyriadGP::handleUpdate(MyriadGpUpdate* update, nodeid_t sender) {
             auto& w = update->getWidths(i);
             curRs.adjacentRings.push_back({ w.ring, w.isRedundant });
         }
-        MLOG_N_DEBUG(sender) << "stored widths for ring='" << (char)curRing
+        MLOG_N_DEBUG(sender) << "stored widths for ring='" << curRing
                              << "' (" << widthLen << " transitions)\n";
     }
 
@@ -529,7 +529,7 @@ void MyriadGP::handleUpdate(MyriadGpUpdate* update, nodeid_t sender) {
     RibEntry* entry = nullptr;
     for (auto& e : originRs.ribIn) if (e.chain == fullChain) { entry = &e; break; }
     if (entry && entry->seq_no >= seq) {
-        MLOG_N_DEBUG(sender) << "UPDATE dup origin='" << (char)origin
+        MLOG_N_DEBUG(sender) << "UPDATE dup origin='" << origin
                              << "' seq=" << seq << " chain=" << formatChain(fullChain)
                              << " (stored " << entry->seq_no << ")\n";
         doInterRing = false;
@@ -561,7 +561,7 @@ void MyriadGP::handleUpdate(MyriadGpUpdate* update, nodeid_t sender) {
             originRs.ribIn.push_back({ fullChain, seq, update->getSpof_count() });
         }
 
-        MLOG_N_INFO(sender) << "UPDATE store origin='" << (char)origin
+        MLOG_N_INFO(sender) << "UPDATE store origin='" << origin
                             << "' seq=" << seq << " chain=" << formatChain(fullChain)
                             << " spof=" << update->getSpof_count()
                             << " ribIn=" << originRs.ribIn.size() << "\n";
@@ -597,7 +597,7 @@ void MyriadGP::forwardUpdateInRing(MyriadGpUpdate* pkt, uint32_t ring, nodeid_t 
     np->setType(MYRIADGP_PACKET_TYPE);
     np->encapsulate(pkt->dup());
     sendToNode(to, std::move(np));
-    MLOG_N_DEBUG(to) << "forward UPDATE in-ring='" << (char)ring
+    MLOG_N_DEBUG(to) << "forward UPDATE in-ring='" << ring
                      << "' seq=" << pkt->getSeq_no() << "\n";
 }
 
@@ -617,7 +617,7 @@ void MyriadGP::forwardUpdateInterRing(MyriadGpUpdate* pkt, uint32_t curRing) {
         for (size_t i = 0; i < pkt->getHandled_ringsArraySize(); ++i)
             if (pkt->getHandled_rings(i) == R2) { alreadyHandled = true; break; }
         if (alreadyHandled) {
-            MLOG_DEBUG() << "UPDATE transition into ring='" << (char)R2
+            MLOG_DEBUG() << "UPDATE transition into ring='" << R2
                          << "' skipped: already flooded by another bridge this lap\n";
             continue;
         }
@@ -627,7 +627,7 @@ void MyriadGP::forwardUpdateInterRing(MyriadGpUpdate* pkt, uint32_t curRing) {
         std::vector<nodeid_t> nbrs = ringNeighbors(R2);
         if (nbrs.empty()) {
             // No neighbor in R2 yet: transient at boot; a later round covers it.
-            MLOG_DEBUG() << "UPDATE transition into ring='" << (char)R2
+            MLOG_DEBUG() << "UPDATE transition into ring='" << R2
                          << "' skipped: no ring-neighbor\n";
             continue;
         }
@@ -644,7 +644,7 @@ void MyriadGP::forwardUpdateInterRing(MyriadGpUpdate* pkt, uint32_t curRing) {
         // A traversal for this exact chain may already be inflight in R2 (e.g. a
         // double transition where both bridges relay the same chain). Skip the dup.
         if (rs2.updateInflights.count(fwdChain)) {
-            MLOG_N_DEBUG(nbrs[0]) << "UPDATE transition dup into ring='" << (char)R2
+            MLOG_N_DEBUG(nbrs[0]) << "UPDATE transition dup into ring='" << R2
                                   << "' chain-len=" << fwdChain.size() << "; skipping\n";
             continue;
         }
@@ -676,7 +676,7 @@ void MyriadGP::forwardUpdateInterRing(MyriadGpUpdate* pkt, uint32_t curRing) {
         sendRingReliable(fl, primary, fallback, fwd, rxmtInterval, COLLECT_RETRY_LIMIT,
                          [this, R2, fwdChain]() { onUpdateBudgetExpired(R2, fwdChain); });
 
-        MLOG_N_INFO(primary) << "UPDATE transition into ring='" << (char)R2
+        MLOG_N_INFO(primary) << "UPDATE transition into ring='" << R2
             << "' seq=" << pkt->getSeq_no() << " chain=" << formatChain(fwdChain)
             << " spof=" << fwd->getSpof_count() << "\n";
 

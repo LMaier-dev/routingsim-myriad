@@ -83,7 +83,7 @@ class MyriadHelper : public Protocol {
             std::string s = "[";
             for (size_t i = 0; i < chain.size(); ++i) {
                 if (i) s += ',';
-                s += (char)chain[i];
+                s += std::to_string(chain[i]);
             }
             s += ']';
             return s;

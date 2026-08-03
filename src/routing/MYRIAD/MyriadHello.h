@@ -26,7 +26,7 @@ namespace routingsim {
         protected:
             std::unordered_map<nodeid_t, N> neighbors;
 
-            // Rings this node belongs to (ASCII-char-as-uint64 encoding).
+            // Rings this node belongs to (integer ring ids).
             // Populated by initSelfRings()
             std::vector<uint32_t> selfRings;
             std::string selfRingsLabel;
@@ -63,14 +63,16 @@ namespace routingsim {
             virtual void onNeighborDead(N& /*nbr*/, bool /*wasFull*/) {}
 
             void initSelfRings() {
-                // Ring membership from the ringLabel param, e.g. "A,B".
+                // Ring membership from the ringLabel param, e.g. "1000000,999999".
                 // Set per node via **.NodeN.*.ringLabel
                 selfRingsLabel = hasPar("ringLabel") ? par("ringLabel").stdstringValue() : "";
                 selfRings.clear();
                 std::stringstream ss(selfRingsLabel);
                 std::string tok;
                 while (std::getline(ss, tok, ',')) {
-                    if (!tok.empty()) selfRings.push_back(static_cast<uint32_t>(tok[0]));
+                    size_t b = tok.find_first_not_of(" \t");
+                    if (b == std::string::npos) continue;
+                    selfRings.push_back(static_cast<uint32_t>(std::stoul(tok.substr(b))));
                 }
                 MLOG_INFO() << "rings: " << selfRingsLabel << "\n";
             }
@@ -137,7 +139,7 @@ namespace routingsim {
                     if (!nbr.rings.empty()) {
                         EV << " rings=[";
                         for (size_t i = 0; i < nbr.rings.size(); ++i)
-                            EV << (i ? "," : "") << (char)nbr.rings[i];
+                            EV << (i ? "," : "") << nbr.rings[i];
                         EV << "]";
                     }
                     EV << "\n";
