@@ -6,25 +6,18 @@ import argparse
 import os
 import networkx as nx
 import matplotlib
-matplotlib.use("Agg")  # headless: write PNG, no display
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.patches
 
 from generate_ring_membership import get_ring_per_node
 
-# Ring ids = RING_ID_BASE - ring_index. Stays clear of node ids as long as
-# nodes + rings < RING_ID_BASE (true for every current topology; the largest is
-# ~50k nodes / ~50k rings). Fits in the uint32_t the protocol stores.
+# Ring ids = RING_ID_BASE - ring_index (distinguishability)
 RING_ID_BASE = 1_000_000
-# Above this node count a spring-layout PNG is too slow and unreadable; the
-# .ini is the benchmark artifact, the picture is only a convenience.
 NODE_PNG_CAP = 1000
 
 
 def read_topology(path):
-    # routingsim self-defined format: skip blank / '#' lines; first remaining
-    # line is the "N M" header (ignored -- we build the graph from the data);
-    # every later "from to" line is an edge. Node ids parsed as ints.
     g = nx.Graph()
     header_seen = False
     with open(path) as f:
@@ -33,7 +26,7 @@ def read_topology(path):
             if not line or line.startswith("#"):
                 continue
             if not header_seen:
-                header_seen = True  # "N M" header
+                header_seen = True
                 continue
             parts = line.split()
             if len(parts) >= 2 and parts[0] != "node":
@@ -65,13 +58,7 @@ def draw(g, ring_of, ring_ids, path):
                     (x, y), r, i * step, (i + 1) * step,
                     facecolor=color[rid], edgecolor="black", linewidth=0.5, zorder=2))
         ax.text(x, y, str(n), ha="center", va="center", fontsize=7, zorder=3)
-
-    # A per-ring legend only makes sense for a handful of rings.
-    if n_rings <= 12:
-        handles = [plt.Line2D([0], [0], marker="o", color="w",
-                              markerfacecolor=color[rid], markersize=10,
-                              label=f"ring {rid}") for rid in ring_ids]
-        ax.legend(handles=handles, loc="upper right")
+        
     ax.set_title(f"{os.path.basename(path)}: {g.number_of_nodes()} nodes, "
                  f"{n_rings} rings (multi-color = multi-ring node)")
     ax.set_aspect("equal")
@@ -93,7 +80,7 @@ def main():
     g = read_topology(args.topology)
     stem = os.path.splitext(os.path.basename(args.topology))[0]
 
-    # cycle_basis membership (indices 0..R-1) -> ring ids counting down.
+    # runs the generate_ring_membership.py by daniel
     rings_idx = get_ring_per_node(g)
     n_rings = max((max(v) + 1 for v in rings_idx.values() if v), default=0)
     def ring_id(idx):

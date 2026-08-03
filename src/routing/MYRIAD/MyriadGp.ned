@@ -10,11 +10,20 @@ simple myriadgp extends routingsim.foundation.Protocol
         double helloInterval @unit(s) = default(10s);
         double deadInterval @unit(s) = default(40s);
         double rxmtInterval @unit(s) = default(5s);
+        // Jitter added to each hello: delay = helloInterval + uniform(0,
+        // helloJitter). Decorrelates nodes so two-way / origination don't all
+        // land on one tick. Keep helloInterval + helloJitter < deadInterval.
+        double helloJitter @unit(s) = default(1s);
 
         // king re-originates a COLLECT every refreshInterval; members run a
         // watchdog of 2*refreshInterval + uniform(0, refreshJitter).
         double refreshInterval @unit(s) = default(30s);
         double refreshJitter @unit(s) = default(5s);
+
+        // Best-path cost exponent a: a chain's size cost is Σ member_count^a.
+        // a>1 is convex so one huge ring is penalised more than several small
+        // rings of equal total size; a=1 is plain member sum. See ADR 0016.
+        double ringCostExponent = default(2.0);
 
         // Ring membership override, e.g. "A,B". Empty = use the built-in
         // per-id table. Set per node via **.NodeN.*.ringLabel or a topology

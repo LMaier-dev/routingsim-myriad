@@ -9,6 +9,8 @@ simple myriadls extends routingsim.foundation.Protocol
         double helloInterval @unit(s) = default(10s);
         double deadInterval @unit(s) = default(40s);
         double rxmtInterval @unit(s) = default(5s);
+        // Jitter added to each hello
+        double helloJitter @unit(s) = default(1s);
         // Max number of LSA headers per DBD packet, or LsaRequests per LSR packet.
         int dbExchangeBatchSize = default(10);
 

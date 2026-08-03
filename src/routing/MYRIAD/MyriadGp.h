@@ -40,6 +40,7 @@ namespace routingsim {
     // chain[0] = latest ring visited, chain.back() = origin.
     struct RibEntry {
         std::vector<uint32_t> chain;
+        std::vector<uint32_t> chain_sizes; // raw member count per ring, parallel to chain
         uint32_t seq_no = 0;
         uint32_t spof_count = 0;
     };
@@ -68,6 +69,9 @@ namespace routingsim {
 
         // derived from recent Collect lap; used for spof_count on inter-ring forward
         std::vector<AdjacentRingState> adjacentRings;
+        // This ring's member count (its size). Set from the king's own COLLECT
+        // return, or from the origin-UPDATE trailer for non-king members
+        uint32_t memberCount = 0;
 
         // Persistent kingship + periodic refresh (king) / liveness watchdog (member).
         bool isKing = false;
@@ -135,6 +139,8 @@ namespace routingsim {
             void onUpdateBudgetExpired(uint32_t ring, std::vector<uint32_t> chain);
             // Retransmit budget (retransmissions after the initial send).
             static constexpr int COLLECT_RETRY_LIMIT = 3;
+            // Placeholder ring size before a ring's origin-UPDATE trailer arrives
+            static constexpr uint32_t UNKNOWN_RING_SIZE = 1u << 20;
 
             // Reliable ring send: first send to `primary`, retransmits alternate
             // to `fallback` (equal args = same-neighbor probe). Sets fl.tx and
@@ -151,6 +157,11 @@ namespace routingsim {
             // King re-collect period, and member watchdog jitter bound.
             simtime_t refreshInterval;
             simtime_t refreshJitter;
+            // Best-path cost exponent a: path cost = sum of (member_count^a) over the chain
+            double ringCostExponent;
+            double pathCost(const RibEntry& e) const;
+            // Recompute rings[origin].preferred
+            void selectPreferred(RingState& rs);
 
         private:
             std::unordered_map<uint32_t /*ring*/, RingState> rings;

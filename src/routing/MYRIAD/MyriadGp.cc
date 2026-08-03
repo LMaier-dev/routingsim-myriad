@@ -1,5 +1,7 @@
 #include "routing/MYRIAD/MyriadGp.h"
 #include <algorithm>
+#include <cmath>
+#include <limits>
 
 namespace routingsim {
 
@@ -16,6 +18,7 @@ void MyriadGP::onInitialize() {
 
     refreshInterval = par("refreshInterval");
     refreshJitter = par("refreshJitter");
+    ringCostExponent = par("ringCostExponent");
 
     MLOG_INFO() << "MyriadGP up\n";
 
@@ -55,6 +58,7 @@ void MyriadGP::originateCollect(uint32_t ring, nodeid_t to) {
     pkt->setRouter_id_src(myId);     // king_id
     pkt->setSeq_no(currentRingState.originSeq);
     pkt->setCurrent_ring(ring);
+    pkt->setMember_count(1); // forwarders increment
 
     // Insert my (subnet, myId) pairs.
     pkt->setRrArraySize(mySubnets.size());
@@ -100,7 +104,7 @@ void MyriadGP::startRefresh(uint32_t ring) {
     RingState& rs = rings[ring];
     if (rs.watchdogTimer) { cancelAndDelete(rs.watchdogTimer); rs.watchdogTimer = nullptr; }
     if (rs.refreshTimer)  { cancelAndDelete(rs.refreshTimer);  rs.refreshTimer = nullptr; }
-    rs.refreshTimer = addOneShotTimer(refreshInterval, [this, ring](short) {
+    rs.refreshTimer = addOneShotTimer(refreshInterval + uniform(0, refreshJitter), [this, ring](short) {
         rings[ring].refreshTimer = nullptr;
         reoriginateCollect(ring);
         if (rings[ring].isKing) startRefresh(ring); // reschedule
@@ -136,6 +140,7 @@ void MyriadGP::sendRingReliable(RingInflight& fl, nodeid_t primary, nodeid_t fal
     // First send goes to the primary neighbor.
     auto np = std::make_unique<NodePkt>(pkt->getName());
     np->setType(packetType);
+    np->setAttributes(np->getAttributes() | NODEPKT_ATTR_CONTROL_PLANE_PROCESSING_DELAY);
     np->encapsulate(pkt->dup());
     sendToNode(primary, std::move(np));
 
@@ -161,6 +166,7 @@ void MyriadGP::ringRetxFire(RingTx* h) {
 
     auto np = std::make_unique<NodePkt>(h->pkt->getName());
     np->setType(packetType);
+    np->setAttributes(np->getAttributes() | NODEPKT_ATTR_CONTROL_PLANE_PROCESSING_DELAY);
     np->encapsulate(h->pkt->dup());
     sendToNode(to, std::move(np));
 
@@ -271,6 +277,9 @@ void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t sender) {
         if (currentRingState.collectInflight.tx != nullptr && seq == currentRingState.collectInflight.seq_no) {
             cancelCollect(R);
 
+            // Lap closed: member_count now equals the ring's router count.
+            currentRingState.memberCount = collect->getMember_count();
+
             // Snapshot the collected data onto ring state.
             currentRingState.rr.clear();
             currentRingState.rr.reserve(collect->getRrArraySize());
@@ -373,6 +382,8 @@ void MyriadGP::originateUpdate(uint32_t ring) {
     pkt->setSeq_no(rs.originSeq);         // same seq as the collect round
     pkt->setCurrent_ring(ring);
     pkt->setRing_chainArraySize(0);       // origin: empty chain
+    pkt->setChain_sizesArraySize(0);      // parallel to ring_chain
+    pkt->setMember_count(rs.memberCount); // origin ring size (trailer)
     pkt->setSpof_count(0);
 
     pkt->setRrArraySize(rs.rr.size());
@@ -405,6 +416,9 @@ void MyriadGP::originateUpdate(uint32_t ring) {
 }
 
 void MyriadGP::insertAndForwardCollect(MyriadGpCollect* pkt, uint32_t R, nodeid_t sender) {
+    // Count myself as a ring member
+    pkt->setMember_count(pkt->getMember_count() + 1);
+
     // 1. Append my (subnet, myId) pairs.
     size_t n = pkt->getRrArraySize();
     pkt->setRrArraySize(n + mySubnets.size());
@@ -454,11 +468,40 @@ void MyriadGP::insertAndForwardCollect(MyriadGpCollect* pkt, uint32_t R, nodeid_
     }
     auto np = std::make_unique<NodePkt>("Myriad_GP_Collect_Pkt");
     np->setType(MYRIADGP_PACKET_TYPE);
+    np->setAttributes(np->getAttributes() | NODEPKT_ATTR_CONTROL_PLANE_PROCESSING_DELAY);
     np->encapsulate(pkt->dup());
     sendToNode(to, std::move(np));
     MLOG_N_DEBUG(to) << "forward COLLECT ring='" << R
                      << "' seq=" << pkt->getSeq_no()
                      << " king=" << (int)pkt->getRouter_id_src() << "\n";
+}
+
+double MyriadGP::pathCost(const RibEntry& e) const {
+    // sum up member_count^a over the chain
+    double cost = 0.0;
+    for (uint32_t s : e.chain_sizes) cost += std::pow((double)s, ringCostExponent);
+    return cost;
+}
+
+void MyriadGP::selectPreferred(RingState& rs) {
+    // Strict lexicographic best: min spof, min pathCost, min chain length, then chain
+    // lexicographic if draw.
+    // TODO check: Linear scan over ribIn but ribIn is small per origin. If a ring
+    // ever accumulates many chains, index by a sorted key instead.
+    rs.preferred = SIZE_MAX;
+    double bestCost = 0.0;
+    for (size_t i = 0; i < rs.ribIn.size(); ++i) {
+        const RibEntry& e = rs.ribIn[i];
+        double cost = pathCost(e);
+        if (rs.preferred == SIZE_MAX) { rs.preferred = i; bestCost = cost; continue; }
+        const RibEntry& b = rs.ribIn[rs.preferred];
+        bool better =
+            e.spof_count != b.spof_count ? e.spof_count < b.spof_count :
+            cost != bestCost             ? cost < bestCost :
+            e.chain.size() != b.chain.size() ? e.chain.size() < b.chain.size() :
+            e.chain < b.chain;
+        if (better) { rs.preferred = i; bestCost = cost; }
+    }
 }
 
 void MyriadGP::handleUpdate(MyriadGpUpdate* update, nodeid_t sender) {
@@ -508,6 +551,9 @@ void MyriadGP::handleUpdate(MyriadGpUpdate* update, nodeid_t sender) {
         MLOG_N_DEBUG(sender) << "stored widths for ring='" << curRing
                              << "' (" << widthLen << " transitions)\n";
     }
+    // Origin UPDATE also carries this rings member count (its size)
+    if (chainLen == 0 && update->getMember_count() > 0)
+        curRs.memberCount = update->getMember_count();
 
     RingState& originRs = rings[origin];
 
@@ -518,6 +564,13 @@ void MyriadGP::handleUpdate(MyriadGpUpdate* update, nodeid_t sender) {
     fullChain.reserve(chainLen + 1);
     fullChain.push_back(curRing);
     for (uint32_t c : chain) fullChain.push_back(c);
+
+    // Sizes parallel to fullChain
+    std::vector<uint32_t> fullSizes;
+    fullSizes.reserve(chainLen + 1);
+    fullSizes.push_back(curRs.memberCount ? curRs.memberCount : UNKNOWN_RING_SIZE);
+    for (size_t i = 0; i < update->getChain_sizesArraySize(); ++i)
+        fullSizes.push_back(update->getChain_sizes(i));
 
     // Decide whether to transition inter-ring. Regardless of the outcome we
     // still forward intra-ring at the end (needed for the circular ACK, and to
@@ -557,8 +610,9 @@ void MyriadGP::handleUpdate(MyriadGpUpdate* update, nodeid_t sender) {
         if (entry) {
             entry->seq_no = seq;
             entry->spof_count = update->getSpof_count();
+            entry->chain_sizes = fullSizes;
         } else {
-            originRs.ribIn.push_back({ fullChain, seq, update->getSpof_count() });
+            originRs.ribIn.push_back({ fullChain, fullSizes, seq, update->getSpof_count() });
         }
 
         MLOG_N_INFO(sender) << "UPDATE store origin='" << origin
@@ -566,7 +620,19 @@ void MyriadGP::handleUpdate(MyriadGpUpdate* update, nodeid_t sender) {
                             << " spof=" << update->getSpof_count()
                             << " ribIn=" << originRs.ribIn.size() << "\n";
 
-        // TODO: policy → preferred + materialized routes.
+        // Best-path selection: recompute the preferred chain for this origin.
+        // Only the winner transitions inter-ring (re-forward whenever
+        // this UPDATE becomes the new winner). Losers are stored as backup but
+        // don't propagate.
+        selectPreferred(originRs);
+        bool isWinner = originRs.preferred != SIZE_MAX
+                        && originRs.ribIn[originRs.preferred].chain == fullChain;
+        if (!isWinner) {
+            MLOG_N_DEBUG(sender) << "UPDATE not preferred origin='" << origin
+                                 << "' chain=" << formatChain(fullChain)
+                                 << " — stored, not propagated\n";
+            doInterRing = false;
+        }
 
         // Loop prevention: if any of my rings is already in the packet chain,
         // I've been here — don't transition again (intra-ring forward still
@@ -595,6 +661,7 @@ void MyriadGP::forwardUpdateInRing(MyriadGpUpdate* pkt, uint32_t ring, nodeid_t 
     }
     auto np = std::make_unique<NodePkt>("Myriad_GP_Update_Pkt");
     np->setType(MYRIADGP_PACKET_TYPE);
+    np->setAttributes(np->getAttributes() | NODEPKT_ATTR_CONTROL_PLANE_PROCESSING_DELAY);
     np->encapsulate(pkt->dup());
     sendToNode(to, std::move(np));
     MLOG_N_DEBUG(to) << "forward UPDATE in-ring='" << ring
@@ -665,6 +732,13 @@ void MyriadGP::forwardUpdateInterRing(MyriadGpUpdate* pkt, uint32_t curRing) {
 
         fwd->setRing_chainArraySize(fwdChain.size());
         for (size_t i = 0; i < fwdChain.size(); ++i) fwd->setRing_chain(i, fwdChain[i]);
+
+        // chain_sizes parallel to fwdChain: prepend curRing's size
+        uint32_t curSize = rings[curRing].memberCount;
+        fwd->setChain_sizesArraySize(fwdChain.size());
+        fwd->setChain_sizes(0, curSize ? curSize : UNKNOWN_RING_SIZE);
+        for (size_t i = 0; i < chainLen; ++i)
+            fwd->setChain_sizes(i + 1, pkt->getChain_sizes(i));
 
         // Carry the same rr.
         size_t rrLen = pkt->getRrArraySize();

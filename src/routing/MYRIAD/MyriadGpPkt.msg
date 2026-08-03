@@ -69,6 +69,9 @@ packet MyriadGpCollect extends MyriadGpNLRI {
     // every collection the ringking checks if transition widths changed
     type = MYRIADGP_COLLECT;
     MyriadGpRingTransition transitions[];
+    // Ring member count: king seeds 1, each forwarder increments; on the king's
+    // own-return it equals the number of routers on the ring (its size).
+    uint32_t member_count;
 }
 
 packet MyriadGpUpdate extends MyriadGpNLRI {
@@ -86,6 +89,11 @@ packet MyriadGpUpdate extends MyriadGpNLRI {
     // double transition doesn't duplicate the flood. Accumulates around the
     // ring; reset (empty) on inter-ring transition.
     uint32_t handled_rings[];
+    // Ring member count (not exponentiated) NED knob. On the origin UPDATE, ring_chain is empty and member_count below
+    // carries the origin ring's size instead.
+    uint32_t chain_sizes[];
+    // Origin ring's member count (origin UPDATE trailer only; like widths).
+    uint32_t member_count;
 }
 
 // DEGRADE is a direct-neighbor flood, not tied to the ring machinery.

@@ -4,14 +4,6 @@ from pathlib import Path
 import networkx as nx
 
 def get_ring_per_node(graph):
-    # cycles = nx.cycle_basis(graph)
-    # cycle_basis returns a *fundamental* basis (one cycle per non-tree edge via
-    # its spanning-tree path), so cycles can be very long and heavily overlap:
-    # on a 10x10 grid it puts up to 13 of 81 rings on a single hub node, whose
-    # COLLECT/UPDATE traffic then explodes (6.6M UPDATEs by t=4s in MyriadGP).
-    # minimum_cycle_basis returns the shortest independent cycles instead — for a
-    # grid these are the unit squares (every ring length 4, every node in <=4),
-    # which is the topology's natural ring structure and keeps the sim tractable.
     cycles = nx.minimum_cycle_basis(graph)
     rings_per_node = {}
     current_ring_id = 0

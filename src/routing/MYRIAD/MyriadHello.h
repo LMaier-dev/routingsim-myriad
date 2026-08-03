@@ -34,12 +34,14 @@ namespace routingsim {
             simtime_t helloInterval;
             simtime_t deadInterval;
             simtime_t rxmtInterval;
+            simtime_t helloJitter;
 
             void onInitialize() override {
                 MyriadHelper::onInitialize();
                 helloInterval = par("helloInterval");
                 deadInterval = par("deadInterval");
                 rxmtInterval = par("rxmtInterval");
+                helloJitter = par("helloJitter");
                 initSelfRings();
             }
 
@@ -78,7 +80,8 @@ namespace routingsim {
             }
 
             void scheduleHello(simtime_t delay) {
-                helloTimer = addOneShotTimer(delay, [this](short) {
+                // Add jitter so nodes don't all hello on the same tick
+                helloTimer = addOneShotTimer(delay + uniform(0, helloJitter), [this](short) {
                     helloTimer = nullptr;
                     sendHello();
                     return false;
@@ -111,6 +114,7 @@ namespace routingsim {
                 for (auto& [nid, nbr] : neighbors) {
                     auto np = std::make_unique<NodePkt>("Myriad_Hello_Pkt");
                     np->setType(packetType);
+                    np->setAttributes(np->getAttributes() | NODEPKT_ATTR_CONTROL_PLANE_PROCESSING_DELAY);
                     np->encapsulate(hello->dup());
                     sendToNode(nid, std::move(np));
                 }
