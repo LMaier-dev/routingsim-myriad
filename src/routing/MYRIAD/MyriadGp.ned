@@ -13,7 +13,9 @@ simple myriadgp extends routingsim.foundation.Protocol
         // Jitter added to each hello: delay = helloInterval + uniform(0,
         // helloJitter). Decorrelates nodes so two-way / origination don't all
         // land on one tick. Keep helloInterval + helloJitter < deadInterval.
-        double helloJitter @unit(s) = default(1s);
+        // Default 0 (safe for the shared base); GP configs set it where the
+        // synchronized-origination wave needs breaking up.
+        double helloJitter @unit(s) = default(0s);
 
         // king re-originates a COLLECT every refreshInterval; members run a
         // watchdog of 2*refreshInterval + uniform(0, refreshJitter).

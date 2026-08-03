@@ -39,7 +39,13 @@ void MyriadGP::onTwoWayReached(GpNeighbor& nbr) {
             for (uint32_t r : n.sharedRings) if (r == R) { ++count; break; }
         }
         if (count > rings[R].maxRingNeighbors) rings[R].maxRingNeighbors = count;
-        if (count >= 1 && count <= 2 && rings[R].collectInflight.tx == nullptr) {
+        // 2-node-ring support DISABLED for now (assume every ring has >=2
+        // members). Originate only once BOTH ring-neighbors are two-way, so a
+        // boot-transient single-neighbor view can't crown a premature king.
+        // To re-enable degenerate 2-node rings, restore the `count >= 1` bound
+        // (see [[0014-two-node-ring-echo]]) and the echo sites below.
+        // if (count >= 1 && count <= 2 && rings[R].collectInflight.tx == nullptr) {
+        if (count == 2 && rings[R].collectInflight.tx == nullptr) {
             originateCollect(R, nbr.id);
         } else if (count > 2) {
             MLOG_N_WARN(nbr.id) << "ring '" << R
@@ -455,16 +461,17 @@ void MyriadGP::insertAndForwardCollect(MyriadGpCollect* pkt, uint32_t R, nodeid_
     // circular ACK (with 2 spofs).
     nodeid_t to = otherRingNeighbor(R, sender);
     if (to == undefined_node) {
-        if (rings[R].maxRingNeighbors <= 1) {
-            to = sender;
-            MLOG_N_DEBUG(sender) << "echo COLLECT ring='" << R
-                                 << "' (2-node ring)\n";
-        } else {
-            // using high-water ring neighbor count
-            MLOG_N_WARN(sender) << "no other ring-neighbor for degraded ring='"
+        // 2-node-ring echo DISABLED for now (see onTwoWayReached). No other
+        // ring-neighbor → drop; boot retransmits recover once the ring is up.
+        // To re-enable, restore the maxRingNeighbors<=1 echo branch:
+        // if (rings[R].maxRingNeighbors <= 1) {
+        //     to = sender;
+        //     MLOG_N_DEBUG(sender) << "echo COLLECT ring='" << R << "' (2-node ring)\n";
+        // } else {
+            MLOG_N_WARN(sender) << "no other ring-neighbor for ring='"
                                 << R << "'; dropping COLLECT\n";
             return;
-        }
+        // }
     }
     auto np = std::make_unique<NodePkt>("Myriad_GP_Collect_Pkt");
     np->setType(MYRIADGP_PACKET_TYPE);
@@ -654,10 +661,13 @@ void MyriadGP::handleUpdate(MyriadGpUpdate* update, nodeid_t sender) {
 void MyriadGP::forwardUpdateInRing(MyriadGpUpdate* pkt, uint32_t ring, nodeid_t sender) {
     nodeid_t to = otherRingNeighbor(ring, sender);
     if (to == undefined_node) {
-        // Genuine 2-node ring: echo back so the king's lap closes. Degraded
-        // larger ring: drop, let the budget expire → DEGRADE.
-        if (rings[ring].maxRingNeighbors > 1) return;
-        to = sender;
+        // 2-node-ring echo DISABLED for now (see onTwoWayReached). No other
+        // ring-neighbor → drop (a degraded larger ring drops here too, letting
+        // the budget expire → DEGRADE). To re-enable degenerate 2-node rings,
+        // restore the echo-to-sender branch:
+        // if (rings[ring].maxRingNeighbors > 1) return;
+        // to = sender;
+        return;
     }
     auto np = std::make_unique<NodePkt>("Myriad_GP_Update_Pkt");
     np->setType(MYRIADGP_PACKET_TYPE);
