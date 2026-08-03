@@ -45,6 +45,18 @@ std::string MyriadHelper::logPrefix(const char* level, nodeid_t nbr) const {
     return o.str();
 }
 
+std::string MyriadHelper::sendTypeLabel(const char* pktName) {
+    std::string n = pktName ? pktName : "";
+    if (n.find("LSU") != std::string::npos) return "lsu";
+    if (n.find("LSR") != std::string::npos) return "lsr";
+    if (n.find("LSAck") != std::string::npos) return "ack";
+    if (n.find("DBD") != std::string::npos) return "dbd";
+    if (n.find("Collect") != std::string::npos) return "collect";
+    if (n.find("Update") != std::string::npos) return "update";
+    if (n.find("Hello") != std::string::npos) return "hello";
+    return n;
+}
+
 PendingTx* MyriadHelper::sendReliable(nodeid_t to, cPacket* pkt, simtime_t interval) {
     auto* h = new PendingTx{pkt, to, interval, nullptr};
 
@@ -52,6 +64,7 @@ PendingTx* MyriadHelper::sendReliable(nodeid_t to, cPacket* pkt, simtime_t inter
     auto np = std::make_unique<NodePkt>(pkt->getName());
     np->setType(packetType);
     np->encapsulate(pkt->dup());
+    countSend(sendTypeLabel(pkt->getName()));
     sendToNode(to, std::move(np));
 
     h->timer = addOneShotTimer(interval, [this, h](short) {
@@ -65,6 +78,7 @@ void MyriadHelper::retxFire(PendingTx* h) {
     auto np = std::make_unique<NodePkt>(h->pkt->getName());
     np->setType(packetType);
     np->encapsulate(h->pkt->dup());
+    countSend(sendTypeLabel(h->pkt->getName()));
     sendToNode(h->dest, std::move(np));
 
     h->timer = addOneShotTimer(h->interval, [this, h](short) {

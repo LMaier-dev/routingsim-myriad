@@ -148,6 +148,7 @@ void MyriadGP::sendRingReliable(RingInflight& fl, nodeid_t primary, nodeid_t fal
     np->setType(packetType);
     np->setAttributes(np->getAttributes() | NODEPKT_ATTR_CONTROL_PLANE_PROCESSING_DELAY);
     np->encapsulate(pkt->dup());
+    countSend(sendTypeLabel(pkt->getName()));
     sendToNode(primary, std::move(np));
 
     h->timer = addOneShotTimer(interval, [this, h](short) {
@@ -174,6 +175,7 @@ void MyriadGP::ringRetxFire(RingTx* h) {
     np->setType(packetType);
     np->setAttributes(np->getAttributes() | NODEPKT_ATTR_CONTROL_PLANE_PROCESSING_DELAY);
     np->encapsulate(h->pkt->dup());
+    countSend(sendTypeLabel(h->pkt->getName()));
     sendToNode(to, std::move(np));
 
     h->timer = addOneShotTimer(h->interval, [this, h](short) {
@@ -477,6 +479,7 @@ void MyriadGP::insertAndForwardCollect(MyriadGpCollect* pkt, uint32_t R, nodeid_
     np->setType(MYRIADGP_PACKET_TYPE);
     np->setAttributes(np->getAttributes() | NODEPKT_ATTR_CONTROL_PLANE_PROCESSING_DELAY);
     np->encapsulate(pkt->dup());
+    countSend("collect");
     sendToNode(to, std::move(np));
     MLOG_N_DEBUG(to) << "forward COLLECT ring='" << R
                      << "' seq=" << pkt->getSeq_no()
@@ -673,6 +676,7 @@ void MyriadGP::forwardUpdateInRing(MyriadGpUpdate* pkt, uint32_t ring, nodeid_t 
     np->setType(MYRIADGP_PACKET_TYPE);
     np->setAttributes(np->getAttributes() | NODEPKT_ATTR_CONTROL_PLANE_PROCESSING_DELAY);
     np->encapsulate(pkt->dup());
+    countSend("update");
     sendToNode(to, std::move(np));
     MLOG_N_DEBUG(to) << "forward UPDATE in-ring='" << ring
                      << "' seq=" << pkt->getSeq_no() << "\n";
@@ -807,6 +811,7 @@ void MyriadGP::reset() {
 
 void MyriadGP::finish() {
     // TODO: dump path-vector table.
+    recordSendScalars();
 }
 
 } // namespace routingsim

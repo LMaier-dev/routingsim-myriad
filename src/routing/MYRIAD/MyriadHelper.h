@@ -6,6 +6,7 @@
 #include <cstring>
 #include <sstream>
 #include <string>
+#include <map>
 #include <vector>
 
 namespace routingsim {
@@ -50,6 +51,19 @@ class MyriadHelper : public Protocol {
         // Subclass must set this (e.g., in onInitialize) before calling sendReliable.
         // Used as the NodePkt type when the helper wraps reliable payloads.
         int packetType = -1;
+
+        // Per-message-type send counters
+        std::map<std::string, unsigned long> sentCounts;
+        void countSend(const std::string& type) { sentCounts[type]++; }
+        static std::string sendTypeLabel(const char* pktName);
+        void recordSendScalars() {
+            unsigned long total = 0;
+            for (auto& [type, n] : sentCounts) {
+                recordScalar(("sent_" + type).c_str(), n);
+                total += n;
+            }
+            recordScalar("sent_total", total);
+        }
 
         void onInitialize() override {
             myId = node().getNodeId();

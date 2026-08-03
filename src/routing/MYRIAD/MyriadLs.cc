@@ -290,6 +290,7 @@ void MyriadLS::handleLSR(MyriadLSR* lsr, nodeid_t from) {
     auto np = std::make_unique<NodePkt>("Myriad_LSU_Pkt");
     np->setType(MYRIADLS_PACKET_TYPE);
     np->encapsulate(lsu);
+    countSend("lsu");
     sendToNode(from, std::move(np));
 }
 
@@ -408,6 +409,7 @@ void MyriadLS::sendAck(nodeid_t to, const std::vector<const LsaHeader*>& headers
     auto np = std::make_unique<NodePkt>("Myriad_LSAck_Pkt");
     np->setType(MYRIADLS_PACKET_TYPE);
     np->encapsulate(ack);
+    countSend("ack");
     sendToNode(to, std::move(np));
     MLOG_N_DEBUG(to) << "sent LSAck for " << headers.size() << " LSA(s)\n";
 }
@@ -451,6 +453,7 @@ void MyriadLS::tryGoFull(NeighborEntry& nbr) {
 
 void MyriadLS::finish() {
     logLsdb();
+    recordSendScalars();
 }
 
 void MyriadLS::handleDBD(MyriadDBD* dbd, nodeid_t from) {
@@ -507,6 +510,7 @@ void MyriadLS::handleDBD(MyriadDBD* dbd, nodeid_t from) {
                 auto np = std::make_unique<NodePkt>("Myriad_DBD_Pkt");
                 np->setType(MYRIADLS_PACKET_TYPE);
                 np->encapsulate(nbr.lastSentDbd->dup());
+                countSend("dbd");
                 sendToNode(from, std::move(np));
             } else {
                 // TODO: Generate SeqNumberMismatch: clear DBD/LSR
@@ -561,6 +565,7 @@ void MyriadLS::sendDBD(nodeid_t to, bool init, bool master, uint16_t seq_no) {
     auto np = std::make_unique<NodePkt>("Myriad_DBD_Pkt");
     np->setType(MYRIADLS_PACKET_TYPE);
     np->encapsulate(dbd);
+    countSend("dbd");
     sendToNode(to, std::move(np));
 }
 
