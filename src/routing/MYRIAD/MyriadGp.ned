@@ -27,6 +27,15 @@ simple myriadgp extends routingsim.foundation.Protocol
         // rings of equal total size; a=1 is plain member sum. See ADR 0016.
         double ringCostExponent = default(2.0);
 
+        // Inter-ring UPDATE batching: a forwarder becoming ring-king for a
+        // transition into another ring holds the send for up to holdInterval,
+        // coalescing every chain transitioning into the same (ring, neighbor)
+        // this window into one MyriadGpUpdateBatch. Only inter-ring transitions
+        // are held; intra-ring lap forwards are always immediate (else the
+        // king's circular-ACK stalls and retransmits fire). 0s = off (exact
+        // pre-batching behaviour: every transition sent immediately).
+        double holdInterval @unit(s) = default(200ms);
+
         // Ring membership override, e.g. "A,B". Empty = use the built-in
         // per-id table. Set per node via **.NodeN.*.ringLabel or a topology
         // node property.

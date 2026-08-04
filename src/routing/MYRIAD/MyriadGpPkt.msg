@@ -21,6 +21,7 @@ enum MyriadGpPDUType {
     MYRIADGP_COLLECT = 1;
     MYRIADGP_UPDATE = 2;
     MYRIADGP_DEGRADE = 3;
+    MYRIADGP_UPDATE_BATCH = 4;
 }
 
 // directly from Kira (mirrors MyriadLsPkt.msg)
@@ -94,6 +95,30 @@ packet MyriadGpUpdate extends MyriadGpNLRI {
     uint32_t chain_sizes[];
     // Origin ring's member count (origin UPDATE trailer only; like widths).
     uint32_t member_count;
+}
+
+// One inter-ring UPDATE transition carried inside a batch. Holds every
+// per-chain field an inter-ring `fwd` UPDATE sets in forwardUpdateInterRing
+// (router_id_src, seq_no, ring_chain, spof_count, rr, chain_sizes). No widths /
+// member_count / handled_rings: those ride only origin/intra-ring UPDATEs, and
+// intra-ring forwards are never batched. The batch header carries the shared
+// current_ring (all entries transition into the SAME ring). A one-entry batch
+// is behaviourally identical to a lone inter-ring MyriadGpUpdate. (A class, not
+// a struct: OMNeT++ structs can't hold dynamic-array fields.)
+class MyriadGpUpdateEntry {
+    nodeid_t router_id_src;   // the forwarder-king that owns this new traversal
+    uint32_t seq_no;
+    uint32_t ring_chain[];
+    uint32_t spof_count;
+    MyriadGpRr rr[];
+    uint32_t chain_sizes[];
+}
+
+// Batch of inter-ring UPDATE transitions, all into current_ring, coalesced by a
+// forwarder within one holdInterval window (see the holdInterval NED knob).
+packet MyriadGpUpdateBatch extends MyriadGpHeader {
+    type = MYRIADGP_UPDATE_BATCH;
+    MyriadGpUpdateEntry entries[];
 }
 
 // DEGRADE is a direct-neighbor flood, not tied to the ring machinery.

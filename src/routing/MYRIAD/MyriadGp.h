@@ -90,6 +90,20 @@ namespace routingsim {
         nodeid_t owner = 0;
     };
 
+    // One inter-ring UPDATE transition held for batching (see holdInterval).
+    // Captures everything buildTransitionUpdate needs to (re)build the single-
+    // chain fwd, plus the send targets. origin = fwdChain.back().
+    struct PendingTransition {
+        uint32_t R2 = 0;
+        nodeid_t primary = 0;
+        nodeid_t fallback = 0;
+        uint32_t seq = 0;
+        uint32_t spof = 0;
+        std::vector<uint32_t> fwdChain;
+        std::vector<uint32_t> fwdSizes;
+        std::vector<MyriadGpRr> rr;
+    };
+
     class MyriadGP : public MyriadHelloProto<GpNeighbor>
     {
         // Distinct from MYRIADLS_PACKET_TYPE so both protocols can coexist.
@@ -106,6 +120,7 @@ namespace routingsim {
 
             void handleCollect(MyriadGpCollect* collect, nodeid_t from);
             void handleUpdate(MyriadGpUpdate* update, nodeid_t from);
+            void handleUpdateBatch(MyriadGpUpdateBatch* batch, nodeid_t from);
             void handleDegrade(MyriadGpDegrade* degrade, nodeid_t from);
 
             //  Originate a COLLECT for ring R towards `to`.
@@ -131,6 +146,18 @@ namespace routingsim {
             void forwardUpdateInRing(MyriadGpUpdate* pkt, uint32_t ring, nodeid_t sender);
             // Transition an UPDATE into each of my other rings not yet in chain.
             void forwardUpdateInterRing(MyriadGpUpdate* pkt, uint32_t curRing);
+            // Build a single-chain inter-ring transition UPDATE (current_ring=R2,
+            // I own it) from raw fields. Used both for the immediate send and as
+            // each held chain's single-chain retransmit template.
+            MyriadGpUpdate* buildTransitionUpdate(uint32_t R2, nodeid_t src, uint32_t seq,
+                                  uint32_t spof, const std::vector<uint32_t>& fwdChain,
+                                  const std::vector<uint32_t>& fwdSizes,
+                                  const std::vector<MyriadGpRr>& rr);
+            // Flush all held inter-ring transitions: re-validate each (still the
+            // winner for its origin at current seq, still loop-free), then emit
+            // one MyriadGpUpdateBatch per (R2, primary) bucket and arm per-chain
+            // reliability. Dropped chains release their reserved inflight slot.
+            void flushPendingTransitions();
             // Cancel a collect inflight + its budget timer for `ring`.
             void cancelCollect(uint32_t ring);
             // Budget-timer expiry for a collect on `ring`: ring declared broken.
@@ -145,10 +172,12 @@ namespace routingsim {
             // Reliable ring send: first send to `primary`, retransmits alternate
             // to `fallback` (equal args = same-neighbor probe). Sets fl.tx and
             // fl.budgetTimer; onBudgetExpired fires after retryLimit misses.
-            // Takes ownership of `pkt`.
+            // Takes ownership of `pkt`. sendFirst=false skips the initial send
+            // (a batch already carried it): only the retransmit template + timers
+            // are armed, so retransmits resend this single chain alone.
             void sendRingReliable(RingInflight& fl, nodeid_t primary, nodeid_t fallback,
                                   cPacket* pkt, simtime_t interval, int retryLimit,
-                                  std::function<void()> onBudgetExpired);
+                                  std::function<void()> onBudgetExpired, bool sendFirst = true);
             void cancelRingReliable(RingInflight& fl);
             void ringRetxFire(RingTx* h);
             // (subnet, myId) pairs derived once at onInitialize; reused as
@@ -159,6 +188,18 @@ namespace routingsim {
             simtime_t refreshJitter;
             // Best-path cost exponent a: path cost = sum of (member_count^a) over the chain
             double ringCostExponent;
+            // Inter-ring transition batching window; 0 = off (send immediately).
+            simtime_t holdInterval;
+            // Held inter-ring transitions bucketed by (target ring R2, next-hop
+            // primary), flushed together when the hold timer fires.
+            std::map<std::pair<uint32_t, nodeid_t>, std::vector<PendingTransition>> pendingTransitions;
+            TimerMsg* holdTimer = nullptr;   // single per-node; armed on first held chain
+            // Batch-size instrumentation: total entries flushed and largest
+            // single batch, recorded as scalars in finish() (avg = entries/count
+            // of update_batch sends). ponytail: plain counters, not a full
+            // cOutVector histogram — the sweep only needs mean + max.
+            unsigned long batchEntriesTotal = 0;
+            unsigned long batchMaxEntries = 0;
             double pathCost(const RibEntry& e) const;
             // Recompute rings[origin].preferred
             void selectPreferred(RingState& rs);
