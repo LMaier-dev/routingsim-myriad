@@ -54,6 +54,22 @@ PARAMS = {
 SENT_TOTAL_RE = re.compile(r"^scalar\s+\S+\s+sent_total\s+([0-9.]+)", re.M)
 
 
+def _sum_scalar(scas, name):
+    """Sum a named scalar across all .sca files (0 if absent)."""
+    rx = re.compile(rf"^scalar\s+\S+\s+{re.escape(name)}\s+([0-9.]+)", re.M)
+    return sum(int(float(m.group(1))) for sca in scas
+               for m in rx.finditer(open(sca).read()))
+
+
+def _max_scalar(scas, name):
+    """Max of a named scalar across all .sca files (0 if absent)."""
+    vals = [int(float(m.group(1)))
+            for sca in scas
+            for m in re.finditer(rf"^scalar\s+\S+\s+{re.escape(name)}\s+([0-9.]+)",
+                                 open(sca).read(), re.M)]
+    return max(vals) if vals else 0
+
+
 def run(cmd, **kw):
     return subprocess.run(cmd, capture_output=True, text=True, **kw)
 
@@ -177,16 +193,19 @@ def write_ini(proto, topo_path, ring_lines):
     return ini_path
 
 
-def message_count(proto, ini_path):
+def message_count(proto, ini_path, tag="", extra_args=None):
     """Run the sim (from SIM_ROOT so relative NED lookups work) and return the
     total application-level messages sent, summed from the per-type `sent_total`
     scalars each protocol records in finish(). This counts routing messages on
     the wire — NOT the kernel's gross `created:` total, which also includes
-    timers, packet wrappers, and per-send dups."""
-    res = os.path.join(INI_DIR, f"res_{proto}_{os.path.basename(ini_path)}")
+    timers, packet wrappers, and per-send dups. `tag` disambiguates result dirs
+    for the same ini run under different overrides (e.g. holdInterval); the
+    trailing .sca is left in place for batch_stats to read."""
+    res = os.path.join(INI_DIR, f"res_{proto}{tag}_{os.path.basename(ini_path)}")
     for old in glob.glob(os.path.join(res, "*.sca")):
         os.remove(old)
-    r = run([BIN, "-u", "Cmdenv", ini_path, "--result-dir", res], cwd=SIM_ROOT)
+    cmd = [BIN, "-u", "Cmdenv", ini_path, "--result-dir", res] + (extra_args or [])
+    r = run(cmd, cwd=SIM_ROOT)
     scas = glob.glob(os.path.join(res, "*.sca"))
     if not scas:
         print(f"  !! {proto} produced no .sca. stderr tail:\n{r.stderr[-400:]}")
@@ -198,37 +217,79 @@ def message_count(proto, ini_path):
     return total
 
 
+def batch_stats(ini_path, tag=""):
+    """Read the GP run's already-written .sca (message_count ran first) and
+    return (n_batches, avg_entries, max_entries) for the inter-ring UPDATE
+    batching. n_batches = sum of sent_update_batch (packets on the wire);
+    avg = batch_entries_total / n_batches (mean chains coalesced per packet)."""
+    res = os.path.join(INI_DIR, f"res_gp{tag}_{os.path.basename(ini_path)}")
+    scas = glob.glob(os.path.join(res, "*.sca"))
+    if not scas:
+        return 0, 0.0, 0
+    n_batches = _sum_scalar(scas, "sent_update_batch")
+    entries = _sum_scalar(scas, "batch_entries_total")
+    mx = _max_scalar(scas, "batch_max_entries")
+    avg = (entries / n_batches) if n_batches else 0.0
+    return n_batches, avg, mx
+
+
 def sweep(items):
-    """items: list of (label, topo_path). Returns (labels, ls_counts, gp_counts)."""
-    labels, ls, gp = [], [], []
+    """items: list of (label, topo_path). Runs LS, GP-batched (NED default
+    holdInterval=200ms) and GP-no-batch (holdInterval=0s) for each topology.
+    Returns a dict of parallel series: labels, ls, gp, gp_nobatch, avg_sz,
+    max_sz — everything the two-panel plot needs."""
+    out = {k: [] for k in ("labels", "ls", "gp", "gp_nobatch", "avg_sz", "max_sz")}
     for (label, topo) in items:
         rings = ring_label_lines(topo)
         ls_ini = write_ini("ls", topo, rings)
         gp_ini = write_ini("gp", topo, rings)
         ls_n = message_count("ls", ls_ini)
-        gp_n = message_count("gp", gp_ini)
-        labels.append(label)
-        ls.append(ls_n)
-        gp.append(gp_n)
-        print(f"  {label:<6} LS={ls_n}  GP={gp_n}")
-    return labels, ls, gp
+        gp_n = message_count("gp", gp_ini)                       # 200ms default
+        nb, avg, mx = batch_stats(gp_ini)
+        gp0 = message_count("gp", gp_ini, tag="0",
+                            extra_args=['--**.holdInterval=0s'])  # no-batch baseline
+        out["labels"].append(label)
+        out["ls"].append(ls_n)
+        out["gp"].append(gp_n)
+        out["gp_nobatch"].append(gp0)
+        out["avg_sz"].append(avg)
+        out["max_sz"].append(mx)
+        print(f"  {label:<6} LS={ls_n}  GP0={gp0}  GP={gp_n}  "
+              f"batches={nb} avg_sz={avg:.1f} max_sz={mx}")
+    return out
 
 
-def plot(labels, ls, gp, title, xlabel, outfile):
+def plot(res, title, xlabel, outfile):
+    """Two panels sharing the sweep's x-axis. LEFT: message count — LS,
+    GP-no-batch, GP-batched (log-y so all scales read at once). RIGHT: the
+    batching mechanism — mean and max chains coalesced per batch packet, which
+    is what bends the GP-batched curve below GP-no-batch. `res` is the dict
+    returned by sweep()."""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
+    labels = res["labels"]
     xs = list(range(len(labels)))
-    fig, ax = plt.subplots(figsize=(10, 6))
-    ax.plot(xs, ls, "o-", label="Link-State (MyriadLS)", color="tab:blue")
-    ax.plot(xs, gp, "s-", label="Path-Vector (MyriadGP)", color="tab:red")
-    ax.set_xticks(xs)
-    ax.set_xticklabels(labels, rotation=45, ha="right")
-    ax.set_xlabel(xlabel)
-    ax.set_ylabel("routing messages sent")
-    ax.set_title(title)
-    ax.legend()
-    ax.grid(True, alpha=0.3)
+    fig, (axL, axR) = plt.subplots(1, 2, figsize=(15, 6))
+
+    axL.plot(xs, res["ls"], "o-", label="Link-State (LS)", color="tab:blue")
+    axL.plot(xs, res["gp_nobatch"], "^--", label="Path-Vector, no batching",
+             color="tab:red", alpha=0.55)
+    axL.plot(xs, res["gp"], "s-", label="Path-Vector, batched (200ms)",
+             color="tab:red")
+    axL.set_xticks(xs); axL.set_xticklabels(labels, rotation=45, ha="right")
+    axL.set_xlabel(xlabel); axL.set_ylabel("routing messages sent")
+    axL.set_title(title); axL.legend(); axL.grid(True, alpha=0.3)
+
+    axR.plot(xs, res["avg_sz"], "s-", label="mean entries / batch",
+             color="tab:green")
+    axR.plot(xs, res["max_sz"], "^--", label="max entries / batch",
+             color="tab:olive", alpha=0.7)
+    axR.set_xticks(xs); axR.set_xticklabels(labels, rotation=45, ha="right")
+    axR.set_xlabel(xlabel); axR.set_ylabel("chains coalesced per batch packet")
+    axR.set_title("Inter-ring UPDATE batch size"); axR.legend()
+    axR.grid(True, alpha=0.3)
+
     fig.tight_layout()
     fig.savefig(outfile, dpi=110)
     print(f"  wrote {outfile}")
@@ -391,16 +452,14 @@ def main():
     if args.only in (None, "square"):
         print("== square sweep (NxN) ==")
         s_items = [(f"{x}x{y}", gen_topology(x, y)) for (x, y) in square_dims]
-        s_lbl, s_ls, s_gp = sweep(s_items)
-        plot(s_lbl, s_ls, s_gp,
+        plot(sweep(s_items),
              "GP vs LS: square grid scaling (dense 2D ring-mesh)",
              "grid size", os.path.join(PLOT_DIR, "square_scaling.png"))
 
     if args.only in (None, "width"):
         print("== width sweep (3xW) ==")
         w_items = [(f"3x{w}", gen_topology(3, w)) for (_, w) in width_dims]
-        w_lbl, w_ls, w_gp = sweep(w_items)
-        plot(w_lbl, w_ls, w_gp,
+        plot(sweep(w_items),
              "GP vs LS: width scaling (3xW ladder ring-mesh)",
              "grid size", os.path.join(PLOT_DIR, "width_scaling.png"))
 
@@ -410,8 +469,7 @@ def main():
         # is GP's very best case and the linear-scaling floor for the sweep.
         print("== ladder sweep (2xW, 1-D line of unit-square rings) ==")
         l_items = [(f"L2x{w}", gen_ladder(w)) for w in ladder_widths]
-        l_lbl, l_ls, l_gp = sweep(l_items)
-        plot(l_lbl, l_ls, l_gp,
+        plot(sweep(l_items),
              "GP vs LS: ladder scaling (2xW, pure 1-D line of rings)",
              "ladder width", os.path.join(PLOT_DIR, "ladder_scaling.png"))
 
@@ -425,8 +483,7 @@ def main():
         # size-2N petals); here petals are size N by request.
         print("== flower sweep (central 2N + N petals of N, ring size grows) ==")
         f_items = [(f"F{N}", gen_flower(N)) for N in flower_N]
-        f_lbl, f_ls, f_gp = sweep(f_items)
-        plot(f_lbl, f_ls, f_gp,
+        plot(sweep(f_items),
              "GP vs LS: flower scaling (N petals of N routers, star ring-graph)",
              "flower N (ring size; N^2 nodes)", os.path.join(PLOT_DIR, "flower_scaling.png"))
 

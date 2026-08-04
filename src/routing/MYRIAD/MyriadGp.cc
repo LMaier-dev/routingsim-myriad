@@ -1,6 +1,7 @@
 #include "routing/MYRIAD/MyriadGp.h"
 #include <algorithm>
 #include <cmath>
+#include <fstream>
 #include <limits>
 
 namespace routingsim {
@@ -824,26 +825,16 @@ void MyriadGP::flushPendingTransitions() {
         nodeid_t primary = key.second;
         RingState& rs2 = rings[R2];
 
-        // Re-validate each held chain against current state; collect survivors.
+        // Every queued chain was already the winner + loop-free when processChain
+        // queued it (that's the gate to enqueue). We do NOT re-drop non-final
+        // winners here: baseline propagates a chain the moment it's winner-on-
+        // arrival, so a chain later superseded still reached downstream — and,
+        // via loop prevention, may be the ONLY path to nodes the final winner's
+        // chain can't enter. Dropping it here silently removes those routes.
+        // So: send all queued (batch-of-1 is fine). Order preserved for determinism.
         std::vector<PendingTransition*> live;
-        for (auto& pt : chains) {
-            uint32_t origin = pt.fwdChain.back();
-            RingState& originRs = rings[origin];
-            bool valid = originRs.preferred != SIZE_MAX
-                && originRs.ribIn[originRs.preferred].chain == pt.fwdChain
-                && originRs.ribIn[originRs.preferred].seq_no == pt.seq;
-            // Loop check: none of my rings may already sit in the packet chain
-            // (fwdChain minus its head, which is curRing = one of my rings).
-            for (size_t i = 1; valid && i < pt.fwdChain.size(); ++i)
-                for (uint32_t myRing : selfRings)
-                    if (pt.fwdChain[i] == myRing) { valid = false; break; }
-            if (!valid) {
-                MLOG_DEBUG() << "held transition dropped (superseded/loop) ring='"
-                             << R2 << "' chain=" << formatChain(pt.fwdChain) << "\n";
-                continue;
-            }
-            live.push_back(&pt);
-        }
+        live.reserve(chains.size());
+        for (auto& pt : chains) live.push_back(&pt);
         if (live.empty()) continue;
 
         // One batch, owned by me, that laps R2 WHOLE under a single circular-ACK.
@@ -990,6 +981,26 @@ void MyriadGP::finish() {
     recordScalar("batch_entries_total", batchEntriesTotal);
     recordScalar("batch_max_entries", batchMaxEntries);
     recordScalar("batches_created", batchesCreated);
+
+    // Test hook: append this node's converged preferred routes so the batching
+    // correctness test can assert they're identical across holdInterval settings.
+    // One line per (origin ring) I have a preferred chain for. The preferred
+    // chain IS the forwarding decision, so equality here == same reachability.
+    std::string dumpFile = par("ribDumpFile").stdstringValue();
+    if (!dumpFile.empty()) {
+        std::ofstream f(dumpFile, std::ios::app);
+        std::vector<uint32_t> originIds;
+        for (auto& [rid, rs] : rings)
+            if (rs.preferred != SIZE_MAX) originIds.push_back(rid);
+        std::sort(originIds.begin(), originIds.end());
+        for (uint32_t rid : originIds) {
+            RingState& rs = rings[rid];
+            const RibEntry& e = rs.ribIn[rs.preferred];
+            f << (int)myId << " origin=" << rid
+              << " chain=" << formatChain(e.chain)
+              << " spof=" << e.spof_count << "\n";
+        }
+    }
 }
 
 } // namespace routingsim
