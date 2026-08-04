@@ -36,6 +36,12 @@ simple myriadgp extends routingsim.foundation.Protocol
         // pre-batching behaviour: every transition sent immediately).
         double holdInterval @unit(s) = default(200ms);
 
+        // Test hook: if non-empty, each node APPENDS its converged preferred
+        // routes to this file in finish() (one line per (node, origin)). Used by
+        // test_rib_batching.py to assert batching doesn't change the RIB. Empty
+        // in production (no I/O).
+        string ribDumpFile = default("");
+
         // Ring membership override, e.g. "A,B". Empty = use the built-in
         // per-id table. Set per node via **.NodeN.*.ringLabel or a topology
         // node property.
