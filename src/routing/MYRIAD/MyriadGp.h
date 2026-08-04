@@ -64,6 +64,12 @@ namespace routingsim {
         // packet's chain: empty chain = my origin-UPDATE; non-empty = a transit
         // relay of another origin's UPDATE. Several can coexist (different chains).
         std::map<std::vector<uint32_t>, RingInflight> updateInflights;
+        // Whole-batch inter-ring transition laps I own in this ring (hold>0
+        // path), keyed by the batch-lap seq I stamped. Distinct from
+        // updateInflights: a batch mixes many chains but closes ONE circular-ACK.
+        std::map<uint32_t /*batchLapSeq*/, RingInflight> batchInflights;
+        // Monotonic per-ring counter for batch-lap seqs I originate here.
+        uint32_t batchLapSeq = 0;
         std::vector<RibEntry> ribIn; // all currently-valid chains for this origin
         size_t preferred = SIZE_MAX; // index into ribIn; SIZE_MAX = none
 
@@ -142,21 +148,42 @@ namespace routingsim {
             std::vector<nodeid_t> ringNeighbors(uint32_t ring);
             // Originate an UPDATE for a ring I just finished collecting.
             void originateUpdate(uint32_t ring);
-            // Forward an UPDATE within its current_ring (unconditional, for ACK).
+            // Forward a single origin/relay UPDATE within its current_ring
+            // (unconditional, closes the king's lap).
             void forwardUpdateInRing(MyriadGpUpdate* pkt, uint32_t ring, nodeid_t sender);
-            // Transition an UPDATE into each of my other rings not yet in chain.
-            void forwardUpdateInterRing(MyriadGpUpdate* pkt, uint32_t curRing);
+            // Forward a whole batch within current_ring (unconditional). The batch
+            // never unpacks intra-ring: it laps as one packet to close ONE ACK.
+            void forwardBatchInRing(MyriadGpUpdateBatch* pkt, uint32_t ring, nodeid_t sender);
+            // Process ONE learned chain at this node: RIB insert/select, and if it
+            // wins + is loop-free, transition it inter-ring (appending R2s it fans
+            // into to `handled`). Shared by handleUpdate (its single chain) and
+            // handleUpdateBatch (each entry). Returns nothing; `handled` accrues
+            // the rings this chain was flooded into so the caller can mark the
+            // lapping packet. curRing = the ring this chain is currently lapping.
+            void processChain(uint32_t curRing, uint32_t seq, uint32_t spof,
+                              const std::vector<uint32_t>& chain,
+                              const std::vector<uint32_t>& chainSizes,
+                              const std::vector<MyriadGpRr>& rr,
+                              const std::vector<MyriadGpRr>* originRrTrailer,
+                              std::vector<uint32_t>& handled);
+            // Transition one chain into each of my other rings not in `chain` and
+            // not already in `handled`. hold=0 sends a single-chain UPDATE now
+            // (old path, exact pre-batch behaviour); hold>0 queues it for the
+            // next batch flush. Appends each R2 it fans into to `handled`.
+            void forwardChainInterRing(uint32_t curRing, uint32_t seq, uint32_t spof,
+                              const std::vector<uint32_t>& chain,
+                              const std::vector<uint32_t>& chainSizes,
+                              const std::vector<MyriadGpRr>& rr,
+                              std::vector<uint32_t>& handled);
             // Build a single-chain inter-ring transition UPDATE (current_ring=R2,
-            // I own it) from raw fields. Used both for the immediate send and as
-            // each held chain's single-chain retransmit template.
+            // I own it) from raw fields — the hold=0 immediate path.
             MyriadGpUpdate* buildTransitionUpdate(uint32_t R2, nodeid_t src, uint32_t seq,
                                   uint32_t spof, const std::vector<uint32_t>& fwdChain,
                                   const std::vector<uint32_t>& fwdSizes,
                                   const std::vector<MyriadGpRr>& rr);
-            // Flush all held inter-ring transitions: re-validate each (still the
-            // winner for its origin at current seq, still loop-free), then emit
-            // one MyriadGpUpdateBatch per (R2, primary) bucket and arm per-chain
-            // reliability. Dropped chains release their reserved inflight slot.
+            // Flush all held inter-ring transitions (hold>0): re-validate each,
+            // then emit one MyriadGpUpdateBatch per (R2, primary) bucket that laps
+            // R2 whole under a single batch-lap circular-ACK.
             void flushPendingTransitions();
             // Cancel a collect inflight + its budget timer for `ring`.
             void cancelCollect(uint32_t ring);
@@ -164,6 +191,8 @@ namespace routingsim {
             void onCollectBudgetExpired(uint32_t ring);
             // Budget-timer expiry for an UPDATE traversal (ring, chain).
             void onUpdateBudgetExpired(uint32_t ring, std::vector<uint32_t> chain);
+            // Budget-timer expiry for a whole-batch lap (ring, batchLapSeq).
+            void onBatchBudgetExpired(uint32_t ring, uint32_t batchLapSeq);
             // Retransmit budget (retransmissions after the initial send).
             static constexpr int COLLECT_RETRY_LIMIT = 3;
             // Placeholder ring size before a ring's origin-UPDATE trailer arrives
@@ -172,12 +201,10 @@ namespace routingsim {
             // Reliable ring send: first send to `primary`, retransmits alternate
             // to `fallback` (equal args = same-neighbor probe). Sets fl.tx and
             // fl.budgetTimer; onBudgetExpired fires after retryLimit misses.
-            // Takes ownership of `pkt`. sendFirst=false skips the initial send
-            // (a batch already carried it): only the retransmit template + timers
-            // are armed, so retransmits resend this single chain alone.
+            // Takes ownership of `pkt`.
             void sendRingReliable(RingInflight& fl, nodeid_t primary, nodeid_t fallback,
                                   cPacket* pkt, simtime_t interval, int retryLimit,
-                                  std::function<void()> onBudgetExpired, bool sendFirst = true);
+                                  std::function<void()> onBudgetExpired);
             void cancelRingReliable(RingInflight& fl);
             void ringRetxFire(RingTx* h);
             // (subnet, myId) pairs derived once at onInitialize; reused as
@@ -200,6 +227,9 @@ namespace routingsim {
             // cOutVector histogram — the sweep only needs mean + max.
             unsigned long batchEntriesTotal = 0;
             unsigned long batchMaxEntries = 0;
+            // Distinct batches created (flushed), the denominator for mean batch
+            // size — NOT sent_update_batch, which also counts every lap-forward.
+            unsigned long batchesCreated = 0;
             double pathCost(const RibEntry& e) const;
             // Recompute rings[origin].preferred
             void selectPreferred(RingState& rs);

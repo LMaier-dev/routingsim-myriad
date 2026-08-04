@@ -97,25 +97,31 @@ packet MyriadGpUpdate extends MyriadGpNLRI {
     uint32_t member_count;
 }
 
-// One inter-ring UPDATE transition carried inside a batch. Holds every
-// per-chain field an inter-ring `fwd` UPDATE sets in forwardUpdateInterRing
-// (router_id_src, seq_no, ring_chain, spof_count, rr, chain_sizes). No widths /
-// member_count / handled_rings: those ride only origin/intra-ring UPDATEs, and
-// intra-ring forwards are never batched. The batch header carries the shared
-// current_ring (all entries transition into the SAME ring). A one-entry batch
-// is behaviourally identical to a lone inter-ring MyriadGpUpdate. (A class, not
-// a struct: OMNeT++ structs can't hold dynamic-array fields.)
+// One inter-ring UPDATE transition carried inside a batch. Every entry in a
+// batch shares the same owner-king and target ring, so those live on the batch
+// header (router_id_src, current_ring); the entry carries only the per-chain
+// fields (seq_no, ring_chain, spof_count, rr, chain_sizes) plus its OWN
+// handled_rings — each entry transitions into different other rings as the
+// batch laps, so the "already flooded this lap" marks must be per-entry, not
+// shared. widths/member_count ride only origin UPDATEs. (A class, not a struct:
+// OMNeT++ structs can't hold dynamic-array fields.)
 class MyriadGpUpdateEntry {
-    nodeid_t router_id_src;   // the forwarder-king that owns this new traversal
     uint32_t seq_no;
     uint32_t ring_chain[];
     uint32_t spof_count;
     MyriadGpRr rr[];
     uint32_t chain_sizes[];
+    // Rings this entry has already been flooded into on the current lap (per-
+    // entry analogue of MyriadGpUpdate.handled_rings). Reset empty at birth.
+    uint32_t handled_rings[];
 }
 
-// Batch of inter-ring UPDATE transitions, all into current_ring, coalesced by a
-// forwarder within one holdInterval window (see the holdInterval NED knob).
+// Batch of inter-ring UPDATE transitions, all owned by router_id_src and all
+// transitioning into current_ring, coalesced within one holdInterval window
+// (see the holdInterval NED knob). The batch laps current_ring WHOLE — never
+// unpacked intra-ring — and closes a single circular-ACK (matched on
+// router_id_src + current_ring + seq_no) for all its entries. seq_no is the
+// owner's per-target-ring batch-lap counter, distinct from per-entry seq_no.
 packet MyriadGpUpdateBatch extends MyriadGpHeader {
     type = MYRIADGP_UPDATE_BATCH;
     MyriadGpUpdateEntry entries[];
