@@ -24,40 +24,39 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SIM_ROOT = os.path.dirname(HERE)
 REPO = os.path.dirname(SIM_ROOT)
 BIN = os.path.join(REPO, "src", "RoutingSim")
-INI = os.path.join(HERE, "myriadgp.ini")
+INI = os.path.join(HERE, "myriadgp.ini")          # holds the Grid5/Grid10 configs
+COMMON_INI = os.path.join(HERE, "eval_common.ini") # shared fair-timing knobs
 OUT = os.path.join(HERE, "eval", "ribtest")
 
 HOLDS = ["0s", "200ms", "1s"]
 CONFIGS = ["Grid5", "Grid10"]
 
-# Same fair-timing overrides the scaling eval uses (deterministic, jitter off).
-# Long sim-time so EVERY holdInterval fully converges before we snapshot: hold
-# adds up to holdInterval of latency per inter-ring hop, and a chain can cross
-# many rings, so a short run would compare half-converged states (a latency
-# artefact, not a routing bug). refreshInterval kept > sim so no re-collect
-# churn mid-run. At convergence the deterministic selectPreferred must pick the
-# same winner from the same complete RIB iff batching preserves routes.
+# Fair-timing knobs come from eval_common.ini (single source of truth, loaded as
+# a second ini so its [General] overrides myriadgp.ini's helloJitter=1s). Here we
+# only add the convergence overrides this test needs on top: a LONG sim-time and
+# refresh > sim so every holdInterval fully converges before we snapshot the RIB
+# (hold adds latency per inter-ring hop; a short run would compare half-converged
+# states — a latency artefact, not a routing bug). Command line beats both inis.
 PARAMS = [
     "--sim-time-limit=120s",
-    "--**.helloInterval=2s", "--**.deadInterval=4s", "--**.rxmtInterval=1s",
-    "--**.helloJitter=0s",
     "--**.refreshInterval=200s", "--**.refreshJitter=0s",
-    "--**.nodeMinControlPlaneDelay=1000000ns",
-    "--**.nodeMaxControlPlaneDelay=1000000ns",
-    "--cmdenv-express-mode=true", '--**.logLevel="warn"',
 ]
 
 
 def run(config, hold):
-    """Run one (config, hold); return (pairs, routes):
+    """Run one (config, hold); return (pairs, routes, stats):
       pairs  = set of (node, origin) — REACHABILITY (the correctness invariant)
-      routes = sorted full 'node origin chain spof' lines — the exact path choice
+      routes = sorted full dump lines — the exact path choice
+      stats  = dict field -> list of values (len/spof/seq/cost/ecmp) over all
+               winner chains, for aggregate quality comparison across holds
     """
     dump = os.path.join(OUT, f"rib_{config}_{hold}.txt")
     if os.path.exists(dump):
         os.remove(dump)
     res = os.path.join(OUT, f"res_{config}_{hold}")
-    cmd = [BIN, "-u", "Cmdenv", INI, "-c", config, *PARAMS,
+    # Two inis: myriadgp.ini (Grid configs) + eval_common.ini (fair timing,
+    # loaded last so its [General] wins over myriadgp.ini's).
+    cmd = [BIN, "-u", "Cmdenv", INI, COMMON_INI, "-c", config, *PARAMS,
            f"--**.holdInterval={hold}",
            f'--**.ribDumpFile="{dump}"',
            "--result-dir", res]
@@ -69,15 +68,29 @@ def run(config, hold):
     if not os.path.exists(dump):
         sys.exit(f"FAIL: {config} hold={hold} produced no RIB dump.\n{log[-800:]}")
     routes, pairs = [], set()
+    stats = {k: [] for k in ("len", "spof", "seq", "cost", "ecmp")}
     with open(dump) as f:
         for l in f:
             l = l.rstrip("\n")
             if not l.strip():
                 continue
             routes.append(l)
-            parts = l.split()
-            pairs.add((parts[0], parts[1]))   # (node, origin=...)
-    return pairs, sorted(routes)
+            # line: <node> origin=<r> len=.. spof=.. seq=.. cost=.. ecmp=.. chain=[..]
+            kv = dict(p.split("=", 1) for p in l.split() if "=" in p and not p.startswith("chain="))
+            pairs.add((l.split()[0], f"origin={kv['origin']}"))
+            for k in stats:
+                if k in kv:
+                    stats[k].append(float(kv[k]))
+    return pairs, sorted(routes), stats
+
+
+def summarize(stats):
+    """Compact mean/max/sum summary of each stat field (skip empty)."""
+    def s(vals):
+        if not vals:
+            return "  n/a"
+        return f"mean={sum(vals)/len(vals):.2f} max={max(vals):.0f} sum={sum(vals):.0f}"
+    return {k: s(v) for k, v in stats.items()}
 
 
 def main():
@@ -90,16 +103,17 @@ def main():
     # differ — path-vector protocols legitimately converge to different loop-free
     # paths under different update ordering (same class as BGP), and holding
     # reorders arrivals. So we assert baseline pairs ⊆ batched pairs, and report
-    # chain-choice differences as informational only.
+    # winner-chain quality stats (len/spof/seq/cost/ecmp) as informational.
     all_ok = True
     for config in CONFIGS:
-        base_pairs, base_routes = run(config, "0s")
-        print(f"{config}: baseline (hold=0s) reaches {len(base_pairs)} "
-              f"(node,origin) pairs via {len(base_routes)} routes")
+        base_pairs, base_routes, base_stats = run(config, "0s")
+        print(f"\n=== {config}: baseline (hold=0s) reaches {len(base_pairs)} "
+              f"(node,origin) pairs via {len(base_routes)} routes ===")
+        _print_stats("0s", base_stats)
         for hold in HOLDS:
             if hold == "0s":
                 continue
-            pairs, routes = run(config, hold)
+            pairs, routes, stats = run(config, hold)
             lost = base_pairs - pairs
             gained = pairs - base_pairs
             chain_diffs = len(set(base_routes) ^ set(routes))
@@ -113,11 +127,19 @@ def main():
                 print(f"  OK   hold={hold}: reachability preserved "
                       f"({len(pairs)} pairs{extra}; {chain_diffs} chain-choice "
                       f"diffs — benign path reordering)")
+            _print_stats(hold, stats)
 
     if not all_ok:
         sys.exit("\nREACHABILITY LOST: batching dropped routes — bug.")
     print("\nPASS: batching preserves reachability on all grids "
           "(no (node,origin) pair ever lost).")
+
+
+def _print_stats(hold, stats):
+    summ = summarize(stats)
+    print(f"       winner-chain stats @ hold={hold}:")
+    for k in ("len", "spof", "seq", "cost", "ecmp"):
+        print(f"         {k:<8} {summ[k]}")
 
 
 if __name__ == "__main__":

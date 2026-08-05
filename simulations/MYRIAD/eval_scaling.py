@@ -36,20 +36,10 @@ TOPO_DIR = os.path.join(EVAL_DIR, "topologies")
 INI_DIR = os.path.join(EVAL_DIR, "ini")
 PLOT_DIR = os.path.join(EVAL_DIR, "plots")
 
-# Aligned, fair timing for BOTH protocols (see the GP-vs-LS analysis): identical
-# hello/dead/rxmt, jitter off (LS's DBD exchange breaks under hello jitter), a
-# uniform 1ms control-plane delay, and enough runtime for both to converge.
-SIM_TIME = "10s"
-DELAY_NS = "1000000ns"   # 1 ms
-PARAMS = {
-    "helloInterval": "2s",
-    "deadInterval": "4s",
-    "rxmtInterval": "1s",
-    "helloJitter": "0s",
-    "dbExchangeBatchSize": "10",
-    "refreshInterval": "15s",
-    "refreshJitter": "1s",
-}
+# Canonical fair-timing knobs live in eval_common.ini (single source of truth,
+# shared with test_rib_batching.py). Each generated per-run ini `include`s it;
+# only per-run knobs (topology, ring labels, holdInterval) are written here.
+COMMON_INI = os.path.join(HERE, "eval_common.ini")
 
 SENT_TOTAL_RE = re.compile(r"^scalar\s+\S+\s+sent_total\s+([0-9.]+)", re.M)
 
@@ -165,28 +155,24 @@ def ring_label_lines(topo_path):
 
 
 def write_ini(proto, topo_path, ring_lines):
-    """Write a self-contained .ini (absolute paths, inlined ringlabels)."""
+    """Write a self-contained .ini: include the shared eval_common.ini for the
+    fair-timing knobs, then only the per-run bits (protocol, topology, inlined
+    ring labels). Absolute paths so it runs from SIM_ROOT."""
     stem = os.path.splitext(os.path.basename(topo_path))[0]
     ini_path = os.path.join(INI_DIR, f"{proto}_{stem}.ini")
     proto_ned = f"routingsim.routing.MYRIAD.myriad{proto}"
     lines = [
+        f"include {COMMON_INI}",
         "[General]",
         f"ned-path={SRC};{SIM_ROOT}",
         f'**.protocols = "{proto_ned}"',
         "network = routingsim.simulations.DefaultNetwork",
-        f"sim-time-limit = {SIM_TIME}",
-        f"**.nodeMinControlPlaneDelay = {DELAY_NS}",
-        f"**.nodeMaxControlPlaneDelay = {DELAY_NS}",
-        "cmdenv-express-mode = true",
-        '**.logLevel = "warn"',
-        "cmdenv-event-banners = false",
         f'*.manager.topologyFile = "{topo_path}"',
         "*.mainStatistics.samplingInterval = 0.01s",
         "*.dynamics.fraction = 0",
         "*.dynamics.warmup = 0s",
         "**.mobility = false",
     ]
-    lines += [f"**.{k} = {v}" for k, v in PARAMS.items()]
     lines += [ln.rstrip("\n") for ln in ring_lines]
     with open(ini_path, "w") as f:
         f.write("\n".join(lines) + "\n")
@@ -233,38 +219,37 @@ def batch_stats(ini_path, tag=""):
     return n_batches, avg, mx
 
 
-def sweep(items):
-    """items: list of (label, topo_path). Runs LS, GP-batched (NED default
-    holdInterval=200ms) and GP-no-batch (holdInterval=0s) for each topology.
-    Returns a dict of parallel series: labels, ls, gp, gp_nobatch, avg_sz,
-    max_sz — everything the two-panel plot needs."""
-    out = {k: [] for k in ("labels", "ls", "gp", "gp_nobatch", "avg_sz", "max_sz")}
+def sweep(items, nobatch=False):
+    """items: list of (label, topo_path). Runs LS and ONE GP per topology. GP
+    uses the holdInterval pinned in eval_common.ini (batching on); pass
+    nobatch=True to override it to 0s — the pre-batching baseline, which is far
+    slower (no coalescing) so it's opt-in, not run every sweep. Returns a dict of
+    parallel series: labels, ls, gp, avg_sz, max_sz."""
+    gp_extra = ['--**.holdInterval=0s'] if nobatch else None
+    out = {k: [] for k in ("labels", "ls", "gp", "avg_sz", "max_sz")}
     for (label, topo) in items:
         rings = ring_label_lines(topo)
         ls_ini = write_ini("ls", topo, rings)
         gp_ini = write_ini("gp", topo, rings)
         ls_n = message_count("ls", ls_ini)
-        gp_n = message_count("gp", gp_ini)                       # 200ms default
+        gp_n = message_count("gp", gp_ini, extra_args=gp_extra)
         nb, avg, mx = batch_stats(gp_ini)
-        gp0 = message_count("gp", gp_ini, tag="0",
-                            extra_args=['--**.holdInterval=0s'])  # no-batch baseline
         out["labels"].append(label)
         out["ls"].append(ls_n)
         out["gp"].append(gp_n)
-        out["gp_nobatch"].append(gp0)
         out["avg_sz"].append(avg)
         out["max_sz"].append(mx)
-        print(f"  {label:<6} LS={ls_n}  GP0={gp0}  GP={gp_n}  "
+        mode = "no-batch" if nobatch else "batched"
+        print(f"  {label:<6} LS={ls_n}  GP({mode})={gp_n}  "
               f"batches={nb} avg_sz={avg:.1f} max_sz={mx}")
     return out
 
 
-def plot(res, title, xlabel, outfile):
-    """Two panels sharing the sweep's x-axis. LEFT: message count — LS,
-    GP-no-batch, GP-batched (log-y so all scales read at once). RIGHT: the
-    batching mechanism — mean and max chains coalesced per batch packet, which
-    is what bends the GP-batched curve below GP-no-batch. `res` is the dict
-    returned by sweep()."""
+def plot(res, title, xlabel, outfile, nobatch=False):
+    """Two panels sharing the sweep's x-axis. LEFT: message count — LS vs the one
+    GP series (batched, or no-batch if --no-batch). RIGHT: the batching mechanism
+    — mean and max chains coalesced per batch packet. `res` is the dict from
+    sweep()."""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -272,11 +257,9 @@ def plot(res, title, xlabel, outfile):
     xs = list(range(len(labels)))
     fig, (axL, axR) = plt.subplots(1, 2, figsize=(15, 6))
 
+    gp_label = "Path-Vector, no batching" if nobatch else "Path-Vector, batched"
     axL.plot(xs, res["ls"], "o-", label="Link-State (LS)", color="tab:blue")
-    axL.plot(xs, res["gp_nobatch"], "^--", label="Path-Vector, no batching",
-             color="tab:red", alpha=0.55)
-    axL.plot(xs, res["gp"], "s-", label="Path-Vector, batched (200ms)",
-             color="tab:red")
+    axL.plot(xs, res["gp"], "s-", label=gp_label, color="tab:red")
     axL.set_xticks(xs); axL.set_xticklabels(labels, rotation=45, ha="right")
     axL.set_xlabel(xlabel); axL.set_ylabel("routing messages sent")
     axL.set_title(title); axL.legend(); axL.grid(True, alpha=0.3)
@@ -427,10 +410,19 @@ def main():
     ap.add_argument("--only", choices=["square", "width", "ladder", "flower", "topos"],
                     help="run just one sweep instead of all four ('topos' = draw "
                          "the representative topology pictures only, no sims)")
+    ap.add_argument("--no-batch", dest="nobatch", action="store_true",
+                    help="run GP with holdInterval=0s (pre-batching baseline). "
+                         "Far slower (no coalescing) — off by default; the normal "
+                         "run uses the holdInterval pinned in eval_common.ini.")
     args = ap.parse_args()
 
     for d in (TOPO_DIR, INI_DIR, PLOT_DIR):
         os.makedirs(d, exist_ok=True)
+    # Snapshot the shared conditions beside the plots so a results bundle is
+    # self-documenting and reproducible.
+    import shutil
+    if os.path.exists(COMMON_INI):
+        shutil.copy(COMMON_INI, os.path.join(PLOT_DIR, "eval_common.ini"))
     if args.only == "topos":
         print("== drawing representative topologies ==")
         draw_topologies(os.path.join(PLOT_DIR, "topologies.png"))
@@ -452,16 +444,16 @@ def main():
     if args.only in (None, "square"):
         print("== square sweep (NxN) ==")
         s_items = [(f"{x}x{y}", gen_topology(x, y)) for (x, y) in square_dims]
-        plot(sweep(s_items),
+        plot(sweep(s_items, args.nobatch),
              "GP vs LS: square grid scaling (dense 2D ring-mesh)",
-             "grid size", os.path.join(PLOT_DIR, "square_scaling.png"))
+             "grid size", os.path.join(PLOT_DIR, "square_scaling.png"), args.nobatch)
 
     if args.only in (None, "width"):
         print("== width sweep (3xW) ==")
         w_items = [(f"3x{w}", gen_topology(3, w)) for (_, w) in width_dims]
-        plot(sweep(w_items),
+        plot(sweep(w_items, args.nobatch),
              "GP vs LS: width scaling (3xW ladder ring-mesh)",
-             "grid size", os.path.join(PLOT_DIR, "width_scaling.png"))
+             "grid size", os.path.join(PLOT_DIR, "width_scaling.png"), args.nobatch)
 
     if args.only in (None, "ladder"):
         # 2xW ladder = W-1 unit-square rings chained in a pure 1-D line. Zero
@@ -469,9 +461,9 @@ def main():
         # is GP's very best case and the linear-scaling floor for the sweep.
         print("== ladder sweep (2xW, 1-D line of unit-square rings) ==")
         l_items = [(f"L2x{w}", gen_ladder(w)) for w in ladder_widths]
-        plot(sweep(l_items),
+        plot(sweep(l_items, args.nobatch),
              "GP vs LS: ladder scaling (2xW, pure 1-D line of rings)",
-             "ladder width", os.path.join(PLOT_DIR, "ladder_scaling.png"))
+             "ladder width", os.path.join(PLOT_DIR, "ladder_scaling.png"), args.nobatch)
 
     if args.only in (None, "flower"):
         # Ring-SIZE sweep (orthogonal to the others, which grow path diversity):
@@ -483,9 +475,10 @@ def main():
         # size-2N petals); here petals are size N by request.
         print("== flower sweep (central 2N + N petals of N, ring size grows) ==")
         f_items = [(f"F{N}", gen_flower(N)) for N in flower_N]
-        plot(sweep(f_items),
+        plot(sweep(f_items, args.nobatch),
              "GP vs LS: flower scaling (N petals of N routers, star ring-graph)",
-             "flower N (ring size; N^2 nodes)", os.path.join(PLOT_DIR, "flower_scaling.png"))
+             "flower N (ring size; N^2 nodes)", os.path.join(PLOT_DIR, "flower_scaling.png"),
+             args.nobatch)
 
     if args.only is None:
         print("== drawing representative topologies ==")

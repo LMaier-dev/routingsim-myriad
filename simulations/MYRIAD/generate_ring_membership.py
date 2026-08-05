@@ -4,7 +4,7 @@ from pathlib import Path
 import networkx as nx
 
 def get_ring_per_node(graph):
-    cycles = nx.minimum_cycle_basis(graph)
+    cycles = nx.cycle_basis(graph)
     rings_per_node = {}
     current_ring_id = 0
     for node in graph.nodes():

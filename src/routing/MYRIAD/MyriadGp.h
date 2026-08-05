@@ -213,8 +213,16 @@ namespace routingsim {
             // King re-collect period, and member watchdog jitter bound.
             simtime_t refreshInterval;
             simtime_t refreshJitter;
-            // Best-path cost exponent a: path cost = sum of (member_count^a) over the chain
-            double ringCostExponent;
+            // Best-path cost exponent a (INTEGER, a>=1): path cost = sum of
+            // member_count^a over the chain, in uint64 so equal-cost ties are
+            // EXACT (no float ULP mismatch) — required for ECMP co-best sets.
+            long ringCostExponent;
+            // Max co-best (ECMP) chains kept per origin; excess dropped keeping
+            // the most ring-diverse subset. See maxEcmpPaths NED param.
+            long maxEcmpPaths;
+            // Max serialized bytes per inter-ring UPDATE batch; flush splits the
+            // held set into batches under this size. See maxBatchBytes NED param.
+            long maxBatchBytes;
             // Inter-ring transition batching window; 0 = off (send immediately).
             simtime_t holdInterval;
             // Held inter-ring transitions bucketed by (target ring R2, next-hop
@@ -230,8 +238,18 @@ namespace routingsim {
             // Distinct batches created (flushed), the denominator for mean batch
             // size — NOT sent_update_batch, which also counts every lap-forward.
             unsigned long batchesCreated = 0;
-            double pathCost(const RibEntry& e) const;
-            // Recompute rings[origin].preferred
+            uint64_t pathCost(const RibEntry& e) const;
+            // True iff a,b are co-best: equal on (spof, cost, chain-length).
+            // Lexicographic chain order is NOT in this key — it only picks the
+            // deterministic primary among equals, so genuine ties are retained.
+            bool coBest(const RibEntry& a, const RibEntry& b) const;
+            // Trim rs.ribIn down to maxEcmpPaths, keeping the most ring-diverse
+            // subset (greedy: drop the member whose removal maximizes the union
+            // of distinct rings over the survivors; lex-larger chain breaks ties).
+            // Returns true iff `candChain` is still present after trimming.
+            bool capEcmp(RingState& rs, const std::vector<uint32_t>& candChain);
+            // Recompute rings[origin].preferred (lexicographic-min of the co-best
+            // set — a representative for the RIB dump, not a forwarding filter).
             void selectPreferred(RingState& rs);
 
         private:

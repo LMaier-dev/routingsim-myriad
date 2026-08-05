@@ -3,6 +3,7 @@
 #include <cmath>
 #include <fstream>
 #include <limits>
+#include <set>
 
 namespace routingsim {
 
@@ -20,6 +21,8 @@ void MyriadGP::onInitialize() {
     refreshInterval = par("refreshInterval");
     refreshJitter = par("refreshJitter");
     ringCostExponent = par("ringCostExponent");
+    maxEcmpPaths = par("maxEcmpPaths");
+    maxBatchBytes = par("maxBatchBytes");
     holdInterval = par("holdInterval");
 
     MLOG_INFO() << "MyriadGP up\n";
@@ -507,31 +510,74 @@ void MyriadGP::insertAndForwardCollect(MyriadGpCollect* pkt, uint32_t R, nodeid_
                      << " king=" << (int)pkt->getRouter_id_src() << "\n";
 }
 
-double MyriadGP::pathCost(const RibEntry& e) const {
-    // sum up member_count^a over the chain
-    double cost = 0.0;
-    for (uint32_t s : e.chain_sizes) cost += std::pow((double)s, ringCostExponent);
+uint64_t MyriadGP::pathCost(const RibEntry& e) const {
+    // Σ member_count^a over the chain, integer so equal costs compare EXACTLY.
+    // a>=1. Real ring sizes are small; the UNKNOWN_RING_SIZE sentinel (1<<20)
+    // only appears transiently before a size trailer arrives — at a=2 that term
+    // is ~2^40 (fits u64), at a>=4 it would overflow, so we saturate rather than
+    // wrap (an unknown-size chain then sorts as "very costly", never spuriously
+    // co-best). ponytail: saturate, not big-int — sentinels are transient.
+    uint64_t cost = 0;
+    for (uint32_t s : e.chain_sizes) {
+        uint64_t term = 1;
+        bool overflow = false;
+        for (long k = 0; k < ringCostExponent; ++k) {
+            if (term > (std::numeric_limits<uint64_t>::max() / (s ? s : 1))) { overflow = true; break; }
+            term *= s;
+        }
+        if (overflow || cost > std::numeric_limits<uint64_t>::max() - term)
+            return std::numeric_limits<uint64_t>::max();
+        cost += term;
+    }
     return cost;
 }
 
+bool MyriadGP::coBest(const RibEntry& a, const RibEntry& b) const {
+    return a.spof_count == b.spof_count
+        && a.chain.size() == b.chain.size()
+        && pathCost(a) == pathCost(b);
+}
+
+bool MyriadGP::capEcmp(RingState& rs, const std::vector<uint32_t>& candChain) {
+    // The candidate is the just-appended back element; we're exactly one over the
+    // cap. Total ring-diversity of the kept set = union of distinct rings across
+    // it. We drop whichever member leaves the LARGEST such union — but bias to
+    // dropping the CANDIDATE on ties: only evict an incumbent if the candidate
+    // STRICTLY improves diversity. No strict improvement → drop the newcomer, so
+    // it never transitions and we don't re-flood a chain that adds nothing.
+    // K is tiny (default 3) so the O(K^2 * chainlen) rescan is trivial.
+    auto unionSansIndex = [&](size_t skip) {
+        std::set<uint32_t> u;
+        for (size_t i = 0; i < rs.ribIn.size(); ++i) {
+            if (i == skip) continue;
+            for (uint32_t r : rs.ribIn[i].chain) u.insert(r);
+        }
+        return u.size();
+    };
+    while ((long)rs.ribIn.size() > maxEcmpPaths) {
+        size_t candIdx = rs.ribIn.size() - 1;          // candidate is at the back
+        size_t dropCandUnion = unionSansIndex(candIdx); // diversity if we drop it
+        size_t drop = candIdx, bestUnion = dropCandUnion;
+        // Only prefer an incumbent-drop if it STRICTLY beats dropping the candidate.
+        for (size_t i = 0; i < candIdx; ++i) {
+            size_t u = unionSansIndex(i);
+            if (u > bestUnion) { drop = i; bestUnion = u; }
+        }
+        rs.ribIn.erase(rs.ribIn.begin() + drop);
+    }
+    for (auto& e : rs.ribIn) if (e.chain == candChain) return true;
+    return false;
+}
+
 void MyriadGP::selectPreferred(RingState& rs) {
-    // Strict lexicographic best: min spof, min pathCost, min chain length, then chain
-    // lexicographic if draw.
-    // TODO check: Linear scan over ribIn but ribIn is small per origin. If a ring
-    // ever accumulates many chains, index by a sorted key instead.
+    // Under eager co-best pruning ribIn already holds only co-best entries, so
+    // this just picks the deterministic PRIMARY (lexicographic-min chain) as the
+    // RIB-dump representative. It does NOT filter — all co-best entries forward.
     rs.preferred = SIZE_MAX;
-    double bestCost = 0.0;
     for (size_t i = 0; i < rs.ribIn.size(); ++i) {
-        const RibEntry& e = rs.ribIn[i];
-        double cost = pathCost(e);
-        if (rs.preferred == SIZE_MAX) { rs.preferred = i; bestCost = cost; continue; }
-        const RibEntry& b = rs.ribIn[rs.preferred];
-        bool better =
-            e.spof_count != b.spof_count ? e.spof_count < b.spof_count :
-            cost != bestCost             ? cost < bestCost :
-            e.chain.size() != b.chain.size() ? e.chain.size() < b.chain.size() :
-            e.chain < b.chain;
-        if (better) { rs.preferred = i; bestCost = cost; }
+        if (rs.preferred == SIZE_MAX
+            || rs.ribIn[i].chain < rs.ribIn[rs.preferred].chain)
+            rs.preferred = i;
     }
 }
 
@@ -641,55 +687,65 @@ void MyriadGP::processChain(uint32_t curRing, uint32_t seq, uint32_t spof,
 
     bool doInterRing = true;
 
-    // Dedup on (origin, fullChain): already forwarded at >= seq → nothing to do.
-    RibEntry* entry = nullptr;
-    for (auto& e : originRs.ribIn) if (e.chain == fullChain) { entry = &e; break; }
-    if (entry && entry->seq_no >= seq) {
-        MLOG_DEBUG() << "UPDATE dup origin='" << origin
-                     << "' seq=" << seq << " chain=" << formatChain(fullChain)
-                     << " (stored " << entry->seq_no << ")\n";
-        doInterRing = false;
+    // Candidate entry for this arriving chain.
+    RibEntry cand{fullChain, fullSizes, seq, spof};
+
+    // Seq-advance: a newer generation supersedes everything for this origin →
+    // clear the whole co-best set and refresh rr. (Under eager co-best pruning
+    // all retained entries share curSeq, so "trim old seqs" == "clear".)
+    if (seq > originRs.curSeq) {
+        originRs.curSeq = seq;
+        originRs.ribIn.clear();
+        if (originRrTrailer) originRs.rr = *originRrTrailer;
     }
 
-    if (doInterRing) {
-        // Seq advance: newer generation → purge older chains, refresh rr.
-        if (seq > originRs.curSeq) {
-            originRs.curSeq = seq;
-            originRs.ribIn.erase(
-                std::remove_if(originRs.ribIn.begin(), originRs.ribIn.end(),
-                    [seq](const RibEntry& e) { return e.seq_no < seq; }),
-                originRs.ribIn.end());
-            entry = nullptr;
-            for (auto& e : originRs.ribIn) if (e.chain == fullChain) { entry = &e; break; }
-            if (originRrTrailer) originRs.rr = *originRrTrailer;
-        }
+    // Dup: this exact chain is already retained at >= seq. Only co-best chains
+    // are stored now, so this only fires for a re-arriving co-best chain — its
+    // inter-ring transition already happened; just don't re-forward.
+    bool isDup = false;
+    for (auto& e : originRs.ribIn)
+        if (e.chain == fullChain && e.seq_no >= seq) { isDup = true; break; }
 
-        // Insert or replace the RIB entry for this chain.
-        if (entry) {
-            entry->seq_no = seq;
-            entry->spof_count = spof;
-            entry->chain_sizes = fullSizes;
+    if (isDup) {
+        MLOG_DEBUG() << "UPDATE co-best dup origin='" << origin
+                     << "' seq=" << seq << " chain=" << formatChain(fullChain) << "\n";
+        doInterRing = false;
+    } else {
+        // Strict-better on the (spof, cost, chain-length) triple — the same
+        // ranking as before minus the lexicographic tiebreak (so equals tie).
+        auto strictlyBetter = [&](const RibEntry& a, const RibEntry& b) {
+            if (a.spof_count != b.spof_count) return a.spof_count < b.spof_count;
+            uint64_t ca = pathCost(a), cb = pathCost(b);
+            if (ca != cb) return ca < cb;
+            return a.chain.size() < b.chain.size();
+        };
+        if (originRs.ribIn.empty()) {
+            originRs.ribIn.push_back(cand);                       // first path
+        } else if (strictlyBetter(cand, originRs.ribIn.front())) {
+            originRs.ribIn.clear();                               // new best beats all
+            originRs.ribIn.push_back(cand);
+        } else if (coBest(cand, originRs.ribIn.front())) {
+            // ECMP co-best. Append, then if we exceed the fan-out cap keep the
+            // most ring-diverse K (greedy: repeatedly drop the member whose
+            // removal leaves the largest union of distinct rings). If cand is the
+            // one dropped, it does NOT transition — that's what bounds the
+            // combinatorial re-advertisement on symmetric meshes.
+            originRs.ribIn.push_back(cand);
+            if ((long)originRs.ribIn.size() > maxEcmpPaths)
+                doInterRing = capEcmp(originRs, fullChain);
         } else {
-            originRs.ribIn.push_back({ fullChain, fullSizes, seq, spof });
+            doInterRing = false;                                 // inferior → drop
         }
 
-        MLOG_INFO() << "UPDATE store origin='" << origin
-                    << "' seq=" << seq << " chain=" << formatChain(fullChain)
-                    << " spof=" << spof << " ribIn=" << originRs.ribIn.size() << "\n";
-
-        // Best-path: only the winner transitions inter-ring.
-        selectPreferred(originRs);
-        bool isWinner = originRs.preferred != SIZE_MAX
-                        && originRs.ribIn[originRs.preferred].chain == fullChain;
-        if (!isWinner) {
-            MLOG_DEBUG() << "UPDATE not preferred origin='" << origin
-                         << "' chain=" << formatChain(fullChain) << " — stored, not propagated\n";
-            doInterRing = false;
+        if (doInterRing) {
+            selectPreferred(originRs);   // refresh the primary representative
+            MLOG_INFO() << "UPDATE store origin='" << origin
+                        << "' seq=" << seq << " chain=" << formatChain(fullChain)
+                        << " spof=" << spof << " cobest=" << originRs.ribIn.size() << "\n";
+            // Loop prevention: any of my rings already in the packet chain → been here.
+            for (uint32_t myRing : selfRings)
+                for (uint32_t c : chain) if (c == myRing) { doInterRing = false; break; }
         }
-
-        // Loop prevention: any of my rings already in the packet chain → been here.
-        for (uint32_t myRing : selfRings)
-            for (uint32_t c : chain) if (c == myRing) { doInterRing = false; break; }
     }
 
     if (doInterRing)
@@ -837,39 +893,58 @@ void MyriadGP::flushPendingTransitions() {
         for (auto& pt : chains) live.push_back(&pt);
         if (live.empty()) continue;
 
-        // One batch, owned by me, that laps R2 WHOLE under a single circular-ACK.
         nodeid_t fallback = live.front()->fallback;
-        uint32_t lapSeq = ++rs2.batchLapSeq;
 
-        auto* batch = new MyriadGpUpdateBatch("Myriad_GP_Update_Batch");
-        batch->setType(MYRIADGP_UPDATE_BATCH);
-        batch->setRouter_id_src(myId);        // owner: recognised on own-return
-        batch->setCurrent_ring(R2);
-        batch->setSeq_no(lapSeq);             // my per-ring batch-lap counter
-        batch->setEntriesArraySize(live.size());
-        for (size_t i = 0; i < live.size(); ++i) {
-            PendingTransition* pt = live[i];
-            MyriadGpUpdateEntry e;
-            e.setSeq_no(pt->seq);
-            e.setSpof_count(pt->spof);
-            e.setRing_chainArraySize(pt->fwdChain.size());
-            for (size_t j = 0; j < pt->fwdChain.size(); ++j) e.setRing_chain(j, pt->fwdChain[j]);
-            e.setChain_sizesArraySize(pt->fwdSizes.size());
-            for (size_t j = 0; j < pt->fwdSizes.size(); ++j) e.setChain_sizes(j, pt->fwdSizes[j]);
-            e.setRrArraySize(pt->rr.size());
-            for (size_t j = 0; j < pt->rr.size(); ++j) e.setRr(j, pt->rr[j]);
-            batch->setEntries(i, e);          // handled_rings empty at birth
+        // Pack into batches up to maxBatchBytes; overflow spills into more
+        // batches that lap R2 independently (real protocols cap PDU size too).
+        // Model per-entry size: chain*8 (ring+sizes @4B) + rr*6 (subnet 4B +
+        // owner 2B) + 16 (seq/spof/framing). A lone entry over the cap still
+        // ships as its own batch (can't split one chain). ~16B batch header.
+        auto entryBytes = [](const PendingTransition* pt) {
+            return (long)(pt->fwdChain.size() * 8 + pt->rr.size() * 6 + 16);
+        };
+        size_t i = 0;
+        while (i < live.size()) {
+            std::vector<PendingTransition*> group;
+            long bytes = 16;   // batch header
+            while (i < live.size()
+                   && (group.empty() || bytes + entryBytes(live[i]) <= maxBatchBytes)) {
+                group.push_back(live[i]);
+                bytes += entryBytes(live[i]);
+                ++i;
+            }
+            uint32_t lapSeq = ++rs2.batchLapSeq;
+            auto* batch = new MyriadGpUpdateBatch("Myriad_GP_Update_Batch");
+            batch->setType(MYRIADGP_UPDATE_BATCH);
+            batch->setRouter_id_src(myId);        // owner: recognised on own-return
+            batch->setCurrent_ring(R2);
+            batch->setSeq_no(lapSeq);             // my per-ring batch-lap counter
+            batch->setEntriesArraySize(group.size());
+            for (size_t g = 0; g < group.size(); ++g) {
+                PendingTransition* pt = group[g];
+                MyriadGpUpdateEntry e;
+                e.setSeq_no(pt->seq);
+                e.setSpof_count(pt->spof);
+                e.setRing_chainArraySize(pt->fwdChain.size());
+                for (size_t j = 0; j < pt->fwdChain.size(); ++j) e.setRing_chain(j, pt->fwdChain[j]);
+                e.setChain_sizesArraySize(pt->fwdSizes.size());
+                for (size_t j = 0; j < pt->fwdSizes.size(); ++j) e.setChain_sizes(j, pt->fwdSizes[j]);
+                e.setRrArraySize(pt->rr.size());
+                for (size_t j = 0; j < pt->rr.size(); ++j) e.setRr(j, pt->rr[j]);
+                batch->setEntries(g, e);          // handled_rings empty at birth
+            }
+            batchEntriesTotal += group.size();
+            batchesCreated += 1;
+            if (group.size() > batchMaxEntries) batchMaxEntries = group.size();
+
+            RingInflight& fl = rs2.batchInflights[lapSeq];
+            fl.seq_no = lapSeq;
+            sendRingReliable(fl, primary, fallback, batch, rxmtInterval, COLLECT_RETRY_LIMIT,
+                             [this, R2, lapSeq]() { onBatchBudgetExpired(R2, lapSeq); });
+            MLOG_N_INFO(primary) << "flush UPDATE batch into ring='" << R2
+                << "' seq=" << lapSeq << " entries=" << group.size()
+                << " bytes=" << bytes << "\n";
         }
-        batchEntriesTotal += live.size();
-        batchesCreated += 1;
-        if (live.size() > batchMaxEntries) batchMaxEntries = live.size();
-
-        RingInflight& fl = rs2.batchInflights[lapSeq];
-        fl.seq_no = lapSeq;
-        sendRingReliable(fl, primary, fallback, batch, rxmtInterval, COLLECT_RETRY_LIMIT,
-                         [this, R2, lapSeq]() { onBatchBudgetExpired(R2, lapSeq); });
-        MLOG_N_INFO(primary) << "flush UPDATE batch into ring='" << R2
-            << "' seq=" << lapSeq << " entries=" << live.size() << "\n";
     }
 }
 
@@ -983,9 +1058,11 @@ void MyriadGP::finish() {
     recordScalar("batches_created", batchesCreated);
 
     // Test hook: append this node's converged preferred routes so the batching
-    // correctness test can assert they're identical across holdInterval settings.
-    // One line per (origin ring) I have a preferred chain for. The preferred
-    // chain IS the forwarding decision, so equality here == same reachability.
+    // test can compare reachability AND route quality across holdInterval
+    // settings. One line per (origin ring) with the primary (representative)
+    // chain. Numeric stats come first (len/spof/seq/cost/ecmp); the chain is
+    // last so the test can read stats without parsing it. ecmp = size of the
+    // co-best set for this origin (1 = single path, >1 = equal-cost multipath).
     std::string dumpFile = par("ribDumpFile").stdstringValue();
     if (!dumpFile.empty()) {
         std::ofstream f(dumpFile, std::ios::app);
@@ -997,8 +1074,12 @@ void MyriadGP::finish() {
             RingState& rs = rings[rid];
             const RibEntry& e = rs.ribIn[rs.preferred];
             f << (int)myId << " origin=" << rid
-              << " chain=" << formatChain(e.chain)
-              << " spof=" << e.spof_count << "\n";
+              << " len=" << e.chain.size()
+              << " spof=" << e.spof_count
+              << " seq=" << e.seq_no
+              << " cost=" << pathCost(e)
+              << " ecmp=" << rs.ribIn.size()
+              << " chain=" << formatChain(e.chain) << "\n";
         }
     }
 }

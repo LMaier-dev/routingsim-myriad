@@ -22,10 +22,29 @@ simple myriadgp extends routingsim.foundation.Protocol
         double refreshInterval @unit(s) = default(30s);
         double refreshJitter @unit(s) = default(5s);
 
-        // Best-path cost exponent a: a chain's size cost is Σ member_count^a.
-        // a>1 is convex so one huge ring is penalised more than several small
-        // rings of equal total size; a=1 is plain member sum. See ADR 0016.
-        double ringCostExponent = default(2.0);
+        // Best-path cost exponent a (INTEGER, a>=1): a chain's size cost is
+        // Σ member_count^a, computed in uint64 so equal-cost ties are exact
+        // (enables ECMP co-best retention). a>1 is convex so one huge ring is
+        // penalised more than several small rings of equal total size; a=1 is
+        // plain member sum. See ADR 0016.
+        int ringCostExponent = default(2);
+
+        // ECMP fan-out cap: keep at most this many co-best (equal spof/cost/len)
+        // chains per origin. On symmetric meshes the number of equal-cost paths
+        // is combinatorial (a 10x10 grid has C(16,8)=12870 to some origins), so
+        // an uncapped co-best set explodes both memory and inter-ring re-adverts.
+        // When the set is full we keep the MOST RING-DIVERSE subset (greedy: drop
+        // the member whose removal leaves the largest union of distinct rings).
+        // Only the kept chains transition inter-ring. 1 = no multipath.
+        int maxEcmpPaths = default(3);
+
+        // Max serialized size (bytes) of one inter-ring UPDATE batch. At flush,
+        // held transitions are packed into batches up to this size; the overflow
+        // spills into additional batches that lap independently. Real path-vector
+        // protocols cap PDU size the same way (BGP UPDATE 4096B classic; IS-IS
+        // LSP ~1492B) — an unbounded batch can't fit one L2 frame. Default 1400
+        // ≈ one Ethernet payload. Model size per entry = chain*8 + rr*6 + 16.
+        int maxBatchBytes = default(1400);
 
         // Inter-ring UPDATE batching: a forwarder becoming ring-king for a
         // transition into another ring holds the send for up to holdInterval,
