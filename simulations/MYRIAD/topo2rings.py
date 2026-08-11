@@ -75,13 +75,15 @@ def main():
     ap.add_argument("--out-dir", default=os.path.dirname(os.path.abspath(__file__)),
                     help="where to write .ringlabels.ini / .png (default: next to this script)")
     ap.add_argument("--no-png", action="store_true", help="skip the drawing")
+    ap.add_argument("--basis", choices=["min", "all"], default="min",
+                    help="ring basis: min=minimum_cycle_basis, all=cycle_basis")
     args = ap.parse_args()
 
     g = read_topology(args.topology)
     stem = os.path.splitext(os.path.basename(args.topology))[0]
 
     # runs the generate_ring_membership.py by daniel
-    rings_idx = get_ring_per_node(g)
+    rings_idx = get_ring_per_node(g, args.basis)
     n_rings = max((max(v) + 1 for v in rings_idx.values() if v), default=0)
     def ring_id(idx):
         return RING_ID_BASE - idx

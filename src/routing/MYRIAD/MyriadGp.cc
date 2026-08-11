@@ -391,10 +391,9 @@ std::vector<nodeid_t> MyriadGP::ringNeighbors(uint32_t ring) {
 void MyriadGP::originateUpdate(uint32_t ring) {
     RingState& rs = rings[ring];
 
-    // I'm a member of my own ring: install the trivial [ring] route for myself,
-    // exactly as other members will when this origin-UPDATE reaches them. Without
-    // this the king has no RIB entry to its own ring and later backfills it with
-    // a nonsensical looped-back detour. seq-advance clears older generations.
+    // Install my own trivial [ring] route, as members do when this UPDATE
+    // reaches them — else the king has no entry to its own ring and backfills a
+    // looped-back detour.
     if (rs.originSeq > rs.curSeq) { rs.curSeq = rs.originSeq; rs.ribIn.clear(); }
     RibEntry self{{ring}, {rs.memberCount ? rs.memberCount : UNKNOWN_RING_SIZE},
                   rs.originSeq, 0};
@@ -552,19 +551,15 @@ bool MyriadGP::coBest(const RibEntry& a, const RibEntry& b) const {
 }
 
 bool MyriadGP::capEcmp(RingState& rs, const std::vector<uint32_t>& candChain) {
-    // Cap the CURRENT-generation co-best group (seq_no==curSeq) to maxEcmpPaths.
-    // Retained older-generation holdovers (make-before-break) are not ECMP
-    // siblings — never count or drop them here. Drop whichever current-gen member
-    // leaves the largest union of distinct rings, biased to dropping the just-
-    // appended candidate (only evict an incumbent if it STRICTLY improves
-    // diversity), so we don't re-flood a chain that adds nothing. K is tiny.
+    // Cap the current generation (seq_no==curSeq) to maxEcmpPaths; retained older
+    // holdovers aren't ECMP siblings, so skip them. Drop the member leaving the
+    // largest ring-union, biased to the just-appended candidate. K is tiny.
     auto isCur = [&](size_t i) { return rs.ribIn[i].seq_no == rs.curSeq; };
     auto curCount = [&]() {
         size_t n = 0;
         for (size_t i = 0; i < rs.ribIn.size(); ++i) if (isCur(i)) ++n;
         return n;
     };
-    // Union of distinct rings over current-gen members, excluding index `skip`.
     auto unionSansIndex = [&](size_t skip) {
         std::set<uint32_t> u;
         for (size_t i = 0; i < rs.ribIn.size(); ++i) {
@@ -574,8 +569,7 @@ bool MyriadGP::capEcmp(RingState& rs, const std::vector<uint32_t>& candChain) {
         return u.size();
     };
     while ((long)curCount() > maxEcmpPaths) {
-        // Candidate is the last current-gen entry (just appended).
-        size_t candIdx = SIZE_MAX;
+        size_t candIdx = SIZE_MAX;   // last current-gen entry (just appended)
         for (size_t i = rs.ribIn.size(); i-- > 0; ) if (isCur(i)) { candIdx = i; break; }
         size_t drop = candIdx, bestUnion = unionSansIndex(candIdx);
         for (size_t i = 0; i < candIdx; ++i) {
@@ -590,11 +584,9 @@ bool MyriadGP::capEcmp(RingState& rs, const std::vector<uint32_t>& candChain) {
 }
 
 void MyriadGP::selectPreferred(RingState& rs) {
-    // Best across ALL of ribIn (which may span two generations during make-
-    // before-break): strictlyBetter first, then lex-min chain as the
-    // deterministic tiebreak among equals. This intentionally ignores seq — a
-    // retained older-generation chain that is strictly better than the current
-    // generation wins, so `preferred` (data plane) may lag curSeq by one gen.
+    // Best across ALL of ribIn (may span two generations): strictlyBetter, then
+    // lex-min chain as the tiebreak. Ignores seq, so a retained older chain that
+    // beats the current generation wins — preferred may lag curSeq (see ribIn).
     rs.preferred = SIZE_MAX;
     for (size_t i = 0; i < rs.ribIn.size(); ++i) {
         if (rs.preferred == SIZE_MAX
@@ -698,8 +690,7 @@ void MyriadGP::processChain(uint32_t curRing, uint32_t seq, uint32_t spof,
     bool doInterRing = true;
     RibEntry cand{fullChain, fullSizes, seq, spof};
 
-    // Purge entries two or more generations behind: make-before-break keeps at
-    // most the previous generation (curSeq-1) alongside the current one.
+    // Drop entries >=2 generations behind (see the ribIn comment in RingState).
     auto purgeStale = [&]() {
         auto& v = originRs.ribIn;
         v.erase(std::remove_if(v.begin(), v.end(),
@@ -707,11 +698,8 @@ void MyriadGP::processChain(uint32_t curRing, uint32_t seq, uint32_t spof,
             v.end());
     };
 
-    // Seq-advance: a newer generation. Adopt it, purge anything now >=2 behind,
-    // but do NOT blanket-clear — keep old-gen chains STRICTLY BETTER than this
-    // candidate so the data plane keeps a last-known-good redundant route while
-    // the network reconverges (they age out at the next advance). Old-gen chains
-    // that are not strictly better were only co-best siblings and are dropped.
+    // Seq-advance: adopt the new generation, purge stale, but keep old-gen chains
+    // strictly better than this candidate (make-before-break); drop the rest.
     if (seq > originRs.curSeq) {
         originRs.curSeq = seq;
         if (originRrTrailer) originRs.rr = *originRrTrailer;
@@ -722,8 +710,7 @@ void MyriadGP::processChain(uint32_t curRing, uint32_t seq, uint32_t spof,
             v.end());
     }
 
-    // A chain older than the current generation that is NOT strictly better than
-    // what we hold is stale-and-useless: ignore it (don't store or forward).
+    // Older-than-current chain that isn't strictly better: stale, ignore it.
     if (seq < originRs.curSeq) {
         bool useful = originRs.ribIn.empty();
         for (auto& e : originRs.ribIn)
@@ -731,8 +718,7 @@ void MyriadGP::processChain(uint32_t curRing, uint32_t seq, uint32_t spof,
         if (!useful) return;
     }
 
-    // Dup: this exact chain already retained at >= seq — its transition already
-    // happened, so keep it but don't re-forward.
+    // Exact chain already held at >= seq: transition already happened, don't re-forward.
     bool isDup = false;
     for (auto& e : originRs.ribIn)
         if (e.chain == fullChain && e.seq_no >= seq) { isDup = true; break; }
@@ -742,9 +728,8 @@ void MyriadGP::processChain(uint32_t curRing, uint32_t seq, uint32_t spof,
                      << "' seq=" << seq << " chain=" << formatChain(fullChain) << "\n";
         doInterRing = false;
     } else {
-        // The store/forward decision ranks against the CURRENT generation only
-        // (retained older holdovers must not make a valid new-gen chain look
-        // inferior — it still has to propagate). Find the best current-gen entry.
+        // Rank against the current generation only, so retained holdovers can't
+        // make a valid new-gen chain look inferior (it still must propagate).
         RibEntry* curBest = nullptr;
         for (auto& e : originRs.ribIn)
             if (e.seq_no == originRs.curSeq
@@ -753,8 +738,7 @@ void MyriadGP::processChain(uint32_t curRing, uint32_t seq, uint32_t spof,
         if (!curBest) {
             originRs.ribIn.push_back(cand);                      // first of this gen
         } else if (strictlyBetter(cand, *curBest)) {
-            // New best for this generation: drop the current gen's now-inferior
-            // entries (keep any retained older-gen holdovers), then install.
+            // New best: drop this generation's now-inferior entries, keep holdovers.
             auto& v = originRs.ribIn;
             v.erase(std::remove_if(v.begin(), v.end(),
                 [&](const RibEntry& e) { return e.seq_no == originRs.curSeq; }),
@@ -762,7 +746,7 @@ void MyriadGP::processChain(uint32_t curRing, uint32_t seq, uint32_t spof,
             originRs.ribIn.push_back(cand);
         } else if (coBest(cand, *curBest)) {
             originRs.ribIn.push_back(cand);
-            if ((long)originRs.ribIn.size() > maxEcmpPaths)   // capEcmp scopes to curSeq
+            if ((long)originRs.ribIn.size() > maxEcmpPaths)
                 doInterRing = capEcmp(originRs, fullChain);
         } else {
             doInterRing = false;                                 // inferior
@@ -1086,8 +1070,7 @@ void MyriadGP::finish() {
         for (uint32_t rid : originIds) {
             RingState& rs = rings[rid];
             const RibEntry& e = rs.ribIn[rs.preferred];
-            // ecmp = current-generation co-best count (ignore retained older-gen
-            // make-before-break holdovers, which are not ECMP siblings).
+            // ecmp = current-generation co-best count (skip retained holdovers).
             size_t ecmp = 0;
             for (auto& c : rs.ribIn) if (c.seq_no == rs.curSeq) ++ecmp;
             f << (int)myId << " origin=" << rid

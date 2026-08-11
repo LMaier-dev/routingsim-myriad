@@ -3,8 +3,10 @@ import json
 from pathlib import Path
 import networkx as nx
 
-def get_ring_per_node(graph):
-    cycles = nx.minimum_cycle_basis(graph)
+def get_ring_per_node(graph, basis="min"):
+    # basis: "min" = minimum_cycle_basis (unit rings), "all" = cycle_basis.
+    cycles = (nx.minimum_cycle_basis(graph) if basis == "min"
+              else nx.cycle_basis(graph))
     rings_per_node = {}
     current_ring_id = 0
     for node in graph.nodes():

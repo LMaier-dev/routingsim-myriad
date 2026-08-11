@@ -32,9 +32,12 @@ GRAPHGEN = os.path.join(REPO, "scripts", "graphgen.py")
 TOPO2RINGS = os.path.join(HERE, "topo2rings.py")
 
 EVAL_DIR = os.path.join(HERE, "eval")
+# TOPO_DIR/INI_DIR/PLOT_DIR are rebound under a per-basis subfolder in main()
+# (min_cycles / all_cycles) so the two ring bases don't share cached labels.
 TOPO_DIR = os.path.join(EVAL_DIR, "topologies")
 INI_DIR = os.path.join(EVAL_DIR, "ini")
 PLOT_DIR = os.path.join(EVAL_DIR, "plots")
+BASIS = "min"   # ring basis for topo2rings; set from --basis in main()
 
 # Canonical fair-timing knobs live in eval_common.ini (single source of truth,
 # shared with test_rib_batching.py). Each generated per-run ini `include`s it;
@@ -147,7 +150,8 @@ def ring_label_lines(topo_path):
     stem = os.path.splitext(os.path.basename(topo_path))[0]
     ini = os.path.join(TOPO_DIR, f"{stem}.ringlabels.ini")
     if not os.path.exists(ini):
-        r = run(["python3", TOPO2RINGS, topo_path, "--out-dir", TOPO_DIR, "--no-png"])
+        r = run(["python3", TOPO2RINGS, topo_path, "--out-dir", TOPO_DIR,
+                 "--no-png", "--basis", BASIS])
         if not os.path.exists(ini):
             sys.exit(f"topo2rings failed for {topo_path}:\n{r.stdout}\n{r.stderr}")
     with open(ini) as f:
@@ -414,7 +418,19 @@ def main():
                     help="run GP with holdInterval=0s (pre-batching baseline). "
                          "Far slower (no coalescing) — off by default; the normal "
                          "run uses the holdInterval pinned in eval_common.ini.")
+    ap.add_argument("--basis", choices=["min", "all"], default="min",
+                    help="ring basis: min=minimum_cycle_basis (default), "
+                         "all=cycle_basis. Results nest under eval/<basis>_cycles/.")
     args = ap.parse_args()
+
+    # Nest all outputs under a per-basis subfolder so min_cycles and all_cycles
+    # keep separate cached labels, inis, and plots.
+    global BASIS, TOPO_DIR, INI_DIR, PLOT_DIR
+    BASIS = args.basis
+    basis_dir = os.path.join(EVAL_DIR, f"{BASIS}_cycles")
+    TOPO_DIR = os.path.join(basis_dir, "topologies")
+    INI_DIR = os.path.join(basis_dir, "ini")
+    PLOT_DIR = os.path.join(basis_dir, "plots")
 
     for d in (TOPO_DIR, INI_DIR, PLOT_DIR):
         os.makedirs(d, exist_ok=True)
