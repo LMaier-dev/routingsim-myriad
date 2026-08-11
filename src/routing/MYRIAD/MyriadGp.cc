@@ -391,6 +391,17 @@ std::vector<nodeid_t> MyriadGP::ringNeighbors(uint32_t ring) {
 void MyriadGP::originateUpdate(uint32_t ring) {
     RingState& rs = rings[ring];
 
+    // I'm a member of my own ring: install the trivial [ring] route for myself,
+    // exactly as other members will when this origin-UPDATE reaches them. Without
+    // this the king has no RIB entry to its own ring and later backfills it with
+    // a nonsensical looped-back detour. seq-advance clears older generations.
+    if (rs.originSeq > rs.curSeq) { rs.curSeq = rs.originSeq; rs.ribIn.clear(); }
+    RibEntry self{{ring}, {rs.memberCount ? rs.memberCount : UNKNOWN_RING_SIZE},
+                  rs.originSeq, 0};
+    bool haveSelf = false;
+    for (auto& e : rs.ribIn) if (e.chain == self.chain) { haveSelf = true; break; }
+    if (!haveSelf) { rs.ribIn.push_back(self); selectPreferred(rs); }
+
     std::vector<nodeid_t> nbrs = ringNeighbors(ring);
     if (nbrs.empty()) {
         MLOG_WARN() << "originate UPDATE ring='" << ring
