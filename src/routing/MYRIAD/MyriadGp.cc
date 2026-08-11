@@ -44,13 +44,9 @@ void MyriadGP::onTwoWayReached(GpNeighbor& nbr) {
             for (uint32_t r : n.sharedRings) if (r == R) { ++count; break; }
         }
         if (count > rings[R].maxRingNeighbors) rings[R].maxRingNeighbors = count;
-        // 2-node-ring support DISABLED for now (assume every ring has >=2
-        // members). Originate only once BOTH ring-neighbors are two-way, so a
-        // boot-transient single-neighbor view can't crown a premature king.
-        // To re-enable degenerate 2-node rings, restore the `count >= 1` bound
-        // (see [[0014-two-node-ring-echo]]) and the echo sites below.
-        // if (count >= 1 && count <= 2 && rings[R].collectInflight.tx == nullptr) {
-        if (count == 2 && rings[R].collectInflight.tx == nullptr) {
+        // Originate once >=1 ring-neighbor is two-way (a genuine 2-node ring has
+        // exactly one and closes its lap via echo; see the echo sites below).
+        if (count >= 1 && count <= 2 && rings[R].collectInflight.tx == nullptr) {
             originateCollect(R, nbr.id);
         } else if (count > 2) {
             MLOG_N_WARN(nbr.id) << "ring '" << R
@@ -487,17 +483,17 @@ void MyriadGP::insertAndForwardCollect(MyriadGpCollect* pkt, uint32_t R, nodeid_
     // circular ACK (with 2 spofs).
     nodeid_t to = otherRingNeighbor(R, sender);
     if (to == undefined_node) {
-        // 2-node-ring echo DISABLED for now (see onTwoWayReached). No other
-        // ring-neighbor → drop; boot retransmits recover once the ring is up.
-        // To re-enable, restore the maxRingNeighbors<=1 echo branch:
-        // if (rings[R].maxRingNeighbors <= 1) {
-        //     to = sender;
-        //     MLOG_N_DEBUG(sender) << "echo COLLECT ring='" << R << "' (2-node ring)\n";
-        // } else {
+        // Genuine 2-node ring: echo back to the sender so the king still gets
+        // its circular ACK. A degraded larger ring (had >1 neighbor) instead
+        // drops, letting the budget expire → DEGRADE.
+        if (rings[R].maxRingNeighbors <= 1) {
+            to = sender;
+            MLOG_N_DEBUG(sender) << "echo COLLECT ring='" << R << "' (2-node ring)\n";
+        } else {
             MLOG_N_WARN(sender) << "no other ring-neighbor for ring='"
                                 << R << "'; dropping COLLECT\n";
             return;
-        // }
+        }
     }
     auto np = std::make_unique<NodePkt>("Myriad_GP_Collect_Pkt");
     np->setType(MYRIADGP_PACKET_TYPE);
@@ -511,12 +507,11 @@ void MyriadGP::insertAndForwardCollect(MyriadGpCollect* pkt, uint32_t R, nodeid_
 }
 
 uint64_t MyriadGP::pathCost(const RibEntry& e) const {
-    // Σ member_count^a over the chain, integer so equal costs compare EXACTLY.
-    // a>=1. Real ring sizes are small; the UNKNOWN_RING_SIZE sentinel (1<<20)
-    // only appears transiently before a size trailer arrives — at a=2 that term
-    // is ~2^40 (fits u64), at a>=4 it would overflow, so we saturate rather than
-    // wrap (an unknown-size chain then sorts as "very costly", never spuriously
-    // co-best). ponytail: saturate, not big-int — sentinels are transient.
+    // sum over member_count^ringCostExponent, integer for exact tie comparison. The
+    // UNKNOWN_RING_SIZE sentinel (1<<20) appears transiently before a size
+    // trailer arrives; at a>=4 its term overflows u64, so we saturate rather
+    // than wrap (an unknown-size chain then sorts as very costly, never
+    // spuriously co-best).
     uint64_t cost = 0;
     for (uint32_t s : e.chain_sizes) {
         uint64_t term = 1;
@@ -539,13 +534,11 @@ bool MyriadGP::coBest(const RibEntry& a, const RibEntry& b) const {
 }
 
 bool MyriadGP::capEcmp(RingState& rs, const std::vector<uint32_t>& candChain) {
-    // The candidate is the just-appended back element; we're exactly one over the
-    // cap. Total ring-diversity of the kept set = union of distinct rings across
-    // it. We drop whichever member leaves the LARGEST such union — but bias to
-    // dropping the CANDIDATE on ties: only evict an incumbent if the candidate
-    // STRICTLY improves diversity. No strict improvement → drop the newcomer, so
-    // it never transitions and we don't re-flood a chain that adds nothing.
-    // K is tiny (default 3) so the O(K^2 * chainlen) rescan is trivial.
+    // We're exactly one over the cap. Drop whichever member leaves the largest
+    // union of distinct rings, but bias to dropping the just-appended candidate
+    // (at the back): only evict an incumbent if it STRICTLY improves diversity,
+    // else the newcomer goes and never transitions, so we don't re-flood a chain
+    // that adds nothing. K is tiny so the O(K^2 * chainlen) rescan is trivial.
     auto unionSansIndex = [&](size_t skip) {
         std::set<uint32_t> u;
         for (size_t i = 0; i < rs.ribIn.size(); ++i) {
@@ -555,10 +548,8 @@ bool MyriadGP::capEcmp(RingState& rs, const std::vector<uint32_t>& candChain) {
         return u.size();
     };
     while ((long)rs.ribIn.size() > maxEcmpPaths) {
-        size_t candIdx = rs.ribIn.size() - 1;          // candidate is at the back
-        size_t dropCandUnion = unionSansIndex(candIdx); // diversity if we drop it
-        size_t drop = candIdx, bestUnion = dropCandUnion;
-        // Only prefer an incumbent-drop if it STRICTLY beats dropping the candidate.
+        size_t candIdx = rs.ribIn.size() - 1;
+        size_t drop = candIdx, bestUnion = unionSansIndex(candIdx);
         for (size_t i = 0; i < candIdx; ++i) {
             size_t u = unionSansIndex(i);
             if (u > bestUnion) { drop = i; bestUnion = u; }
@@ -570,9 +561,8 @@ bool MyriadGP::capEcmp(RingState& rs, const std::vector<uint32_t>& candChain) {
 }
 
 void MyriadGP::selectPreferred(RingState& rs) {
-    // Under eager co-best pruning ribIn already holds only co-best entries, so
-    // this just picks the deterministic PRIMARY (lexicographic-min chain) as the
-    // RIB-dump representative. It does NOT filter — all co-best entries forward.
+    // ribIn is already all co-best, so this just picks the lex-min chain as the
+    // deterministic representative. It does NOT filter — all co-best entries forward.
     rs.preferred = SIZE_MAX;
     for (size_t i = 0; i < rs.ribIn.size(); ++i) {
         if (rs.preferred == SIZE_MAX
@@ -586,18 +576,14 @@ void MyriadGP::handleUpdate(MyriadGpUpdate* update, nodeid_t sender) {
     nodeid_t king = update->getRouter_id_src();
     uint32_t seq = update->getSeq_no();
 
-    // Chain is prepend-order; origin = chain.back(), or curRing if chain empty.
     size_t chainLen = update->getRing_chainArraySize();
-
-    // Materialise the chain (the identity of this ring traversal).
     std::vector<uint32_t> chain;
     chain.reserve(chainLen);
     for (size_t i = 0; i < chainLen; ++i) chain.push_back(update->getRing_chain(i));
 
     RingState& curRs = rings[curRing];
 
-    // Own ACK: my own traversal (this chain, in this ring) returned on the other
-    // interface. Cancel that inflight, do NOT re-forward.
+    // Own ACK: my traversal of this chain returned on the other interface.
     if (king == myId) {
         auto it = curRs.updateInflights.find(chain);
         if (it != curRs.updateInflights.end() && it->second.tx != nullptr
@@ -613,9 +599,8 @@ void MyriadGP::handleUpdate(MyriadGpUpdate* update, nodeid_t sender) {
         return;
     }
 
-    // Width trailer: only origin UPDATEs carry it, and its current_ring is the
-    // ring the widths describe. Overwrite my stored widths for this ring (the
-    // king's list is authoritative and complete).
+    // Width trailer rides only origin UPDATEs; the king's list is authoritative,
+    // so overwrite ours for this ring.
     size_t widthLen = update->getWidthsArraySize();
     if (widthLen > 0) {
         curRs.adjacentRings.clear();
@@ -627,23 +612,19 @@ void MyriadGP::handleUpdate(MyriadGpUpdate* update, nodeid_t sender) {
         MLOG_N_DEBUG(sender) << "stored widths for ring='" << curRing
                              << "' (" << widthLen << " transitions)\n";
     }
-    // Origin UPDATE also carries this rings member count (its size)
+    // Origin UPDATE also carries this ring's size.
     if (chainLen == 0 && update->getMember_count() > 0)
         curRs.memberCount = update->getMember_count();
 
-    // rr snapshot carried by this packet (used on seq-advance inside processChain).
     std::vector<MyriadGpRr> rr;
     rr.reserve(update->getRrArraySize());
     for (size_t i = 0; i < update->getRrArraySize(); ++i) rr.push_back(update->getRr(i));
 
-    // chain_sizes carried (parallel to packet chain; processChain prepends curRing's).
     std::vector<uint32_t> sizes;
     sizes.reserve(update->getChain_sizesArraySize());
     for (size_t i = 0; i < update->getChain_sizesArraySize(); ++i)
         sizes.push_back(update->getChain_sizes(i));
 
-    // Process this chain: RIB/select, and (if winner + loop-free) transition it
-    // inter-ring. handled accrues the rings it fans into.
     std::vector<uint32_t> handled;
     for (size_t i = 0; i < update->getHandled_ringsArraySize(); ++i)
         handled.push_back(update->getHandled_rings(i));
@@ -653,16 +634,12 @@ void MyriadGP::handleUpdate(MyriadGpUpdate* update, nodeid_t sender) {
     update->setHandled_ringsArraySize(handled.size());
     for (size_t i = 0; i < handled.size(); ++i) update->setHandled_rings(i, handled[i]);
 
-    // Always forward within current_ring so the originator's lap can close,
-    // carrying any handled-rings marks to downstream bridges.
+    // Always forward within current_ring so the originator's lap can close.
     forwardUpdateInRing(update, curRing, sender);
 }
 
-// Process ONE learned chain at this node: RIB insert/select + inter-ring
-// transition of the winner. Extracted from handleUpdate so handleUpdateBatch can
-// call it per-entry. `handled` is seeded with the lapping packet's marks and
-// gains any rings this chain fans into. originRrTrailer is the rr to adopt on a
-// seq-advance (the packet's own rr).
+// originRrTrailer is the rr to adopt on a seq-advance (the packet's own rr).
+// See the declaration in MyriadGp.h for the rest.
 void MyriadGP::processChain(uint32_t curRing, uint32_t seq, uint32_t spof,
                             const std::vector<uint32_t>& chain,
                             const std::vector<uint32_t>& chainSizes,
@@ -673,35 +650,30 @@ void MyriadGP::processChain(uint32_t curRing, uint32_t seq, uint32_t spof,
     uint32_t origin = chain.empty() ? curRing : chain.back();
     RingState& originRs = rings[origin];
 
-    // Full path identity = current_ring :: packet chain.
+    // Full path identity = current_ring :: packet chain, with sizes parallel.
     std::vector<uint32_t> fullChain;
     fullChain.reserve(chain.size() + 1);
     fullChain.push_back(curRing);
     for (uint32_t c : chain) fullChain.push_back(c);
 
-    // Sizes parallel to fullChain.
     std::vector<uint32_t> fullSizes;
     fullSizes.reserve(chain.size() + 1);
     fullSizes.push_back(curRs.memberCount ? curRs.memberCount : UNKNOWN_RING_SIZE);
     for (uint32_t s : chainSizes) fullSizes.push_back(s);
 
     bool doInterRing = true;
-
-    // Candidate entry for this arriving chain.
     RibEntry cand{fullChain, fullSizes, seq, spof};
 
-    // Seq-advance: a newer generation supersedes everything for this origin →
-    // clear the whole co-best set and refresh rr. (Under eager co-best pruning
-    // all retained entries share curSeq, so "trim old seqs" == "clear".)
+    // Seq-advance: a newer generation supersedes everything for this origin.
+    // (All retained entries share curSeq, so trimming old seqs == clearing.)
     if (seq > originRs.curSeq) {
         originRs.curSeq = seq;
         originRs.ribIn.clear();
         if (originRrTrailer) originRs.rr = *originRrTrailer;
     }
 
-    // Dup: this exact chain is already retained at >= seq. Only co-best chains
-    // are stored now, so this only fires for a re-arriving co-best chain — its
-    // inter-ring transition already happened; just don't re-forward.
+    // Only co-best chains are stored, so a match here is a re-arriving co-best
+    // chain whose transition already happened: keep it but don't re-forward.
     bool isDup = false;
     for (auto& e : originRs.ribIn)
         if (e.chain == fullChain && e.seq_no >= seq) { isDup = true; break; }
@@ -711,8 +683,6 @@ void MyriadGP::processChain(uint32_t curRing, uint32_t seq, uint32_t spof,
                      << "' seq=" << seq << " chain=" << formatChain(fullChain) << "\n";
         doInterRing = false;
     } else {
-        // Strict-better on the (spof, cost, chain-length) triple — the same
-        // ranking as before minus the lexicographic tiebreak (so equals tie).
         auto strictlyBetter = [&](const RibEntry& a, const RibEntry& b) {
             if (a.spof_count != b.spof_count) return a.spof_count < b.spof_count;
             uint64_t ca = pathCost(a), cb = pathCost(b);
@@ -720,29 +690,27 @@ void MyriadGP::processChain(uint32_t curRing, uint32_t seq, uint32_t spof,
             return a.chain.size() < b.chain.size();
         };
         if (originRs.ribIn.empty()) {
-            originRs.ribIn.push_back(cand);                       // first path
+            originRs.ribIn.push_back(cand);
         } else if (strictlyBetter(cand, originRs.ribIn.front())) {
             originRs.ribIn.clear();                               // new best beats all
             originRs.ribIn.push_back(cand);
         } else if (coBest(cand, originRs.ribIn.front())) {
-            // ECMP co-best. Append, then if we exceed the fan-out cap keep the
-            // most ring-diverse K (greedy: repeatedly drop the member whose
-            // removal leaves the largest union of distinct rings). If cand is the
-            // one dropped, it does NOT transition — that's what bounds the
-            // combinatorial re-advertisement on symmetric meshes.
+            // If capEcmp drops cand it returns false, so it won't transition —
+            // that's what bounds the combinatorial re-advertisement.
             originRs.ribIn.push_back(cand);
             if ((long)originRs.ribIn.size() > maxEcmpPaths)
                 doInterRing = capEcmp(originRs, fullChain);
         } else {
-            doInterRing = false;                                 // inferior → drop
+            doInterRing = false;                                 // inferior
         }
 
         if (doInterRing) {
-            selectPreferred(originRs);   // refresh the primary representative
+            selectPreferred(originRs);
             MLOG_INFO() << "UPDATE store origin='" << origin
                         << "' seq=" << seq << " chain=" << formatChain(fullChain)
                         << " spof=" << spof << " cobest=" << originRs.ribIn.size() << "\n";
-            // Loop prevention: any of my rings already in the packet chain → been here.
+            // Loop prevention: any of my rings already in the chain means I bridged
+            // this origin's flood on an earlier lap, so don't re-bridge it now.
             for (uint32_t myRing : selfRings)
                 for (uint32_t c : chain) if (c == myRing) { doInterRing = false; break; }
         }
@@ -755,13 +723,10 @@ void MyriadGP::processChain(uint32_t curRing, uint32_t seq, uint32_t spof,
 void MyriadGP::forwardUpdateInRing(MyriadGpUpdate* pkt, uint32_t ring, nodeid_t sender) {
     nodeid_t to = otherRingNeighbor(ring, sender);
     if (to == undefined_node) {
-        // 2-node-ring echo DISABLED for now (see onTwoWayReached). No other
-        // ring-neighbor → drop (a degraded larger ring drops here too, letting
-        // the budget expire → DEGRADE). To re-enable degenerate 2-node rings,
-        // restore the echo-to-sender branch:
-        // if (rings[ring].maxRingNeighbors > 1) return;
-        // to = sender;
-        return;
+        // Genuine 2-node ring: echo to the sender to close the lap. A degraded
+        // larger ring drops, letting the budget expire → DEGRADE.
+        if (rings[ring].maxRingNeighbors > 1) return;
+        to = sender;
     }
     auto np = std::make_unique<NodePkt>("Myriad_GP_Update_Pkt");
     np->setType(MYRIADGP_PACKET_TYPE);
@@ -799,12 +764,11 @@ void MyriadGP::forwardChainInterRing(uint32_t curRing, uint32_t seq, uint32_t sp
                           std::vector<uint32_t>& handled) {
     for (uint32_t R2 : selfRings) {
         if (R2 == curRing) continue;
-        // R2 already in the chain → transitioning there would loop; skip.
+        // R2 in the chain would loop; already in `handled` means a sibling bridge
+        // flooded it on this lap. Skip both.
         bool inChain = false;
         for (uint32_t c : chain) if (c == R2) { inChain = true; break; }
         if (inChain) continue;
-        // Already flooded into R2 on this lap (a sibling bridge's mark rode the
-        // lapping packet/entry to me) — don't duplicate.
         bool already = false;
         for (uint32_t h : handled) if (h == R2) { already = true; break; }
         if (already) continue;
@@ -818,20 +782,17 @@ void MyriadGP::forwardChainInterRing(uint32_t curRing, uint32_t seq, uint32_t sp
         nodeid_t primary = nbrs[0];
         nodeid_t fallback = nbrs.size() > 1 ? nbrs[1] : nbrs[0];
 
-        // fwdChain = curRing :: chain (the new traversal's identity in R2).
-        std::vector<uint32_t> fwdChain;
+        std::vector<uint32_t> fwdChain;   // curRing :: chain: identity in R2
         fwdChain.reserve(chain.size() + 1);
         fwdChain.push_back(curRing);
         for (uint32_t c : chain) fwdChain.push_back(c);
 
-        // Single-node transition is an unprotected point (+1 spof) unless the
-        // width trailer marked this transition redundant.
+        // +1 spof unless the width trailer marked this transition redundant.
         bool doubleTransition = false;
         for (auto& a : rings[curRing].adjacentRings)
             if (a.ring == R2) { doubleTransition = a.isRedundant; break; }
         uint32_t fwdSpof = spof + (doubleTransition ? 0 : 1);
 
-        // chain_sizes parallel to fwdChain: prepend curRing's size.
         std::vector<uint32_t> fwdSizes;
         fwdSizes.reserve(fwdChain.size());
         uint32_t curSize = rings[curRing].memberCount;
@@ -839,8 +800,7 @@ void MyriadGP::forwardChainInterRing(uint32_t curRing, uint32_t seq, uint32_t sp
         for (uint32_t s : chainSizes) fwdSizes.push_back(s);
 
         if (holdInterval > SIMTIME_ZERO) {
-            // hold>0: queue for the next batch flush. RIB dedup upstream + the
-            // per-entry handled marks prevent double-queue, so no reserved slot.
+            // Queue for the next flush; RIB dedup + handled marks prevent double-queue.
             pendingTransitions[{R2, primary}].push_back(
                 PendingTransition{R2, primary, fallback, seq, fwdSpof, fwdChain, fwdSizes, rr});
             if (!holdTimer)
@@ -852,8 +812,7 @@ void MyriadGP::forwardChainInterRing(uint32_t curRing, uint32_t seq, uint32_t sp
             MLOG_N_DEBUG(primary) << "transition HELD into ring='" << R2
                 << "' chain=" << formatChain(fwdChain) << " spof=" << fwdSpof << "\n";
         } else {
-            // hold=0: single-chain transition sent NOW (exact pre-batch path,
-            // including the same-chain dup-guard on updateInflights).
+            // hold=0: send now, with the same-chain dup-guard on updateInflights.
             if (rings[R2].updateInflights.count(fwdChain)) {
                 MLOG_N_DEBUG(primary) << "transition dup into ring='" << R2
                                       << "' chain-len=" << fwdChain.size() << "; skipping\n";
@@ -881,13 +840,9 @@ void MyriadGP::flushPendingTransitions() {
         nodeid_t primary = key.second;
         RingState& rs2 = rings[R2];
 
-        // Every queued chain was already the winner + loop-free when processChain
-        // queued it (that's the gate to enqueue). We do NOT re-drop non-final
-        // winners here: baseline propagates a chain the moment it's winner-on-
-        // arrival, so a chain later superseded still reached downstream — and,
-        // via loop prevention, may be the ONLY path to nodes the final winner's
-        // chain can't enter. Dropping it here silently removes those routes.
-        // So: send all queued (batch-of-1 is fine). Order preserved for determinism.
+        // Send ALL queued, no re-validation: a chain that was winner-on-arrival
+        // already propagated downstream, and via loop prevention may be the only
+        // path to some nodes. Re-dropping non-final winners here loses those routes.
         std::vector<PendingTransition*> live;
         live.reserve(chains.size());
         for (auto& pt : chains) live.push_back(&pt);
@@ -895,11 +850,9 @@ void MyriadGP::flushPendingTransitions() {
 
         nodeid_t fallback = live.front()->fallback;
 
-        // Pack into batches up to maxBatchBytes; overflow spills into more
-        // batches that lap R2 independently (real protocols cap PDU size too).
-        // Model per-entry size: chain*8 (ring+sizes @4B) + rr*6 (subnet 4B +
-        // owner 2B) + 16 (seq/spof/framing). A lone entry over the cap still
-        // ships as its own batch (can't split one chain). ~16B batch header.
+        // Pack into batches up to maxBatchBytes; overflow spills into more that
+        // lap R2 independently. A lone over-cap entry still ships (can't split a
+        // chain). Modelled per-entry size: chain*8 + rr*6 + 16, ~16B header.
         auto entryBytes = [](const PendingTransition* pt) {
             return (long)(pt->fwdChain.size() * 8 + pt->rr.size() * 6 + 16);
         };
@@ -918,7 +871,7 @@ void MyriadGP::flushPendingTransitions() {
             batch->setType(MYRIADGP_UPDATE_BATCH);
             batch->setRouter_id_src(myId);        // owner: recognised on own-return
             batch->setCurrent_ring(R2);
-            batch->setSeq_no(lapSeq);             // my per-ring batch-lap counter
+            batch->setSeq_no(lapSeq);             // per-ring batch-lap counter
             batch->setEntriesArraySize(group.size());
             for (size_t g = 0; g < group.size(); ++g) {
                 PendingTransition* pt = group[g];
@@ -951,9 +904,10 @@ void MyriadGP::flushPendingTransitions() {
 void MyriadGP::forwardBatchInRing(MyriadGpUpdateBatch* pkt, uint32_t ring, nodeid_t sender) {
     nodeid_t to = otherRingNeighbor(ring, sender);
     if (to == undefined_node) {
-        // 2-node-ring echo DISABLED for now (see forwardUpdateInRing). No other
-        // ring-neighbor → drop; the batch-lap budget expires → ring broken.
-        return;
+        // Genuine 2-node ring: echo to the sender to close the batch lap (see
+        // forwardUpdateInRing). A degraded larger ring drops → budget expiry.
+        if (rings[ring].maxRingNeighbors > 1) return;
+        to = sender;
     }
     auto np = std::make_unique<NodePkt>("Myriad_GP_Update_Batch_Pkt");
     np->setType(MYRIADGP_PACKET_TYPE);
@@ -971,8 +925,8 @@ void MyriadGP::handleUpdateBatch(MyriadGpUpdateBatch* batch, nodeid_t sender) {
     uint32_t lapSeq = batch->getSeq_no();
     RingState& rs2 = rings[R2];
 
-    // Own ACK: my batch lapped R2 and returned. Cancel the inflight; the batch
-    // is NOT unpacked or re-forwarded (its entries were processed on the way out).
+    // Own ACK: my batch lapped R2 and returned. Its entries were processed on
+    // the way out, so don't unpack or re-forward.
     if (owner == myId) {
         auto it = rs2.batchInflights.find(lapSeq);
         if (it != rs2.batchInflights.end() && it->second.tx != nullptr
@@ -986,10 +940,9 @@ void MyriadGP::handleUpdateBatch(MyriadGpUpdateBatch* batch, nodeid_t sender) {
         return;
     }
 
-    // Per-entry: RIB/select + this entry's own inter-ring transitions (which
-    // become NEW held batches into MY other rings). Update the entry's
-    // handled_rings in place so the lapping batch tells sibling bridges what I
-    // already flooded — but the batch itself stays WHOLE for the lap.
+    // Process each entry (its transitions become new held batches into my other
+    // rings), updating its handled_rings in place so sibling bridges downstream
+    // see what I flooded. The batch itself stays WHOLE for the lap.
     for (size_t i = 0; i < batch->getEntriesArraySize(); ++i) {
         MyriadGpUpdateEntry& e = batch->getEntriesForUpdate(i);
         std::vector<uint32_t> chain;
@@ -1051,18 +1004,14 @@ void MyriadGP::reset() {
 }
 
 void MyriadGP::finish() {
-    // TODO: dump path-vector table.
     recordSendScalars();
     recordScalar("batch_entries_total", batchEntriesTotal);
     recordScalar("batch_max_entries", batchMaxEntries);
     recordScalar("batches_created", batchesCreated);
 
-    // Test hook: append this node's converged preferred routes so the batching
-    // test can compare reachability AND route quality across holdInterval
-    // settings. One line per (origin ring) with the primary (representative)
-    // chain. Numeric stats come first (len/spof/seq/cost/ecmp); the chain is
-    // last so the test can read stats without parsing it. ecmp = size of the
-    // co-best set for this origin (1 = single path, >1 = equal-cost multipath).
+    // Test hook (test_rib_batching.py): one line per origin with the primary
+    // chain. Numeric stats first so the test can read them without parsing the
+    // chain; ecmp = co-best set size (1 = single path, >1 = multipath).
     std::string dumpFile = par("ribDumpFile").stdstringValue();
     if (!dumpFile.empty()) {
         std::ofstream f(dumpFile, std::ios::app);

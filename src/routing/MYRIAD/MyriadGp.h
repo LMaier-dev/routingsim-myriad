@@ -14,91 +14,75 @@ namespace routingsim {
     struct GpNeighbor : HelloNeighbor {
     };
 
-    // In-flight reliable ring send. Retransmits alternate primary/fallback so
-    // one directional send covers both ring directions across retries; equal
-    // primary/fallback degenerates to same-neighbor retry (probe mode).
+    // Reliable ring send. Retransmits alternate primary/fallback so one
+    // directional send covers both ring directions; equal primary/fallback is
+    // same-neighbor probing.
     struct RingTx {
         cPacket* pkt = nullptr;   // template; dup()'d on each (re)send
         nodeid_t primary = 0;
         nodeid_t fallback = 0;
         simtime_t interval;
         TimerMsg* timer = nullptr;
-        bool onFallback = false;  // which neighbor the next retransmit targets
+        bool onFallback = false;
     };
 
-    // When packet is superseeded by a newer SN, also cancel RTX and flood this one.
     struct RingInflight {
         RingTx* tx = nullptr;
-        // seq_no of the packet this inflight is circulating; matched on own-return.
-        uint32_t seq_no = 0;
-        // Parallel budget timer of (retryLimit+0.5)*rxmtInterval; on fire while
-        // tx still set → ring declared broken.
+        uint32_t seq_no = 0;      // matched when the packet laps back to us
+        // Fires (retryLimit+0.5) intervals in; if tx is still set, ring is broken.
         TimerMsg* budgetTimer = nullptr;
     };
 
-    // One learned path to an origin ring. chain is prepend-order:
-    // chain[0] = latest ring visited, chain.back() = origin.
+    // A learned path to an origin ring. chain is prepend-order:
+    // chain[0] = latest ring, chain.back() = origin.
     struct RibEntry {
         std::vector<uint32_t> chain;
-        std::vector<uint32_t> chain_sizes; // raw member count per ring, parallel to chain
+        std::vector<uint32_t> chain_sizes; // member count per ring, parallel to chain
         uint32_t seq_no = 0;
         uint32_t spof_count = 0;
     };
 
-    // Collect phase fills this for adjacent rings
-    // false: single router on this ring also in `ring`
-    // true: at least two routers on this ring also in `ring` (dont care for more than two)
+    // isRedundant: false = one router bridges to this ring (a SPOF),
+    // true = two or more do. Filled during the Collect lap.
     struct AdjacentRingState {
         uint32_t ring;
         bool isRedundant;
     };
 
     struct RingState {
-        std::vector<MyriadGpRr> rr; // (subnet, owner) pairs; refreshed on curSeq advance
-        uint32_t curSeq = 0; // highest seq_no seen for this origin ring
-        // My own sequence for this ring, shared by COLLECT and origin-UPDATE.
-        uint32_t originSeq = 0;
-        // My collect for this ring (at most one at a time).
+        std::vector<MyriadGpRr> rr; // (subnet, owner) pairs; refreshed when curSeq advances
+        uint32_t curSeq = 0;        // highest seq_no seen for this origin ring
+        uint32_t originSeq = 0;     // my sequence for this ring (COLLECT + origin-UPDATE)
         RingInflight collectInflight;
-        // Reliable UPDATE traversals I currently own in this ring, keyed by the
-        // packet's chain: empty chain = my origin-UPDATE; non-empty = a transit
-        // relay of another origin's UPDATE. Several can coexist (different chains).
+        // Reliable UPDATE traversals I own here, keyed by chain (empty = my
+        // origin-UPDATE, non-empty = a relay); several coexist on distinct chains.
         std::map<std::vector<uint32_t>, RingInflight> updateInflights;
-        // Whole-batch inter-ring transition laps I own in this ring (hold>0
-        // path), keyed by the batch-lap seq I stamped. Distinct from
-        // updateInflights: a batch mixes many chains but closes ONE circular-ACK.
+        // Batch laps I own here (hold>0). Unlike updateInflights, one batch mixes
+        // many chains but closes a single circular-ACK, so it's keyed by lap seq.
         std::map<uint32_t /*batchLapSeq*/, RingInflight> batchInflights;
-        // Monotonic per-ring counter for batch-lap seqs I originate here.
-        uint32_t batchLapSeq = 0;
-        std::vector<RibEntry> ribIn; // all currently-valid chains for this origin
+        uint32_t batchLapSeq = 0;   // monotonic counter for batch laps I originate
+        std::vector<RibEntry> ribIn;
         size_t preferred = SIZE_MAX; // index into ribIn; SIZE_MAX = none
 
-        // derived from recent Collect lap; used for spof_count on inter-ring forward
-        std::vector<AdjacentRingState> adjacentRings;
-        // This ring's member count (its size). Set from the king's own COLLECT
-        // return, or from the origin-UPDATE trailer for non-king members
+        std::vector<AdjacentRingState> adjacentRings; // feeds spof_count on forward
         uint32_t memberCount = 0;
 
-        // Persistent kingship + periodic refresh (king) / liveness watchdog (member).
         bool isKing = false;
-        TimerMsg* refreshTimer = nullptr;   // king only: periodic re-collect
-        TimerMsg* watchdogTimer = nullptr;  // member only: coup if king goes silent
-        // High-water mark of ring-neighbors ever seen. ==1 means a genuine
-        // 2-node ring (echo to close the lap); dropping from 2 to 1 is
-        // degradation (let the lap fail so DEGRADE fires).
+        TimerMsg* refreshTimer = nullptr;   // king: periodic re-collect
+        TimerMsg* watchdogTimer = nullptr;  // member: coup if the king goes silent
+        // High-water mark of ring-neighbors. 1 = genuine 2-node ring; a drop from
+        // 2 to 1 is degradation, so we let the lap fail and DEGRADE fires.
         size_t maxRingNeighbors = 0;
     };
 
-    // A materialized routing-table entry.
     struct RouteEntry {
         uint32_t origin_ring = 0;
-        std::vector<uint32_t> chain; // prepend-order, same as RibEntry
+        std::vector<uint32_t> chain; // prepend-order, like RibEntry
         nodeid_t owner = 0;
     };
 
-    // One inter-ring UPDATE transition held for batching (see holdInterval).
-    // Captures everything buildTransitionUpdate needs to (re)build the single-
-    // chain fwd, plus the send targets. origin = fwdChain.back().
+    // An inter-ring transition held for batching (see holdInterval); origin is
+    // fwdChain.back().
     struct PendingTransition {
         uint32_t R2 = 0;
         nodeid_t primary = 0;
@@ -129,140 +113,103 @@ namespace routingsim {
             void handleUpdateBatch(MyriadGpUpdateBatch* batch, nodeid_t from);
             void handleDegrade(MyriadGpDegrade* degrade, nodeid_t from);
 
-            //  Originate a COLLECT for ring R towards `to`.
             void originateCollect(uint32_t ring, nodeid_t to);
-            // Originate a fresh COLLECT for a ring I own (picks a ring-neighbor).
+            // Fresh COLLECT for a ring I own (picks a ring-neighbor).
             void reoriginateCollect(uint32_t ring);
-            // Persistent-king refresh timer and member liveness watchdog.
-            void startRefresh(uint32_t ring);
-            void startWatchdog(uint32_t ring);
+            void startRefresh(uint32_t ring);   // king: periodic re-collect
+            void startWatchdog(uint32_t ring);  // member: coup if the king goes silent
             void cancelKingship(uint32_t ring);
-            // Insert my (subnet,myId) pairs + update transitions + forward to
-            // the other ring-neighbor for R. `sender` is the immediate hop we
-            // received from (NOT the king), used to pick the other neighbor.
+            // Insert my pairs + transitions, forward to the other ring-neighbor.
+            // `sender` is the hop we received from, used to pick the other one.
             void insertAndForwardCollect(MyriadGpCollect* pkt, uint32_t ring, nodeid_t sender);
-            // The other ring-neighbor for R (the one we did NOT receive from);
-            // returns undefined_node if none exists.
+            // The ring-neighbor we did NOT receive from; undefined_node if none.
             nodeid_t otherRingNeighbor(uint32_t ring, nodeid_t sender);
-            // Both TWOWAY+ ring-neighbors for R (0, 1, or 2 entries).
+            // Both TWOWAY+ ring-neighbors for R (0, 1, or 2).
             std::vector<nodeid_t> ringNeighbors(uint32_t ring);
-            // Originate an UPDATE for a ring I just finished collecting.
             void originateUpdate(uint32_t ring);
-            // Forward a single origin/relay UPDATE within its current_ring
-            // (unconditional, closes the king's lap).
             void forwardUpdateInRing(MyriadGpUpdate* pkt, uint32_t ring, nodeid_t sender);
-            // Forward a whole batch within current_ring (unconditional). The batch
-            // never unpacks intra-ring: it laps as one packet to close ONE ACK.
+            // Forward a whole batch intra-ring; it never unpacks, lapping as one
+            // packet to close a single ACK.
             void forwardBatchInRing(MyriadGpUpdateBatch* pkt, uint32_t ring, nodeid_t sender);
-            // Process ONE learned chain at this node: RIB insert/select, and if it
-            // wins + is loop-free, transition it inter-ring (appending R2s it fans
-            // into to `handled`). Shared by handleUpdate (its single chain) and
-            // handleUpdateBatch (each entry). Returns nothing; `handled` accrues
-            // the rings this chain was flooded into so the caller can mark the
-            // lapping packet. curRing = the ring this chain is currently lapping.
+            // RIB insert/select for one learned chain, then transition it
+            // inter-ring if it wins and is loop-free. Shared by handleUpdate and
+            // handleUpdateBatch (per entry). `handled` accrues the rings this
+            // chain fanned into, so the caller can mark the lapping packet.
             void processChain(uint32_t curRing, uint32_t seq, uint32_t spof,
                               const std::vector<uint32_t>& chain,
                               const std::vector<uint32_t>& chainSizes,
                               const std::vector<MyriadGpRr>& rr,
                               const std::vector<MyriadGpRr>* originRrTrailer,
                               std::vector<uint32_t>& handled);
-            // Transition one chain into each of my other rings not in `chain` and
-            // not already in `handled`. hold=0 sends a single-chain UPDATE now
-            // (old path, exact pre-batch behaviour); hold>0 queues it for the
-            // next batch flush. Appends each R2 it fans into to `handled`.
+            // Transition one chain into each of my other rings not in `chain` or
+            // `handled`. hold=0 sends now; hold>0 queues for the next flush.
             void forwardChainInterRing(uint32_t curRing, uint32_t seq, uint32_t spof,
                               const std::vector<uint32_t>& chain,
                               const std::vector<uint32_t>& chainSizes,
                               const std::vector<MyriadGpRr>& rr,
                               std::vector<uint32_t>& handled);
-            // Build a single-chain inter-ring transition UPDATE (current_ring=R2,
-            // I own it) from raw fields — the hold=0 immediate path.
+            // Build a single-chain transition UPDATE (the hold=0 immediate path).
             MyriadGpUpdate* buildTransitionUpdate(uint32_t R2, nodeid_t src, uint32_t seq,
                                   uint32_t spof, const std::vector<uint32_t>& fwdChain,
                                   const std::vector<uint32_t>& fwdSizes,
                                   const std::vector<MyriadGpRr>& rr);
-            // Flush all held inter-ring transitions (hold>0): re-validate each,
-            // then emit one MyriadGpUpdateBatch per (R2, primary) bucket that laps
-            // R2 whole under a single batch-lap circular-ACK.
+            // Emit the held transitions as one batch per (R2, primary) bucket,
+            // each lapping R2 under a single circular-ACK.
             void flushPendingTransitions();
-            // Cancel a collect inflight + its budget timer for `ring`.
             void cancelCollect(uint32_t ring);
-            // Budget-timer expiry for a collect on `ring`: ring declared broken.
             void onCollectBudgetExpired(uint32_t ring);
-            // Budget-timer expiry for an UPDATE traversal (ring, chain).
             void onUpdateBudgetExpired(uint32_t ring, std::vector<uint32_t> chain);
-            // Budget-timer expiry for a whole-batch lap (ring, batchLapSeq).
             void onBatchBudgetExpired(uint32_t ring, uint32_t batchLapSeq);
-            // Retransmit budget (retransmissions after the initial send).
+            // Retransmits after the initial send.
             static constexpr int COLLECT_RETRY_LIMIT = 3;
-            // Placeholder ring size before a ring's origin-UPDATE trailer arrives
+            // Placeholder ring size until the origin-UPDATE trailer arrives.
             static constexpr uint32_t UNKNOWN_RING_SIZE = 1u << 20;
 
-            // Reliable ring send: first send to `primary`, retransmits alternate
-            // to `fallback` (equal args = same-neighbor probe). Sets fl.tx and
-            // fl.budgetTimer; onBudgetExpired fires after retryLimit misses.
-            // Takes ownership of `pkt`.
+            // First send to `primary`, retransmits alternate to `fallback` (equal
+            // args = probe). onBudgetExpired fires after retryLimit misses. Takes
+            // ownership of `pkt`.
             void sendRingReliable(RingInflight& fl, nodeid_t primary, nodeid_t fallback,
                                   cPacket* pkt, simtime_t interval, int retryLimit,
                                   std::function<void()> onBudgetExpired);
             void cancelRingReliable(RingInflight& fl);
             void ringRetxFire(RingTx* h);
-            // (subnet, myId) pairs derived once at onInitialize; reused as
-            // both the local-subnet source at origination and on insert.
-            std::vector<uint32_t> mySubnets;
-            // King re-collect period, and member watchdog jitter bound.
+            std::vector<uint32_t> mySubnets;    // (subnet, myId) pairs, set at init
             simtime_t refreshInterval;
             simtime_t refreshJitter;
-            // Best-path cost exponent a (INTEGER, a>=1): path cost = sum of
-            // member_count^a over the chain, in uint64 so equal-cost ties are
-            // EXACT (no float ULP mismatch) — required for ECMP co-best sets.
+            // Path cost = sum of member_count^ringCostExponent over the chain.
+            // Integer exponent (a>=1) keeps costs in uint64 so co-best ties are
+            // exact (no float ULP mismatch), which ECMP needs.
             long ringCostExponent;
-            // Max co-best (ECMP) chains kept per origin; excess dropped keeping
-            // the most ring-diverse subset. See maxEcmpPaths NED param.
-            long maxEcmpPaths;
-            // Max serialized bytes per inter-ring UPDATE batch; flush splits the
-            // held set into batches under this size. See maxBatchBytes NED param.
-            long maxBatchBytes;
-            // Inter-ring transition batching window; 0 = off (send immediately).
-            simtime_t holdInterval;
-            // Held inter-ring transitions bucketed by (target ring R2, next-hop
-            // primary), flushed together when the hold timer fires.
+            long maxEcmpPaths;   // max co-best chains kept per origin
+            long maxBatchBytes;  // flush splits the held set under this size
+            simtime_t holdInterval;  // batch window; 0 = send immediately
+            // Held transitions bucketed by (target ring, next-hop primary).
             std::map<std::pair<uint32_t, nodeid_t>, std::vector<PendingTransition>> pendingTransitions;
-            TimerMsg* holdTimer = nullptr;   // single per-node; armed on first held chain
-            // Batch-size instrumentation: total entries flushed and largest
-            // single batch, recorded as scalars in finish() (avg = entries/count
-            // of update_batch sends). ponytail: plain counters, not a full
-            // cOutVector histogram — the sweep only needs mean + max.
+            TimerMsg* holdTimer = nullptr;   // per-node; armed on the first held chain
+            // Batch-size scalars for finish(); mean = entries / batchesCreated.
             unsigned long batchEntriesTotal = 0;
             unsigned long batchMaxEntries = 0;
-            // Distinct batches created (flushed), the denominator for mean batch
-            // size — NOT sent_update_batch, which also counts every lap-forward.
             unsigned long batchesCreated = 0;
             uint64_t pathCost(const RibEntry& e) const;
-            // True iff a,b are co-best: equal on (spof, cost, chain-length).
-            // Lexicographic chain order is NOT in this key — it only picks the
-            // deterministic primary among equals, so genuine ties are retained.
+            // Co-best: equal on (spof, cost, chain-length). Chain order is not in
+            // the key, so genuine ties are retained for ECMP.
             bool coBest(const RibEntry& a, const RibEntry& b) const;
-            // Trim rs.ribIn down to maxEcmpPaths, keeping the most ring-diverse
-            // subset (greedy: drop the member whose removal maximizes the union
-            // of distinct rings over the survivors; lex-larger chain breaks ties).
-            // Returns true iff `candChain` is still present after trimming.
+            // Trim ribIn to maxEcmpPaths, keeping the most ring-diverse subset
+            // (greedy). Returns whether `candChain` survived.
             bool capEcmp(RingState& rs, const std::vector<uint32_t>& candChain);
-            // Recompute rings[origin].preferred (lexicographic-min of the co-best
-            // set — a representative for the RIB dump, not a forwarding filter).
+            // Recompute preferred as the lex-min of the co-best set (a RIB-dump
+            // representative, not a forwarding filter).
             void selectPreferred(RingState& rs);
 
         private:
             std::unordered_map<uint32_t /*ring*/, RingState> rings;
-            // Degrade state per culprit ring: {seq_no, beacon_no}. Held here (not
-            // per-chain) so RIB-In purges don't lose it; chains re-mark from this.
+            // Degrade state per culprit ring, kept here (not per-chain) so RIB-In
+            // purges don't lose it; chains re-mark from this.
             std::unordered_map<uint32_t /*culprit ring*/,
                                std::pair<uint32_t /*seq_no*/, uint32_t /*beacon_no*/>> degrades;
-            // Materialized routing table: subnet → preferred route.
             std::unordered_map<uint32_t /*subnet*/, RouteEntry> routes;
-            // Reverse lookup: subnet → ring(s) that advertise it
             std::unordered_map<uint32_t /*subnet*/, std::vector<uint32_t> /*ring_ids*/> subnetToRing;
-            std::vector<uint32_t /*subnet*/> keys; // only for simulation later to pick destinations at random
+            std::vector<uint32_t /*subnet*/> keys; // random destination picks in sim
     };
 
 } // namespace routingsim
