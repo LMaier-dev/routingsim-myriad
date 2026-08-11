@@ -83,7 +83,7 @@ def main():
     stem = os.path.splitext(os.path.basename(args.topology))[0]
 
     # runs the generate_ring_membership.py by daniel
-    rings_idx = get_ring_per_node(g, args.basis)
+    rings_idx, n_echo = get_ring_per_node(g, args.basis)
     n_rings = max((max(v) + 1 for v in rings_idx.values() if v), default=0)
     def ring_id(idx):
         return RING_ID_BASE - idx
@@ -98,7 +98,8 @@ def main():
             labels = ",".join(str(rid) for rid in ring_of[n])
             f.write(f'**.Node{n}.*.ringLabel = "{labels}"\n')
 
-    print(f"{g.number_of_nodes()} nodes, {g.number_of_edges()} edges, {n_rings} rings")
+    print(f"{g.number_of_nodes()} nodes, {g.number_of_edges()} edges, {n_rings} rings "
+          f"({n_echo} of them 2-node echo rings covering bridges/leaves)")
     empty = [n for n in nodes if not ring_of[n]]
     if empty:
         print(f"  WARNING: {len(empty)} node(s) in no ring (unreachable): {empty[:10]}"

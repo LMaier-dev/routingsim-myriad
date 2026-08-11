@@ -15,7 +15,18 @@ def get_ring_per_node(graph, basis="min"):
         for node in cycle:
             rings_per_node[node].append(current_ring_id)
         current_ring_id += 1
-    return rings_per_node
+    # Echo rings: every edge whose endpoints share no cycle ring becomes a 2-node
+    # ring, so bridges/leaves/tree parts are covered and the ring graph stays
+    # connected wherever the node graph is (each such ring is closed by echo).
+    # Chords and intra-cycle edges self-skip (endpoints already share a ring).
+    n_echo = 0
+    for u, v in graph.edges():
+        if set(rings_per_node[u]).isdisjoint(rings_per_node[v]):
+            rings_per_node[u].append(current_ring_id)
+            rings_per_node[v].append(current_ring_id)
+            current_ring_id += 1
+            n_echo += 1
+    return rings_per_node, n_echo
 
 def read_self_defined_topo(filename):
     graph = nx.Graph()
@@ -47,7 +58,7 @@ def main():
     else:
         print("Invalid input type: ", args.type)
         return
-    rings_per_node = get_ring_per_node(graph)
+    rings_per_node, n_echo = get_ring_per_node(graph)
     if output_file == "":
         output_file = args.input + "_ring_memberships.json"
     with open(output_file, 'w') as outfile:

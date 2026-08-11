@@ -6,15 +6,28 @@ grid topologies scale two ways:
   2. width    : 3x3, 3x4, ... 3x30    (one dimension grows -> ring-adjacency stays
                                         a narrow ladder, GP's favourable case)
 
-For each grid it generates the topology + ring labels, writes a self-contained
-.ini per (protocol, grid), runs Cmdenv, scrapes the total "created:" message
-count, and plots LS vs GP for both sweeps.
+For each topology it generates ring labels, writes a self-contained .ini per
+(protocol, topology), runs Cmdenv, sums the per-type `sent_total` scalars, and
+(for sweeps) plots LS vs GP.
 
-Everything generated lands in eval/ (git-ignored). Nothing touches the tracked
-myriad{gp,ls}.ini. Run from anywhere:
+Everything generated lands in eval/<basis>_cycles/ (git-ignored). Nothing touches
+the tracked myriad{gp,ls}.ini. Run from anywhere:
 
-    python3 simulations/MYRIAD/eval_scaling.py            # full sweep + plots
-    python3 simulations/MYRIAD/eval_scaling.py --quick    # small sweep for a smoke test
+    # full grid sweeps + plots (minimum_cycle_basis rings)
+    python3 simulations/MYRIAD/eval_scaling.py
+    python3 simulations/MYRIAD/eval_scaling.py --quick        # small smoke test
+
+    # one topology, counts only (no sweep/plot) — pass a name under
+    # simulations/topologies/ or an absolute path:
+    python3 simulations/MYRIAD/eval_scaling.py --single powerlaw_cluster_graph_n100_m3_p0.5_seed0.txt
+    python3 simulations/MYRIAD/eval_scaling.py --single powerlaw_cluster_graph_n200_m3_p0.5_seed0.txt
+
+    # ring basis: --basis min (minimum_cycle_basis, default) or all (cycle_basis).
+    # minimum_cycle_basis is ~O(dim^3) in the cycle-space dimension (E-V+C), so it
+    # is only feasible up to dim~400 (e.g. n200 m3 ~47s; n500 m3 / n1000+ too slow).
+    # For large graphs (e.g. the full ASgraph-2024, dim~98k) use --basis all, which
+    # is linear and tractable:
+    python3 simulations/MYRIAD/eval_scaling.py --single ASgraph-2024-10-09-1200.txt --basis all
 """
 import argparse
 import glob
@@ -421,6 +434,10 @@ def main():
     ap.add_argument("--basis", choices=["min", "all"], default="min",
                     help="ring basis: min=minimum_cycle_basis (default), "
                          "all=cycle_basis. Results nest under eval/<basis>_cycles/.")
+    ap.add_argument("--single", metavar="TOPO",
+                    help="run GP+LS on ONE topology .txt and print counts (no "
+                         "sweep, no plot). Path relative to simulations/topologies "
+                         "or absolute.")
     args = ap.parse_args()
 
     # Nest all outputs under a per-basis subfolder so min_cycles and all_cycles
@@ -445,6 +462,19 @@ def main():
         return
     if not os.path.exists(BIN):
         sys.exit(f"RoutingSim binary not found at {BIN} — build it first.")
+
+    if args.single:
+        # One topology, counts only (no sweep/plot). Resolve relative to the
+        # tracked topologies dir if not an existing path as given.
+        topo = args.single
+        if not os.path.exists(topo):
+            topo = os.path.join(SIM_ROOT, "topologies", args.single)
+        if not os.path.exists(topo):
+            sys.exit(f"topology not found: {args.single}")
+        label = os.path.splitext(os.path.basename(topo))[0]
+        print(f"== single topology ({BASIS} cycles): {label} ==")
+        sweep([(label, topo)], args.nobatch)
+        return
 
     if args.quick:
         square_dims = [(n, n) for n in range(2, 6)]
