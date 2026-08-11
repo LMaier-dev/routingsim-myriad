@@ -61,6 +61,12 @@ namespace routingsim {
         // many chains but closes a single circular-ACK, so it's keyed by lap seq.
         std::map<uint32_t /*batchLapSeq*/, RingInflight> batchInflights;
         uint32_t batchLapSeq = 0;   // monotonic counter for batch laps I originate
+        // Learned chains for this origin. Normally one generation (all co-best,
+        // equal spof/cost/len). During make-before-break it may also hold chains
+        // from the PREVIOUS generation (seq_no == curSeq-1) that are strictly
+        // better than the current one — kept so the data plane keeps serving a
+        // last-known-good redundant route while the network reconverges. Purged
+        // once curSeq - seq_no >= 2, so at most two adjacent generations coexist.
         std::vector<RibEntry> ribIn;
         size_t preferred = SIZE_MAX; // index into ribIn; SIZE_MAX = none
 
@@ -191,14 +197,22 @@ namespace routingsim {
             unsigned long batchMaxEntries = 0;
             unsigned long batchesCreated = 0;
             uint64_t pathCost(const RibEntry& e) const;
+            // Rank order: spof ascending, then cost, then chain length. The sole
+            // ordering used by both the store cascade and selectPreferred.
+            bool strictlyBetter(const RibEntry& a, const RibEntry& b) const;
             // Co-best: equal on (spof, cost, chain-length). Chain order is not in
             // the key, so genuine ties are retained for ECMP.
             bool coBest(const RibEntry& a, const RibEntry& b) const;
             // Trim ribIn to maxEcmpPaths, keeping the most ring-diverse subset
-            // (greedy). Returns whether `candChain` survived.
+            // (greedy). Returns whether `candChain` survived. Operates on the
+            // current-generation (seq_no==curSeq) co-best group only; retained
+            // older-generation holdovers are not ECMP siblings and are left alone.
             bool capEcmp(RingState& rs, const std::vector<uint32_t>& candChain);
-            // Recompute preferred as the lex-min of the co-best set (a RIB-dump
-            // representative, not a forwarding filter).
+            // Recompute preferred as the best (strictlyBetter, then lex-min chain)
+            // across ALL of ribIn — including a retained older generation. So
+            // `preferred` (the data-plane route) may lag curSeq by one generation
+            // during make-before-break, while forwarding always advertises the
+            // just-arrived new generation. See the ribIn comment in RingState.
             void selectPreferred(RingState& rs);
 
         private:

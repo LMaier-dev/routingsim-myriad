@@ -24,12 +24,15 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SIM_ROOT = os.path.dirname(HERE)
 REPO = os.path.dirname(SIM_ROOT)
 BIN = os.path.join(REPO, "src", "RoutingSim")
-INI = os.path.join(HERE, "myriadgp.ini")          # holds the Grid5/Grid10 configs
+INI = os.path.join(HERE, "myriadgp.ini")          # holds the Grid configs
 COMMON_INI = os.path.join(HERE, "eval_common.ini") # shared fair-timing knobs
 OUT = os.path.join(HERE, "eval", "ribtest")
 
 HOLDS = ["0s", "200ms", "1s"]
-CONFIGS = ["Grid5", "Grid10"]
+# config -> tracked topology whose ring labels we regenerate before running, so
+# the test is reproducible from a clean checkout (the .ringlabels.ini is a
+# generated artifact, not committed).
+CONFIGS = {"Grid10": "grid_10,10.txt"}
 
 # Fair-timing knobs come from eval_common.ini (single source of truth, loaded as
 # a second ini so its [General] overrides myriadgp.ini's helloJitter=1s). Here we
@@ -97,6 +100,17 @@ def main():
     os.makedirs(OUT, exist_ok=True)
     if not os.path.exists(BIN):
         sys.exit(f"RoutingSim binary not found at {BIN} — build it first.")
+
+    # Regenerate ring labels from the tracked topology (the .ringlabels.ini is a
+    # generated artifact, not committed) so the test runs on a clean checkout.
+    for topo in CONFIGS.values():
+        src = os.path.join(SIM_ROOT, "topologies", topo)
+        r = subprocess.run(
+            [sys.executable, os.path.join(HERE, "topo2rings.py"), src,
+             "--out-dir", HERE, "--no-png"],
+            capture_output=True, text=True)
+        if r.returncode != 0:
+            sys.exit(f"topo2rings.py failed for {topo}:\n{r.stdout}{r.stderr}")
 
     # The invariant batching must preserve is REACHABILITY: every (node, origin)
     # routable without batching must stay routable with it. The EXACT chain may

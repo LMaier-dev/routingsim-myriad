@@ -527,6 +527,13 @@ uint64_t MyriadGP::pathCost(const RibEntry& e) const {
     return cost;
 }
 
+bool MyriadGP::strictlyBetter(const RibEntry& a, const RibEntry& b) const {
+    if (a.spof_count != b.spof_count) return a.spof_count < b.spof_count;
+    uint64_t ca = pathCost(a), cb = pathCost(b);
+    if (ca != cb) return ca < cb;
+    return a.chain.size() < b.chain.size();
+}
+
 bool MyriadGP::coBest(const RibEntry& a, const RibEntry& b) const {
     return a.spof_count == b.spof_count
         && a.chain.size() == b.chain.size()
@@ -534,23 +541,34 @@ bool MyriadGP::coBest(const RibEntry& a, const RibEntry& b) const {
 }
 
 bool MyriadGP::capEcmp(RingState& rs, const std::vector<uint32_t>& candChain) {
-    // We're exactly one over the cap. Drop whichever member leaves the largest
-    // union of distinct rings, but bias to dropping the just-appended candidate
-    // (at the back): only evict an incumbent if it STRICTLY improves diversity,
-    // else the newcomer goes and never transitions, so we don't re-flood a chain
-    // that adds nothing. K is tiny so the O(K^2 * chainlen) rescan is trivial.
+    // Cap the CURRENT-generation co-best group (seq_no==curSeq) to maxEcmpPaths.
+    // Retained older-generation holdovers (make-before-break) are not ECMP
+    // siblings — never count or drop them here. Drop whichever current-gen member
+    // leaves the largest union of distinct rings, biased to dropping the just-
+    // appended candidate (only evict an incumbent if it STRICTLY improves
+    // diversity), so we don't re-flood a chain that adds nothing. K is tiny.
+    auto isCur = [&](size_t i) { return rs.ribIn[i].seq_no == rs.curSeq; };
+    auto curCount = [&]() {
+        size_t n = 0;
+        for (size_t i = 0; i < rs.ribIn.size(); ++i) if (isCur(i)) ++n;
+        return n;
+    };
+    // Union of distinct rings over current-gen members, excluding index `skip`.
     auto unionSansIndex = [&](size_t skip) {
         std::set<uint32_t> u;
         for (size_t i = 0; i < rs.ribIn.size(); ++i) {
-            if (i == skip) continue;
+            if (i == skip || !isCur(i)) continue;
             for (uint32_t r : rs.ribIn[i].chain) u.insert(r);
         }
         return u.size();
     };
-    while ((long)rs.ribIn.size() > maxEcmpPaths) {
-        size_t candIdx = rs.ribIn.size() - 1;
+    while ((long)curCount() > maxEcmpPaths) {
+        // Candidate is the last current-gen entry (just appended).
+        size_t candIdx = SIZE_MAX;
+        for (size_t i = rs.ribIn.size(); i-- > 0; ) if (isCur(i)) { candIdx = i; break; }
         size_t drop = candIdx, bestUnion = unionSansIndex(candIdx);
         for (size_t i = 0; i < candIdx; ++i) {
+            if (!isCur(i)) continue;
             size_t u = unionSansIndex(i);
             if (u > bestUnion) { drop = i; bestUnion = u; }
         }
@@ -561,12 +579,17 @@ bool MyriadGP::capEcmp(RingState& rs, const std::vector<uint32_t>& candChain) {
 }
 
 void MyriadGP::selectPreferred(RingState& rs) {
-    // ribIn is already all co-best, so this just picks the lex-min chain as the
-    // deterministic representative. It does NOT filter — all co-best entries forward.
+    // Best across ALL of ribIn (which may span two generations during make-
+    // before-break): strictlyBetter first, then lex-min chain as the
+    // deterministic tiebreak among equals. This intentionally ignores seq — a
+    // retained older-generation chain that is strictly better than the current
+    // generation wins, so `preferred` (data plane) may lag curSeq by one gen.
     rs.preferred = SIZE_MAX;
     for (size_t i = 0; i < rs.ribIn.size(); ++i) {
         if (rs.preferred == SIZE_MAX
-            || rs.ribIn[i].chain < rs.ribIn[rs.preferred].chain)
+            || strictlyBetter(rs.ribIn[i], rs.ribIn[rs.preferred])
+            || (!strictlyBetter(rs.ribIn[rs.preferred], rs.ribIn[i])
+                && rs.ribIn[i].chain < rs.ribIn[rs.preferred].chain))
             rs.preferred = i;
     }
 }
@@ -664,16 +687,41 @@ void MyriadGP::processChain(uint32_t curRing, uint32_t seq, uint32_t spof,
     bool doInterRing = true;
     RibEntry cand{fullChain, fullSizes, seq, spof};
 
-    // Seq-advance: a newer generation supersedes everything for this origin.
-    // (All retained entries share curSeq, so trimming old seqs == clearing.)
+    // Purge entries two or more generations behind: make-before-break keeps at
+    // most the previous generation (curSeq-1) alongside the current one.
+    auto purgeStale = [&]() {
+        auto& v = originRs.ribIn;
+        v.erase(std::remove_if(v.begin(), v.end(),
+            [&](const RibEntry& e) { return originRs.curSeq - e.seq_no >= 2; }),
+            v.end());
+    };
+
+    // Seq-advance: a newer generation. Adopt it, purge anything now >=2 behind,
+    // but do NOT blanket-clear — keep old-gen chains STRICTLY BETTER than this
+    // candidate so the data plane keeps a last-known-good redundant route while
+    // the network reconverges (they age out at the next advance). Old-gen chains
+    // that are not strictly better were only co-best siblings and are dropped.
     if (seq > originRs.curSeq) {
         originRs.curSeq = seq;
-        originRs.ribIn.clear();
         if (originRrTrailer) originRs.rr = *originRrTrailer;
+        purgeStale();
+        auto& v = originRs.ribIn;
+        v.erase(std::remove_if(v.begin(), v.end(),
+            [&](const RibEntry& e) { return !strictlyBetter(e, cand); }),
+            v.end());
     }
 
-    // Only co-best chains are stored, so a match here is a re-arriving co-best
-    // chain whose transition already happened: keep it but don't re-forward.
+    // A chain older than the current generation that is NOT strictly better than
+    // what we hold is stale-and-useless: ignore it (don't store or forward).
+    if (seq < originRs.curSeq) {
+        bool useful = originRs.ribIn.empty();
+        for (auto& e : originRs.ribIn)
+            if (strictlyBetter(cand, e)) { useful = true; break; }
+        if (!useful) return;
+    }
+
+    // Dup: this exact chain already retained at >= seq — its transition already
+    // happened, so keep it but don't re-forward.
     bool isDup = false;
     for (auto& e : originRs.ribIn)
         if (e.chain == fullChain && e.seq_no >= seq) { isDup = true; break; }
@@ -683,22 +731,27 @@ void MyriadGP::processChain(uint32_t curRing, uint32_t seq, uint32_t spof,
                      << "' seq=" << seq << " chain=" << formatChain(fullChain) << "\n";
         doInterRing = false;
     } else {
-        auto strictlyBetter = [&](const RibEntry& a, const RibEntry& b) {
-            if (a.spof_count != b.spof_count) return a.spof_count < b.spof_count;
-            uint64_t ca = pathCost(a), cb = pathCost(b);
-            if (ca != cb) return ca < cb;
-            return a.chain.size() < b.chain.size();
-        };
-        if (originRs.ribIn.empty()) {
+        // The store/forward decision ranks against the CURRENT generation only
+        // (retained older holdovers must not make a valid new-gen chain look
+        // inferior — it still has to propagate). Find the best current-gen entry.
+        RibEntry* curBest = nullptr;
+        for (auto& e : originRs.ribIn)
+            if (e.seq_no == originRs.curSeq
+                && (!curBest || strictlyBetter(e, *curBest))) curBest = &e;
+
+        if (!curBest) {
+            originRs.ribIn.push_back(cand);                      // first of this gen
+        } else if (strictlyBetter(cand, *curBest)) {
+            // New best for this generation: drop the current gen's now-inferior
+            // entries (keep any retained older-gen holdovers), then install.
+            auto& v = originRs.ribIn;
+            v.erase(std::remove_if(v.begin(), v.end(),
+                [&](const RibEntry& e) { return e.seq_no == originRs.curSeq; }),
+                v.end());
             originRs.ribIn.push_back(cand);
-        } else if (strictlyBetter(cand, originRs.ribIn.front())) {
-            originRs.ribIn.clear();                               // new best beats all
+        } else if (coBest(cand, *curBest)) {
             originRs.ribIn.push_back(cand);
-        } else if (coBest(cand, originRs.ribIn.front())) {
-            // If capEcmp drops cand it returns false, so it won't transition —
-            // that's what bounds the combinatorial re-advertisement.
-            originRs.ribIn.push_back(cand);
-            if ((long)originRs.ribIn.size() > maxEcmpPaths)
+            if ((long)originRs.ribIn.size() > maxEcmpPaths)   // capEcmp scopes to curSeq
                 doInterRing = capEcmp(originRs, fullChain);
         } else {
             doInterRing = false;                                 // inferior
@@ -1022,12 +1075,16 @@ void MyriadGP::finish() {
         for (uint32_t rid : originIds) {
             RingState& rs = rings[rid];
             const RibEntry& e = rs.ribIn[rs.preferred];
+            // ecmp = current-generation co-best count (ignore retained older-gen
+            // make-before-break holdovers, which are not ECMP siblings).
+            size_t ecmp = 0;
+            for (auto& c : rs.ribIn) if (c.seq_no == rs.curSeq) ++ecmp;
             f << (int)myId << " origin=" << rid
               << " len=" << e.chain.size()
               << " spof=" << e.spof_count
               << " seq=" << e.seq_no
               << " cost=" << pathCost(e)
-              << " ecmp=" << rs.ribIn.size()
+              << " ecmp=" << ecmp
               << " chain=" << formatChain(e.chain) << "\n";
         }
     }
