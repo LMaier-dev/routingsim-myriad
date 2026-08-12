@@ -148,8 +148,10 @@ void MyriadLS::originateSelfLsa(MyriadLSAType type, uint16_t minSeq) {
 
     MLOG_INFO() << "originated self-LSA type=" << type << " seq=" << newSeq << "\n";
 
+    // Flood to TWOWAY+ neighbors (OSPF's Exchange+): an LSA originated mid-exchange
+    // must reach a neighbor whose DBD summary was already snapshotted.
     for (auto& [nid, nbr] : neighbors) {
-        if (nbr.state != NSTATE_FULL) continue;
+        if (nbr.state < NSTATE_TWOWAY) continue;
         enqueueFlood(nbr, key);
         sendNextFloodBatch(nbr);
     }
@@ -329,23 +331,22 @@ void MyriadLS::handleLSU(MyriadLSU* lsu, nodeid_t from) {
             }
         }
 
-        // LSR response vs flooded LSU
+        // Ack every received LSA so flooding can overlap the DB exchange:
+        // a flood needs the ack, an LSR response ignores the spurious one.
+        // Drain the request if this satisfies it; reflood any newer install.
         auto pit = std::find(nbr.lsrQueue.begin(), nbr.lsrQueue.end(), key);
         if (pit != nbr.lsrQueue.end()) {
             nbr.lsrQueue.erase(pit);
             drainedAny = true;
-        } else {
-            // Flooded: ack to sender, and reflood if we just installed newer.
-            toAck.push_back(h);
-            if (installed) toReflood.push_back(key);
         }
+        toAck.push_back(h);
+        if (installed) toReflood.push_back(key);
     }
 
-    // Reflood all newly-installed keys to FULL neighbors except sender.
-    // They get bundled into one LSU per neighbor (per-queue)
+    // Reflood newly-installed LSAs to TWOWAY+ neighbors except the sender.
     if (!toReflood.empty()) {
         for (auto& [nid, nb] : neighbors) {
-            if (nb.state != NSTATE_FULL) continue;
+            if (nb.state < NSTATE_TWOWAY) continue;
             if (nid == from) continue;
             for (const auto& k : toReflood) enqueueFlood(nb, k);
             sendNextFloodBatch(nb);
