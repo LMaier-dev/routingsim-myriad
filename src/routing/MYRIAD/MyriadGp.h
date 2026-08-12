@@ -185,6 +185,8 @@ namespace routingsim {
             // Integer exponent (a>=1) keeps costs in uint64 so co-best ties are
             // exact (no float ULP mismatch), which ECMP needs.
             long ringCostExponent;
+            // false = rank purely by cost (oracle mode); see MyriadGp.ned.
+            bool rankUseSpof = true;
             long maxEcmpPaths;   // max co-best chains kept per origin
             long maxBatchBytes;  // flush splits the held set under this size
             simtime_t holdInterval;  // batch window; 0 = send immediately

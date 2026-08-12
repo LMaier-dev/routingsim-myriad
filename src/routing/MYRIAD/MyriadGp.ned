@@ -23,6 +23,10 @@ simple myriadgp extends routingsim.foundation.Protocol
         // is a plain member sum.
         int ringCostExponent = default(2);
 
+        // Rank on SPOF count first (default) or skip it and rank purely by cost.
+        // false makes the RIB least-cost, matching the Dijkstra algo
+        bool rankUseSpof = default(true);
+
         // ECMP fan-out cap; excess co-best chains dropped keeping the most
         // ring-diverse subset (see capEcmp). 1 = no multipath. Needed because
         // equal-cost paths are combinatorial on symmetric meshes.

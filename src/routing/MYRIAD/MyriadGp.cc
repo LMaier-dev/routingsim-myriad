@@ -21,6 +21,7 @@ void MyriadGP::onInitialize() {
     refreshInterval = par("refreshInterval");
     refreshJitter = par("refreshJitter");
     ringCostExponent = par("ringCostExponent");
+    rankUseSpof = par("rankUseSpof");
     maxEcmpPaths = par("maxEcmpPaths");
     maxBatchBytes = par("maxBatchBytes");
     holdInterval = par("holdInterval");
@@ -538,14 +539,14 @@ uint64_t MyriadGP::pathCost(const RibEntry& e) const {
 }
 
 bool MyriadGP::strictlyBetter(const RibEntry& a, const RibEntry& b) const {
-    if (a.spof_count != b.spof_count) return a.spof_count < b.spof_count;
+    if (rankUseSpof && a.spof_count != b.spof_count) return a.spof_count < b.spof_count;
     uint64_t ca = pathCost(a), cb = pathCost(b);
     if (ca != cb) return ca < cb;
     return a.chain.size() < b.chain.size();
 }
 
 bool MyriadGP::coBest(const RibEntry& a, const RibEntry& b) const {
-    return a.spof_count == b.spof_count
+    return (!rankUseSpof || a.spof_count == b.spof_count)
         && a.chain.size() == b.chain.size()
         && pathCost(a) == pathCost(b);
 }
@@ -675,6 +676,14 @@ void MyriadGP::processChain(uint32_t curRing, uint32_t seq, uint32_t spof,
     RingState& curRs = rings[curRing];
     uint32_t origin = chain.empty() ? curRing : chain.back();
     RingState& originRs = rings[origin];
+
+    // Don't store or bridge an inter-ring update arriving on a ring whose COLLECT
+    // hasn't landed here yet (the dup guard blocks re-forwarding)
+    if (!chain.empty() && curRs.memberCount == 0) {
+        MLOG_DEBUG() << "inter-ring UPDATE on ring='" << curRing
+                     << "' deferred: own COLLECT not yet complete\n";
+        return;
+    }
 
     // Full path identity = current_ring :: packet chain, with sizes parallel.
     std::vector<uint32_t> fullChain;
@@ -820,6 +829,14 @@ void MyriadGP::forwardChainInterRing(uint32_t curRing, uint32_t seq, uint32_t sp
         bool already = false;
         for (uint32_t h : handled) if (h == R2) { already = true; break; }
         if (already) continue;
+
+        // R2's COLLECT hasn't landed here yet: its members can't bridge out of it
+        // (same gate in processChain) target ring has to prove redundancy first.
+        if (rings[R2].memberCount == 0) {
+            MLOG_DEBUG() << "transition into ring='" << R2
+                         << "' skipped: its COLLECT not yet complete\n";
+            continue;
+        }
 
         std::vector<nodeid_t> nbrs = ringNeighbors(R2);
         if (nbrs.empty()) {
