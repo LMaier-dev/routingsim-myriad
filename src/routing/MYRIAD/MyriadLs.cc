@@ -1,4 +1,5 @@
 #include "routing/MYRIAD/MyriadLs.h"
+#include "routing/MYRIAD/RingSpfOracle.h"
 #include <algorithm>
 
 namespace routingsim {
@@ -455,6 +456,22 @@ void MyriadLS::tryGoFull(NeighborEntry& nbr) {
 void MyriadLS::finish() {
     logLsdb();
     recordSendScalars();
+
+    // Optimality oracle (see RingSpfOracle): dump this node's Dijkstra
+    // least-cost-per-origin over the ring graph, rebuilt from the flooded RingsLsa.
+    std::string oracleFile = par("oracleDumpFile").stdstringValue();
+    if (!oracleFile.empty()) {
+        std::map<ringspf::NodeId, std::vector<ringspf::RingId>> perNodeRings;
+        for (const auto& [key, lsa] : lsdb) {
+            if (key.type != LSA_RINGS) continue;
+            auto* r = check_and_cast<RingsLsa*>(lsa.get());
+            auto& rs = perNodeRings[(ringspf::NodeId)key.origin];
+            for (size_t i = 0; i < r->getRingsArraySize(); ++i)
+                rs.push_back(r->getRings(i));
+        }
+        ringspf::dumpOracle(oracleFile, (ringspf::NodeId)myId,
+                            perNodeRings, par("ringCostExponent"));
+    }
 }
 
 void MyriadLS::handleDBD(MyriadDBD* dbd, nodeid_t from) {
