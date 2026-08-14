@@ -45,6 +45,11 @@ simple myriadgp extends routingsim.foundation.Protocol
         // appends its converged preferred routes here.
         string ribDumpFile = default("");
 
+        // Observational RIB snapshot period (see startSnapshot). >0 appends the
+        // preferred RIB to ribDumpFile every interval with a t=<simTime> prefix;
+        // 0s = off (finish() dump only). Read-only, does not perturb the protocol.
+        double snapshotInterval @unit(s) = default(0s);
+
         // Ring membership override, e.g. "1000000,999999". Empty = built-in
         // per-id table. Set via **.NodeN.*.ringLabel or a node property.
         string ringLabel = default("");

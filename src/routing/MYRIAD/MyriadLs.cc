@@ -10,6 +10,7 @@ void MyriadLS::onInitialize() {
     MyriadHelloProto::onInitialize();
     packetType = MYRIADLS_PACKET_TYPE;
     dbExchangeBatchSize = par("dbExchangeBatchSize");
+    snapshotInterval = par("snapshotInterval");
 
     node().bind(MYRIADLS_PACKET_TYPE, this);
 
@@ -19,6 +20,8 @@ void MyriadLS::onInitialize() {
     // periodically send hellos to all neighbors
     scheduleHello(helloInterval);
 
+    if (snapshotInterval > 0 && !par("oracleDumpFile").stdstringValue().empty())
+        startSnapshot();
 }
 
 void MyriadLS::onTwoWayReached(NeighborEntry& nbr) {
@@ -88,6 +91,7 @@ void MyriadLS::reset() {
     lsdb.clear();
     installSelfLsas();
 
+    if (snapshotTimer) { cancelAndDelete(snapshotTimer); snapshotTimer = nullptr; }
     cancelHelloTimer();
 }
 
@@ -453,25 +457,40 @@ void MyriadLS::tryGoFull(NeighborEntry& nbr) {
     originateSelfLsa(LSA_ADJACENCIES);
 }
 
+void MyriadLS::dumpOracleTo(const std::string& path, const std::string& tprefix) {
+    // Rebuild per-node ring membership from the flooded RingsLsa, then let the
+    // oracle run Dijkstra over the ring graph.
+    std::map<ringspf::NodeId, std::vector<ringspf::RingId>> perNodeRings;
+    for (const auto& [key, lsa] : lsdb) {
+        if (key.type != LSA_RINGS) continue;
+        auto* r = check_and_cast<RingsLsa*>(lsa.get());
+        auto& rs = perNodeRings[(ringspf::NodeId)key.origin];
+        for (size_t i = 0; i < r->getRingsArraySize(); ++i)
+            rs.push_back(r->getRings(i));
+    }
+    ringspf::dumpOracle(path, (ringspf::NodeId)myId, perNodeRings,
+                        par("ringCostExponent"), tprefix);
+}
+
+void MyriadLS::startSnapshot() {
+    // Re-arms itself like the hello timer; purely observational (see header).
+    snapshotTimer = addOneShotTimer(snapshotInterval, [this](short) {
+        snapshotTimer = nullptr;
+        dumpOracleTo(par("oracleDumpFile").stdstringValue(),
+                     "t=" + simTime().str() + " ");
+        startSnapshot();
+        return false;
+    });
+}
+
 void MyriadLS::finish() {
     logLsdb();
     recordSendScalars();
 
-    // Optimality oracle (see RingSpfOracle): dump this node's Dijkstra
-    // least-cost-per-origin over the ring graph, rebuilt from the flooded RingsLsa.
+    // Optimality oracle (see RingSpfOracle)
     std::string oracleFile = par("oracleDumpFile").stdstringValue();
-    if (!oracleFile.empty()) {
-        std::map<ringspf::NodeId, std::vector<ringspf::RingId>> perNodeRings;
-        for (const auto& [key, lsa] : lsdb) {
-            if (key.type != LSA_RINGS) continue;
-            auto* r = check_and_cast<RingsLsa*>(lsa.get());
-            auto& rs = perNodeRings[(ringspf::NodeId)key.origin];
-            for (size_t i = 0; i < r->getRingsArraySize(); ++i)
-                rs.push_back(r->getRings(i));
-        }
-        ringspf::dumpOracle(oracleFile, (ringspf::NodeId)myId,
-                            perNodeRings, par("ringCostExponent"));
-    }
+    if (!oracleFile.empty())
+        dumpOracleTo(oracleFile, snapshotInterval > 0 ? "t=" + simTime().str() + " " : "");
 }
 
 void MyriadLS::handleDBD(MyriadDBD* dbd, nodeid_t from) {

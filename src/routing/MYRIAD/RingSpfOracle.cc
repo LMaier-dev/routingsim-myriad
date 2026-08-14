@@ -93,16 +93,15 @@ shortestRingCosts(const std::map<NodeId, std::vector<RingId>>& perNodeRings, lon
 }
 
 void dumpOracle(const std::string& path, NodeId self,
-                const std::map<NodeId, std::vector<RingId>>& perNodeRings, long exp) {
-    // ponytail: recomputes the global all-pairs per calling node; fine at the
-    // <100-ring scale these fixtures run at.
+                const std::map<NodeId, std::vector<RingId>>& perNodeRings, long exp,
+                const std::string& tprefix) {
     auto all = shortestRingCosts(perNodeRings, exp);
     auto it = all.find(self);
     if (it == all.end()) return;
 
     std::ofstream f(path, std::ios::app);
     for (const auto& [origin, cost] : it->second)
-        f << self << " origin=" << origin << " cost=" << cost << "\n";
+        f << tprefix << self << " origin=" << origin << " cost=" << cost << "\n";
 }
 
 } // namespace ringspf

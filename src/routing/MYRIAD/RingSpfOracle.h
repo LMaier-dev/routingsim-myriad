@@ -26,10 +26,12 @@ std::map<NodeId, std::map<RingId, uint64_t>>
 shortestRingCosts(const std::map<NodeId, std::vector<RingId>>& perNodeRings, long exp);
 
 // Append `self`'s rows to `path` (open in append mode) as
-//   <self> origin=<ring> cost=<optimal>
+//   <tprefix><self> origin=<ring> cost=<optimal>
 // matching the leading schema of MyriadGP's ribDumpFile so one parser reads both.
+// tprefix is empty for a one-shot dump, or "t=<simTime> " for a periodic snapshot.
 void dumpOracle(const std::string& path, NodeId self,
-                const std::map<NodeId, std::vector<RingId>>& perNodeRings, long exp);
+                const std::map<NodeId, std::vector<RingId>>& perNodeRings, long exp,
+                const std::string& tprefix = "");
 
 } // namespace ringspf
 } // namespace routingsim

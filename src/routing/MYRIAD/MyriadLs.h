@@ -5,6 +5,7 @@
 #include "routing/MYRIAD/MyriadLsPkt_m.h"
 #include <deque>
 #include <memory>
+#include <string>
 
 namespace routingsim {
 
@@ -79,6 +80,8 @@ namespace routingsim {
             void handleAck(MyriadAck* ack, nodeid_t from);
             void sendAck(nodeid_t to, const std::vector<const LsaHeader*>& headers);
             void tryGoFull(NeighborEntry& nbr);
+            void startSnapshot();
+            void dumpOracleTo(const std::string& path, const std::string& tprefix);
 
         private:
             // `neighbors` (typed std::unordered_map<nodeid_t, NeighborEntry>)
@@ -86,6 +89,9 @@ namespace routingsim {
             Lsdb lsdb;
 
             int dbExchangeBatchSize = 10;
+
+            simtime_t snapshotInterval;      // periodic oracle snapshot; 0 = off
+            TimerMsg* snapshotTimer = nullptr;
 
             void buildSelfRingsLsa(uint16_t seq);
             void buildSelfSubnetsLsa(uint16_t seq);

@@ -8,6 +8,8 @@
 #include <map>
 #include <vector>
 #include <functional>
+#include <iosfwd>
+#include <string>
 
 namespace routingsim {
 
@@ -123,6 +125,9 @@ namespace routingsim {
             void reoriginateCollect(uint32_t ring);
             void startRefresh(uint32_t ring);   // king: periodic re-collect
             void startWatchdog(uint32_t ring);  // member: coup if the king goes silent
+            // Observational periodic RIB snapshot (snapshotInterval)
+            void startSnapshot();
+            void dumpRibTo(std::ostream& f, const std::string& tprefix);
             void cancelKingship(uint32_t ring);
             // Insert my pairs + transitions, forward to the other ring-neighbor.
             // `sender` is the hop we received from, used to pick the other one.
@@ -190,6 +195,8 @@ namespace routingsim {
             long maxEcmpPaths;   // max co-best chains kept per origin
             long maxBatchBytes;  // flush splits the held set under this size
             simtime_t holdInterval;  // batch window; 0 = send immediately
+            simtime_t snapshotInterval;      // periodic RIB snapshot; 0 = off (finish() only)
+            TimerMsg* snapshotTimer = nullptr;
             // Held transitions bucketed by (target ring, next-hop primary).
             std::map<std::pair<uint32_t, nodeid_t>, std::vector<PendingTransition>> pendingTransitions;
             TimerMsg* holdTimer = nullptr;   // per-node; armed on the first held chain

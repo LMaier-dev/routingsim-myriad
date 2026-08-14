@@ -25,11 +25,15 @@ void MyriadGP::onInitialize() {
     maxEcmpPaths = par("maxEcmpPaths");
     maxBatchBytes = par("maxBatchBytes");
     holdInterval = par("holdInterval");
+    snapshotInterval = par("snapshotInterval");
 
     MLOG_INFO() << "MyriadGP up\n";
 
     // Periodically send hellos to all neighbors. The hello / dead / two-way
     scheduleHello(helloInterval);
+
+    if (snapshotInterval > 0 && !par("ribDumpFile").stdstringValue().empty())
+        startSnapshot();
 }
 
 void MyriadGP::onTwoWayReached(GpNeighbor& nbr) {
@@ -116,6 +120,17 @@ void MyriadGP::startRefresh(uint32_t ring) {
         rings[ring].refreshTimer = nullptr;
         reoriginateCollect(ring);
         if (rings[ring].isKing) startRefresh(ring); // reschedule
+        return false;
+    });
+}
+
+void MyriadGP::startSnapshot() {
+    // Re-arms itself like startRefresh; purely observational (see header).
+    snapshotTimer = addOneShotTimer(snapshotInterval, [this](short) {
+        snapshotTimer = nullptr;
+        std::ofstream f(par("ribDumpFile").stdstringValue(), std::ios::app);
+        dumpRibTo(f, "t=" + simTime().str() + " ");
+        startSnapshot();
         return false;
     });
 }
@@ -1065,7 +1080,30 @@ void MyriadGP::reset() {
     routes.clear();
     pendingTransitions.clear();
     if (holdTimer) { cancelAndDelete(holdTimer); holdTimer = nullptr; }
+    if (snapshotTimer) { cancelAndDelete(snapshotTimer); snapshotTimer = nullptr; }
     cancelHelloTimer();
+}
+
+void MyriadGP::dumpRibTo(std::ostream& f, const std::string& tprefix) {
+    // One line per origin with the primary chain. Numeric stats first so the
+    // test can read them without parsing the chain; ecmp = co-best set size.
+    std::vector<uint32_t> originIds;
+    for (auto& [rid, rs] : rings)
+        if (rs.preferred != SIZE_MAX) originIds.push_back(rid);
+    std::sort(originIds.begin(), originIds.end());
+    for (uint32_t rid : originIds) {
+        RingState& rs = rings[rid];
+        const RibEntry& e = rs.ribIn[rs.preferred];
+        size_t ecmp = 0;
+        for (auto& c : rs.ribIn) if (c.seq_no == rs.curSeq) ++ecmp;
+        f << tprefix << (int)myId << " origin=" << rid
+          << " len=" << e.chain.size()
+          << " spof=" << e.spof_count
+          << " seq=" << e.seq_no
+          << " cost=" << pathCost(e)
+          << " ecmp=" << ecmp
+          << " chain=" << formatChain(e.chain) << "\n";
+    }
 }
 
 void MyriadGP::finish() {
@@ -1074,30 +1112,12 @@ void MyriadGP::finish() {
     recordScalar("batch_max_entries", batchMaxEntries);
     recordScalar("batches_created", batchesCreated);
 
-    // Test hook (test_rib_batching.py): one line per origin with the primary
-    // chain. Numeric stats first so the test can read them without parsing the
-    // chain; ecmp = co-best set size (1 = single path, >1 = multipath).
+    // Test hook (test_rib_batching.py). With periodic snapshots on, emit a final
+    // t=<simTime> snapshot so the end state is captured; else the legacy dump.
     std::string dumpFile = par("ribDumpFile").stdstringValue();
     if (!dumpFile.empty()) {
         std::ofstream f(dumpFile, std::ios::app);
-        std::vector<uint32_t> originIds;
-        for (auto& [rid, rs] : rings)
-            if (rs.preferred != SIZE_MAX) originIds.push_back(rid);
-        std::sort(originIds.begin(), originIds.end());
-        for (uint32_t rid : originIds) {
-            RingState& rs = rings[rid];
-            const RibEntry& e = rs.ribIn[rs.preferred];
-            // ecmp = current-generation co-best count (skip retained holdovers).
-            size_t ecmp = 0;
-            for (auto& c : rs.ribIn) if (c.seq_no == rs.curSeq) ++ecmp;
-            f << (int)myId << " origin=" << rid
-              << " len=" << e.chain.size()
-              << " spof=" << e.spof_count
-              << " seq=" << e.seq_no
-              << " cost=" << pathCost(e)
-              << " ecmp=" << ecmp
-              << " chain=" << formatChain(e.chain) << "\n";
-        }
+        dumpRibTo(f, snapshotInterval > 0 ? "t=" + simTime().str() + " " : "");
     }
 }
 

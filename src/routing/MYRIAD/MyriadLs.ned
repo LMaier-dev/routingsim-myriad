@@ -23,6 +23,11 @@ simple myriadls extends routingsim.foundation.Protocol
         int ringCostExponent = default(2);
         string oracleDumpFile = default("");
 
+        // Observational oracle snapshot period (see startSnapshot). >0 appends the
+        // Dijkstra least-cost-per-origin to oracleDumpFile every interval with a
+        // t=<simTime> prefix; 0s = off
+        double snapshotInterval @unit(s) = default(0s);
+
         // logging: DEBUG | INFO | WARN | ERROR
         string logLevel = default("DEBUG");
         // ANSI-color the log prefix by level (Cmdenv terminal only; off for log files / Qtenv)
