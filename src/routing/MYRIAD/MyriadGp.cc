@@ -280,7 +280,9 @@ void MyriadGP::onCollectBudgetExpired(uint32_t ring) {
     cancelRingReliable(currentRingState.collectInflight);
     MLOG_WARN() << "ring send budget expired ring='" << ring
                 << "' seq=" << currentRingState.collectInflight.seq_no << " — ring broken\n";
-    if (degradeEnabled) originateDegrade(ring);
+    // Degrade only on actual degradation
+    if (degradeEnabled && ringNeighbors(ring).size() < currentRingState.maxRingNeighbors)
+        originateDegrade(ring);
 }
 
 void MyriadGP::onUpdateBudgetExpired(uint32_t ring, std::vector<uint32_t> chain) {
