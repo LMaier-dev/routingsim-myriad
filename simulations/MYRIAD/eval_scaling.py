@@ -51,6 +51,9 @@ TOPO_DIR = os.path.join(EVAL_DIR, "topologies")
 INI_DIR = os.path.join(EVAL_DIR, "ini")
 PLOT_DIR = os.path.join(EVAL_DIR, "plots")
 BASIS = "min"   # ring basis for topo2rings; set from --basis in main()
+CONV_SNAP = "0.5s"        # stats-mode snapshots are tiny, so poll finely
+CONV_SIMTIME = "200s"   # convergence runs need more headroom (50s default too tight for 20x20)
+CONV_GP_WARMUP = "10s"  # periodic re-COLLECTs every 1s stabilise memberCounts by then
 
 # Canonical fair-timing knobs live in eval_common.ini (single source of truth,
 # shared with test_rib_batching.py). Each generated per-run ini `include`s it;
@@ -74,6 +77,34 @@ def _max_scalar(scas, name):
             for m in re.finditer(rf"^scalar\s+\S+\s+{re.escape(name)}\s+([0-9.]+)",
                                  open(sca).read(), re.M)]
     return max(vals) if vals else 0
+
+
+def parse_stats(path):
+    """Stats-mode dump -> {t(float): {node: (n, cost_sum, cost_max)}}. One line
+    per node per snapshot: `t=T <node> n=N cost_sum=X cost_max=Y`. Full per-route
+    lines (finish()'s final dump, which carry `origin=`) are skipped."""
+    snaps = {}
+    for line in open(path):
+        line = line.strip()
+        if not line.startswith("t=") or "origin=" in line:
+            continue
+        t_tok, rest = line.split(" ", 1)
+        toks = rest.split()
+        node = toks[0]
+        kv = dict(p.split("=", 1) for p in toks[1:] if "=" in p)
+        snaps.setdefault(float(t_tok[2:]), {})[node] = (
+            int(kv["n"]), int(kv["cost_sum"]), int(kv["cost_max"]))
+    return snaps
+
+
+def convergence_time(snaps):
+    """Last t at which the (aggregate) RIB changed -> first stable moment."""
+    ts = sorted(snaps)
+    last_change = ts[0] if ts else None
+    for i in range(1, len(ts)):
+        if snaps[ts[i]] != snaps[ts[i - 1]]:
+            last_change = ts[i]
+    return last_change
 
 
 def run(cmd, **kw):
@@ -236,20 +267,40 @@ def batch_stats(ini_path, tag=""):
     return n_batches, avg, mx
 
 
-def sweep(items, nobatch=False):
+def sweep(items, nobatch=False, conv=False):
     """items: list of (label, topo_path). Runs LS and ONE GP per topology. GP
     uses the holdInterval pinned in eval_common.ini (batching on); pass
     nobatch=True to override it to 0s — the pre-batching baseline, which is far
     slower (no coalescing) so it's opt-in, not run every sweep. Returns a dict of
-    parallel series: labels, ls, gp, avg_sz, max_sz."""
-    gp_extra = ['--**.holdInterval=0s'] if nobatch else None
+    parallel series: labels, ls, gp, avg_sz, max_sz, and (if conv) ls_ct, gp_ct."""
     out = {k: [] for k in ("labels", "ls", "gp", "avg_sz", "max_sz")}
+    if conv:
+        out["ls_ct"] = []
+        out["gp_ct"] = []
     for (label, topo) in items:
         rings = ring_label_lines(topo)
         ls_ini = write_ini("ls", topo, rings)
         gp_ini = write_ini("gp", topo, rings)
-        ls_n = message_count("ls", ls_ini)
-        gp_n = message_count("gp", gp_ini, extra_args=gp_extra)
+        ls_extra = []
+        gp_extra = ['--**.holdInterval=0s'] if nobatch else []
+        if conv:
+            stem = os.path.splitext(os.path.basename(topo))[0]
+            ls_dump = os.path.join(INI_DIR, f"dump_ls_{stem}.txt")
+            gp_dump = os.path.join(INI_DIR, f"dump_gp_{stem}.txt")
+            for d in (ls_dump, gp_dump):   # C++ appends; clear stale prior runs
+                if os.path.exists(d):
+                    os.remove(d)
+            ls_extra += [f'--**.oracleDumpFile="{ls_dump}"',
+                         f'--**.snapshotInterval={CONV_SNAP}',
+                         '--**.snapshotFormat="stats"',
+                         f'--sim-time-limit={CONV_SIMTIME}']
+            gp_extra += [f'--**.ribDumpFile="{gp_dump}"',
+                         f'--**.snapshotInterval={CONV_SNAP}',
+                         '--**.snapshotFormat="stats"',
+                         f'--sim-time-limit={CONV_SIMTIME}',
+                         f'--**.collectWarmupDuration={CONV_GP_WARMUP}']
+        ls_n = message_count("ls", ls_ini, extra_args=ls_extra or None)
+        gp_n = message_count("gp", gp_ini, extra_args=gp_extra or None)
         nb, avg, mx = batch_stats(gp_ini)
         out["labels"].append(label)
         out["ls"].append(ls_n)
@@ -257,22 +308,33 @@ def sweep(items, nobatch=False):
         out["avg_sz"].append(avg)
         out["max_sz"].append(mx)
         mode = "no-batch" if nobatch else "batched"
+        ct_str = ""
+        if conv:
+            warmup_s = float(CONV_GP_WARMUP.rstrip("s"))
+            ls_ct = convergence_time(parse_stats(ls_dump)) if os.path.exists(ls_dump) else None
+            raw_gp_ct = convergence_time(parse_stats(gp_dump)) if os.path.exists(gp_dump) else None
+            gp_ct = (raw_gp_ct - warmup_s) if raw_gp_ct is not None else None
+            out["ls_ct"].append(ls_ct)
+            out["gp_ct"].append(gp_ct)
+            ct_str = f"  LS_ct={ls_ct}s  GP_ct={gp_ct}s"
         print(f"  {label:<6} LS={ls_n}  GP({mode})={gp_n}  "
-              f"batches={nb} avg_sz={avg:.1f} max_sz={mx}")
+              f"batches={nb} avg_sz={avg:.1f} max_sz={mx}{ct_str}")
     return out
 
 
 def plot(res, title, xlabel, outfile, nobatch=False):
-    """Two panels sharing the sweep's x-axis. LEFT: message count — LS vs the one
-    GP series (batched, or no-batch if --no-batch). RIGHT: the batching mechanism
-    — mean and max chains coalesced per batch packet. `res` is the dict from
-    sweep()."""
+    """Two panels sharing the sweep's x-axis (message count + batch stats), plus
+    an optional third panel (convergence time) when res contains ls_ct/gp_ct.
+    `res` is the dict from sweep()."""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     labels = res["labels"]
     xs = list(range(len(labels)))
-    fig, (axL, axR) = plt.subplots(1, 2, figsize=(15, 6))
+    has_conv = "ls_ct" in res and any(v is not None for v in res["ls_ct"])
+    ncols = 3 if has_conv else 2
+    fig, axes = plt.subplots(1, ncols, figsize=(7.5 * ncols, 6))
+    axL, axR = axes[0], axes[1]
 
     gp_label = "Path-Vector, no batching" if nobatch else "Path-Vector, batched"
     axL.plot(xs, res["ls"], "o-", label="Link-State (LS)", color="tab:blue")
@@ -289,6 +351,17 @@ def plot(res, title, xlabel, outfile, nobatch=False):
     axR.set_xlabel(xlabel); axR.set_ylabel("chains coalesced per batch packet")
     axR.set_title("Inter-ring UPDATE batch size"); axR.legend()
     axR.grid(True, alpha=0.3)
+
+    if has_conv:
+        axC = axes[2]
+        ls_cts = [v for v in res["ls_ct"]]
+        gp_cts = [v for v in res["gp_ct"]]
+        axC.plot(xs, ls_cts, "o-", label="LS convergence time", color="tab:blue")
+        axC.plot(xs, gp_cts, "s-", label="GP convergence time", color="tab:red")
+        axC.set_xticks(xs); axC.set_xticklabels(labels, rotation=45, ha="right")
+        axC.set_xlabel(xlabel); axC.set_ylabel("convergence time (s)")
+        axC.set_title("Convergence time vs network size")
+        axC.legend(); axC.grid(True, alpha=0.3)
 
     fig.tight_layout()
     fig.savefig(outfile, dpi=110)
@@ -431,6 +504,9 @@ def main():
                     help="run GP with holdInterval=0s (pre-batching baseline). "
                          "Far slower (no coalescing) — off by default; the normal "
                          "run uses the holdInterval pinned in eval_common.ini.")
+    ap.add_argument("--convergence", action="store_true",
+                    help="also measure convergence time per topology (extends "
+                         f"sim-time-limit to {CONV_SIMTIME}; adds a third plot panel).")
     ap.add_argument("--basis", choices=["min", "all"], default="min",
                     help="ring basis: min=minimum_cycle_basis (default), "
                          "all=cycle_basis. Results nest under eval/<basis>_cycles/.")
@@ -477,12 +553,12 @@ def main():
         return
 
     if args.quick:
-        square_dims = [(n, n) for n in range(2, 6)]
+        square_dims = [(n, n) for n in range(3, 6)]
         width_dims = [(3, w) for w in range(3, 9)]
         ladder_widths = list(range(3, 9))
         flower_N = list(range(3, 8))
     else:
-        square_dims = [(n, n) for n in range(2, 11)]       # 2x2 .. 10x10
+        square_dims = [(n, n) for n in range(3, 11)]       # 3x3 .. 10x10
         width_dims = [(3, w) for w in range(3, 31)]        # 3x3 .. 3x30
         ladder_widths = list(range(3, 31))                 # ladder3_3 .. ladder3_30
         flower_N = list(range(3, 13))                      # flower_3 .. flower_12
@@ -490,14 +566,14 @@ def main():
     if args.only in (None, "square"):
         print("== square sweep (NxN) ==")
         s_items = [(f"{x}x{y}", gen_topology(x, y)) for (x, y) in square_dims]
-        plot(sweep(s_items, args.nobatch),
+        plot(sweep(s_items, args.nobatch, args.convergence),
              "GP vs LS: square grid scaling (dense 2D ring-mesh)",
              "grid size", os.path.join(PLOT_DIR, "square_scaling.png"), args.nobatch)
 
     if args.only in (None, "width"):
         print("== width sweep (3xW) ==")
         w_items = [(f"3x{w}", gen_topology(3, w)) for (_, w) in width_dims]
-        plot(sweep(w_items, args.nobatch),
+        plot(sweep(w_items, args.nobatch, args.convergence),
              "GP vs LS: width scaling (3xW ladder ring-mesh)",
              "grid size", os.path.join(PLOT_DIR, "width_scaling.png"), args.nobatch)
 
@@ -507,7 +583,7 @@ def main():
         # is GP's very best case and the linear-scaling floor for the sweep.
         print("== ladder sweep (2xW, 1-D line of unit-square rings) ==")
         l_items = [(f"L2x{w}", gen_ladder(w)) for w in ladder_widths]
-        plot(sweep(l_items, args.nobatch),
+        plot(sweep(l_items, args.nobatch, args.convergence),
              "GP vs LS: ladder scaling (2xW, pure 1-D line of rings)",
              "ladder width", os.path.join(PLOT_DIR, "ladder_scaling.png"), args.nobatch)
 
@@ -521,7 +597,7 @@ def main():
         # size-2N petals); here petals are size N by request.
         print("== flower sweep (central 2N + N petals of N, ring size grows) ==")
         f_items = [(f"F{N}", gen_flower(N)) for N in flower_N]
-        plot(sweep(f_items, args.nobatch),
+        plot(sweep(f_items, args.nobatch, args.convergence),
              "GP vs LS: flower scaling (N petals of N routers, star ring-graph)",
              "flower N (ring size; N^2 nodes)", os.path.join(PLOT_DIR, "flower_scaling.png"),
              args.nobatch)
