@@ -63,6 +63,9 @@ class MyriadHelper : public Protocol {
                 total += n;
             }
             recordScalar("sent_total", total);
+            unsigned long long totalBytes = 0;
+            for (auto& [nbr, st] : node().getLinkUsageMap()) totalBytes += st.bytecount;
+            recordScalar("bytes_total", totalBytes);
         }
 
         void onInitialize() override {

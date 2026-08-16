@@ -1,4 +1,5 @@
 #include "routing/MYRIAD/MyriadGp.h"
+#include "routing/MYRIAD/MyriadPduSize.h"
 #include <algorithm>
 #include <cmath>
 #include <fstream>
@@ -8,6 +9,36 @@
 namespace routingsim {
 
 Define_Module(MyriadGP);
+
+namespace {
+using namespace msgsize;
+
+int64_t gpCollectBytes(const MyriadGpCollect* p) {
+    return MYRIADGP_HDR + U32                              // member_count
+         + (int64_t) p->getRrArraySize() * RR
+         + (int64_t) p->getTransitionsArraySize() * TRANSITION;
+}
+int64_t gpUpdateBytes(const MyriadGpUpdate* p) {
+    return MYRIADGP_HDR + U32 + U32                        // member_count + spof_count
+         + (int64_t) p->getRrArraySize() * RR
+         + (int64_t) p->getRing_chainArraySize() * U32
+         + (int64_t) p->getChain_sizesArraySize() * U32
+         + (int64_t) p->getHandled_ringsArraySize() * U32
+         + (int64_t) p->getWidthsArraySize() * TRANSITION;
+}
+int64_t gpBatchBytes(const MyriadGpUpdateBatch* p) {
+    int64_t b = MYRIADGP_HDR;
+    for (size_t i = 0; i < p->getEntriesArraySize(); ++i) {
+        const MyriadGpUpdateEntry& e = p->getEntries(i);
+        b += U32 + U32                                     // seq_no + spof_count
+           + (int64_t) e.getRing_chainArraySize() * U32
+           + (int64_t) e.getChain_sizesArraySize() * U32
+           + (int64_t) e.getHandled_ringsArraySize() * U32
+           + (int64_t) e.getRrArraySize() * RR;
+    }
+    return b;
+}
+} // namespace
 
 void MyriadGP::onInitialize() {
     MyriadHelloProto::onInitialize();
@@ -92,6 +123,7 @@ void MyriadGP::originateCollect(uint32_t ring, nodeid_t to) {
 
     // Send one direction now; retransmits alternate to the other neighbor so a
     // single directional send still reaches every ring member if one side breaks.
+    pkt->setByteLength(gpCollectBytes(pkt));
     sendRingReliable(currentRingState.collectInflight, to, to, pkt, rxmtInterval,
                      COLLECT_RETRY_LIMIT, [this, ring]() { onCollectBudgetExpired(ring); });
 
@@ -460,6 +492,7 @@ void MyriadGP::originateUpdate(uint32_t ring) {
     for (size_t i = 0; i < handled.size(); ++i) pkt->setHandled_rings(i, handled[i]);
 
     // Origin-UPDATE lives in the empty-chain inflight slot.
+    pkt->setByteLength(gpUpdateBytes(pkt));
     RingInflight& fl = rs.updateInflights[emptyChain];
     fl.seq_no = rs.originSeq;
     sendRingReliable(fl, primary, fallback, pkt, rxmtInterval, COLLECT_RETRY_LIMIT,
@@ -524,6 +557,7 @@ void MyriadGP::insertAndForwardCollect(MyriadGpCollect* pkt, uint32_t R, nodeid_
     auto np = std::make_unique<NodePkt>("Myriad_GP_Collect_Pkt");
     np->setType(MYRIADGP_PACKET_TYPE);
     np->setAttributes(np->getAttributes() | NODEPKT_ATTR_CONTROL_PLANE_PROCESSING_DELAY);
+    pkt->setByteLength(gpCollectBytes(pkt));
     np->encapsulate(pkt->dup());
     countSend("collect");
     sendToNode(to, std::move(np));
@@ -803,6 +837,7 @@ void MyriadGP::forwardUpdateInRing(MyriadGpUpdate* pkt, uint32_t ring, nodeid_t 
     auto np = std::make_unique<NodePkt>("Myriad_GP_Update_Pkt");
     np->setType(MYRIADGP_PACKET_TYPE);
     np->setAttributes(np->getAttributes() | NODEPKT_ATTR_CONTROL_PLANE_PROCESSING_DELAY);
+    pkt->setByteLength(gpUpdateBytes(pkt));
     np->encapsulate(pkt->dup());
     countSend("update");
     sendToNode(to, std::move(np));
@@ -826,6 +861,7 @@ MyriadGpUpdate* MyriadGP::buildTransitionUpdate(uint32_t R2, nodeid_t src, uint3
     for (size_t i = 0; i < fwdSizes.size(); ++i) fwd->setChain_sizes(i, fwdSizes[i]);
     fwd->setRrArraySize(rr.size());
     for (size_t i = 0; i < rr.size(); ++i) fwd->setRr(i, rr[i]);
+    fwd->setByteLength(gpUpdateBytes(fwd));
     return fwd;
 }
 
@@ -972,6 +1008,7 @@ void MyriadGP::flushPendingTransitions() {
 
             RingInflight& fl = rs2.batchInflights[lapSeq];
             fl.seq_no = lapSeq;
+            batch->setByteLength(gpBatchBytes(batch));
             sendRingReliable(fl, primary, fallback, batch, rxmtInterval, COLLECT_RETRY_LIMIT,
                              [this, R2, lapSeq]() { onBatchBudgetExpired(R2, lapSeq); });
             MLOG_N_INFO(primary) << "flush UPDATE batch into ring='" << R2
@@ -992,6 +1029,7 @@ void MyriadGP::forwardBatchInRing(MyriadGpUpdateBatch* pkt, uint32_t ring, nodei
     auto np = std::make_unique<NodePkt>("Myriad_GP_Update_Batch_Pkt");
     np->setType(MYRIADGP_PACKET_TYPE);
     np->setAttributes(np->getAttributes() | NODEPKT_ATTR_CONTROL_PLANE_PROCESSING_DELAY);
+    pkt->setByteLength(gpBatchBytes(pkt));
     np->encapsulate(pkt->dup());
     countSend("update_batch");
     sendToNode(to, std::move(np));

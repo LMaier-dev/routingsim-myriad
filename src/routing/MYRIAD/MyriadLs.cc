@@ -1,10 +1,43 @@
 #include "routing/MYRIAD/MyriadLs.h"
 #include "routing/MYRIAD/RingSpfOracle.h"
+#include "routing/MYRIAD/MyriadPduSize.h"
 #include <algorithm>
 
 namespace routingsim {
 
 Define_Module(MyriadLS);
+
+namespace {
+using namespace msgsize;
+
+int64_t lsaBytes(const LsaHeader* h) {
+    int64_t b = LSA_HDR;
+    switch (h->getType()) {
+        case LSA_ADJACENCIES:
+            b += (int64_t) check_and_cast<const AdjacenciesLsa*>(h)->getAdjacenciesArraySize() * NODEID; break;
+        case LSA_SUBNETS:
+            b += (int64_t) check_and_cast<const SubnetsLsa*>(h)->getSubnetsArraySize() * U32; break;
+        case LSA_RINGS:
+            b += (int64_t) check_and_cast<const RingsLsa*>(h)->getRingsArraySize() * U32; break;
+    }
+    return b;
+}
+int64_t lsuBytes(const MyriadLSU* p) {
+    int64_t b = MYRIADLS_HDR;
+    for (size_t i = 0; i < p->getLsasArraySize(); ++i) b += lsaBytes(p->getLsas(i));
+    return b;
+}
+int64_t lsrBytes(const MyriadLSR* p) {
+    return MYRIADLS_HDR + (int64_t) p->getReqsArraySize() * LSREQ;
+}
+int64_t ackBytes(const MyriadAck* p) {
+    return MYRIADLS_HDR + (int64_t) p->getAckedArraySize() * LSA_HDR;
+}
+int64_t dbdBytes(const MyriadDBD* p) {
+    return MYRIADLS_HDR + U16 + 3          // seq_no + init/master/more bools
+         + (int64_t) p->getLs_dbdsArraySize() * LSA_HDR;
+}
+} // namespace
 
 void MyriadLS::onInitialize() {
     MyriadHelloProto::onInitialize();
@@ -265,6 +298,7 @@ void MyriadLS::sendNextLsr(NeighborEntry& nbr) {
         lsr->setReqs(i, r);
     }
     MLOG_N_DEBUG(nbr.id) << "sending LSR with " << batch << " request(s)\n";
+    lsr->setByteLength(lsrBytes(lsr));
     nbr.inflightLsr = sendReliable(nbr.id, lsr, rxmtInterval);
 }
 
@@ -296,6 +330,7 @@ void MyriadLS::handleLSR(MyriadLSR* lsr, nodeid_t from) {
     MLOG_N_DEBUG(from) << "sending LSU with " << dups.size() << " LSA(s)\n";
     auto np = std::make_unique<NodePkt>("Myriad_LSU_Pkt");
     np->setType(MYRIADLS_PACKET_TYPE);
+    lsu->setByteLength(lsuBytes(lsu));
     np->encapsulate(lsu);
     countSend("lsu");
     sendToNode(from, std::move(np));
@@ -401,6 +436,7 @@ void MyriadLS::sendNextFloodBatch(NeighborEntry& nbr) {
     lsu->setLsasArraySize(dups.size());
     for (size_t i = 0; i < dups.size(); ++i) lsu->setLsas(i, dups[i]); // @owned
 
+    lsu->setByteLength(lsuBytes(lsu));
     nbr.inflightFloodLsu = sendReliable(nbr.id, lsu, rxmtInterval);
     MLOG_N_DEBUG(nbr.id) << "flooding LSU with " << dups.size() << " LSA(s)\n";
 }
@@ -414,6 +450,7 @@ void MyriadLS::sendAck(nodeid_t to, const std::vector<const LsaHeader*>& headers
 
     auto np = std::make_unique<NodePkt>("Myriad_LSAck_Pkt");
     np->setType(MYRIADLS_PACKET_TYPE);
+    ack->setByteLength(ackBytes(ack));
     np->encapsulate(ack);
     countSend("ack");
     sendToNode(to, std::move(np));
@@ -583,6 +620,7 @@ void MyriadLS::sendDBD(nodeid_t to, bool init, bool master, uint16_t seq_no) {
         }
     }
     dbd->setMore(more);
+    dbd->setByteLength(dbdBytes(dbd));
 
     // MS=1 is the side that retransmits.
     // MS=0 (slave response) is fire and forget

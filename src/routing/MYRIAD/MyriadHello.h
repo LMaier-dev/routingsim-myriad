@@ -3,6 +3,7 @@
 
 #include "routing/MYRIAD/MyriadHelper.h"
 #include "routing/MYRIAD/MyriadLsPkt_m.h"
+#include "routing/MYRIAD/MyriadPduSize.h"
 #include <sstream>
 #include <unordered_map>
 #include <vector>
@@ -110,7 +111,11 @@ namespace routingsim {
                     hello->setKnownNeighbors(i, heard[i]);
                 }
 
-                // TODO set hello->setByteLength
+                // Wire size (bytes): header(3) + 2 simtime(8) + neighbors(2 ea) +
+                // rings(4 ea)
+                hello->setByteLength(msgsize::MYRIADLS_HDR + 2 * msgsize::SIMTIME
+                    + (int64_t) heard.size() * msgsize::NODEID
+                    + (int64_t) selfRings.size() * msgsize::U32);
                 for (auto& [nid, nbr] : neighbors) {
                     auto np = std::make_unique<NodePkt>("Myriad_Hello_Pkt");
                     np->setType(packetType);
