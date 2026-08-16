@@ -52,6 +52,7 @@ std::string MyriadHelper::sendTypeLabel(const char* pktName) {
     if (n.find("LSAck") != std::string::npos) return "ack";
     if (n.find("DBD") != std::string::npos) return "dbd";
     if (n.find("Collect") != std::string::npos) return "collect";
+    if (n.find("Batch") != std::string::npos) return "update_batch";
     if (n.find("Update") != std::string::npos) return "update";
     if (n.find("Hello") != std::string::npos) return "hello";
     return n;
