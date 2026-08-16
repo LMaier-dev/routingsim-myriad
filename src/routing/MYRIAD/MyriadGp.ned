@@ -32,6 +32,11 @@ simple myriadgp extends routingsim.foundation.Protocol
         // rely on refresh/purge alone (broken paths linger until reconvergence).
         bool degradeEnabled = default(true);
 
+        // On COLLECT own-return, if a recovered (stateless) member is on the
+        // ring, the king replays its current front-of-ring chains as seq=0
+        // UPDATEs so the recovered node repopulates without waiting for refresh.
+        bool recoveryReplayEnabled = default(true);
+
         // ECMP fan-out cap; excess co-best chains dropped keeping the most
         // ring-diverse subset (see capEcmp). 1 = no multipath. Needed because
         // equal-cost paths are combinatorial on symmetric meshes.

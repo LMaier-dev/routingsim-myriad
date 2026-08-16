@@ -14,7 +14,7 @@ namespace {
 using namespace msgsize;
 
 int64_t gpCollectBytes(const MyriadGpCollect* p) {
-    return MYRIADGP_HDR + U32                              // member_count
+    return MYRIADGP_HDR + U32 + 2 * BOOL                   // member_count + crash bits
          + (int64_t) p->getRrArraySize() * RR
          + (int64_t) p->getTransitionsArraySize() * TRANSITION;
 }
@@ -54,6 +54,7 @@ void MyriadGP::onInitialize() {
     ringCostExponent = par("ringCostExponent");
     rankUseSpof = par("rankUseSpof");
     degradeEnabled = par("degradeEnabled");
+    recoveryReplayEnabled = par("recoveryReplayEnabled");
     maxEcmpPaths = par("maxEcmpPaths");
     maxBatchBytes = par("maxBatchBytes");
     holdInterval = par("holdInterval");
@@ -110,6 +111,12 @@ void MyriadGP::originateCollect(uint32_t ring, nodeid_t to) {
     pkt->setSeq_no(currentRingState.originSeq);
     pkt->setCurrent_ring(ring);
     pkt->setMember_count(1); // forwarders increment
+
+    // A stateless (recovered/fresh) king loses the election to any live member;
+    // seeds crashed_present so a live king that wins instead learns to replay.
+    bool crashed = currentRingState.memberCount == 0;
+    pkt->setOriginator_crashed(crashed);
+    pkt->setCrashed_present(crashed);
 
     // Insert my (subnet, myId) pairs.
     pkt->setRrArraySize(mySubnets.size());
@@ -359,6 +366,13 @@ void MyriadGP::onMessage(NodePkt_p pkt) {
     }
 }
 
+bool MyriadGP::collectWins(bool incomingCrashed, nodeid_t incomingId, uint32_t ring) const {
+    auto it = rings.find(ring);
+    bool myCrashed = it == rings.end() || it->second.memberCount == 0;
+    if (incomingCrashed != myCrashed) return myCrashed;   // live beats crashed
+    return incomingId > myId;
+}
+
 void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t sender) {
     uint32_t R = collect->getCurrent_ring();
     nodeid_t king = collect->getRouter_id_src();
@@ -405,6 +419,10 @@ void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t sender) {
                 MLOG_INFO() << "became king of ring='" << R << "'\n";
             }
             startRefresh(R);
+
+            // A recovered member lapped this COLLECT: hand back its RIB.
+            if (recoveryReplayEnabled && collect->getCrashed_present())
+                replayInto(R);
         } else {
             MLOG_N_WARN(sender) << "stale own COLLECT return ring='" << R
                                 << "' seq=" << seq << " (cur=" << currentRingState.collectInflight.seq_no << ")\n";
@@ -417,20 +435,28 @@ void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t sender) {
     if (!currentRingState.isKing) startWatchdog(R);
 
     // Contention: I'm also asserting this ring if I have a collect inflight or
-    // I'm the established king. Higher id wins; I yield/demote to it, or I hold
-    // and ignore a lower id (my next collect makes them yield).
+    // I'm the established king. Priority is (live, id): a live node beats any
+    // crashed one, else higher id wins. I yield/demote to a winner, or hold and
+    // ignore a loser (my next collect makes them yield).
+    bool incomingCrashed = collect->getOriginator_crashed();
     if (currentRingState.collectInflight.tx != nullptr || currentRingState.isKing) {
-        if (king > myId) {
+        if (collectWins(incomingCrashed, king, R)) {
             MLOG_N_INFO(sender) << "yield COLLECT ring='" << R
                                 << "' to king=" << (int)king << "\n";
             cancelCollect(R);                     // no-op if no inflight
             if (currentRingState.isKing) cancelKingship(R);
             insertAndForwardCollect(collect, R, sender);
         } else {
-            // Ignore lower-id king; my collection/kingship stands.
             MLOG_N_DEBUG(sender) << "ignore COLLECT ring='" << R
-                                 << "' from lower king=" << (int)king << "\n";
+                                 << "' from king=" << (int)king << "\n";
         }
+        return;
+    }
+
+    // A live member drops a stateless originator's COLLECT so the recovered node
+    // can't win the ring; the live king/neighbor re-collects instead.
+    if (currentRingState.memberCount > 0 && incomingCrashed) {
+        MLOG_N_DEBUG(sender) << "drop crashed COLLECT ring='" << R << "'\n";
         return;
     }
 
@@ -526,6 +552,9 @@ void MyriadGP::originateUpdate(uint32_t ring) {
 void MyriadGP::insertAndForwardCollect(MyriadGpCollect* pkt, uint32_t R, nodeid_t sender) {
     // Count myself as a ring member
     pkt->setMember_count(pkt->getMember_count() + 1);
+
+    // Stateless: flag a recovered member so the king replays on own-return.
+    if (rings[R].memberCount == 0) pkt->setCrashed_present(true);
 
     // 1. Append my (subnet, myId) pairs.
     size_t n = pkt->getRrArraySize();
@@ -810,6 +839,11 @@ void MyriadGP::processChain(uint32_t curRing, uint32_t seq, uint32_t spof,
         return;
     }
 
+    // Replay (seq==0) repopulates stateless nodes only: a node that already knows
+    // this origin ignores it (the caller still forwards the lap to the recovered
+    // node). Without this, live members treat it as a stale chain and re-store it.
+    if (seq == 0 && !originRs.ribIn.empty()) return;
+
     // Full path identity = current_ring :: packet chain, with sizes parallel.
     std::vector<uint32_t> fullChain;
     fullChain.reserve(chain.size() + 1);
@@ -852,6 +886,11 @@ void MyriadGP::processChain(uint32_t curRing, uint32_t seq, uint32_t spof,
             if (strictlyBetter(cand, e)) { useful = true; break; }
         if (!useful) return;
     }
+
+    // Recovered node: a seq=0 replay carries no seq advance, so adopt the
+    // origin's rr here to repopulate empty state.
+    if (originRs.rr.empty() && originRrTrailer && !originRrTrailer->empty())
+        originRs.rr = *originRrTrailer;
 
     // Exact chain already held at >= seq: transition already happened, don't re-forward.
     bool isDup = false;
@@ -899,7 +938,8 @@ void MyriadGP::processChain(uint32_t curRing, uint32_t seq, uint32_t spof,
         }
     }
 
-    if (doInterRing)
+    // Only the current generation propagates
+    if (doInterRing && seq >= originRs.curSeq)
         forwardChainInterRing(curRing, seq, spof, chain, chainSizes, rr, handled);
 }
 
@@ -1099,6 +1139,72 @@ void MyriadGP::flushPendingTransitions() {
     }
 }
 
+void MyriadGP::replayInto(uint32_t ring) {
+    std::vector<nodeid_t> nbrs = ringNeighbors(ring);
+    if (nbrs.empty()) return;
+    nodeid_t primary = nbrs[0];
+    nodeid_t fallback = nbrs.size() > 1 ? nbrs[1] : nbrs[0];
+    RingState& rs = rings[ring];
+
+    // Every current-gen chain entering via `ring`, across all origins.
+    std::vector<const RibEntry*> replay;
+    for (auto& [origin, ors] : rings)
+        for (auto& e : ors.ribIn)
+            if (e.seq_no == ors.curSeq && !e.chain.empty() && e.chain.front() == ring)
+                replay.push_back(&e);
+    if (replay.empty()) return;
+
+    auto entryBytes = [&](const RibEntry* e) {
+        return (long)(e->chain.size() * 8 + rings[e->chain.back()].rr.size() * 6 + 16);
+    };
+
+    // Pack into batches up to maxBatchBytes (see flushPendingTransitions); each
+    // laps `ring` under its own circular-ACK.
+    size_t i = 0;
+    while (i < replay.size()) {
+        std::vector<const RibEntry*> group;
+        long bytes = 16;
+        while (i < replay.size()
+               && (group.empty() || bytes + entryBytes(replay[i]) <= maxBatchBytes)) {
+            group.push_back(replay[i]);
+            bytes += entryBytes(replay[i]);
+            ++i;
+        }
+        uint32_t lapSeq = ++rs.batchLapSeq;
+        auto* batch = new MyriadGpUpdateBatch("Myriad_GP_Update_Batch");
+        batch->setType(MYRIADGP_UPDATE_BATCH);
+        batch->setRouter_id_src(myId);
+        batch->setCurrent_ring(ring);
+        batch->setSeq_no(lapSeq);
+        batch->setEntriesArraySize(group.size());
+        for (size_t g = 0; g < group.size(); ++g) {
+            const RibEntry* e = group[g];
+            const std::vector<MyriadGpRr>& rr = rings[e->chain.back()].rr;
+            MyriadGpUpdateEntry en;
+            en.setSeq_no(0);                      // sentinel: replay, adopt-if-empty
+            en.setSpof_count(e->spof_count);
+            en.setRing_chainArraySize(e->chain.size());
+            for (size_t j = 0; j < e->chain.size(); ++j) en.setRing_chain(j, e->chain[j]);
+            en.setChain_sizesArraySize(e->chain_sizes.size());
+            for (size_t j = 0; j < e->chain_sizes.size(); ++j) en.setChain_sizes(j, e->chain_sizes[j]);
+            en.setRrArraySize(rr.size());
+            for (size_t j = 0; j < rr.size(); ++j) en.setRr(j, rr[j]);
+            batch->setEntries(g, en);
+        }
+        batchEntriesTotal += group.size();
+        batchesCreated += 1;
+        if (group.size() > batchMaxEntries) batchMaxEntries = group.size();
+
+        RingInflight& fl = rs.batchInflights[lapSeq];
+        fl.seq_no = lapSeq;
+        batch->setByteLength(gpBatchBytes(batch));
+        sendRingReliable(fl, primary, fallback, batch, rxmtInterval, COLLECT_RETRY_LIMIT,
+                         [this, ring, lapSeq]() { onBatchBudgetExpired(ring, lapSeq); });
+        MLOG_N_INFO(primary) << "replay batch into ring='" << ring
+            << "' seq=" << lapSeq << " entries=" << group.size() << "\n";
+    }
+}
+
 void MyriadGP::forwardBatchInRing(MyriadGpUpdateBatch* pkt, uint32_t ring, nodeid_t sender) {
     nodeid_t to = otherRingNeighbor(ring, sender);
     if (to == undefined_node) {
@@ -1184,6 +1290,7 @@ void MyriadGP::handleDegrade(MyriadGpDegrade* degrade, nodeid_t from) {
 }
 
 void MyriadGP::reset() {
+    Enter_Method_Silent();   // invoked cross-module from NetworkManager; we reschedule below
     for (auto& [nid, nbr] : neighbors) {
         if (nbr.deadTimer) {
             cancelAndDelete(nbr.deadTimer);
@@ -1215,6 +1322,10 @@ void MyriadGP::reset() {
     if (holdTimer) { cancelAndDelete(holdTimer); holdTimer = nullptr; }
     if (snapshotTimer) { cancelAndDelete(snapshotTimer); snapshotTimer = nullptr; }
     cancelHelloTimer();
+
+    scheduleHello(helloInterval);
+    if (snapshotInterval > 0 && !par("ribDumpFile").stdstringValue().empty())
+        startSnapshot();
 }
 
 void MyriadGP::dumpRibTo(std::ostream& f, const std::string& tprefix, bool stats) {

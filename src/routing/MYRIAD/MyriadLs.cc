@@ -109,6 +109,7 @@ void MyriadLS::onMessage(NodePkt_p pkt) {
 }
 
 void MyriadLS::reset() {
+    Enter_Method_Silent();   // invoked cross-module from NetworkManager; we reschedule below
     for (auto& [nid, nbr] : neighbors) {
         if (nbr.deadTimer) {
             cancelAndDelete(nbr.deadTimer);
@@ -127,6 +128,10 @@ void MyriadLS::reset() {
 
     if (snapshotTimer) { cancelAndDelete(snapshotTimer); snapshotTimer = nullptr; }
     cancelHelloTimer();
+
+    scheduleHello(helloInterval);
+    if (snapshotInterval > 0 && !par("oracleDumpFile").stdstringValue().empty())
+        startSnapshot();
 }
 
 

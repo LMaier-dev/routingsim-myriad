@@ -119,6 +119,10 @@ namespace routingsim {
             void handleUpdate(MyriadGpUpdate* update, nodeid_t from);
             void handleUpdateBatch(MyriadGpUpdateBatch* batch, nodeid_t from);
             void handleDegrade(MyriadGpDegrade* degrade, nodeid_t from);
+            // A recovered member needs its RIB back: replay every current-gen chain
+            void replayInto(uint32_t ring);
+            // COLLECT election key: live (memberCount>0) beats crashed, ties by id.
+            bool collectWins(bool incomingCrashed, nodeid_t incomingId, uint32_t ring) const;
             // A broken ring's collect lap expired: record + flood a DEGRADE for it
             // (re-beaconed on each retry). floodDegrade skips the hop we got it from.
             void originateDegrade(uint32_t ring);
@@ -203,6 +207,7 @@ namespace routingsim {
             // false = rank purely by cost (oracle mode); see MyriadGp.ned.
             bool rankUseSpof = true;
             bool degradeEnabled = true;
+            bool recoveryReplayEnabled = true;
             long maxEcmpPaths;   // max co-best chains kept per origin
             long maxBatchBytes;  // flush splits the held set under this size
             simtime_t holdInterval;  // batch window; 0 = send immediately
