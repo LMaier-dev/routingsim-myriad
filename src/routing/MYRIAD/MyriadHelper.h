@@ -52,9 +52,13 @@ class MyriadHelper : public Protocol {
         // Used as the NodePkt type when the helper wraps reliable payloads.
         int packetType = -1;
 
-        // Per-message-type send counters
+        // Per-message-type send counters and byte volume.
         std::map<std::string, unsigned long> sentCounts;
-        void countSend(const std::string& type) { sentCounts[type]++; }
+        std::map<std::string, unsigned long long> sentBytes;
+        void countSend(const std::string& type, unsigned long long bytes = 0) {
+            sentCounts[type]++;
+            sentBytes[type] += bytes;
+        }
         static std::string sendTypeLabel(const char* pktName);
         void recordSendScalars() {
             unsigned long total = 0;
@@ -63,6 +67,9 @@ class MyriadHelper : public Protocol {
                 total += n;
             }
             recordScalar("sent_total", total);
+            // Per-type byte volume
+            for (auto& [type, b] : sentBytes)
+                recordScalar(("bytes_" + type).c_str(), b);
             unsigned long long totalBytes = 0;
             for (auto& [nbr, st] : node().getLinkUsageMap()) totalBytes += st.bytecount;
             recordScalar("bytes_total", totalBytes);

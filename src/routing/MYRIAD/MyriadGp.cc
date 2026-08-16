@@ -214,7 +214,7 @@ void MyriadGP::sendRingReliable(RingInflight& fl, nodeid_t primary, nodeid_t fal
     np->setType(packetType);
     np->setAttributes(np->getAttributes() | NODEPKT_ATTR_CONTROL_PLANE_PROCESSING_DELAY);
     np->encapsulate(pkt->dup());
-    countSend(sendTypeLabel(pkt->getName()));
+    countSend(sendTypeLabel(pkt->getName()), np->getByteLength());
     sendToNode(primary, std::move(np));
 
     h->timer = addOneShotTimer(interval, [this, h](short) {
@@ -241,7 +241,7 @@ void MyriadGP::ringRetxFire(RingTx* h) {
     np->setType(packetType);
     np->setAttributes(np->getAttributes() | NODEPKT_ATTR_CONTROL_PLANE_PROCESSING_DELAY);
     np->encapsulate(h->pkt->dup());
-    countSend(sendTypeLabel(h->pkt->getName()));
+    countSend(sendTypeLabel(h->pkt->getName()), np->getByteLength());
     sendToNode(to, std::move(np));
 
     h->timer = addOneShotTimer(h->interval, [this, h](short) {
@@ -576,7 +576,7 @@ void MyriadGP::insertAndForwardCollect(MyriadGpCollect* pkt, uint32_t R, nodeid_
     np->setAttributes(np->getAttributes() | NODEPKT_ATTR_CONTROL_PLANE_PROCESSING_DELAY);
     pkt->setByteLength(gpCollectBytes(pkt));
     np->encapsulate(pkt->dup());
-    countSend("collect");
+    countSend("collect", np->getByteLength());
     sendToNode(to, std::move(np));
     MLOG_N_DEBUG(to) << "forward COLLECT ring='" << R
                      << "' seq=" << pkt->getSeq_no()
@@ -861,7 +861,7 @@ void MyriadGP::forwardUpdateInRing(MyriadGpUpdate* pkt, uint32_t ring, nodeid_t 
     np->setAttributes(np->getAttributes() | NODEPKT_ATTR_CONTROL_PLANE_PROCESSING_DELAY);
     pkt->setByteLength(gpUpdateBytes(pkt));
     np->encapsulate(pkt->dup());
-    countSend("update");
+    countSend("update", np->getByteLength());
     sendToNode(to, std::move(np));
     MLOG_N_DEBUG(to) << "forward UPDATE in-ring='" << ring
                      << "' seq=" << pkt->getSeq_no() << "\n";
@@ -1057,7 +1057,7 @@ void MyriadGP::forwardBatchInRing(MyriadGpUpdateBatch* pkt, uint32_t ring, nodei
     np->setAttributes(np->getAttributes() | NODEPKT_ATTR_CONTROL_PLANE_PROCESSING_DELAY);
     pkt->setByteLength(gpBatchBytes(pkt));
     np->encapsulate(pkt->dup());
-    countSend("update_batch");
+    countSend("update_batch", np->getByteLength());
     sendToNode(to, std::move(np));
     MLOG_N_DEBUG(to) << "forward batch in-ring='" << ring
                      << "' seq=" << pkt->getSeq_no() << "\n";

@@ -121,7 +121,7 @@ namespace routingsim {
                     np->setType(packetType);
                     np->setAttributes(np->getAttributes() | NODEPKT_ATTR_CONTROL_PLANE_PROCESSING_DELAY);
                     np->encapsulate(hello->dup());
-                    countSend("hello");
+                    countSend("hello", np->getByteLength());
                     sendToNode(nid, std::move(np));
                 }
                 scheduleHello(helloInterval);

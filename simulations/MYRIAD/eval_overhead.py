@@ -50,6 +50,7 @@ DURATION = "8s"
 
 SENT_RE = re.compile(r"^scalar\s+\S+\s+sent_(\S+)\s+([0-9.]+)", re.M)
 BYTES_RE = re.compile(r"^scalar\s+\S+\s+bytes_total\s+([0-9.]+)", re.M)
+BYTES_TYPE_RE = re.compile(r"^scalar\s+\S+\s+bytes_(\S+)\s+([0-9.]+)", re.M)
 
 
 def ring_label_lines():
@@ -85,7 +86,8 @@ def write_ini(proto, ring_lines):
 
 
 def measure(ini, resdir, churn):
-    """Run one scenario; return (per_type_counts, total_msgs, total_bytes)."""
+    """Run one scenario; return (per_type_counts, total_msgs, total_bytes,
+    per_type_bytes)."""
     for sca in glob.glob(resdir + "/*.sca"):
         os.remove(sca)
     dyn = [f'--**.dynamics.linkSelection="{"random" if churn else "none"}"']
@@ -110,7 +112,7 @@ def measure(ini, resdir, churn):
     scas = glob.glob(resdir + "/*.sca")
     if not scas:
         sys.exit(f"FAIL: produced no .sca in {resdir}")
-    per_type, total_bytes = {}, 0
+    per_type, per_type_bytes, total_bytes = {}, {}, 0
     for sca in scas:
         txt = open(sca).read()
         for m in SENT_RE.finditer(txt):
@@ -118,8 +120,13 @@ def measure(ini, resdir, churn):
             if t == "total":
                 continue          # re-summed from parts below
             per_type[t] = per_type.get(t, 0) + v
+        for m in BYTES_TYPE_RE.finditer(txt):
+            t, v = m.group(1), int(float(m.group(2)))
+            if t == "total":
+                continue
+            per_type_bytes[t] = per_type_bytes.get(t, 0) + v
         total_bytes += sum(int(float(m.group(1))) for m in BYTES_RE.finditer(txt))
-    return per_type, sum(per_type.values()), total_bytes
+    return per_type, sum(per_type.values()), total_bytes, per_type_bytes
 
 
 def main():
@@ -141,7 +148,7 @@ def main():
     print(f"{'scenario':>12}{'messages':>12}{'bytes':>14}{'B/msg':>9}")
     for proto in ("gp", "ls"):
         for churn in (False, True):
-            pt, m, b = res[(proto, churn)]
+            pt, m, b, _ = res[(proto, churn)]
             lbl = f"{proto.upper()} {'churn' if churn else 'base'}"
             print(f"{lbl:>12}{m:>12}{b:>14}{(b/m if m else 0):>9.1f}")
     for proto in ("gp", "ls"):
@@ -149,6 +156,16 @@ def main():
         ch_m, ch_b = res[(proto, True)][1], res[(proto, True)][2]
         print(f"  {proto.upper()} churn overhead (churn-base): "
               f"+{ch_m-base_m} msgs, +{ch_b-base_b} bytes")
+
+    # Per-type breakdown (baseline, static topology): where the bytes actually go.
+    for proto in ("gp", "ls"):
+        counts, _, _, tbytes = res[(proto, False)]
+        print(f"\n--- {proto.upper()} baseline per-type ---")
+        print(f"{'type':>14}{'messages':>11}{'bytes':>14}{'B/msg':>9}{'%bytes':>8}")
+        tot_b = sum(tbytes.values()) or 1
+        for t in sorted(counts, key=lambda k: -tbytes.get(k, 0)):
+            c, b = counts[t], tbytes.get(t, 0)
+            print(f"{t:>14}{c:>11}{b:>14}{(b/c if c else 0):>9.0f}{100*b/tot_b:>7.1f}%")
 
     try:
         import matplotlib
