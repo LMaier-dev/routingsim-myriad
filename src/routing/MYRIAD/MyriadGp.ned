@@ -27,6 +27,11 @@ simple myriadgp extends routingsim.foundation.Protocol
         // false makes the RIB least-cost, matching the Dijkstra algo
         bool rankUseSpof = default(true);
 
+        // On a broken ring, flood a DEGRADE so every node demotes chains that
+        // transit it below any non-degraded alternative until it recovers. Off =
+        // rely on refresh/purge alone (broken paths linger until reconvergence).
+        bool degradeEnabled = default(true);
+
         // ECMP fan-out cap; excess co-best chains dropped keeping the most
         // ring-diverse subset (see capEcmp). 1 = no multipath. Needed because
         // equal-cost paths are combinatorial on symmetric meshes.

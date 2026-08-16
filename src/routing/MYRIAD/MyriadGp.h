@@ -119,6 +119,15 @@ namespace routingsim {
             void handleUpdate(MyriadGpUpdate* update, nodeid_t from);
             void handleUpdateBatch(MyriadGpUpdateBatch* batch, nodeid_t from);
             void handleDegrade(MyriadGpDegrade* degrade, nodeid_t from);
+            // A broken ring's collect lap expired: record + flood a DEGRADE for it
+            // (re-beaconed on each retry). floodDegrade skips the hop we got it from.
+            void originateDegrade(uint32_t ring);
+            void floodDegrade(uint32_t ring, uint32_t seq, uint32_t beacon, nodeid_t skip);
+            // A chain is degraded iff any ring on it has an active degrade.
+            bool chainDegraded(const std::vector<uint32_t>& chain) const;
+            void reselectAll();
+            // A newer generation of `ring` proves it healed → drop its degrade.
+            void clearDegradeIfRecovered(uint32_t ring);
 
             void originateCollect(uint32_t ring, nodeid_t to);
             // Fresh COLLECT for a ring I own (picks a ring-neighbor).
@@ -193,6 +202,7 @@ namespace routingsim {
             long ringCostExponent;
             // false = rank purely by cost (oracle mode); see MyriadGp.ned.
             bool rankUseSpof = true;
+            bool degradeEnabled = true;
             long maxEcmpPaths;   // max co-best chains kept per origin
             long maxBatchBytes;  // flush splits the held set under this size
             simtime_t holdInterval;  // batch window; 0 = send immediately

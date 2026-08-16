@@ -53,6 +53,7 @@ void MyriadGP::onInitialize() {
     refreshJitter = par("refreshJitter");
     ringCostExponent = par("ringCostExponent");
     rankUseSpof = par("rankUseSpof");
+    degradeEnabled = par("degradeEnabled");
     maxEcmpPaths = par("maxEcmpPaths");
     maxBatchBytes = par("maxBatchBytes");
     holdInterval = par("holdInterval");
@@ -279,7 +280,7 @@ void MyriadGP::onCollectBudgetExpired(uint32_t ring) {
     cancelRingReliable(currentRingState.collectInflight);
     MLOG_WARN() << "ring send budget expired ring='" << ring
                 << "' seq=" << currentRingState.collectInflight.seq_no << " — ring broken\n";
-    // TODO: originate DEGRADE for this ring (beacon mode).
+    if (degradeEnabled) originateDegrade(ring);
 }
 
 void MyriadGP::onUpdateBudgetExpired(uint32_t ring, std::vector<uint32_t> chain) {
@@ -460,6 +461,7 @@ void MyriadGP::originateUpdate(uint32_t ring) {
     // reaches them — else the king has no entry to its own ring and backfills a
     // looped-back detour.
     if (rs.originSeq > rs.curSeq) { rs.curSeq = rs.originSeq; rs.ribIn.clear(); }
+    clearDegradeIfRecovered(ring);
     RibEntry self{{ring}, {rs.memberCount ? rs.memberCount : UNKNOWN_RING_SIZE},
                   rs.originSeq, 0};
     bool haveSelf = false;
@@ -651,16 +653,66 @@ bool MyriadGP::capEcmp(RingState& rs, const std::vector<uint32_t>& candChain) {
 }
 
 void MyriadGP::selectPreferred(RingState& rs) {
-    // Best across ALL of ribIn (may span two generations): strictlyBetter, then
-    // lex-min chain as the tiebreak. Ignores seq, so a retained older chain that
-    // beats the current generation wins — preferred may lag curSeq (see ribIn).
+    // Best across ALL of ribIn (may span two generations): a degraded chain (one
+    // transiting a ring under an active DEGRADE) loses to any non-degraded one,
+    // overriding spof/cost; within a class, strictlyBetter then lex-min chain.
+    // Ignores seq, so a retained older chain that beats the current generation
+    // wins — preferred may lag curSeq (see ribIn).
     rs.preferred = SIZE_MAX;
     for (size_t i = 0; i < rs.ribIn.size(); ++i) {
-        if (rs.preferred == SIZE_MAX
-            || strictlyBetter(rs.ribIn[i], rs.ribIn[rs.preferred])
+        if (rs.preferred == SIZE_MAX) { rs.preferred = i; continue; }
+        bool di = chainDegraded(rs.ribIn[i].chain);
+        bool dp = chainDegraded(rs.ribIn[rs.preferred].chain);
+        if (di != dp) { if (!di) rs.preferred = i; continue; }
+        if (strictlyBetter(rs.ribIn[i], rs.ribIn[rs.preferred])
             || (!strictlyBetter(rs.ribIn[rs.preferred], rs.ribIn[i])
                 && rs.ribIn[i].chain < rs.ribIn[rs.preferred].chain))
             rs.preferred = i;
+    }
+}
+
+bool MyriadGP::chainDegraded(const std::vector<uint32_t>& chain) const {
+    for (uint32_t r : chain) if (degrades.count(r)) return true;
+    return false;
+}
+
+void MyriadGP::reselectAll() {
+    for (auto& [ring, rs] : rings) selectPreferred(rs);
+}
+
+void MyriadGP::clearDegradeIfRecovered(uint32_t ring) {
+    auto it = degrades.find(ring);
+    if (it != degrades.end() && it->second.first < rings[ring].curSeq) {
+        degrades.erase(it);
+        reselectAll();
+    }
+}
+
+void MyriadGP::originateDegrade(uint32_t ring) {
+    uint32_t seq = rings[ring].curSeq;
+    auto& d = degrades[ring];               // culprit ring -> (seq, beacon)
+    if (d.first < seq) d = {seq, 0};        // new generation
+    else d.second += 1;                     // re-beacon the current one
+    reselectAll();
+    floodDegrade(ring, d.first, d.second, undefined_node);
+}
+
+void MyriadGP::floodDegrade(uint32_t ring, uint32_t seq, uint32_t beacon, nodeid_t skip) {
+    auto tmpl = std::make_unique<MyriadGpDegrade>("Myriad_GP_Degrade");
+    tmpl->setType(MYRIADGP_DEGRADE);
+    tmpl->setRouter_id_src(myId);
+    tmpl->setRing_id(ring);
+    tmpl->setSeq_no(seq);
+    tmpl->setBeacon_no(beacon);
+    tmpl->setByteLength(msgsize::TYPE_TAG + msgsize::NODEID + 3 * msgsize::U32);
+    for (auto& [nid, nbr] : neighbors) {
+        if (nid == skip) continue;
+        auto np = std::make_unique<NodePkt>("Myriad_GP_Degrade_Pkt");
+        np->setType(MYRIADGP_PACKET_TYPE);
+        np->setAttributes(np->getAttributes() | NODEPKT_ATTR_CONTROL_PLANE_PROCESSING_DELAY);
+        np->encapsulate(tmpl->dup());
+        countSend("degrade", np->getByteLength());
+        sendToNode(nid, std::move(np));
     }
 }
 
@@ -782,6 +834,7 @@ void MyriadGP::processChain(uint32_t curRing, uint32_t seq, uint32_t spof,
     // strictly better than this candidate (make-before-break); drop the rest.
     if (seq > originRs.curSeq) {
         originRs.curSeq = seq;
+        clearDegradeIfRecovered(origin);
         if (originRrTrailer) originRs.rr = *originRrTrailer;
         purgeStale();
         auto& v = originRs.ribIn;
@@ -1109,9 +1162,23 @@ void MyriadGP::handleUpdateBatch(MyriadGpUpdateBatch* batch, nodeid_t sender) {
     forwardBatchInRing(batch, R2, sender);
 }
 
-void MyriadGP::handleDegrade(MyriadGpDegrade* /*degrade*/, nodeid_t from) {
-    // TODO: process ring-degrade event.
-    MLOG_N_DEBUG(from) << "Received Degrade (handler stub)\n";
+void MyriadGP::handleDegrade(MyriadGpDegrade* degrade, nodeid_t from) {
+    if (!degradeEnabled) return;
+    uint32_t R = degrade->getRing_id();
+    uint32_t seq = degrade->getSeq_no(), beacon = degrade->getBeacon_no();
+    // Stale: R has already re-originated past this generation (recovered).
+    auto rit = rings.find(R);
+    if (rit != rings.end() && seq < rit->second.curSeq) return;
+    // Dedup: act only on a strictly newer (seq, beacon) — else the flood loops.
+    auto it = degrades.find(R);
+    if (it != degrades.end()
+        && (seq < it->second.first
+            || (seq == it->second.first && beacon <= it->second.second)))
+        return;
+    degrades[R] = {seq, beacon};
+    reselectAll();
+    floodDegrade(R, seq, beacon, from);   // skip-sender
+    MLOG_N_DEBUG(from) << "degrade ring='" << R << "' seq=" << seq << "\n";
 }
 
 void MyriadGP::reset() {
