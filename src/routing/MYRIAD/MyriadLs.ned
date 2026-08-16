@@ -28,6 +28,9 @@ simple myriadls extends routingsim.foundation.Protocol
         // t=<simTime> prefix; 0s = off
         double snapshotInterval @unit(s) = default(0s);
 
+        // See MyriadGp.ned.
+        string snapshotFormat = default("full");
+
         // logging: DEBUG | INFO | WARN | ERROR
         string logLevel = default("DEBUG");
         // ANSI-color the log prefix by level (Cmdenv terminal only; off for log files / Qtenv)

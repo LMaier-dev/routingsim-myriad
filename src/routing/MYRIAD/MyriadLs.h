@@ -81,7 +81,7 @@ namespace routingsim {
             void sendAck(nodeid_t to, const std::vector<const LsaHeader*>& headers);
             void tryGoFull(NeighborEntry& nbr);
             void startSnapshot();
-            void dumpOracleTo(const std::string& path, const std::string& tprefix);
+            void dumpOracleTo(const std::string& path, const std::string& tprefix, bool stats);
 
         private:
             // `neighbors` (typed std::unordered_map<nodeid_t, NeighborEntry>)
@@ -92,6 +92,7 @@ namespace routingsim {
 
             simtime_t snapshotInterval;      // periodic oracle snapshot; 0 = off
             TimerMsg* snapshotTimer = nullptr;
+            bool snapshotStats = false;      // periodic snapshot as aggregate stats, not full
 
             void buildSelfRingsLsa(uint16_t seq);
             void buildSelfSubnetsLsa(uint16_t seq);

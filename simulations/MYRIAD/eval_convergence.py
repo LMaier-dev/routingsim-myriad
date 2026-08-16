@@ -42,7 +42,12 @@ TOPO = "grid_10,10.txt"          # regenerated for a clean checkout (labels git-
 HOLDS = ["0s", "1us", "4us", "16us", "64us", "256us", "1024us", "4096us",
          "16384us", "65536us", "262144us", "1s"]
 SNAP = "2s"                       # snapshot period
-SIMTIME = "120s"                  # several refresh cycles (Grid10 refresh = 15s)
+SIMTIME = "120s"                  # warmup=10s + convergence + one refresh cycle headroom
+# Warmup: run COLLECTs without UPDATEs so memberCounts are pre-populated before
+# the measurement window starts. Eliminates the ~100s refresh-cycle artifact
+# (some inter-ring UPDATEs dropped on first round if local COLLECT hasn't set
+# memberCount yet). Convergence times are reported relative to warmup end.
+GP_WARMUP = "10s"
 
 
 def _to_seconds(s):
@@ -133,15 +138,20 @@ def main():
     # — required for the %-optimal curve to be meaningful (else spof-first ranking
     # picks costlier redundant paths and never matches the pure-cost truth).
     gp = {}  # hold -> (snaps, msgs, conv_time)
+    warmup_s = _to_seconds(GP_WARMUP)
     for h in HOLDS:
         dump = os.path.join(OUT, f"gp_{h}.txt")
         snaps, msgs = run_proto(GP_INI, CONFIG, dump, os.path.join(OUT, f"res_gp_{h}"),
-                                [f"--**.holdInterval={h}", "--**.rankUseSpof=false"])
-        gp[h] = (snaps, msgs, convergence_time(snaps))
+                                [f"--**.holdInterval={h}", "--**.rankUseSpof=false",
+                                 f"--**.collectWarmupDuration={GP_WARMUP}"])
+        raw_ct = convergence_time(snaps)
+        ct = (raw_ct - warmup_s) if raw_ct is not None else None
+        gp[h] = (snaps, msgs, ct)
 
     # Summary table.
     print(f"\n=== {CONFIG}: convergence vs holdInterval "
           f"(LS ref: conv={ls_ct}s, msgs={ls_msgs}, {len(truth)} pairs) ===")
+    print(f"  GP warmup={GP_WARMUP} (subtracted from GP conv times)")
     print(f"{'hold':>8}{'conv_time':>12}{'sent_total':>14}{'final %opt':>12}")
     for h in HOLDS:
         snaps, msgs, ct = gp[h]
@@ -188,12 +198,12 @@ def main():
     fig.tight_layout()
     fig.savefig(os.path.join(OUT, "tradeoff.png"), dpi=120)
 
-    # (c) %-optimal vs time
+    # (c) %-optimal vs time (GP times shifted by warmup so t=0 = UPDATEs start)
     fig, ax = plt.subplots()
     for h in HOLDS:
         snaps = gp[h][0]
         ts = sorted(snaps)
-        ax.plot(ts, [frac_optimal(snaps[t], truth) * 100 for t in ts],
+        ax.plot([t - warmup_s for t in ts], [frac_optimal(snaps[t], truth) * 100 for t in ts],
                 "-", label=f"GP hold={h}")
     ts = sorted(ls_snaps)
     ax.plot(ts, [frac_optimal(ls_snaps[t], truth) * 100 for t in ts],

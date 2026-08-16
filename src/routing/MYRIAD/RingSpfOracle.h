@@ -20,18 +20,19 @@ namespace ringspf {
 using NodeId = uint32_t;
 using RingId = uint32_t;
 
-// perNodeRings: node id -> rings it belongs to. Returns node -> (origin ring ->
-// optimal node-weighted cost) for every ring reachable from that node.
-std::map<NodeId, std::map<RingId, uint64_t>>
+// Optimal route to an origin ring
+struct RingRoute {
+    uint64_t cost;
+    uint32_t hops;
+};
+
+// perNodeRings: node id -> rings it belongs to
+std::map<NodeId, std::map<RingId, RingRoute>>
 shortestRingCosts(const std::map<NodeId, std::vector<RingId>>& perNodeRings, long exp);
 
-// Append `self`'s rows to `path` (open in append mode) as
-//   <tprefix><self> origin=<ring> cost=<optimal>
-// matching the leading schema of MyriadGP's ribDumpFile so one parser reads both.
-// tprefix is empty for a one-shot dump, or "t=<simTime> " for a periodic snapshot.
 void dumpOracle(const std::string& path, NodeId self,
                 const std::map<NodeId, std::vector<RingId>>& perNodeRings, long exp,
-                const std::string& tprefix = "");
+                const std::string& tprefix = "", bool stats = false);
 
 } // namespace ringspf
 } // namespace routingsim

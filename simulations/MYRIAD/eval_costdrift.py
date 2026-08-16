@@ -29,7 +29,9 @@ SIMTIME = "80s"   # two refresh cycles (Grid10 refresh=15s); enough to converge
 
 
 def parse_snapshots(path):
-    """Timestamped dump -> {t(float): {(node, 'origin=r'): cost}}."""
+    """Timestamped dump -> {t(float): {(node, 'origin=r'): (cost, length)}}.
+    length = GP's `len` (chain ring count) or the oracle's `hops` (min-cost path
+    ring count) — the same quantity from either side."""
     snaps = {}
     for line in open(path):
         line = line.strip()
@@ -40,7 +42,9 @@ def parse_snapshots(path):
         node = toks[0]
         kv = dict(p.split("=", 1) for p in toks[1:]
                   if "=" in p and not p.startswith("chain="))
-        snaps.setdefault(float(t_tok[2:]), {})[(node, f"origin={kv['origin']}")] = int(kv["cost"])
+        length = int(kv.get("len", kv.get("hops", 0)))
+        snaps.setdefault(float(t_tok[2:]), {})[(node, f"origin={kv['origin']}")] = (
+            int(kv["cost"]), length)
     return snaps
 
 
@@ -84,11 +88,14 @@ def main():
               os.path.join(OUT, "drift_gp.txt"),
               os.path.join(OUT, "res_gp"), [])
 
-    # --- compute drift ---
-    drifts = {k: gp[k] - oracle[k] for k in oracle if k in gp}
+    # --- compute drift (cost and chain length, both GP − oracle) ---
+    common = [k for k in oracle if k in gp]
+    cost_drift = {k: gp[k][0] - oracle[k][0] for k in common}
+    len_drift = {k: gp[k][1] - oracle[k][1] for k in common}
     missing = [k for k in oracle if k not in gp]
-    negative = {k: v for k, v in drifts.items() if v < 0}
-    vals = list(drifts.values())
+    negative = {k: v for k, v in cost_drift.items() if v < 0}
+    cvals = list(cost_drift.values())
+    lvals = list(len_drift.values())
 
     print(f"\n=== Cost-drift: GP(production) − oracle  [{CONFIG}] ===")
     print(f"  routes in oracle : {len(oracle)}")
@@ -97,10 +104,12 @@ def main():
           + (" (BUG)" if missing else ""))
     print(f"  negative drift   : {len(negative)}"
           + (" (BUG)" if negative else ""))
-    if vals:
-        print(f"  drift  min/mean/max: "
-              f"{min(vals)} / {sum(vals)/len(vals):.1f} / {max(vals)}")
-        zero_frac = sum(1 for v in vals if v == 0) / len(vals) * 100
+    if cvals:
+        print(f"  cost   min/mean/max: "
+              f"{min(cvals)} / {sum(cvals)/len(cvals):.1f} / {max(cvals)}")
+        print(f"  length min/mean/max: "
+              f"{min(lvals)} / {sum(lvals)/len(lvals):.1f} / {max(lvals)}")
+        zero_frac = sum(1 for v in cvals if v == 0) / len(cvals) * 100
         print(f"  routes at exact optimum: {zero_frac:.1f}%")
 
     try:
@@ -111,28 +120,39 @@ def main():
         print("\n(matplotlib not available — skipping plots)")
         return
 
-    # histogram of drift values
-    from collections import Counter
-    counts = Counter(vals)
-    xs = sorted(counts)
-    ys = [counts[x] for x in xs]
-    colors = ["C3" if x < 0 else "C0" for x in xs]
+    # histogram: x-axis = cost-drift bucket. Both drifts share one y-axis (drift
+    # magnitude): the cost premium and the mean chain-length premium of those
+    # routes, side by side. Route count per bucket annotated above.
+    from collections import defaultdict
+    by_cost = defaultdict(list)
+    for k in common:
+        by_cost[cost_drift[k]].append(len_drift[k])
+    cxs = sorted(by_cost)
+    pos = list(range(len(cxs)))                     # categorical: even spacing
+    counts = [len(by_cost[c]) for c in cxs]
+    mean_len = [sum(by_cost[c]) / len(by_cost[c]) for c in cxs]
 
     fig, ax = plt.subplots()
-    ax.bar(xs, ys, color=colors, width=max(1, max(xs) // 60) if xs else 1)
-    ax.axvline(0, ls="--", color="k", lw=0.8, alpha=0.6)
-    ax.set(xlabel="GP cost − oracle cost  (redundancy premium)",
-           ylabel="route count",
-           title=f"Cost drift: GP production vs oracle  ({CONFIG})")
+    ax.bar([p - 0.2 for p in pos], cxs, width=0.4, color="C0",
+           label="cost drift (Σ members²)")
+    ax.bar([p + 0.2 for p in pos], mean_len, width=0.4, color="C1",
+           label="mean chain-length drift (hops)")
+    for p, n in zip(pos, counts):                   # keep the route-count info
+        ax.text(p, 0, f"n={n}", ha="center", va="bottom", fontsize=6, rotation=90)
+    ax.set_xticks(pos)
+    ax.set_xticklabels([str(c) for c in cxs], rotation=45, ha="right", fontsize=7)
+    ax.set(xlabel="cost-drift bucket  GP − oracle", ylabel="drift (GP − oracle)",
+           title=f"Cost vs length drift: GP production vs oracle  ({CONFIG})")
+    ax.legend(fontsize=8)
     if negative:
-        ax.text(0.02, 0.95, f"BUG: {len(negative)} negative",
+        ax.text(0.02, 0.95, f"BUG: {len(negative)} negative cost drift",
                 transform=ax.transAxes, color="C3", va="top", fontsize=9)
     fig.tight_layout()
     fig.savefig(os.path.join(OUT, "histogram.png"), dpi=120)
 
     # scatter: oracle_cost (x) vs GP_cost (y)
-    ox = [oracle[k] for k in drifts]
-    gy = [gp[k] for k in drifts]
+    ox = [oracle[k][0] for k in common]
+    gy = [gp[k][0] for k in common]
     lo, hi = min(ox + gy), max(ox + gy)
 
     fig, ax = plt.subplots()

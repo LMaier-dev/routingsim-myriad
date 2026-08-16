@@ -50,6 +50,22 @@ simple myriadgp extends routingsim.foundation.Protocol
         // 0s = off (finish() dump only). Read-only, does not perturb the protocol.
         double snapshotInterval @unit(s) = default(0s);
 
+        // Periodic snapshot format: "full" (one line per route, needed for
+        // cost-drift) or "stats" (one aggregate line per node: route count, cost
+        // sum + max)
+        string snapshotFormat = default("full");
+
+        // Warmup: run COLLECTs (establishing memberCounts) for this duration
+        // before originating any UPDATEs. Eliminates the first-round convergence
+        // artifact caused by inter-ring UPDATEs arriving before the local COLLECT
+        // has set memberCount. Convergence measurements subtract this offset.
+        // 0s = off (default; normal protocol behaviour).
+        double collectWarmupDuration @unit(s) = default(0s);
+
+        // Interval at which COLLECTs are re-triggered during warmup. Should be
+        // long enough for one COLLECT to complete (~ms in practice, 1s is safe).
+        double collectWarmupInterval @unit(s) = default(1s);
+
         // Ring membership override, e.g. "1000000,999999". Empty = built-in
         // per-id table. Set via **.NodeN.*.ringLabel or a node property.
         string ringLabel = default("");

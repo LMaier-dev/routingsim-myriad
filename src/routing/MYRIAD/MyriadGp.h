@@ -127,7 +127,8 @@ namespace routingsim {
             void startWatchdog(uint32_t ring);  // member: coup if the king goes silent
             // Observational periodic RIB snapshot (snapshotInterval)
             void startSnapshot();
-            void dumpRibTo(std::ostream& f, const std::string& tprefix);
+            void dumpRibTo(std::ostream& f, const std::string& tprefix, bool stats);
+            void startWarmupCollects();  // periodic COLLECT re-runs during warmup
             void cancelKingship(uint32_t ring);
             // Insert my pairs + transitions, forward to the other ring-neighbor.
             // `sender` is the hop we received from, used to pick the other one.
@@ -197,6 +198,9 @@ namespace routingsim {
             simtime_t holdInterval;  // batch window; 0 = send immediately
             simtime_t snapshotInterval;      // periodic RIB snapshot; 0 = off (finish() only)
             TimerMsg* snapshotTimer = nullptr;
+            bool snapshotStats = false; // periodic snapshot as aggregate stats, not full RIB
+            simtime_t collectWarmupDuration; // delay UPDATE origination until COLLECTs settle
+            simtime_t collectWarmupInterval; // how often to re-run COLLECTs during warmup
             // Held transitions bucketed by (target ring, next-hop primary).
             std::map<std::pair<uint32_t, nodeid_t>, std::vector<PendingTransition>> pendingTransitions;
             TimerMsg* holdTimer = nullptr;   // per-node; armed on the first held chain

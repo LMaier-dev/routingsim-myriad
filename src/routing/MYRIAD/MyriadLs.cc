@@ -44,6 +44,7 @@ void MyriadLS::onInitialize() {
     packetType = MYRIADLS_PACKET_TYPE;
     dbExchangeBatchSize = par("dbExchangeBatchSize");
     snapshotInterval = par("snapshotInterval");
+    snapshotStats = par("snapshotFormat").stdstringValue() == "stats";
 
     node().bind(MYRIADLS_PACKET_TYPE, this);
 
@@ -494,7 +495,7 @@ void MyriadLS::tryGoFull(NeighborEntry& nbr) {
     originateSelfLsa(LSA_ADJACENCIES);
 }
 
-void MyriadLS::dumpOracleTo(const std::string& path, const std::string& tprefix) {
+void MyriadLS::dumpOracleTo(const std::string& path, const std::string& tprefix, bool stats) {
     // Rebuild per-node ring membership from the flooded RingsLsa, then let the
     // oracle run Dijkstra over the ring graph.
     std::map<ringspf::NodeId, std::vector<ringspf::RingId>> perNodeRings;
@@ -506,7 +507,7 @@ void MyriadLS::dumpOracleTo(const std::string& path, const std::string& tprefix)
             rs.push_back(r->getRings(i));
     }
     ringspf::dumpOracle(path, (ringspf::NodeId)myId, perNodeRings,
-                        par("ringCostExponent"), tprefix);
+                        par("ringCostExponent"), tprefix, stats);
 }
 
 void MyriadLS::startSnapshot() {
@@ -514,7 +515,7 @@ void MyriadLS::startSnapshot() {
     snapshotTimer = addOneShotTimer(snapshotInterval, [this](short) {
         snapshotTimer = nullptr;
         dumpOracleTo(par("oracleDumpFile").stdstringValue(),
-                     "t=" + simTime().str() + " ");
+                     "t=" + simTime().str() + " ", snapshotStats);
         startSnapshot();
         return false;
     });
@@ -527,7 +528,7 @@ void MyriadLS::finish() {
     // Optimality oracle (see RingSpfOracle)
     std::string oracleFile = par("oracleDumpFile").stdstringValue();
     if (!oracleFile.empty())
-        dumpOracleTo(oracleFile, snapshotInterval > 0 ? "t=" + simTime().str() + " " : "");
+        dumpOracleTo(oracleFile, snapshotInterval > 0 ? "t=" + simTime().str() + " " : "", false);
 }
 
 void MyriadLS::handleDBD(MyriadDBD* dbd, nodeid_t from) {

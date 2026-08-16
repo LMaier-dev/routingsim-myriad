@@ -57,6 +57,9 @@ void MyriadGP::onInitialize() {
     maxBatchBytes = par("maxBatchBytes");
     holdInterval = par("holdInterval");
     snapshotInterval = par("snapshotInterval");
+    snapshotStats = par("snapshotFormat").stdstringValue() == "stats";
+    collectWarmupDuration = par("collectWarmupDuration");
+    collectWarmupInterval = par("collectWarmupInterval");
 
     MLOG_INFO() << "MyriadGP up\n";
 
@@ -65,6 +68,10 @@ void MyriadGP::onInitialize() {
 
     if (snapshotInterval > 0 && !par("ribDumpFile").stdstringValue().empty())
         startSnapshot();
+
+    if (collectWarmupDuration > 0) {
+        startWarmupCollects();
+    }
 }
 
 void MyriadGP::onTwoWayReached(GpNeighbor& nbr) {
@@ -161,8 +168,18 @@ void MyriadGP::startSnapshot() {
     snapshotTimer = addOneShotTimer(snapshotInterval, [this](short) {
         snapshotTimer = nullptr;
         std::ofstream f(par("ribDumpFile").stdstringValue(), std::ios::app);
-        dumpRibTo(f, "t=" + simTime().str() + " ");
+        dumpRibTo(f, "t=" + simTime().str() + " ", snapshotStats);
         startSnapshot();
+        return false;
+    });
+}
+
+void MyriadGP::startWarmupCollects() {
+    addOneShotTimer(collectWarmupInterval, [this](short) -> bool {
+        for (auto& [ring, rs] : rings)
+            if (rs.isKing) reoriginateCollect(ring);
+        if (simTime() < collectWarmupDuration)
+            startWarmupCollects();
         return false;
     });
 }
@@ -689,8 +706,13 @@ void MyriadGP::handleUpdate(MyriadGpUpdate* update, nodeid_t sender) {
                              << "' (" << widthLen << " transitions)\n";
     }
     // Origin UPDATE also carries this ring's size.
-    if (chainLen == 0 && update->getMember_count() > 0)
+    if (chainLen == 0 && update->getMember_count() > 0) {
+        if (curRs.memberCount > 0 && curRs.memberCount != update->getMember_count()) {
+            curRs.ribIn.clear();
+            curRs.preferred = SIZE_MAX;
+        }
         curRs.memberCount = update->getMember_count();
+    }
 
     std::vector<MyriadGpRr> rr;
     rr.reserve(update->getRrArraySize());
@@ -870,6 +892,10 @@ void MyriadGP::forwardChainInterRing(uint32_t curRing, uint32_t seq, uint32_t sp
                           const std::vector<uint32_t>& chainSizes,
                           const std::vector<MyriadGpRr>& rr,
                           std::vector<uint32_t>& handled) {
+    // During COLLECT warmup suppress inter-ring forwarding; memberCounts are
+    // still being established
+    if (collectWarmupDuration > 0 && simTime() < collectWarmupDuration)
+        return;
     for (uint32_t R2 : selfRings) {
         if (R2 == curRing) continue;
         // R2 in the chain would loop; already in `handled` means a sibling bridge
@@ -1122,13 +1148,25 @@ void MyriadGP::reset() {
     cancelHelloTimer();
 }
 
-void MyriadGP::dumpRibTo(std::ostream& f, const std::string& tprefix) {
-    // One line per origin with the primary chain. Numeric stats first so the
-    // test can read them without parsing the chain; ecmp = co-best set size.
+void MyriadGP::dumpRibTo(std::ostream& f, const std::string& tprefix, bool stats) {
     std::vector<uint32_t> originIds;
     for (auto& [rid, rs] : rings)
         if (rs.preferred != SIZE_MAX) originIds.push_back(rid);
     std::sort(originIds.begin(), originIds.end());
+
+    if (stats) {
+        uint64_t n = 0, sum = 0, mx = 0;
+        for (uint32_t rid : originIds) {
+            RingState& rs = rings[rid];
+            uint64_t c = pathCost(rs.ribIn[rs.preferred]);
+            ++n; sum += c; if (c > mx) mx = c;
+        }
+        f << tprefix << (int)myId << " n=" << n
+          << " cost_sum=" << sum << " cost_max=" << mx << "\n";
+        return;
+    }
+
+    // One line per origin with the primary chain.
     for (uint32_t rid : originIds) {
         RingState& rs = rings[rid];
         const RibEntry& e = rs.ribIn[rs.preferred];
@@ -1151,11 +1189,11 @@ void MyriadGP::finish() {
     recordScalar("batches_created", batchesCreated);
 
     // Test hook (test_rib_batching.py). With periodic snapshots on, emit a final
-    // t=<simTime> snapshot so the end state is captured; else the legacy dump.
+    // t=<simTime> snapshot so the end state is captured
     std::string dumpFile = par("ribDumpFile").stdstringValue();
     if (!dumpFile.empty()) {
         std::ofstream f(dumpFile, std::ios::app);
-        dumpRibTo(f, snapshotInterval > 0 ? "t=" + simTime().str() + " " : "");
+        dumpRibTo(f, snapshotInterval > 0 ? "t=" + simTime().str() + " " : "", false);
     }
 }
 
