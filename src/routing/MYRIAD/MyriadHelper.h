@@ -55,9 +55,14 @@ class MyriadHelper : public Protocol {
         // Per-message-type send counters and byte volume.
         std::map<std::string, unsigned long> sentCounts;
         std::map<std::string, unsigned long long> sentBytes;
+        std::map<std::string, unsigned long long> sentMaxBytes;  // largest single PDU per type
+        unsigned long long sentMaxBytesOverall = 0;              // largest single PDU, any type
         void countSend(const std::string& type, unsigned long long bytes = 0) {
             sentCounts[type]++;
             sentBytes[type] += bytes;
+            auto& m = sentMaxBytes[type];
+            if (bytes > m) m = bytes;
+            if (bytes > sentMaxBytesOverall) sentMaxBytesOverall = bytes;
         }
         static std::string sendTypeLabel(const char* pktName);
         void recordSendScalars() {
@@ -73,6 +78,10 @@ class MyriadHelper : public Protocol {
             unsigned long long totalBytes = 0;
             for (auto& [nbr, st] : node().getLinkUsageMap()) totalBytes += st.bytecount;
             recordScalar("bytes_total", totalBytes);
+            // Largest single PDU observed, per type and overall.
+            for (auto& [type, b] : sentMaxBytes)
+                recordScalar(("bytes_max_" + type).c_str(), b);
+            recordScalar("bytes_max", sentMaxBytesOverall);
         }
 
         void onInitialize() override {

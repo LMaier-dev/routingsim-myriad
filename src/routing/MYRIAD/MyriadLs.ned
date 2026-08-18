@@ -13,7 +13,7 @@ simple myriadls extends routingsim.foundation.Protocol
         // negotiation reads hello ordering, so jitter would wedge it.
         double helloJitter @unit(s) = default(0s);
         // Max number of LSA headers per DBD packet, or LsaRequests per LSR packet.
-        int dbExchangeBatchSize = default(10);
+        int dbExchangeBatchSize = default(100);
 
         // Ring membership, e.g. "A,B". Set per node via **.NodeN.*.ringLabel.
         string ringLabel = default("");

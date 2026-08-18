@@ -88,7 +88,7 @@ namespace routingsim {
             // is inherited from MyriadHelloProto<NeighborEntry>.
             Lsdb lsdb;
 
-            int dbExchangeBatchSize = 10;
+            int dbExchangeBatchSize = 220;
 
             simtime_t snapshotInterval;      // periodic oracle snapshot; 0 = off
             TimerMsg* snapshotTimer = nullptr;

@@ -6,7 +6,9 @@ regular intervals), how much routing traffic does each protocol generate — in
 message COUNT and in true BANDWIDTH (bytes)? Every PDU now carries a modelled
 on-wire byte length (see MyriadPduSize.h), and Node already tallies bytes per
 link, surfaced as the per-node `bytes_total` scalar; `sent_<type>`/`sent_total`
-give the counts. We sum both across all nodes.
+give the counts, and `bytes_max`/`bytes_max_<type>` give the largest single PDU
+seen (per node). We sum the counts/totals and take the max of the maxes across
+all nodes.
 
 Config is built exactly like eval_scaling.py: a self-contained [General] ini that
 `include`s eval_common.ini for the fair-timing knobs (refreshInterval, delays,
@@ -51,6 +53,8 @@ DURATION = "8s"
 SENT_RE = re.compile(r"^scalar\s+\S+\s+sent_(\S+)\s+([0-9.]+)", re.M)
 BYTES_RE = re.compile(r"^scalar\s+\S+\s+bytes_total\s+([0-9.]+)", re.M)
 BYTES_TYPE_RE = re.compile(r"^scalar\s+\S+\s+bytes_(\S+)\s+([0-9.]+)", re.M)
+BYTES_MAX_RE = re.compile(r"^scalar\s+\S+\s+bytes_max\s+([0-9.]+)", re.M)
+BYTES_MAX_TYPE_RE = re.compile(r"^scalar\s+\S+\s+bytes_max_(\S+)\s+([0-9.]+)", re.M)
 
 
 def ring_label_lines():
@@ -87,7 +91,7 @@ def write_ini(proto, ring_lines):
 
 def measure(ini, resdir, churn):
     """Run one scenario; return (per_type_counts, total_msgs, total_bytes,
-    per_type_bytes)."""
+    per_type_bytes, max_bytes, per_type_max_bytes)."""
     for sca in glob.glob(resdir + "/*.sca"):
         os.remove(sca)
     dyn = [f'--**.dynamics.linkSelection="{"random" if churn else "none"}"']
@@ -113,6 +117,7 @@ def measure(ini, resdir, churn):
     if not scas:
         sys.exit(f"FAIL: produced no .sca in {resdir}")
     per_type, per_type_bytes, total_bytes = {}, {}, 0
+    per_type_max_bytes, max_bytes = {}, 0
     for sca in scas:
         txt = open(sca).read()
         for m in SENT_RE.finditer(txt):
@@ -122,11 +127,16 @@ def measure(ini, resdir, churn):
             per_type[t] = per_type.get(t, 0) + v
         for m in BYTES_TYPE_RE.finditer(txt):
             t, v = m.group(1), int(float(m.group(2)))
-            if t == "total":
-                continue
+            if t == "total" or t.startswith("max"):
+                continue          # bytes_max/bytes_max_<type> handled separately below
             per_type_bytes[t] = per_type_bytes.get(t, 0) + v
         total_bytes += sum(int(float(m.group(1))) for m in BYTES_RE.finditer(txt))
-    return per_type, sum(per_type.values()), total_bytes, per_type_bytes
+        # Largest single PDU seen on any node, per type and overall.
+        for m in BYTES_MAX_TYPE_RE.finditer(txt):
+            t, v = m.group(1), int(float(m.group(2)))
+            per_type_max_bytes[t] = max(per_type_max_bytes.get(t, 0), v)
+        max_bytes = max([max_bytes] + [int(float(m.group(1))) for m in BYTES_MAX_RE.finditer(txt)])
+    return per_type, sum(per_type.values()), total_bytes, per_type_bytes, max_bytes, per_type_max_bytes
 
 
 def main():
@@ -135,7 +145,7 @@ def main():
         sys.exit(f"RoutingSim binary not found at {BIN} — build it first.")
 
     ring_lines = ring_label_lines()
-    res = {}  # (proto, churn) -> (per_type, msgs, bytes)
+    res = {}  # (proto, churn) -> (per_type, msgs, bytes, per_type_bytes, max_bytes, per_type_max_bytes)
     for proto in ("gp", "ls"):
         ini = write_ini(proto, ring_lines)
         for churn in (False, True):
@@ -145,12 +155,12 @@ def main():
     # Summary table.
     print(f"\n=== Grid10: steady-state overhead over {SIMTIME} "
           f"(churn: {NUM_LINKS} links, period {PERIOD}, dur {DURATION}) ===")
-    print(f"{'scenario':>12}{'messages':>12}{'bytes':>14}{'B/msg':>9}")
+    print(f"{'scenario':>12}{'messages':>12}{'bytes':>14}{'B/msg':>9}{'max B':>9}")
     for proto in ("gp", "ls"):
         for churn in (False, True):
-            pt, m, b, _ = res[(proto, churn)]
+            pt, m, b, _, mx, _ = res[(proto, churn)]
             lbl = f"{proto.upper()} {'churn' if churn else 'base'}"
-            print(f"{lbl:>12}{m:>12}{b:>14}{(b/m if m else 0):>9.1f}")
+            print(f"{lbl:>12}{m:>12}{b:>14}{(b/m if m else 0):>9.1f}{mx:>9}")
     for proto in ("gp", "ls"):
         base_m, base_b = res[(proto, False)][1], res[(proto, False)][2]
         ch_m, ch_b = res[(proto, True)][1], res[(proto, True)][2]
@@ -159,13 +169,13 @@ def main():
 
     # Per-type breakdown (baseline, static topology): where the bytes actually go.
     for proto in ("gp", "ls"):
-        counts, _, _, tbytes = res[(proto, False)]
+        counts, _, _, tbytes, _, tmax = res[(proto, False)]
         print(f"\n--- {proto.upper()} baseline per-type ---")
-        print(f"{'type':>14}{'messages':>11}{'bytes':>14}{'B/msg':>9}{'%bytes':>8}")
+        print(f"{'type':>14}{'messages':>11}{'bytes':>14}{'B/msg':>9}{'max B':>8}{'%bytes':>8}")
         tot_b = sum(tbytes.values()) or 1
         for t in sorted(counts, key=lambda k: -tbytes.get(k, 0)):
-            c, b = counts[t], tbytes.get(t, 0)
-            print(f"{t:>14}{c:>11}{b:>14}{(b/c if c else 0):>9.0f}{100*b/tot_b:>7.1f}%")
+            c, b, mx = counts[t], tbytes.get(t, 0), tmax.get(t, 0)
+            print(f"{t:>14}{c:>11}{b:>14}{(b/c if c else 0):>9.0f}{mx:>8}{100*b/tot_b:>7.1f}%")
 
     try:
         import matplotlib
