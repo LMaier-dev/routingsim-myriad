@@ -9,6 +9,7 @@
 #include <vector>
 #include <functional>
 #include <iosfwd>
+#include <memory>
 #include <string>
 
 namespace routingsim {
@@ -51,10 +52,11 @@ namespace routingsim {
         bool isRedundant;
     };
 
-    struct RingState {
-        std::vector<MyriadGpRr> rr; // (subnet, owner) pairs; refreshed when curSeq advances
-        uint32_t curSeq = 0;        // highest seq_no seen for this origin ring
+    // State a router keeps ONLY for rings it is itself a member of: king/collect
+    // bookkeeping and the in-flight ring laps.
+    struct RingMembership {
         uint32_t originSeq = 0;     // my sequence for this ring (COLLECT + origin-UPDATE)
+        uint32_t memberCount = 0;   // ring size; set when a COLLECT lap closes
         RingInflight collectInflight;
         // Reliable UPDATE traversals I own here, keyed by chain (empty = my
         // origin-UPDATE, non-empty = a relay); several coexist on distinct chains.
@@ -63,23 +65,28 @@ namespace routingsim {
         // many chains but closes a single circular-ACK, so it's keyed by lap seq.
         std::map<uint32_t /*batchLapSeq*/, RingInflight> batchInflights;
         uint32_t batchLapSeq = 0;   // monotonic counter for batch laps I originate
-        // Learned chains for this origin. Usually one generation (all co-best).
-        // Make-before-break may also keep PREVIOUS-generation chains (seq_no ==
-        // curSeq-1) that beat the current one, so the data plane keeps a good
-        // redundant route while reconverging. Purged at curSeq - seq_no >= 2, so
-        // at most two adjacent generations coexist.
-        std::vector<RibEntry> ribIn;
-        size_t preferred = SIZE_MAX; // index into ribIn; SIZE_MAX = none
-
         std::vector<AdjacentRingState> adjacentRings; // feeds spof_count on forward
-        uint32_t memberCount = 0;
-
         bool isKing = false;
         TimerMsg* refreshTimer = nullptr;   // king: periodic re-collect
         TimerMsg* watchdogTimer = nullptr;  // member: coup if the king goes silent
         // High-water mark of ring-neighbors. 1 = genuine 2-node ring; a drop from
         // 2 to 1 is degradation, so we let the lap fail and DEGRADE fires.
         size_t maxRingNeighbors = 0;
+    };
+
+    struct RingState {
+        // Origin-scoped: kept for EVERY ring this router knows a route to.
+        std::vector<MyriadGpRr> rr; // (subnet, owner) pairs; refreshed when curSeq advances
+        uint32_t curSeq = 0;        // highest seq_no seen for this origin ring
+        // Learned chains for this origin. Usually one generation (all co-best).
+        // Make-before-break may also keep PREVIOUS-generation chains (seq_no ==
+        // curSeq-1) that beat the current one, so the data plane keeps a good
+        // redundant route while reconverging.
+        // At most two adjacent generations coexist.
+        std::vector<RibEntry> ribIn;
+        size_t preferred = SIZE_MAX; // index into ribIn; SIZE_MAX = none
+        // Member-scoped state; present only if this router is on the ring.
+        std::unique_ptr<RingMembership> member;
     };
 
     struct RouteEntry {
@@ -123,6 +130,8 @@ namespace routingsim {
             void replayInto(uint32_t ring);
             // COLLECT election key: live (memberCount>0) beats crashed, ties by id.
             bool collectWins(bool incomingCrashed, nodeid_t incomingId, uint32_t ring) const;
+            // Null-safe member count: 0 if I hold no membership for `ring`
+            uint32_t memberCountOf(uint32_t ring) const;
             // A broken ring's collect lap expired: record + flood a DEGRADE for it
             // (re-beaconed on each retry). floodDegrade skips the hop we got it from.
             void originateDegrade(uint32_t ring);
