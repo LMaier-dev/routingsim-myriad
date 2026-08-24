@@ -54,5 +54,3 @@ plots/*
 .buildconfig
 *.bak
 TAGS
-.idea
-simulations/MYRIAD/eval/
