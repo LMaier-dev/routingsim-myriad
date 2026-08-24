@@ -870,6 +870,9 @@ void MyriadGP::processChain(uint32_t curRing, uint32_t seq, uint32_t spof,
 
     // Seq-advance: adopt the new generation, purge stale, but keep old-gen chains
     // strictly better than this candidate (make-before-break); drop the rest.
+    // Same-chain entries are always replaced — cost can increase (echo-path gives
+    // a low transient count; full COLLECT corrects it upward), so a stale cheaper
+    // same-chain entry is wrong data, not a genuine backup path.
     if (seq > originRs.curSeq) {
         originRs.curSeq = seq;
         clearDegradeIfRecovered(origin);
@@ -877,7 +880,7 @@ void MyriadGP::processChain(uint32_t curRing, uint32_t seq, uint32_t spof,
         purgeStale();
         auto& v = originRs.ribIn;
         v.erase(std::remove_if(v.begin(), v.end(),
-            [&](const RibEntry& e) { return !strictlyBetter(e, cand); }),
+            [&](const RibEntry& e) { return e.chain == cand.chain || !strictlyBetter(e, cand); }),
             v.end());
     }
 
