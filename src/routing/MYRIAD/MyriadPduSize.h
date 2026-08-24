@@ -19,6 +19,7 @@ namespace msgsize {
 
 constexpr int64_t NODEID       = 2;   // nodeid_t = unsigned short
 constexpr int64_t U32          = 4;
+constexpr int64_t U64          = 8;
 constexpr int64_t U16          = 2;
 constexpr int64_t BOOL         = 1;
 constexpr int64_t SIMTIME      = 8;   // simtime_t on the wire

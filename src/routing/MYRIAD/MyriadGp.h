@@ -40,7 +40,7 @@ namespace routingsim {
     // chain[0] = latest ring, chain.back() = origin.
     struct RibEntry {
         std::vector<uint32_t> chain;
-        std::vector<uint32_t> chain_sizes; // member count per ring, parallel to chain
+        uint64_t chain_cost = 0;           // sum of memberCount^ringCostExponent over chain
         uint32_t seq_no = 0;
         uint32_t spof_count = 0;
     };
@@ -104,7 +104,7 @@ namespace routingsim {
         uint32_t seq = 0;
         uint32_t spof = 0;
         std::vector<uint32_t> fwdChain;
-        std::vector<uint32_t> fwdSizes;
+        uint64_t fwdCost = 0;
         std::vector<MyriadGpRr> rr;
     };
 
@@ -170,7 +170,7 @@ namespace routingsim {
             // chain fanned into, so the caller can mark the lapping packet.
             void processChain(uint32_t curRing, uint32_t seq, uint32_t spof,
                               const std::vector<uint32_t>& chain,
-                              const std::vector<uint32_t>& chainSizes,
+                              uint64_t chainCost,
                               const std::vector<MyriadGpRr>& rr,
                               const std::vector<MyriadGpRr>* originRrTrailer,
                               std::vector<uint32_t>& handled);
@@ -178,13 +178,13 @@ namespace routingsim {
             // `handled`. hold=0 sends now; hold>0 queues for the next flush.
             void forwardChainInterRing(uint32_t curRing, uint32_t seq, uint32_t spof,
                               const std::vector<uint32_t>& chain,
-                              const std::vector<uint32_t>& chainSizes,
+                              uint64_t chainCost,
                               const std::vector<MyriadGpRr>& rr,
                               std::vector<uint32_t>& handled);
             // Build a single-chain transition UPDATE (the hold=0 immediate path).
             MyriadGpUpdate* buildTransitionUpdate(uint32_t R2, nodeid_t src, uint32_t seq,
                                   uint32_t spof, const std::vector<uint32_t>& fwdChain,
-                                  const std::vector<uint32_t>& fwdSizes,
+                                  uint64_t fwdCost,
                                   const std::vector<MyriadGpRr>& rr);
             // Emit the held transitions as one batch per (R2, primary) bucket,
             // each lapping R2 under a single circular-ACK.
@@ -232,7 +232,7 @@ namespace routingsim {
             unsigned long batchEntriesTotal = 0;
             unsigned long batchMaxEntries = 0;
             unsigned long batchesCreated = 0;
-            uint64_t pathCost(const RibEntry& e) const;
+            uint64_t sizeToCost(uint32_t s) const;
             // Rank order: spof, then cost, then chain length. Used by both the
             // store cascade and selectPreferred.
             bool strictlyBetter(const RibEntry& a, const RibEntry& b) const;
