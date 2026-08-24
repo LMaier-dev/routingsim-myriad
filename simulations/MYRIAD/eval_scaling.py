@@ -36,13 +36,11 @@ import re
 import subprocess
 import sys
 
-HERE = os.path.dirname(os.path.abspath(__file__))          # .../simulations/MYRIAD
-SIM_ROOT = os.path.dirname(HERE)                            # .../simulations
-REPO = os.path.dirname(SIM_ROOT)                           # repo root
-SRC = os.path.join(REPO, "src")
-BIN = os.path.join(SRC, "RoutingSim")
-GRAPHGEN = os.path.join(REPO, "scripts", "graphgen.py")
-TOPO2RINGS = os.path.join(HERE, "topo2rings.py")
+from eval_harness import BIN, SIM_ROOT, SRC, REPO, MYRIAD_DIR, run_sim
+
+HERE = str(MYRIAD_DIR)
+GRAPHGEN = str(REPO / "scripts" / "graphgen.py")
+TOPO2RINGS = str(MYRIAD_DIR / "topo2rings.py")
 
 EVAL_DIR = os.path.join(HERE, "eval")
 # TOPO_DIR/INI_DIR/PLOT_DIR are rebound under a per-basis subfolder in main()
@@ -192,7 +190,7 @@ def ring_label_lines(topo_path):
     """Run topo2rings (skipped if labels already exist), return the per-node
     ringLabel lines (inlined into the ini)."""
     stem = os.path.splitext(os.path.basename(topo_path))[0]
-    ini = os.path.join(TOPO_DIR, f"{stem}.ringlabels.ini")
+    ini = os.path.join(TOPO_DIR, f"{stem}.{BASIS}.ringlabels.ini")
     if not os.path.exists(ini):
         r = run(["python3", TOPO2RINGS, topo_path, "--out-dir", TOPO_DIR,
                  "--no-png", "--basis", BASIS])
@@ -239,10 +237,10 @@ def message_count(proto, ini_path, tag="", extra_args=None):
     for old in glob.glob(os.path.join(res, "*.sca")):
         os.remove(old)
     cmd = [BIN, "-u", "Cmdenv", ini_path, "--result-dir", res] + (extra_args or [])
-    r = run(cmd, cwd=SIM_ROOT)
+    run_sim(cmd, cwd=SIM_ROOT)
     scas = glob.glob(os.path.join(res, "*.sca"))
     if not scas:
-        print(f"  !! {proto} produced no .sca. stderr tail:\n{r.stderr[-400:]}")
+        print(f"  !! {proto} produced no .sca.")
         return None
     total = 0
     for sca in scas:
@@ -440,7 +438,7 @@ def draw_topologies(outfile):
         n, edges = _read_edges(topo)
         # full ring membership per node (all rings, for the pie wedges)
         stem = os.path.splitext(os.path.basename(topo))[0]
-        ini = os.path.join(TOPO_DIR, f"{stem}.ringlabels.ini")
+        ini = os.path.join(TOPO_DIR, f"{stem}.{BASIS}.ringlabels.ini")
         ring_of = {}
         if os.path.exists(ini):
             for l in open(ini):
@@ -494,27 +492,28 @@ def draw_topologies(outfile):
     print(f"  wrote {outfile}")
 
 
-def main():
-    ap = argparse.ArgumentParser(description="GP-vs-LS message-count scaling eval")
-    ap.add_argument("--quick", action="store_true", help="short sweeps for a smoke test")
-    ap.add_argument("--only", choices=["square", "width", "ladder", "flower", "topos"],
-                    help="run just one sweep instead of all four ('topos' = draw "
-                         "the representative topology pictures only, no sims)")
-    ap.add_argument("--no-batch", dest="nobatch", action="store_true",
-                    help="run GP with holdInterval=0s (pre-batching baseline). "
-                         "Far slower (no coalescing) — off by default; the normal "
-                         "run uses the holdInterval pinned in eval_common.ini.")
-    ap.add_argument("--convergence", action="store_true",
-                    help="also measure convergence time per topology (extends "
-                         f"sim-time-limit to {CONV_SIMTIME}; adds a third plot panel).")
-    ap.add_argument("--basis", choices=["min", "all"], default="min",
-                    help="ring basis: min=minimum_cycle_basis (default), "
-                         "all=cycle_basis. Results nest under eval/<basis>_cycles/.")
-    ap.add_argument("--single", metavar="TOPO",
-                    help="run GP+LS on ONE topology .txt and print counts (no "
-                         "sweep, no plot). Path relative to simulations/topologies "
-                         "or absolute.")
-    args = ap.parse_args()
+def main(args=None):
+    if args is None:
+        ap = argparse.ArgumentParser(description="GP-vs-LS message-count scaling eval")
+        ap.add_argument("--quick", action="store_true", help="short sweeps for a smoke test")
+        ap.add_argument("--only", choices=["square", "width", "ladder", "flower", "topos"],
+                        help="run just one sweep instead of all four ('topos' = draw "
+                             "the representative topology pictures only, no sims)")
+        ap.add_argument("--no-batch", dest="nobatch", action="store_true",
+                        help="run GP with holdInterval=0s (pre-batching baseline). "
+                             "Far slower (no coalescing) — off by default; the normal "
+                             "run uses the holdInterval pinned in eval_common.ini.")
+        ap.add_argument("--convergence", action="store_true",
+                        help="also measure convergence time per topology (extends "
+                             f"sim-time-limit to {CONV_SIMTIME}; adds a third plot panel).")
+        ap.add_argument("--basis", choices=["min", "all"], default="min",
+                        help="ring basis: min=minimum_cycle_basis (default), "
+                             "all=cycle_basis. Results nest under eval/<basis>_cycles/.")
+        ap.add_argument("--single", metavar="TOPO",
+                        help="run GP+LS on ONE topology .txt and print counts (no "
+                             "sweep, no plot). Path relative to simulations/topologies "
+                             "or absolute.")
+        args = ap.parse_args()
 
     # Nest all outputs under a per-basis subfolder so min_cycles and all_cycles
     # keep separate cached labels, inis, and plots.

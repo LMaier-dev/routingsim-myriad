@@ -12,31 +12,27 @@ round.
 This eval fails nodes with the CatastrophicFailure dynamics model (a node-only
 model that reboots them after `duration`) on a dedicated RecoveryNetwork, and
 snapshots every node's route count over time (snapshotFormat="stats"). Three
-configs on the SAME failure schedule (dynamics RNG isolated, as in
-eval_overhead.py): GP replay-off, GP replay-on, LS. For every node that fails we
-measure recovery latency = time from its reboot until its RIB is full again.
+configs on the SAME failure schedule (dynamics RNG isolated): GP replay-off, GP
+replay-on, LS. For every node that fails we measure recovery latency = time from
+its reboot until its RIB is full again.
 
-    python3 simulations/MYRIAD/eval_recovery.py
+    python3 simulations/MYRIAD/eval_recovery.py [--topo PATH] [--basis {min,all}]
 
 Outputs a latency table + one route-count-vs-time plot under
 simulations/MYRIAD/eval/recovery/.
 """
+import argparse
 import glob
 import os
 import re
-import subprocess
 import sys
 from collections import defaultdict
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-SIM_ROOT = os.path.dirname(HERE)
-REPO = os.path.dirname(SIM_ROOT)
-SRC = os.path.join(REPO, "src")
-BIN = os.path.join(SRC, "RoutingSim")
-COMMON_INI = os.path.join(HERE, "eval_common.ini")
-TOPO2RINGS = os.path.join(HERE, "topo2rings.py")
+from eval_harness import (BIN, SIM_ROOT, MYRIAD_DIR,
+                          ensure_ring_labels, run_sim, write_proto_ini, add_topo_args)
+
+HERE = str(MYRIAD_DIR)
 OUT = os.path.join(HERE, "eval", "recovery")
-TOPO = os.path.join(SIM_ROOT, "topologies", "grid_10,10.txt")
 
 SIMTIME = "180s"
 SNAP = "5s"
@@ -45,20 +41,10 @@ SNAP = "5s"
 # refreshInterval (100s) so the OFF case visibly lags the refresh-driven refill.
 WARMUP, PERIOD, DURATION, FRACTION = "8s", "20s", "5s", 0.08
 
+RECOVERY_NETWORK = "routingsim.simulations.MYRIAD.RecoveryNetwork"
+
 # stats snapshot line: "t=<t> <nodeid> n=<count> cost_sum=.. cost_max=.."
 SNAP_RE = re.compile(r"^t=([0-9.]+)s?\s+(\d+)\s+n=(\d+)", re.M)
-
-
-def ring_label_lines():
-    stem = os.path.splitext(os.path.basename(TOPO))[0]
-    labels = os.path.join(HERE, f"{stem}.ringlabels.ini")
-    r = subprocess.run([sys.executable, TOPO2RINGS, TOPO, "--out-dir", HERE, "--no-png"],
-                       capture_output=True, text=True)
-    if not os.path.exists(labels):
-        sys.exit(f"topo2rings.py failed:\n{r.stdout}{r.stderr}")
-    with open(labels) as f:
-        return [ln.rstrip("\n") for ln in f if ln.strip() and not ln.startswith("#")]
-
 
 # GP dumps to ribDumpFile, LS to oracleDumpFile (its routes come from the
 # RingSpfOracle over the LSDB); both honour snapshotInterval/snapshotFormat.
@@ -69,31 +55,7 @@ CONFIGS = [
 ]
 
 
-def write_ini(proto, ring_lines):
-    ini = os.path.join(OUT, f"{proto}.ini")
-    lines = [
-        f"include {COMMON_INI}",
-        "[General]",
-        f"ned-path={SRC};{SIM_ROOT}",
-        f'**.protocols = "routingsim.routing.MYRIAD.myriad{proto}"',
-        "network = routingsim.simulations.MYRIAD.RecoveryNetwork",
-        f'*.manager.topologyFile = "{TOPO}"',
-        "**.mobility = false",
-        f"**.dynamics.warmup = {WARMUP}",
-        f"**.dynamics.period = {PERIOD}",
-        f"**.dynamics.duration = {DURATION}",
-        f"**.dynamics.fraction = {FRACTION}",
-        "**.dynamics.minDegree = 0",   # grid corners are degree 2; fail any node
-        f"**.snapshotInterval = {SNAP}",
-        '**.snapshotFormat = "stats"',
-    ] + ring_lines
-    with open(ini, "w") as f:
-        f.write("\n".join(lines) + "\n")
-    return ini
-
-
-def run(name, proto, dumppar, replay, ring_lines):
-    ini = write_ini(proto, ring_lines)
+def run(name, ini, dumppar, replay):
     resdir = os.path.join(OUT, f"res_{name}")
     dump = os.path.join(OUT, f"{name}.rib")
     for stale in (dump, *glob.glob(resdir + "/*.sca")):
@@ -106,9 +68,7 @@ def run(name, proto, dumppar, replay, ring_lines):
             "--result-dir", resdir]
     if replay is not None:
         args.append(f"--**.recoveryReplayEnabled={replay}")
-    r = subprocess.run(args, cwd=SIM_ROOT, capture_output=True, text=True)
-    if r.returncode != 0:
-        sys.exit(f"FAIL: {name}\n{(r.stdout + r.stderr)[-1500:]}")
+    run_sim(args)
     return dump
 
 
@@ -143,16 +103,45 @@ def recovery_latencies(series, duration_s):
     return out
 
 
-def main():
+def main(args=None):
+    if args is None:
+        p = argparse.ArgumentParser()
+        add_topo_args(p)
+        args = p.parse_args()
+
     os.makedirs(OUT, exist_ok=True)
     if not os.path.exists(BIN):
         sys.exit(f"RoutingSim binary not found at {BIN} — build it first.")
-    ring_lines = ring_label_lines()
 
-    series = {name: load(run(name, proto, dp, rep, ring_lines))
-              for name, proto, dp, rep in CONFIGS}
+    labels = ensure_ring_labels(args.topo, args.basis)
+    recovery_extra = [
+        f"**.dynamics.warmup = {WARMUP}",
+        f"**.dynamics.period = {PERIOD}",
+        f"**.dynamics.duration = {DURATION}",
+        f"**.dynamics.fraction = {FRACTION}",
+        "**.dynamics.minDegree = 0",   # grid corners are degree 2; fail any node
+        f"**.snapshotInterval = {SNAP}",
+        '**.snapshotFormat = "stats"',
+    ]
+    inis = {
+        proto: write_proto_ini(
+            os.path.join(OUT, f"{proto}.ini"), proto,
+            args.topo, labels,
+            extra_lines=recovery_extra,
+            update_jitter=args.update_jitter if proto == "gp" else None,
+            warmup=args.warmup if proto == "gp" else None,
+            network=RECOVERY_NETWORK)
+        for proto in ("gp", "ls")
+    }
 
-    print(f"\n=== Grid10 node-failure recovery ({SIMTIME}, {FRACTION:.0%}/wave, "
+    series = {}
+    for name, proto, dumppar, replay in CONFIGS:
+        print(f"  → {name} …", flush=True)
+        dump = run(name, inis[proto], dumppar, replay)
+        series[name] = load(dump)
+        print(f"  ✓ {name} done ({len(series[name])} nodes tracked)")
+
+    print(f"\n=== node-failure recovery ({SIMTIME}, {FRACTION:.0%}/wave, "
           f"dur {DURATION}, refresh 100s) ===")
     print(f"{'config':>8}{'nodes recovered':>17}{'mean latency':>14}"
           f"{'median':>9}{'max':>8}")
@@ -171,7 +160,6 @@ def main():
     print("\nlatency = seconds from reboot until RIB is full again "
           "(GP-off waits for refresh; GP-on/LS repopulate at once).")
 
-    # Plot: route count vs time for the earliest-failing node, all three configs.
     off = series["gp_off"]
     fn, tz = None, 1e9
     for nid, ser in off.items():
@@ -194,7 +182,7 @@ def main():
         ts = sorted(ser)
         ax.plot(ts, [ser[t] for t in ts], marker=".", label=name, color=color)
     ax.set(xlabel="time (s)", ylabel=f"routes at node {fn}",
-           title=f"Recovery of a rebooted node (Grid10, node {fn})")
+           title=f"Recovery of a rebooted node (node {fn})")
     ax.legend(); fig.tight_layout()
     p = os.path.join(OUT, "recovery_node.png")
     fig.savefig(p, dpi=120)

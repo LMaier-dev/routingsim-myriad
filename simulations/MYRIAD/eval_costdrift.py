@@ -5,27 +5,25 @@ GP's spof-first ranking deliberately picks costlier but more-redundant paths.
 This measures by how much — the "redundancy premium" per (node, origin) route.
 Any negative drift (GP cheaper than optimal) is a bug flag.
 
-    python3 simulations/MYRIAD/eval_costdrift.py
+    python3 simulations/MYRIAD/eval_costdrift.py [--topo PATH] [--basis {min,all}]
 
 Outputs histogram.png + scatter.png under simulations/MYRIAD/eval/costdrift/.
 """
+import argparse
 import os
-import subprocess
 import sys
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-SIM_ROOT = os.path.dirname(HERE)
-REPO = os.path.dirname(SIM_ROOT)
-BIN = os.path.join(REPO, "src", "RoutingSim")
-GP_INI = os.path.join(HERE, "myriadgp.ini")
-LS_INI = os.path.join(HERE, "myriadls.ini")
-COMMON_INI = os.path.join(HERE, "eval_common.ini")
+from eval_harness import (BIN, SIM_ROOT, MYRIAD_DIR,
+                          ensure_ring_labels, run_sim, write_proto_ini, add_topo_args)
+
+HERE = str(MYRIAD_DIR)
 OUT = os.path.join(HERE, "eval", "costdrift")
 
-CONFIG = "Grid10"
-TOPO = "grid_10,10.txt"
 SNAP = "5s"
-SIMTIME = "80s"   # two refresh cycles (Grid10 refresh=15s); enough to converge
+SIMTIME = "80s"   # two refresh cycles at 15s; enough to heal transients
+
+# Fast refresh so multiple cycles complete within SIMTIME.
+_REFRESH_LINES = ["**.refreshInterval = 15s", "**.refreshJitter = 0s"]
 
 
 def parse_snapshots(path):
@@ -48,17 +46,13 @@ def parse_snapshots(path):
     return snaps
 
 
-def _run(ini, config, dumpfile, resdir, extra):
+def _run(ini, dump_param, dumpfile, resdir):
     if os.path.exists(dumpfile):
         os.remove(dumpfile)
-    dump_param = f'--**.{"ribDumpFile" if ini == GP_INI else "oracleDumpFile"}="{dumpfile}"'
-    cmd = [BIN, "-u", "Cmdenv", ini, COMMON_INI, "-c", config,
+    cmd = [BIN, "-u", "Cmdenv", ini,
            f"--sim-time-limit={SIMTIME}", f"--**.snapshotInterval={SNAP}",
-           *extra, dump_param, "--result-dir", resdir]
-    r = subprocess.run(cmd, cwd=SIM_ROOT, capture_output=True, text=True)
-    log = r.stdout + r.stderr
-    if r.returncode != 0 or "budget expired" in log or "ring broken" in log:
-        sys.exit(f"FAIL: {os.path.basename(ini)} run errored\n{log[-1200:]}")
+           f'--**.{dump_param}="{dumpfile}"', "--result-dir", resdir]
+    run_sim(cmd)
     if not os.path.exists(dumpfile):
         sys.exit(f"FAIL: no dump produced ({dumpfile})")
     snaps = parse_snapshots(dumpfile)
@@ -67,26 +61,34 @@ def _run(ini, config, dumpfile, resdir, extra):
     return snaps[max(snaps)]
 
 
-def main():
+def main(args=None):
+    if args is None:
+        p = argparse.ArgumentParser()
+        add_topo_args(p)
+        args = p.parse_args()
+
     os.makedirs(OUT, exist_ok=True)
     if not os.path.exists(BIN):
         sys.exit(f"RoutingSim binary not found at {BIN} — build first.")
 
-    r = subprocess.run([sys.executable, os.path.join(HERE, "topo2rings.py"),
-                        os.path.join(SIM_ROOT, "topologies", TOPO),
-                        "--out-dir", HERE, "--no-png"], capture_output=True, text=True)
-    if r.returncode != 0:
-        sys.exit(f"topo2rings.py failed:\n{r.stdout}{r.stderr}")
+    labels = ensure_ring_labels(args.topo, args.basis)
+    gp_ini = write_proto_ini(os.path.join(OUT, "gp.ini"), "gp",
+                             args.topo, labels, extra_lines=_REFRESH_LINES,
+                             update_jitter=args.update_jitter, warmup=args.warmup)
+    ls_ini = write_proto_ini(os.path.join(OUT, "ls.ini"), "ls",
+                             args.topo, labels, extra_lines=_REFRESH_LINES)
 
-    print("Running LS (oracle truth)…")
-    oracle = _run(LS_INI, CONFIG,
+    print("  → LS oracle …", flush=True)
+    oracle = _run(ls_ini, "oracleDumpFile",
                   os.path.join(OUT, "drift_ls.txt"),
-                  os.path.join(OUT, "res_ls"), [])
+                  os.path.join(OUT, "res_ls"))
+    print(f"  ✓ LS done ({len(oracle)} entries)")
 
-    print("Running GP production (rankUseSpof=true, default)…")
-    gp = _run(GP_INI, CONFIG,
+    print("  → GP production (rankUseSpof=true) …", flush=True)
+    gp = _run(gp_ini, "ribDumpFile",
               os.path.join(OUT, "drift_gp.txt"),
-              os.path.join(OUT, "res_gp"), [])
+              os.path.join(OUT, "res_gp"))
+    print(f"  ✓ GP done ({len(gp)} entries)")
 
     # --- compute drift (cost and chain length, both GP − oracle) ---
     common = [k for k in oracle if k in gp]
@@ -97,13 +99,11 @@ def main():
     cvals = list(cost_drift.values())
     lvals = list(len_drift.values())
 
-    print(f"\n=== Cost-drift: GP(production) − oracle  [{CONFIG}] ===")
+    print(f"\n=== Cost-drift: GP(production) − oracle ===")
     print(f"  routes in oracle : {len(oracle)}")
     print(f"  routes in GP     : {len(gp)}")
-    print(f"  missing in GP    : {len(missing)}"
-          + (" (BUG)" if missing else ""))
-    print(f"  negative drift   : {len(negative)}"
-          + (" (BUG)" if negative else ""))
+    print(f"  missing in GP    : {len(missing)}" + (" (BUG)" if missing else ""))
+    print(f"  negative drift   : {len(negative)}" + (" (BUG)" if negative else ""))
     if cvals:
         print(f"  cost   min/mean/max: "
               f"{min(cvals)} / {sum(cvals)/len(cvals):.1f} / {max(cvals)}")
@@ -120,15 +120,12 @@ def main():
         print("\n(matplotlib not available — skipping plots)")
         return
 
-    # histogram: x-axis = cost-drift bucket. Both drifts share one y-axis (drift
-    # magnitude): the cost premium and the mean chain-length premium of those
-    # routes, side by side. Route count per bucket annotated above.
     from collections import defaultdict
     by_cost = defaultdict(list)
     for k in common:
         by_cost[cost_drift[k]].append(len_drift[k])
     cxs = sorted(by_cost)
-    pos = list(range(len(cxs)))                     # categorical: even spacing
+    pos = list(range(len(cxs)))
     counts = [len(by_cost[c]) for c in cxs]
     mean_len = [sum(by_cost[c]) / len(by_cost[c]) for c in cxs]
 
@@ -137,12 +134,12 @@ def main():
            label="cost drift (Σ members²)")
     ax.bar([p + 0.2 for p in pos], mean_len, width=0.4, color="C1",
            label="mean chain-length drift (hops)")
-    for p, n in zip(pos, counts):                   # keep the route-count info
+    for p, n in zip(pos, counts):
         ax.text(p, 0, f"n={n}", ha="center", va="bottom", fontsize=6, rotation=90)
     ax.set_xticks(pos)
     ax.set_xticklabels([str(c) for c in cxs], rotation=45, ha="right", fontsize=7)
     ax.set(xlabel="cost-drift bucket  GP − oracle", ylabel="drift (GP − oracle)",
-           title=f"Cost vs length drift: GP production vs oracle  ({CONFIG})")
+           title="Cost vs length drift: GP production vs oracle")
     ax.legend(fontsize=8)
     if negative:
         ax.text(0.02, 0.95, f"BUG: {len(negative)} negative cost drift",
@@ -150,7 +147,6 @@ def main():
     fig.tight_layout()
     fig.savefig(os.path.join(OUT, "histogram.png"), dpi=120)
 
-    # scatter: oracle_cost (x) vs GP_cost (y)
     ox = [oracle[k][0] for k in common]
     gy = [gp[k][0] for k in common]
     lo, hi = min(ox + gy), max(ox + gy)
@@ -159,7 +155,7 @@ def main():
     ax.scatter(ox, gy, s=4, alpha=0.4, color="C0")
     ax.plot([lo, hi], [lo, hi], "k--", lw=0.8, label="y = x  (optimal)")
     ax.set(xlabel="oracle cost (Dijkstra)", ylabel="GP cost (production)",
-           title=f"GP vs oracle path cost  ({CONFIG})")
+           title="GP vs oracle path cost")
     ax.legend(fontsize=8)
     fig.tight_layout()
     fig.savefig(os.path.join(OUT, "scatter.png"), dpi=120)

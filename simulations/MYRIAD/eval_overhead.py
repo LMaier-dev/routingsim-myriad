@@ -12,37 +12,31 @@ all nodes.
 
 Config is built exactly like eval_scaling.py: a self-contained [General] ini that
 `include`s eval_common.ini for the fair-timing knobs (refreshInterval, delays,
-holdInterval, ...). We deliberately do NOT load myriadgp.ini/myriadls.ini — their
+holdInterval, ...). We deliberately do NOT load myriad{gp,ls}.ini — their
 [Config Grid10] sections override eval_common (e.g. refreshInterval 15s vs 100s),
 which would inflate GP's refresh churn ~6x and make the comparison meaningless.
 
-Four runs on Grid10: {GP, LS} x {baseline (no failures), churn (periodic link
-fail/recover)}. baseline = static-topology floor; churn - baseline = the
-reconvergence overhead each protocol pays per unit of topology change. The
-link-failure schedule is made IDENTICAL for both protocols by isolating the
-dynamics module's RNG (num-rngs=2, dynamics.rng-0=1, fixed seed) so it can't be
-perturbed by protocol-side randomness — same links, same times.
+Four runs: {GP, LS} x {baseline (no failures), churn (periodic link fail/recover)}.
+baseline = static-topology floor; churn - baseline = the reconvergence overhead
+each protocol pays per unit of topology change. The link-failure schedule is made
+IDENTICAL for both protocols by isolating the dynamics module's RNG.
 
-    python3 simulations/MYRIAD/eval_overhead.py
+    python3 simulations/MYRIAD/eval_overhead.py [--topo PATH] [--basis {min,all}]
 
 Outputs three plots + a summary table under simulations/MYRIAD/eval/overhead/.
 """
+import argparse
 import glob
 import os
 import re
-import subprocess
 import sys
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-SIM_ROOT = os.path.dirname(HERE)
-REPO = os.path.dirname(SIM_ROOT)
-SRC = os.path.join(REPO, "src")
-BIN = os.path.join(SRC, "RoutingSim")
-COMMON_INI = os.path.join(HERE, "eval_common.ini")
-TOPO2RINGS = os.path.join(HERE, "topo2rings.py")
+from eval_harness import (BIN, SIM_ROOT, MYRIAD_DIR,
+                          ensure_ring_labels, run_sim, write_proto_ini, add_topo_args)
+
+HERE = str(MYRIAD_DIR)
 OUT = os.path.join(HERE, "eval", "overhead")
 
-TOPO = os.path.join(SIM_ROOT, "topologies", "grid_10,10.txt")
 SIMTIME = "150s"                 # initial convergence + several flap cycles
 # Periodic link churn: fail NUM_LINKS random links every PERIOD for DURATION,
 # then recover; repeats. DURATION < PERIOD so links are up between flaps.
@@ -55,38 +49,6 @@ BYTES_RE = re.compile(r"^scalar\s+\S+\s+bytes_total\s+([0-9.]+)", re.M)
 BYTES_TYPE_RE = re.compile(r"^scalar\s+\S+\s+bytes_(\S+)\s+([0-9.]+)", re.M)
 BYTES_MAX_RE = re.compile(r"^scalar\s+\S+\s+bytes_max\s+([0-9.]+)", re.M)
 BYTES_MAX_TYPE_RE = re.compile(r"^scalar\s+\S+\s+bytes_max_(\S+)\s+([0-9.]+)", re.M)
-
-
-def ring_label_lines():
-    """Regenerate Grid10 ring labels (git-ignored) and return them inlined, so a
-    clean checkout works and no per-config include path is needed."""
-    stem = os.path.splitext(os.path.basename(TOPO))[0]
-    labels = os.path.join(HERE, f"{stem}.ringlabels.ini")
-    r = subprocess.run([sys.executable, TOPO2RINGS, TOPO, "--out-dir", HERE, "--no-png"],
-                       capture_output=True, text=True)
-    if not os.path.exists(labels):
-        sys.exit(f"topo2rings.py failed:\n{r.stdout}{r.stderr}")
-    with open(labels) as f:
-        return [ln.rstrip("\n") for ln in f if ln.strip() and not ln.startswith("#")]
-
-
-def write_ini(proto, ring_lines):
-    """Self-contained ini: include eval_common.ini (fair-timing knobs), then only
-    the per-run bits. No myriad{gp,ls}.ini -> no [Config] override of eval_common."""
-    ini_path = os.path.join(OUT, f"{proto}.ini")
-    lines = [
-        f"include {COMMON_INI}",
-        "[General]",
-        f"ned-path={SRC};{SIM_ROOT}",
-        f'**.protocols = "routingsim.routing.MYRIAD.myriad{proto}"',
-        "network = routingsim.simulations.DefaultNetwork",
-        f'*.manager.topologyFile = "{TOPO}"',
-        "*.mainStatistics.samplingInterval = 0.01s",
-        "**.mobility = false",
-    ] + ring_lines
-    with open(ini_path, "w") as f:
-        f.write("\n".join(lines) + "\n")
-    return ini_path
 
 
 def measure(ini, resdir, churn):
@@ -107,11 +69,7 @@ def measure(ini, resdir, churn):
                 "--num-rngs=2", "--**.dynamics.rng-0=1", "--seed-set=1"]
     cmd = [BIN, "-u", "Cmdenv", ini, f"--sim-time-limit={SIMTIME}", *dyn,
            "--result-dir", resdir]
-    r = subprocess.run(cmd, cwd=SIM_ROOT, capture_output=True, text=True)
-    # Under churn, "budget expired"/"ring broken" are the expected DEGRADE grace
-    # path, not a bug — so only a nonzero exit code is fatal.
-    if r.returncode != 0:
-        sys.exit(f"FAIL: {os.path.basename(ini)} churn={churn}\n{(r.stdout + r.stderr)[-1500:]}")
+    run_sim(cmd, allow_budget_expired=True)
 
     scas = glob.glob(resdir + "/*.sca")
     if not scas:
@@ -123,15 +81,14 @@ def measure(ini, resdir, churn):
         for m in SENT_RE.finditer(txt):
             t, v = m.group(1), int(float(m.group(2)))
             if t == "total":
-                continue          # re-summed from parts below
+                continue
             per_type[t] = per_type.get(t, 0) + v
         for m in BYTES_TYPE_RE.finditer(txt):
             t, v = m.group(1), int(float(m.group(2)))
             if t == "total" or t.startswith("max"):
-                continue          # bytes_max/bytes_max_<type> handled separately below
+                continue
             per_type_bytes[t] = per_type_bytes.get(t, 0) + v
         total_bytes += sum(int(float(m.group(1))) for m in BYTES_RE.finditer(txt))
-        # Largest single PDU seen on any node, per type and overall.
         for m in BYTES_MAX_TYPE_RE.finditer(txt):
             t, v = m.group(1), int(float(m.group(2)))
             per_type_max_bytes[t] = max(per_type_max_bytes.get(t, 0), v)
@@ -139,36 +96,47 @@ def measure(ini, resdir, churn):
     return per_type, sum(per_type.values()), total_bytes, per_type_bytes, max_bytes, per_type_max_bytes
 
 
-def main():
+def main(args=None):
+    if args is None:
+        p = argparse.ArgumentParser()
+        add_topo_args(p)
+        args = p.parse_args()
+
     os.makedirs(OUT, exist_ok=True)
     if not os.path.exists(BIN):
         sys.exit(f"RoutingSim binary not found at {BIN} — build it first.")
 
-    ring_lines = ring_label_lines()
-    res = {}  # (proto, churn) -> (per_type, msgs, bytes, per_type_bytes, max_bytes, per_type_max_bytes)
+    labels = ensure_ring_labels(args.topo, args.basis)
+    res = {}
     for proto in ("gp", "ls"):
-        ini = write_ini(proto, ring_lines)
+        ini = write_proto_ini(os.path.join(OUT, f"{proto}.ini"), proto,
+                              args.topo, labels,
+                              update_jitter=args.update_jitter if proto == "gp" else None,
+                              warmup=args.warmup if proto == "gp" else None)
         for churn in (False, True):
             tag = f"{proto}_{'churn' if churn else 'base'}"
+            print(f"  → {proto.upper()} {'churn' if churn else 'baseline'} …", flush=True)
             res[(proto, churn)] = measure(ini, os.path.join(OUT, f"res_{tag}"), churn)
+            print(f"  ✓ done ({res[(proto, churn)][1]} msgs, "
+                  f"{res[(proto, churn)][2]//1000} KB)")
 
     # Summary table.
-    print(f"\n=== Grid10: steady-state overhead over {SIMTIME} "
+    print(f"\n=== steady-state overhead over {SIMTIME} "
           f"(churn: {NUM_LINKS} links, period {PERIOD}, dur {DURATION}) ===")
     print(f"{'scenario':>12}{'messages':>12}{'bytes':>14}{'B/msg':>9}{'max B':>9}")
-    for proto in ("gp", "ls"):
+    protos = ["gp", "ls"]
+    for proto in protos:
         for churn in (False, True):
             pt, m, b, _, mx, _ = res[(proto, churn)]
             lbl = f"{proto.upper()} {'churn' if churn else 'base'}"
             print(f"{lbl:>12}{m:>12}{b:>14}{(b/m if m else 0):>9.1f}{mx:>9}")
-    for proto in ("gp", "ls"):
+    for proto in protos:
         base_m, base_b = res[(proto, False)][1], res[(proto, False)][2]
         ch_m, ch_b = res[(proto, True)][1], res[(proto, True)][2]
         print(f"  {proto.upper()} churn overhead (churn-base): "
               f"+{ch_m-base_m} msgs, +{ch_b-base_b} bytes")
 
-    # Per-type breakdown (baseline, static topology): where the bytes actually go.
-    for proto in ("gp", "ls"):
+    for proto in protos:
         counts, _, _, tbytes, _, tmax = res[(proto, False)]
         print(f"\n--- {proto.upper()} baseline per-type ---")
         print(f"{'type':>14}{'messages':>11}{'bytes':>14}{'B/msg':>9}{'max B':>8}{'%bytes':>8}")
@@ -185,8 +153,7 @@ def main():
         print("\n(matplotlib not available — skipping plots)")
         return
 
-    protos = ["gp", "ls"]
-    labels = ["GP", "LS"]
+    labels_list = ["GP", "LS"]
     x = range(len(protos))
     w = 0.38
 
@@ -198,17 +165,16 @@ def main():
         b2 = ax.bar([i + w/2 for i in x], churn, w, label="with link churn", color="C3")
         ax.bar_label(b1, fmt="%.0f", fontsize=8)
         ax.bar_label(b2, fmt="%.0f", fontsize=8)
-        ax.set_xticks(list(x)); ax.set_xticklabels(labels)
+        ax.set_xticks(list(x)); ax.set_xticklabels(labels_list)
         ax.set(ylabel=ylabel, title=title)
         ax.legend(fontsize=8); fig.tight_layout()
         fig.savefig(os.path.join(OUT, fname), dpi=120)
 
-    grouped(1, "total sent messages", f"Control-plane messages (Grid10, {SIMTIME})",
+    grouped(1, "total sent messages", f"Control-plane messages ({SIMTIME})",
             "overhead_messages.png")
-    grouped(2, "total bytes (KB)", f"Control-plane bandwidth (Grid10, {SIMTIME})",
+    grouped(2, "total bytes (KB)", f"Control-plane bandwidth ({SIMTIME})",
             "overhead_bytes.png", scale=1000.0)
 
-    # Per-type message breakdown under churn (which PDUs dominate each protocol).
     all_types = sorted({t for p in protos for t in res[(p, True)][0]})
     fig, ax = plt.subplots()
     for i, p in enumerate(protos):
@@ -221,8 +187,8 @@ def main():
             ax.bar(i, v, 0.5, bottom=bottom, color=f"C{j}",
                    label=t if i == 0 else None)
             bottom += v
-    ax.set_xticks(list(x)); ax.set_xticklabels(labels)
-    ax.set(ylabel="sent messages (churn run)", title="Message mix under churn (Grid10)")
+    ax.set_xticks(list(x)); ax.set_xticklabels(labels_list)
+    ax.set(ylabel="sent messages (churn run)", title="Message mix under churn")
     ax.legend(fontsize=8, title="PDU type"); fig.tight_layout()
     fig.savefig(os.path.join(OUT, "overhead_bytype.png"), dpi=120)
 

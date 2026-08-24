@@ -18,6 +18,12 @@ simple myriadgp extends routingsim.foundation.Protocol
         double refreshInterval @unit(s) = default(30s);
         double refreshJitter @unit(s) = default(5s);
 
+        // Spread the initial UPDATE storm: all rings' COLLECTs settle at roughly
+        // the same time, so the very first origination per ring is delayed by
+        // uniform(0, updateJitter). Raise for large topologies (many rings
+        // originating at once); refreshes are already desynced by refreshJitter.
+        double updateJitter @unit(s) = default(1s);
+
         // Path-cost exponent for summing up member_count^a; see MyriadGp.h.
         // a>1 is convex (penalises one huge ring over several small ones), a=1
         // is a plain member sum.
@@ -69,8 +75,9 @@ simple myriadgp extends routingsim.foundation.Protocol
         // before originating any UPDATEs. Eliminates the first-round convergence
         // artifact caused by inter-ring UPDATEs arriving before the local COLLECT
         // has set memberCount. Convergence measurements subtract this offset.
-        // 0s = off (default; normal protocol behaviour).
-        double collectWarmupDuration @unit(s) = default(0s);
+        // On by default: without it, round-1 UPDATEs carry unsettled counts and
+        // corrections diffuse only ~1 ring-hop per refresh cycle. 0s = off.
+        double collectWarmupDuration @unit(s) = default(10s);
 
         // Interval at which COLLECTs are re-triggered during warmup. Should be
         // long enough for one COLLECT to complete (~ms in practice, 1s is safe).

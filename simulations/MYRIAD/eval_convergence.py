@@ -3,7 +3,7 @@
 
 The oracle test proves both protocols reach the same optimum. This measures how
 fast and how cheaply each gets there. GP is swept over the batching holdInterval
-{0s..2s}; LS has no such knob so it's a single reference run. Every run enables
+{0s..1s}; LS has no such knob so it's a single reference run. Every run enables
 observational RIB snapshots (snapshotInterval), which are provably non-intrusive
 (identical message counts / final RIB with snapshots off), so the measurement
 doesn't perturb convergence.
@@ -12,42 +12,41 @@ Per run we parse the timestamped snapshots into {t: {(node,origin): cost}} and
 derive: convergence time (last t at which the RIB changed), the %-optimal-vs-time
 curve (vs the LS final costs = the proven optimum), and total sent messages.
 
-    python3 simulations/MYRIAD/eval_convergence.py
+    python3 simulations/MYRIAD/eval_convergence.py [--topo PATH] [--basis {min,all}]
 
-Outputs three plots + a summary table under simulations/MYRIAD/eval/convergence/.
+Outputs two plots + a summary table under simulations/MYRIAD/eval/convergence/.
 Convergence is diffed on COST (refresh-invariant once ring sizes are known), so
 king re-origination bumps seq/chain without falsely resetting convergence.
 """
+import argparse
 import glob
 import os
 import re
-import subprocess
 import sys
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-SIM_ROOT = os.path.dirname(HERE)
-REPO = os.path.dirname(SIM_ROOT)
-BIN = os.path.join(REPO, "src", "RoutingSim")
-GP_INI = os.path.join(HERE, "myriadgp.ini")
-LS_INI = os.path.join(HERE, "myriadls.ini")
-COMMON_INI = os.path.join(HERE, "eval_common.ini")
+from eval_harness import (BIN, SIM_ROOT, MYRIAD_DIR,
+                          ensure_ring_labels, run_sim, write_proto_ini, add_topo_args)
+
+HERE = str(MYRIAD_DIR)
 OUT = os.path.join(HERE, "eval", "convergence")
 
-CONFIG = "Grid10"
-TOPO = "grid_10,10.txt"          # regenerated for a clean checkout (labels git-ignored)
 # GP batching sweep, strict geometric x4 from 1us to 1s; 0s = batching off
 # (baseline). Straddles the per-hop delay spread (eval_common: 0.01-0.25ms) and
 # runs up to the ~1s working ceiling (hold>=~1.5s livelocks on Grid10 as
 # overlapping refresh generations compound; 2s never converges).
 HOLDS = ["0s", "1us", "4us", "16us", "64us", "256us", "1024us", "4096us",
          "16384us", "65536us", "262144us", "1s"]
-SNAP = "2s"                       # snapshot period
-SIMTIME = "120s"                  # warmup=10s + convergence + one refresh cycle headroom
+SNAP = "2s"
+SIMTIME = "120s"     # warmup=10s + convergence + one refresh cycle headroom
 # Warmup: run COLLECTs without UPDATEs so memberCounts are pre-populated before
 # the measurement window starts. Eliminates the ~100s refresh-cycle artifact
 # (some inter-ring UPDATEs dropped on first round if local COLLECT hasn't set
 # memberCount yet). Convergence times are reported relative to warmup end.
 GP_WARMUP = "10s"
+
+# Fast refresh so several cycles complete within SIMTIME; eval_common defaults
+# to 100s which would leave only one cycle — not enough to heal transients.
+_REFRESH_LINES = ["**.refreshInterval = 15s", "**.refreshJitter = 0s"]
 
 
 def _to_seconds(s):
@@ -55,13 +54,6 @@ def _to_seconds(s):
         if s.endswith(suf):
             return float(s[:-2]) / div
     return float(s.rstrip("s"))
-
-
-def _run(cmd, what):
-    r = subprocess.run(cmd, cwd=SIM_ROOT, capture_output=True, text=True)
-    log = r.stdout + r.stderr
-    if r.returncode != 0 or "budget expired" in log or "ring broken" in log:
-        sys.exit(f"FAIL: {what} run errored\n{log[-1200:]}")
 
 
 def _sum_sent_total(resdir):
@@ -102,56 +94,70 @@ def frac_optimal(snap, truth):
     return sum(1 for k, v in truth.items() if snap.get(k) == v) / len(truth) if truth else 0.0
 
 
-def run_proto(ini, config, dumpfile, resdir, extra):
+def run_proto(ini, dump_param, dumpfile, resdir, extra):
     if os.path.exists(dumpfile):
         os.remove(dumpfile)
-    cmd = [BIN, "-u", "Cmdenv", ini, COMMON_INI, "-c", config,
+    cmd = [BIN, "-u", "Cmdenv", ini,
            f"--sim-time-limit={SIMTIME}", f"--**.snapshotInterval={SNAP}",
-           *extra, f'--**.{"ribDumpFile" if ini == GP_INI else "oracleDumpFile"}="{dumpfile}"',
-           "--result-dir", resdir]
-    _run(cmd, os.path.basename(ini))
+           *extra, f'--**.{dump_param}="{dumpfile}"', "--result-dir", resdir]
+    run_sim(cmd)
     if not os.path.exists(dumpfile):
-        sys.exit(f"FAIL: {config} produced no snapshot dump ({dumpfile})")
+        sys.exit(f"FAIL: produced no snapshot dump ({dumpfile})")
     return parse_snapshots(dumpfile), _sum_sent_total(resdir)
 
 
-def main():
+def main(args=None):
+    if args is None:
+        p = argparse.ArgumentParser()
+        add_topo_args(p)
+        args = p.parse_args()
+
     os.makedirs(OUT, exist_ok=True)
     if not os.path.exists(BIN):
         sys.exit(f"RoutingSim binary not found at {BIN} — build it first.")
 
-    # Regenerate ring labels (git-ignored) so a clean checkout works.
-    r = subprocess.run([sys.executable, os.path.join(HERE, "topo2rings.py"),
-                        os.path.join(SIM_ROOT, "topologies", TOPO),
-                        "--out-dir", HERE, "--no-png"], capture_output=True, text=True)
-    if r.returncode != 0:
-        sys.exit(f"topo2rings.py failed:\n{r.stdout}{r.stderr}")
+    labels = ensure_ring_labels(args.topo, args.basis)
+    gp_ini = write_proto_ini(os.path.join(OUT, "gp.ini"), "gp",
+                             args.topo, labels, extra_lines=_REFRESH_LINES,
+                             update_jitter=args.update_jitter)
+    ls_ini = write_proto_ini(os.path.join(OUT, "ls.ini"), "ls",
+                             args.topo, labels, extra_lines=_REFRESH_LINES)
 
     # LS reference; its final costs are the proven optimum (truth for the curves).
-    ls_snaps, ls_msgs = run_proto(LS_INI, CONFIG, os.path.join(OUT, "ls.txt"),
+    print("  → LS reference …", flush=True)
+    ls_snaps, ls_msgs = run_proto(ls_ini, "oracleDumpFile",
+                                  os.path.join(OUT, "ls.txt"),
                                   os.path.join(OUT, "res_ls"), [])
     truth = ls_snaps[max(ls_snaps)]
     ls_ct = convergence_time(ls_snaps)
+    print(f"  ✓ LS done: conv={ls_ct}s, msgs={ls_msgs}")
 
     # GP over the holdInterval sweep. rankUseSpof=false ranks purely by cost, so
     # GP's converged RIB targets the same optimum LS computes (see the oracle test)
     # — required for the %-optimal curve to be meaningful (else spof-first ranking
     # picks costlier redundant paths and never matches the pure-cost truth).
     gp = {}  # hold -> (snaps, msgs, conv_time)
-    warmup_s = _to_seconds(GP_WARMUP)
+    warmup = args.warmup or GP_WARMUP        # harness override; NED default is 10s
+    if warmup[-1].isdigit():
+        warmup += "s"
+    warmup_s = _to_seconds(warmup)
     for h in HOLDS:
+        print(f"  → GP hold={h} …", flush=True)
         dump = os.path.join(OUT, f"gp_{h}.txt")
-        snaps, msgs = run_proto(GP_INI, CONFIG, dump, os.path.join(OUT, f"res_gp_{h}"),
+        snaps, msgs = run_proto(gp_ini, "ribDumpFile", dump,
+                                os.path.join(OUT, f"res_gp_{h}"),
                                 [f"--**.holdInterval={h}", "--**.rankUseSpof=false",
-                                 f"--**.collectWarmupDuration={GP_WARMUP}"])
+                                 f"--**.collectWarmupDuration={warmup}"])
         raw_ct = convergence_time(snaps)
         ct = (raw_ct - warmup_s) if raw_ct is not None else None
+        fo = frac_optimal(snaps[max(snaps)], truth) * 100
         gp[h] = (snaps, msgs, ct)
+        print(f"  ✓ hold={h}: conv={ct}s, msgs={msgs}, {fo:.1f}% optimal")
 
     # Summary table.
-    print(f"\n=== {CONFIG}: convergence vs holdInterval "
+    print(f"\n=== convergence vs holdInterval "
           f"(LS ref: conv={ls_ct}s, msgs={ls_msgs}, {len(truth)} pairs) ===")
-    print(f"  GP warmup={GP_WARMUP} (subtracted from GP conv times)")
+    print(f"  GP warmup={warmup} (subtracted from GP conv times)")
     print(f"{'hold':>8}{'conv_time':>12}{'sent_total':>14}{'final %opt':>12}")
     for h in HOLDS:
         snaps, msgs, ct = gp[h]
@@ -168,9 +174,6 @@ def main():
         print("\n(matplotlib not available — skipping plots)")
         return
 
-    # Holds are geometric -> log x-axis. Dual y: convergence time on the LEFT
-    # (the "batching is ~free" story), message count on the RIGHT. 0s (batching
-    # off) can't sit on a log x, so it and the LS values are horizontal refs.
     geo = [h for h in HOLDS if _to_seconds(h) > 0]
     gx = [_to_seconds(h) for h in geo]
     has_off = "0s" in HOLDS
@@ -193,12 +196,11 @@ def main():
                              label=f"LS messages ({ls_msgs})"))
     axL.set(xlabel="holdInterval (s, log scale)", ylabel="convergence time (s)")
     axR.set_ylabel("total sent messages")
-    axL.set_title(f"Batching tradeoff: convergence time vs messages ({CONFIG})")
+    axL.set_title("Batching tradeoff: convergence time vs messages")
     axL.legend(handles=lines, fontsize=7, loc="center left")
     fig.tight_layout()
     fig.savefig(os.path.join(OUT, "tradeoff.png"), dpi=120)
 
-    # (c) %-optimal vs time (GP times shifted by warmup so t=0 = UPDATEs start)
     fig, ax = plt.subplots()
     for h in HOLDS:
         snaps = gp[h][0]
@@ -206,11 +208,11 @@ def main():
         ax.plot([t - warmup_s for t in ts], [frac_optimal(snaps[t], truth) * 100 for t in ts],
                 "-", label=f"GP hold={h}")
     ts = sorted(ls_snaps)
-    ax.plot(ts, [frac_optimal(ls_snaps[t], truth) * 100 for t in ts],
-            "k--", label="LS")
+    ax.plot(ts, [frac_optimal(ls_snaps[t], truth) * 100 for t in ts], "k--", label="LS")
     ax.set(xlabel="sim time (s)", ylabel="% of optimal RIB reached",
-           title=f"Convergence curve ({CONFIG})")
-    ax.legend(fontsize=8); fig.savefig(os.path.join(OUT, "optimal_vs_time.png"), dpi=120)
+           title="Convergence curve")
+    ax.legend(fontsize=8)
+    fig.savefig(os.path.join(OUT, "optimal_vs_time.png"), dpi=120)
 
     print(f"\nplots -> {OUT}/{{tradeoff,optimal_vs_time}}.png")
 

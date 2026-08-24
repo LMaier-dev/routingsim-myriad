@@ -65,6 +65,7 @@ void MyriadGP::onInitialize() {
 
     refreshInterval = par("refreshInterval");
     refreshJitter = par("refreshJitter");
+    updateJitter = par("updateJitter");
     ringCostExponent = par("ringCostExponent");
     rankUseSpof = par("rankUseSpof");
     degradeEnabled = par("degradeEnabled");
@@ -427,14 +428,23 @@ void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t sender) {
             }
             EV << "]\n";
 
-            originateUpdate(R);
-
-            // Winning the lap makes me (or keeps me) king: run the refresh
-            // timer, stop watching for someone else.
+            // Winning the lap makes me (or keeps me) king. The very first
+            // origination per ring is jittered: all rings' COLLECTs settle at
+            // roughly the same time, so firing UPDATEs immediately storms the
+            // network. Refresh re-originations are already desynced by
+            // refreshJitter, so only the first (isKing still false) is delayed.
             if (!m.isKing) {
                 m.isKing = true;
                 MLOG_INFO() << "became king of ring='" << R << "'\n";
+                if (updateJitter > 0)
+                    addOneShotTimer(uniform(0, updateJitter),
+                                    [this, R](short) { originateUpdate(R); return false; });
+                else
+                    originateUpdate(R);
+            } else {
+                originateUpdate(R);
             }
+
             startRefresh(R);
 
             // A recovered member lapped this COLLECT: hand back its RIB.

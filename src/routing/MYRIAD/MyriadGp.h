@@ -209,6 +209,7 @@ namespace routingsim {
             std::vector<uint32_t> mySubnets;    // (subnet, myId) pairs, set at init
             simtime_t refreshInterval;
             simtime_t refreshJitter;
+            simtime_t updateJitter;   // spread the initial per-ring UPDATE storm
             // Path cost = sum of member_count^ringCostExponent over the chain.
             // Integer exponent (a>=1) keeps costs in uint64 so co-best ties are
             // exact (no float ULP mismatch), which ECMP needs.
