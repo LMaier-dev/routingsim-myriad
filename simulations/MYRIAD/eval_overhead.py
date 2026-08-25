@@ -31,8 +31,9 @@ import os
 import re
 import sys
 
-from eval_harness import (BIN, SIM_ROOT, MYRIAD_DIR,
-                          ensure_ring_labels, run_sim, write_proto_ini, add_topo_args)
+from eval_harness import (BIN, SIM_ROOT, MYRIAD_DIR, apply_repeat_args,
+                          ensure_ring_labels, pm, rep_path, repeat_mean,
+                          repeats_note, run_sim, write_proto_ini, add_topo_args)
 
 HERE = str(MYRIAD_DIR)
 OUT = os.path.join(HERE, "eval", "overhead")
@@ -51,9 +52,10 @@ BYTES_MAX_RE = re.compile(r"^scalar\s+\S+\s+bytes_max\s+([0-9.]+)", re.M)
 BYTES_MAX_TYPE_RE = re.compile(r"^scalar\s+\S+\s+bytes_max_(\S+)\s+([0-9.]+)", re.M)
 
 
-def measure(ini, resdir, churn):
+def measure(ini, resdir, churn, rep=0):
     """Run one scenario; return (per_type_counts, total_msgs, total_bytes,
     per_type_bytes, max_bytes, per_type_max_bytes)."""
+    resdir = rep_path(resdir, rep)
     for sca in glob.glob(resdir + "/*.sca"):
         os.remove(sca)
     dyn = [f'--**.dynamics.linkSelection="{"random" if churn else "none"}"']
@@ -65,11 +67,12 @@ def measure(ini, resdir, churn):
                 f"--**.dynamics.period={PERIOD}",
                 f"--**.dynamics.duration={DURATION}",
                 "--**.dynamics.oneFailure=false",
-                # Isolate the dynamics RNG so both protocols see the same failures.
-                "--num-rngs=2", "--**.dynamics.rng-0=1", "--seed-set=1"]
+                # Isolate the dynamics RNG so both protocols see the same
+                # failures (run_sim pins the seed-set per repeat).
+                "--num-rngs=2", "--**.dynamics.rng-0=1"]
     cmd = [BIN, "-u", "Cmdenv", ini, f"--sim-time-limit={SIMTIME}", *dyn,
            "--result-dir", resdir]
-    run_sim(cmd, allow_budget_expired=True)
+    run_sim(cmd, allow_budget_expired=True, rep=rep)
 
     scas = glob.glob(resdir + "/*.sca")
     if not scas:
@@ -101,6 +104,7 @@ def main(args=None):
         p = argparse.ArgumentParser()
         add_topo_args(p)
         args = p.parse_args()
+        apply_repeat_args(args)
 
     os.makedirs(OUT, exist_ok=True)
     if not os.path.exists(BIN):
@@ -116,34 +120,41 @@ def main(args=None):
         for churn in (False, True):
             tag = f"{proto}_{'churn' if churn else 'base'}"
             print(f"  → {proto.upper()} {'churn' if churn else 'baseline'} …", flush=True)
-            res[(proto, churn)] = measure(ini, os.path.join(OUT, f"res_{tag}"), churn)
-            print(f"  ✓ done ({res[(proto, churn)][1]} msgs, "
-                  f"{res[(proto, churn)][2]//1000} KB)")
+            resdir = os.path.join(OUT, f"res_{tag}")
+            res[(proto, churn)] = repeat_mean(
+                lambda rep, i=ini, d=resdir, c=churn: measure(i, d, c, rep))
+            print(f"  ✓ done ({res[(proto, churn)][1]:.0f} msgs, "
+                  f"{res[(proto, churn)][2]/1000:.0f} KB)")
 
     # Summary table.
     print(f"\n=== steady-state overhead over {SIMTIME} "
-          f"(churn: {NUM_LINKS} links, period {PERIOD}, dur {DURATION}) ===")
-    print(f"{'scenario':>12}{'messages':>12}{'bytes':>14}{'B/msg':>9}{'max B':>9}")
+          f"(churn: {NUM_LINKS} links, period {PERIOD}, dur {DURATION})"
+          f"{repeats_note()} ===")
+    print(f"{'scenario':>12}{'messages':>20}{'bytes':>24}{'B/msg':>9}{'max B':>9}")
     protos = ["gp", "ls"]
     for proto in protos:
         for churn in (False, True):
             pt, m, b, _, mx, _ = res[(proto, churn)]
             lbl = f"{proto.upper()} {'churn' if churn else 'base'}"
-            print(f"{lbl:>12}{m:>12}{b:>14}{(b/m if m else 0):>9.1f}{mx:>9}")
+            ms, bs = f"{m:.0f}" + pm(m, ".0f"), f"{b:.0f}" + pm(b, ".0f")
+            print(f"{lbl:>12}{ms:>20}{bs:>24}"
+                  f"{(b/m if m else 0):>9.1f}{mx:>9.0f}")
     for proto in protos:
         base_m, base_b = res[(proto, False)][1], res[(proto, False)][2]
         ch_m, ch_b = res[(proto, True)][1], res[(proto, True)][2]
         print(f"  {proto.upper()} churn overhead (churn-base): "
-              f"+{ch_m-base_m} msgs, +{ch_b-base_b} bytes")
+              f"+{ch_m-base_m:.0f} msgs, +{ch_b-base_b:.0f} bytes")
 
     for proto in protos:
         counts, _, _, tbytes, _, tmax = res[(proto, False)]
         print(f"\n--- {proto.upper()} baseline per-type ---")
-        print(f"{'type':>14}{'messages':>11}{'bytes':>14}{'B/msg':>9}{'max B':>8}{'%bytes':>8}")
+        print(f"{'type':>14}{'messages':>20}{'bytes':>24}{'B/msg':>9}{'max B':>8}{'%bytes':>8}")
         tot_b = sum(tbytes.values()) or 1
         for t in sorted(counts, key=lambda k: -tbytes.get(k, 0)):
             c, b, mx = counts[t], tbytes.get(t, 0), tmax.get(t, 0)
-            print(f"{t:>14}{c:>11}{b:>14}{(b/c if c else 0):>9.0f}{mx:>8}{100*b/tot_b:>7.1f}%")
+            cs, bs = f"{c:.0f}" + pm(c, ".0f"), f"{b:.0f}" + pm(b, ".0f")
+            print(f"{t:>14}{cs:>20}{bs:>24}{(b/c if c else 0):>9.0f}"
+                  f"{mx:>8.0f}{100*b/tot_b:>7.1f}%")
 
     try:
         import matplotlib

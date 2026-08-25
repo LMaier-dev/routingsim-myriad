@@ -25,17 +25,18 @@ import glob
 import os
 import sys
 
-from eval_harness import (BIN, ensure_ring_labels, run_sim, write_proto_ini,
-                          add_topo_args)
+from eval_harness import (BIN, apply_repeat_args, ensure_ring_labels, pm,
+                          rep_path, repeat_mean, repeats_note, run_sim,
+                          write_proto_ini, add_topo_args)
 from eval_recovery import load, RECOVERY_NETWORK
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "eval", "reconverge")
 
-WARMUP = "30s"       # let initial convergence settle (GP warmup 10s default) first
+WARMUP = "20s"       # let initial convergence settle (GP warmup 10s default) first
 DURATION = "10s"     # downtime before reboot
 PERIOD = "9999s"     # > SIMTIME ⇒ exactly one failure wave
-SIMTIME = "300s"     # GP heals ~1 ring-hop/refresh: ~150s+ at low fractions, more higher
+SIMTIME = "100s"     # GP heals ~1 ring-hop/refresh: ~150s+ at low fractions, more higher
 SNAP = "2s"
 DEFAULT_FRACTIONS = [0.05, 0.1, 0.2, 0.3, 0.4]
 
@@ -86,9 +87,9 @@ def reconverge_latencies(series, target, wave_t, reboot_t):
     return out, converged
 
 
-def run(name, ini, dumppar, replay, fraction):
-    resdir = os.path.join(OUT, f"res_{name}_{fraction}")
-    dump = os.path.join(OUT, f"{name}_{fraction}.rib")
+def run(name, ini, dumppar, replay, fraction, rep=0):
+    resdir = rep_path(os.path.join(OUT, f"res_{name}_{fraction}"), rep)
+    dump = rep_path(os.path.join(OUT, f"{name}_{fraction}.rib"), rep)
     for stale in (dump, *glob.glob(resdir + "/*.sca")):
         if os.path.exists(stale):
             os.remove(stale)
@@ -98,14 +99,15 @@ def run(name, ini, dumppar, replay, fraction):
             # CLI overrides eval_common's 100s (ini include wins over in-ini lines,
             # but --opts beat both): fast refresh so the refresh-bound recovery tail
             # (chains whose ring king also failed) heals within the window.
-            "--**.refreshInterval=15s", "--**.refreshJitter=0s",
+            "--**.refreshInterval=101s", "--**.refreshJitter=0s",
             # isolate the dynamics RNG so GP and LS see the SAME failed set
-            "--num-rngs=2", "--**.dynamics.rng-0=1", "--seed-set=1",
+            # (run_sim pins the seed-set per repeat)
+            "--num-rngs=2", "--**.dynamics.rng-0=1",
             "--result-dir", resdir]
     if replay is not None:
         args.append(f"--**.recoveryReplayEnabled={replay}")
     # a big wave can transiently break rings; tolerate it and skip empty points
-    run_sim(args, allow_budget_expired=True)
+    run_sim(args, allow_budget_expired=True, rep=rep)
     return dump if os.path.exists(dump) else None
 
 
@@ -116,6 +118,7 @@ def main(args=None):
         p.add_argument("--fractions", default=None,
                        help="comma-separated failure fractions, e.g. 0.1,0.3")
         args = p.parse_args()
+        apply_repeat_args(args)
 
     fractions = ([float(x) for x in args.fractions.split(",")]
                  if getattr(args, "fractions", None) else DEFAULT_FRACTIONS)
@@ -148,22 +151,26 @@ def main(args=None):
     reboot_t = wave_t + dur_s
     # results[name] = {fraction: (n_affected, mean, median, net_max)}
     results = {name: {} for name, *_ in CONFIGS}
-    for frac in fractions:
+    # One repeat = one fraction's LS+GP pair on the same seed: LS's converged
+    # counts are the truth target for GP, so both must see the SAME failed set.
+    def one(frac, rep):
         # LS first: it reconverges fast and correctly, so its converged per-node
         # counts are the truth target both configs must reach again (same failed
         # set ⇒ same restored reachability). See reconverge_latencies.
         series = {}
         for name, proto, dumppar, replay in CONFIGS:
-            print(f"  → {name} fraction={frac:.0%} …", flush=True)
-            dump = run(name, inis[proto], dumppar, replay, frac)
+            if rep == 0:
+                print(f"  → {name} fraction={frac:.0%} …", flush=True)
+            dump = run(name, inis[proto], dumppar, replay, frac, rep)
             if dump is None:
-                print(f"  (skipped {name} @ {frac:.0%}: no dump)")
+                print(f"  (skipped {name} @ {frac:.0%} rep {rep}: no dump)")
                 continue
             series[name] = load(dump)
         if "ls" not in series:
-            print(f"  (skipped @ {frac:.0%}: no LS target)")
-            continue
+            print(f"  (skipped @ {frac:.0%} rep {rep}: no LS target)")
+            return {}
         target = {nid: ser[max(ser)] for nid, ser in series["ls"].items()}
+        out = {}
         for name, *_ in CONFIGS:
             if name not in series:
                 continue
@@ -171,30 +178,37 @@ def main(args=None):
                                                    wave_t, reboot_t)
             vals = sorted(lat.values())
             if not vals:
-                print(f"  (skipped {name} @ {frac:.0%}: no affected routers)")
+                print(f"  (skipped {name} @ {frac:.0%} rep {rep}: no affected routers)")
                 continue
             if not converged:
-                print(f"  ⚠ {name} @ {frac:.0%}: some routers still below full "
-                      f"reachability at {SIMTIME} — raise SIMTIME; numbers undercount")
+                print(f"  ⚠ {name} @ {frac:.0%} rep {rep}: some routers still below "
+                      f"full reachability at {SIMTIME} — raise SIMTIME; numbers undercount")
             med = vals[len(vals) // 2]
-            results[name][frac] = (len(vals), sum(vals) / len(vals), med, max(vals))
-            print(f"  ✓ {name} @ {frac:.0%}: {len(vals)} routers, "
-                  f"mean={sum(vals)/len(vals):.1f}s, net(max)={max(vals):.0f}s")
+            out[name] = (len(vals), sum(vals) / len(vals), med, max(vals))
+        return out
+
+    for frac in fractions:
+        agg = repeat_mean(lambda rep, frac=frac: one(frac, rep))
+        for name, r in agg.items():
+            results[name][frac] = r
+            print(f"  ✓ {name} @ {frac:.0%}: {r[0]:.0f} routers, "
+                  f"mean={r[1]:.1f}{pm(r[1])}s, net(max)={r[3]:.0f}s")
 
     # --- table ---
     print(f"\n=== reconvergence vs failure fraction "
-          f"(single wave, dur {DURATION}, {SIMTIME} sims) ===")
-    print(f"{'fraction':>9}{'config':>8}{'routers':>9}{'mean':>9}"
-          f"{'median':>9}{'net(max)':>10}")
+          f"(single wave, dur {DURATION}, {SIMTIME} sims){repeats_note()} ===")
+    print(f"{'fraction':>9}{'config':>8}{'routers':>9}{'mean':>14}"
+          f"{'median':>9}{'net(max)':>13}")
     for frac in fractions:
         for name, *_ in CONFIGS:
             r = results[name].get(frac)
             if r is None:
-                print(f"{frac:>8.0%}{name:>8}{'-':>9}{'-':>9}{'-':>9}{'-':>10}")
+                print(f"{frac:>8.0%}{name:>8}{'-':>9}{'-':>14}{'-':>9}{'-':>13}")
             else:
                 n, mean, med, net = r
-                print(f"{frac:>8.0%}{name:>8}{n:>9}{mean:>8.1f}s"
-                      f"{med:>8.0f}s{net:>9.0f}s")
+                print(f"{frac:>8.0%}{name:>8}{n:>9.0f}"
+                      f"{f'{mean:.1f}' + pm(mean) + 's':>14}"
+                      f"{med:>8.0f}s{f'{net:.0f}' + pm(net, '.0f') + 's':>13}")
     print("\nnet(max) = time until the LAST affected router is full again "
           "(= whole-network reconvergence); mean = average across routers.")
 

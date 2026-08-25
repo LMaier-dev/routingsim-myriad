@@ -28,8 +28,9 @@ import re
 import sys
 from collections import defaultdict
 
-from eval_harness import (BIN, SIM_ROOT, MYRIAD_DIR,
-                          ensure_ring_labels, run_sim, write_proto_ini, add_topo_args)
+from eval_harness import (BIN, SIM_ROOT, MYRIAD_DIR, apply_repeat_args,
+                          ensure_ring_labels, pm, rep_path, repeat_mean,
+                          repeats_note, run_sim, write_proto_ini, add_topo_args)
 
 HERE = str(MYRIAD_DIR)
 OUT = os.path.join(HERE, "eval", "recovery")
@@ -55,20 +56,21 @@ CONFIGS = [
 ]
 
 
-def run(name, ini, dumppar, replay):
-    resdir = os.path.join(OUT, f"res_{name}")
-    dump = os.path.join(OUT, f"{name}.rib")
+def run(name, ini, dumppar, replay, rep=0):
+    resdir = rep_path(os.path.join(OUT, f"res_{name}"), rep)
+    dump = rep_path(os.path.join(OUT, f"{name}.rib"), rep)
     for stale in (dump, *glob.glob(resdir + "/*.sca")):
         if os.path.exists(stale):
             os.remove(stale)
     args = [BIN, "-u", "Cmdenv", ini, f"--sim-time-limit={SIMTIME}",
             f'--**.{dumppar}="{dump}"',
-            # isolate the dynamics RNG so every config sees the SAME failures
-            "--num-rngs=2", "--**.dynamics.rng-0=1", "--seed-set=1",
+            # isolate the dynamics RNG so every config in a repeat sees the SAME
+            # failures (run_sim pins the seed-set per repeat)
+            "--num-rngs=2", "--**.dynamics.rng-0=1",
             "--result-dir", resdir]
     if replay is not None:
         args.append(f"--**.recoveryReplayEnabled={replay}")
-    run_sim(args)
+    run_sim(args, rep=rep)
     return dump
 
 
@@ -108,6 +110,7 @@ def main(args=None):
         p = argparse.ArgumentParser()
         add_topo_args(p)
         args = p.parse_args()
+        apply_repeat_args(args)
 
     os.makedirs(OUT, exist_ok=True)
     if not os.path.exists(BIN):
@@ -134,29 +137,46 @@ def main(args=None):
         for proto in ("gp", "ls")
     }
 
-    series = {}
-    for name, proto, dumppar, replay in CONFIGS:
-        print(f"  → {name} …", flush=True)
-        dump = run(name, inis[proto], dumppar, replay)
-        series[name] = load(dump)
-        print(f"  ✓ {name} done ({len(series[name])} nodes tracked)")
+    dur_s = float(DURATION.rstrip("s"))
+    # One repeat = all three configs on the same seed (they must share a failure
+    # schedule to be comparable). Rep 0's raw series feeds the plot: which node
+    # fails differs per seed, so per-node traces can't be averaged.
+    series0 = {}
+
+    def one(rep):
+        stats = {}
+        for name, proto, dumppar, replay in CONFIGS:
+            if rep == 0:
+                print(f"  → {name} …", flush=True)
+            series = load(run(name, inis[proto], dumppar, replay, rep))
+            if rep == 0:
+                series0[name] = series
+                print(f"  ✓ {name} done ({len(series)} nodes tracked)")
+            vals = sorted(recovery_latencies(series, dur_s).values())
+            # keep every key even when nothing recovered — the repeat aggregation
+            # keeps only keys present in ALL repeats
+            stats[name] = {"n": len(vals),
+                           "mean": sum(vals) / len(vals) if vals else 0.0,
+                           "median": vals[len(vals) // 2] if vals else 0.0,
+                           "max": max(vals) if vals else 0.0}
+        return stats
+
+    lat = repeat_mean(one)
 
     print(f"\n=== node-failure recovery ({SIMTIME}, {FRACTION:.0%}/wave, "
-          f"dur {DURATION}, refresh 100s) ===")
-    print(f"{'config':>8}{'nodes recovered':>17}{'mean latency':>14}"
+          f"dur {DURATION}, refresh 100s){repeats_note()} ===")
+    print(f"{'config':>8}{'nodes recovered':>17}{'mean latency':>17}"
           f"{'median':>9}{'max':>8}")
-    lat = {}
-    dur_s = float(DURATION.rstrip("s"))
     for name, *_ in CONFIGS:
-        L = recovery_latencies(series[name], dur_s)
-        lat[name] = L
-        vals = sorted(L.values())
-        if vals:
-            med = vals[len(vals) // 2]
-            print(f"{name:>8}{len(vals):>17}{sum(vals)/len(vals):>13.1f}s"
-                  f"{med:>8.0f}s{max(vals):>7.0f}s")
+        s = lat[name]
+        if s["n"]:
+            mean = f"{s['mean']:.1f}{pm(s['mean'])}s"
+            n = f"{s['n']:.0f}{pm(s['n'])}"
+            print(f"{name:>8}{n:>17}{mean:>17}"
+                  f"{s['median']:>8.0f}s{s['max']:>7.0f}s")
         else:
-            print(f"{name:>8}{0:>17}{'-':>14}{'-':>9}{'-':>8}")
+            print(f"{name:>8}{0:>17}{'-':>17}{'-':>9}{'-':>8}")
+    series = series0
     print("\nlatency = seconds from reboot until RIB is full again "
           "(GP-off waits for refresh; GP-on/LS repopulate at once).")
 

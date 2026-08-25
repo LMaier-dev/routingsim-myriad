@@ -13,8 +13,9 @@ import argparse
 import os
 import sys
 
-from eval_harness import (BIN, SIM_ROOT, MYRIAD_DIR,
-                          ensure_ring_labels, run_sim, write_proto_ini, add_topo_args)
+from eval_harness import (BIN, SIM_ROOT, MYRIAD_DIR, apply_repeat_args,
+                          ensure_ring_labels, pm, rep_path, repeat_mean,
+                          repeats_note, run_sim, write_proto_ini, add_topo_args)
 
 HERE = str(MYRIAD_DIR)
 OUT = os.path.join(HERE, "eval", "costdrift")
@@ -46,13 +47,14 @@ def parse_snapshots(path):
     return snaps
 
 
-def _run(ini, dump_param, dumpfile, resdir):
+def _run(ini, dump_param, dumpfile, resdir, rep=0):
+    dumpfile, resdir = rep_path(dumpfile, rep), rep_path(resdir, rep)
     if os.path.exists(dumpfile):
         os.remove(dumpfile)
     cmd = [BIN, "-u", "Cmdenv", ini,
            f"--sim-time-limit={SIMTIME}", f"--**.snapshotInterval={SNAP}",
            f'--**.{dump_param}="{dumpfile}"', "--result-dir", resdir]
-    run_sim(cmd)
+    run_sim(cmd, rep=rep)
     if not os.path.exists(dumpfile):
         sys.exit(f"FAIL: no dump produced ({dumpfile})")
     snaps = parse_snapshots(dumpfile)
@@ -66,6 +68,7 @@ def main(args=None):
         p = argparse.ArgumentParser()
         add_topo_args(p)
         args = p.parse_args()
+        apply_repeat_args(args)
 
     os.makedirs(OUT, exist_ok=True)
     if not os.path.exists(BIN):
@@ -78,39 +81,60 @@ def main(args=None):
     ls_ini = write_proto_ini(os.path.join(OUT, "ls.ini"), "ls",
                              args.topo, labels, extra_lines=_REFRESH_LINES)
 
-    print("  → LS oracle …", flush=True)
-    oracle = _run(ls_ini, "oracleDumpFile",
-                  os.path.join(OUT, "drift_ls.txt"),
-                  os.path.join(OUT, "res_ls"))
-    print(f"  ✓ LS done ({len(oracle)} entries)")
+    # One repeat = the LS+GP pair on the same seed (the drift is a per-run
+    # comparison, so both sides must come from the same repeat). Rep 0's raw
+    # drift is kept for the plots — the per-route dicts aren't averagable.
+    raw = {}
 
-    print("  → GP production (rankUseSpof=true) …", flush=True)
-    gp = _run(gp_ini, "ribDumpFile",
-              os.path.join(OUT, "drift_gp.txt"),
-              os.path.join(OUT, "res_gp"))
-    print(f"  ✓ GP done ({len(gp)} entries)")
+    def one(rep):
+        if rep == 0:
+            print("  → LS oracle …", flush=True)
+        oracle = _run(ls_ini, "oracleDumpFile",
+                      os.path.join(OUT, "drift_ls.txt"),
+                      os.path.join(OUT, "res_ls"), rep)
+        if rep == 0:
+            print(f"  ✓ LS done ({len(oracle)} entries)")
+            print("  → GP production (rankUseSpof=true) …", flush=True)
+        gp = _run(gp_ini, "ribDumpFile",
+                  os.path.join(OUT, "drift_gp.txt"),
+                  os.path.join(OUT, "res_gp"), rep)
+        if rep == 0:
+            print(f"  ✓ GP done ({len(gp)} entries)")
 
-    # --- compute drift (cost and chain length, both GP − oracle) ---
-    common = [k for k in oracle if k in gp]
-    cost_drift = {k: gp[k][0] - oracle[k][0] for k in common}
-    len_drift = {k: gp[k][1] - oracle[k][1] for k in common}
-    missing = [k for k in oracle if k not in gp]
-    negative = {k: v for k, v in cost_drift.items() if v < 0}
-    cvals = list(cost_drift.values())
-    lvals = list(len_drift.values())
+        # --- compute drift (cost and chain length, both GP − oracle) ---
+        common = [k for k in oracle if k in gp]
+        cost_drift = {k: gp[k][0] - oracle[k][0] for k in common}
+        len_drift = {k: gp[k][1] - oracle[k][1] for k in common}
+        missing = [k for k in oracle if k not in gp]
+        negative = {k: v for k, v in cost_drift.items() if v < 0}
+        cvals, lvals = list(cost_drift.values()), list(len_drift.values())
+        if rep == 0:
+            raw.update(oracle=oracle, gp=gp, common=common, cost=cost_drift,
+                       length=len_drift, negative=negative)
+        return {
+            "n_oracle": len(oracle), "n_gp": len(gp),
+            "missing": len(missing), "negative": len(negative),
+            "cost": (min(cvals), sum(cvals) / len(cvals), max(cvals)) if cvals else None,
+            "length": (min(lvals), sum(lvals) / len(lvals), max(lvals)) if lvals else None,
+            "zero_frac": (sum(1 for v in cvals if v == 0) / len(cvals) * 100) if cvals else 0.0,
+        }
 
-    print(f"\n=== Cost-drift: GP(production) − oracle ===")
-    print(f"  routes in oracle : {len(oracle)}")
-    print(f"  routes in GP     : {len(gp)}")
-    print(f"  missing in GP    : {len(missing)}" + (" (BUG)" if missing else ""))
-    print(f"  negative drift   : {len(negative)}" + (" (BUG)" if negative else ""))
-    if cvals:
-        print(f"  cost   min/mean/max: "
-              f"{min(cvals)} / {sum(cvals)/len(cvals):.1f} / {max(cvals)}")
-        print(f"  length min/mean/max: "
-              f"{min(lvals)} / {sum(lvals)/len(lvals):.1f} / {max(lvals)}")
-        zero_frac = sum(1 for v in cvals if v == 0) / len(cvals) * 100
-        print(f"  routes at exact optimum: {zero_frac:.1f}%")
+    r = repeat_mean(one)
+    oracle, gp, common = raw["oracle"], raw["gp"], raw["common"]
+    cost_drift, len_drift, negative = raw["cost"], raw["length"], raw["negative"]
+
+    print(f"\n=== Cost-drift: GP(production) − oracle{repeats_note()} ===")
+    print(f"  routes in oracle : {r['n_oracle']:.0f}{pm(r['n_oracle'], '.1f')}")
+    print(f"  routes in GP     : {r['n_gp']:.0f}{pm(r['n_gp'], '.1f')}")
+    print(f"  missing in GP    : {r['missing']:.1f}" + (" (BUG)" if r["missing"] else ""))
+    print(f"  negative drift   : {r['negative']:.1f}" + (" (BUG)" if r["negative"] else ""))
+    if r["cost"]:
+        lo, mean, hi = r["cost"]
+        print(f"  cost   min/mean/max: {lo:.1f} / {mean:.1f}{pm(mean)} / {hi:.1f}")
+        lo, mean, hi = r["length"]
+        print(f"  length min/mean/max: {lo:.1f} / {mean:.1f}{pm(mean)} / {hi:.1f}")
+        print(f"  routes at exact optimum: {r['zero_frac']:.1f}"
+              f"{pm(r['zero_frac'])}%")
 
     try:
         import matplotlib

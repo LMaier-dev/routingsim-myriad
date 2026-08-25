@@ -24,8 +24,9 @@ import os
 import re
 import sys
 
-from eval_harness import (BIN, SIM_ROOT, MYRIAD_DIR,
-                          ensure_ring_labels, run_sim, write_proto_ini, add_topo_args)
+from eval_harness import (BIN, SIM_ROOT, MYRIAD_DIR, apply_repeat_args,
+                          ensure_ring_labels, pm, rep_path, repeat_mean,
+                          repeats_note, run_sim, write_proto_ini, add_topo_args)
 
 HERE = str(MYRIAD_DIR)
 OUT = os.path.join(HERE, "eval", "convergence")
@@ -94,16 +95,30 @@ def frac_optimal(snap, truth):
     return sum(1 for k, v in truth.items() if snap.get(k) == v) / len(truth) if truth else 0.0
 
 
-def run_proto(ini, dump_param, dumpfile, resdir, extra):
+def run_proto(ini, dump_param, dumpfile, resdir, extra, rep=0):
+    dumpfile, resdir = rep_path(dumpfile, rep), rep_path(resdir, rep)
     if os.path.exists(dumpfile):
         os.remove(dumpfile)
     cmd = [BIN, "-u", "Cmdenv", ini,
            f"--sim-time-limit={SIMTIME}", f"--**.snapshotInterval={SNAP}",
            *extra, f'--**.{dump_param}="{dumpfile}"', "--result-dir", resdir]
-    run_sim(cmd)
+    run_sim(cmd, rep=rep)
     if not os.path.exists(dumpfile):
         sys.exit(f"FAIL: produced no snapshot dump ({dumpfile})")
     return parse_snapshots(dumpfile), _sum_sent_total(resdir)
+
+
+def derive(snaps, msgs, truth, shift=0.0):
+    """Per-run numbers that are safe to average across repeats: convergence time,
+    messages, final %optimal, and the %optimal-vs-time curve on the (fixed)
+    snapshot grid. Raw snapshots are NOT averaged — mean costs would be
+    fractional and break the equality diffing in convergence_time()."""
+    ct = convergence_time(snaps)
+    return {"ct": (ct - shift) if ct is not None else None,
+            "msgs": msgs,
+            "fo": frac_optimal(snaps[max(snaps)], truth) * 100,
+            "curve": {t - shift: frac_optimal(s, truth) * 100
+                      for t, s in snaps.items()}}
 
 
 def main(args=None):
@@ -111,6 +126,7 @@ def main(args=None):
         p = argparse.ArgumentParser()
         add_topo_args(p)
         args = p.parse_args()
+        apply_repeat_args(args)
 
     os.makedirs(OUT, exist_ok=True)
     if not os.path.exists(BIN):
@@ -124,19 +140,23 @@ def main(args=None):
                              args.topo, labels, extra_lines=_REFRESH_LINES)
 
     # LS reference; its final costs are the proven optimum (truth for the curves).
+    # The optimum is seed-independent, so rep 0 alone defines truth; the other
+    # repeats only contribute LS's own conv time / messages / curve.
     print("  → LS reference …", flush=True)
-    ls_snaps, ls_msgs = run_proto(ls_ini, "oracleDumpFile",
-                                  os.path.join(OUT, "ls.txt"),
-                                  os.path.join(OUT, "res_ls"), [])
-    truth = ls_snaps[max(ls_snaps)]
-    ls_ct = convergence_time(ls_snaps)
-    print(f"  ✓ LS done: conv={ls_ct}s, msgs={ls_msgs}")
+    ls0 = run_proto(ls_ini, "oracleDumpFile", os.path.join(OUT, "ls.txt"),
+                    os.path.join(OUT, "res_ls"), [], 0)
+    truth = ls0[0][max(ls0[0])]
+    ls = repeat_mean(lambda rep: derive(*(ls0 if rep == 0 else run_proto(
+        ls_ini, "oracleDumpFile", os.path.join(OUT, "ls.txt"),
+        os.path.join(OUT, "res_ls"), [], rep)), truth))
+    ls_ct, ls_msgs = ls["ct"], ls["msgs"]
+    print(f"  ✓ LS done: conv={ls_ct}s, msgs={ls_msgs:.0f}")
 
     # GP over the holdInterval sweep. rankUseSpof=false ranks purely by cost, so
     # GP's converged RIB targets the same optimum LS computes (see the oracle test)
     # — required for the %-optimal curve to be meaningful (else spof-first ranking
     # picks costlier redundant paths and never matches the pure-cost truth).
-    gp = {}  # hold -> (snaps, msgs, conv_time)
+    gp = {}  # hold -> {"ct", "msgs", "fo", "curve"}
     warmup = args.warmup or GP_WARMUP        # harness override; NED default is 10s
     if warmup[-1].isdigit():
         warmup += "s"
@@ -144,27 +164,31 @@ def main(args=None):
     for h in HOLDS:
         print(f"  → GP hold={h} …", flush=True)
         dump = os.path.join(OUT, f"gp_{h}.txt")
-        snaps, msgs = run_proto(gp_ini, "ribDumpFile", dump,
-                                os.path.join(OUT, f"res_gp_{h}"),
-                                [f"--**.holdInterval={h}", "--**.rankUseSpof=false",
-                                 f"--**.collectWarmupDuration={warmup}"])
-        raw_ct = convergence_time(snaps)
-        ct = (raw_ct - warmup_s) if raw_ct is not None else None
-        fo = frac_optimal(snaps[max(snaps)], truth) * 100
-        gp[h] = (snaps, msgs, ct)
-        print(f"  ✓ hold={h}: conv={ct}s, msgs={msgs}, {fo:.1f}% optimal")
+        gp[h] = repeat_mean(lambda rep, h=h, dump=dump: derive(
+            *run_proto(gp_ini, "ribDumpFile", dump,
+                       os.path.join(OUT, f"res_gp_{h}"),
+                       [f"--**.holdInterval={h}", "--**.rankUseSpof=false",
+                        f"--**.collectWarmupDuration={warmup}"], rep),
+            truth, warmup_s))
+        print(f"  ✓ hold={h}: conv={gp[h]['ct']}s, msgs={gp[h]['msgs']:.0f}, "
+              f"{gp[h]['fo']:.1f}% optimal")
 
     # Summary table.
     print(f"\n=== convergence vs holdInterval "
-          f"(LS ref: conv={ls_ct}s, msgs={ls_msgs}, {len(truth)} pairs) ===")
+          f"(LS ref: conv={ls_ct:.1f}s, msgs={ls_msgs:.0f}, {len(truth)} pairs)"
+          f"{repeats_note()} ===")
     print(f"  GP warmup={warmup} (subtracted from GP conv times)")
-    print(f"{'hold':>8}{'conv_time':>12}{'sent_total':>14}{'final %opt':>12}")
+    print(f"{'hold':>8}{'conv_time':>16}{'sent_total':>18}{'final %opt':>12}")
+
+    def row(label, r):
+        ct, msgs = r["ct"], r["msgs"]
+        cts = ("-" if ct is None else f"{ct:.1f}{pm(ct)}s")
+        print(f"{label:>8}{cts:>16}{f'{msgs:.0f}' + pm(msgs, '.0f'):>18}"
+              f"{r['fo']:>11.1f}%")
+
     for h in HOLDS:
-        snaps, msgs, ct = gp[h]
-        fo = frac_optimal(snaps[max(snaps)], truth) * 100
-        print(f"{h:>8}{str(ct)+'s':>12}{msgs:>14}{fo:>11.1f}%")
-    print(f"{'LS':>8}{str(ls_ct)+'s':>12}{ls_msgs:>14}"
-          f"{frac_optimal(ls_snaps[max(ls_snaps)], truth)*100:>11.1f}%")
+        row(h, gp[h])
+    row("LS", ls)
 
     try:
         import matplotlib
@@ -182,18 +206,18 @@ def main(args=None):
     axR = axL.twinx()
     axL.set_xscale("log")
     lines = [
-        axL.plot(gx, [gp[h][2] for h in geo], "o-", color="C0",
+        axL.plot(gx, [gp[h]["ct"] for h in geo], "o-", color="C0",
                  label="GP convergence time")[0],
-        axR.plot(gx, [gp[h][1] for h in geo], "s-", color="C3",
+        axR.plot(gx, [gp[h]["msgs"] for h in geo], "s-", color="C3",
                  label="GP sent messages")[0],
     ]
     if has_off:
-        lines.append(axR.axhline(gp["0s"][1], ls=":", color="C3", alpha=.6,
+        lines.append(axR.axhline(gp["0s"]["msgs"], ls=":", color="C3", alpha=.6,
                                  label="GP messages, no batching (0s)"))
     lines.append(axL.axhline(ls_ct, ls="--", color="C0", alpha=.5,
-                             label=f"LS convergence ({ls_ct}s)"))
+                             label=f"LS convergence ({ls_ct:.1f}s)"))
     lines.append(axR.axhline(ls_msgs, ls="--", color="C3", alpha=.5,
-                             label=f"LS messages ({ls_msgs})"))
+                             label=f"LS messages ({ls_msgs:.0f})"))
     axL.set(xlabel="holdInterval (s, log scale)", ylabel="convergence time (s)")
     axR.set_ylabel("total sent messages")
     axL.set_title("Batching tradeoff: convergence time vs messages")
@@ -203,12 +227,11 @@ def main(args=None):
 
     fig, ax = plt.subplots()
     for h in HOLDS:
-        snaps = gp[h][0]
-        ts = sorted(snaps)
-        ax.plot([t - warmup_s for t in ts], [frac_optimal(snaps[t], truth) * 100 for t in ts],
-                "-", label=f"GP hold={h}")
-    ts = sorted(ls_snaps)
-    ax.plot(ts, [frac_optimal(ls_snaps[t], truth) * 100 for t in ts], "k--", label="LS")
+        curve = gp[h]["curve"]
+        ts = sorted(curve)
+        ax.plot(ts, [curve[t] for t in ts], "-", label=f"GP hold={h}")
+    ts = sorted(ls["curve"])
+    ax.plot(ts, [ls["curve"][t] for t in ts], "k--", label="LS")
     ax.set(xlabel="sim time (s)", ylabel="% of optimal RIB reached",
            title="Convergence curve")
     ax.legend(fontsize=8)

@@ -5,11 +5,16 @@ Runs the oracle regression test first, then dispatches to the selected eval.
 
     python3 eval_entrypoint.py {convergence,costdrift,overhead,recovery} [--topo PATH] [--basis {min,all}]
     python3 eval_entrypoint.py scaling [--quick] [--only ...] [--basis {min,all}] [--single TOPO] ...
+
+--repeat N runs every measurement point N times in parallel (--jobs, default
+min(N, cpu count)) and reports mean±sd; run 0 streams its progress, the rest run
+silent on their own result dirs. Default --repeat 1 = the previous behaviour.
 """
 import argparse
 import sys
 
-from eval_harness import add_topo_args, gate_up_to_date, mark_gate_passed
+from eval_harness import (add_repeat_args, add_topo_args, apply_repeat_args,
+                          gate_up_to_date, mark_gate_passed)
 
 
 def _oracle_gate(args):
@@ -42,8 +47,10 @@ def main():
     sc.add_argument("--convergence", action="store_true")
     sc.add_argument("--basis", choices=["min", "all"], default="min")
     sc.add_argument("--single", metavar="TOPO")
+    add_repeat_args(sc)
 
     args = p.parse_args()
+    apply_repeat_args(args)
 
     if args.cmd != "scaling":
         _oracle_gate(args)

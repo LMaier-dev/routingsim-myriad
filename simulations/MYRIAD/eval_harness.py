@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """Shared constants and utilities for MYRIAD eval scripts."""
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+import numbers
+import os
 import re
+import statistics
 import subprocess
 import sys
 
@@ -70,20 +74,26 @@ def ring_label_lines(labels_path):
         return [ln.rstrip("\n") for ln in f if ln.strip() and not ln.startswith("#")]
 
 
-def run_sim(cmd, cwd=None, allow_budget_expired=False):
-    """Run simulator with live progress; exit on nonzero return or fatal patterns."""
-    full_cmd = list(cmd) + ["--cmdenv-status-frequency=2s"]
+def run_sim(cmd, cwd=None, allow_budget_expired=False, rep=0):
+    """Run simulator with live progress; exit on nonzero return or fatal patterns.
+
+    rep: repeat index. Its seed-set replaces any the caller passed, so repeats
+    differ in RNG draws while rep 0 reproduces the scripts' historic --seed-set=1.
+    Only rep 0 streams progress — parallel repeats would fight over the line."""
+    full_cmd = [a for a in cmd if not str(a).startswith("--seed-set")]
+    full_cmd += [f"--seed-set={rep + 1}", "--cmdenv-status-frequency=2s"]
     proc = subprocess.Popen(full_cmd, cwd=str(cwd or SIM_ROOT),
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                             text=True, bufsize=1)
     lines = []
     for line in proc.stdout:
         lines.append(line)
-        if _PROGRESS_RE.search(line):
+        if rep == 0 and _PROGRESS_RE.search(line):
             sys.stderr.write(f"\r    {line.rstrip()[:100]:<100}")
             sys.stderr.flush()
-    sys.stderr.write("\r" + " " * 104 + "\r")
-    sys.stderr.flush()
+    if rep == 0:
+        sys.stderr.write("\r" + " " * 104 + "\r")
+        sys.stderr.flush()
     proc.wait()
     log = "".join(lines)
     if proc.returncode != 0:
@@ -134,8 +144,86 @@ def write_proto_ini(out_path, proto, topo_path, ring_labels_path,
     return str(out_path)
 
 
+# --- repeated runs -----------------------------------------------------------
+# Set from --repeat/--jobs by eval_entrypoint (or a script's own arg parsing).
+REPEATS = 1
+JOBS = None
+
+
+class Stat(float):
+    """Mean of a measurement across repeats, carrying its stdev in .sd.
+
+    A float subclass so every existing format spec, arithmetic and plot call in
+    the eval scripts keeps working unchanged; only summary tables opt into ±."""
+    def __new__(cls, mean, sd=0.0):
+        v = super().__new__(cls, mean)
+        v.sd = sd
+        return v
+
+
+def pm(v, spec=".1f"):
+    """'±sd' suffix for a Stat, or '' for a plain single-run value."""
+    sd = getattr(v, "sd", None)
+    return f"±{sd:{spec}}" if sd is not None else ""
+
+
+def repeats_note():
+    """Table-header suffix stating the repeat count (empty for a single run)."""
+    return f" [mean±sd over {REPEATS} runs]" if REPEATS > 1 else ""
+
+
+def rep_path(path, rep):
+    """Per-repeat result dir / dump file so parallel runs never share one."""
+    return path if rep == 0 else f"{path}.r{rep}"
+
+
+def _agg(vals):
+    """Recursively average repeat results: numbers -> Stat(mean, stdev), dicts
+    over their common keys, sequences elementwise; anything else -> rep 0."""
+    first = vals[0]
+    if isinstance(first, bool) or not isinstance(first, (numbers.Number, dict, list, tuple)):
+        return first
+    if isinstance(first, numbers.Number):
+        return Stat(statistics.fmean(vals),
+                    statistics.pstdev(vals) if len(vals) > 1 else 0.0)
+    if isinstance(first, dict):
+        keys = set(first)
+        for v in vals[1:]:
+            keys &= set(v)
+        return {k: _agg([v[k] for v in vals]) for k in first if k in keys}
+    n = min(len(v) for v in vals)
+    out = [_agg([v[i] for v in vals]) for i in range(n)]
+    return tuple(out) if isinstance(first, tuple) else out
+
+
+def repeat_mean(fn, repeats=None):
+    """Run fn(rep) REPEATS times in parallel and average the returned structure.
+
+    fn must route its result dir / dump paths through rep_path() and pass rep=
+    into run_sim(). At repeats==1 the raw result is passed through untouched."""
+    n = repeats or REPEATS
+    if n <= 1:
+        return fn(0)
+    with ThreadPoolExecutor(max_workers=JOBS or min(n, os.cpu_count() or 1)) as ex:
+        return _agg(list(ex.map(fn, range(n))))
+
+
+def add_repeat_args(parser):
+    parser.add_argument("--repeat", type=int, default=1, metavar="N",
+                        help="run every measurement N times and report mean±sd")
+    parser.add_argument("--jobs", type=int, default=None, metavar="J",
+                        help="parallel sims (default: min(--repeat, cpu count))")
+
+
+def apply_repeat_args(args):
+    global REPEATS, JOBS
+    REPEATS = max(1, getattr(args, "repeat", 1) or 1)
+    JOBS = getattr(args, "jobs", None)
+
+
 def add_topo_args(parser):
-    """Add --topo, --basis, --update-jitter to an ArgumentParser."""
+    """Add --topo, --basis, --update-jitter, --repeat/--jobs to an ArgumentParser."""
+    add_repeat_args(parser)
     parser.add_argument(
         "--topo", default=str(DEFAULT_TOPO),
         help=f"topology file (default: {DEFAULT_TOPO.name})")

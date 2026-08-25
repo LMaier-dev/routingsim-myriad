@@ -36,7 +36,9 @@ import re
 import subprocess
 import sys
 
-from eval_harness import BIN, SIM_ROOT, SRC, REPO, MYRIAD_DIR, run_sim
+from eval_harness import (BIN, SIM_ROOT, SRC, REPO, MYRIAD_DIR, add_repeat_args,
+                          apply_repeat_args, pm, rep_path, repeat_mean,
+                          repeats_note, run_sim)
 
 HERE = str(MYRIAD_DIR)
 GRAPHGEN = str(REPO / "scripts" / "graphgen.py")
@@ -50,7 +52,7 @@ INI_DIR = os.path.join(EVAL_DIR, "ini")
 PLOT_DIR = os.path.join(EVAL_DIR, "plots")
 BASIS = "min"   # ring basis for topo2rings; set from --basis in main()
 CONV_SNAP = "0.5s"        # stats-mode snapshots are tiny, so poll finely
-CONV_SIMTIME = "200s"   # convergence runs need more headroom (50s default too tight for 20x20)
+CONV_SIMTIME = "100s"   # convergence runs need more headroom (50s default too tight for 20x20)
 CONV_GP_WARMUP = "10s"  # periodic re-COLLECTs every 1s stabilise memberCounts by then
 
 # Canonical fair-timing knobs live in eval_common.ini (single source of truth,
@@ -225,7 +227,7 @@ def write_ini(proto, topo_path, ring_lines):
     return ini_path
 
 
-def message_count(proto, ini_path, tag="", extra_args=None):
+def message_count(proto, ini_path, tag="", extra_args=None, rep=0):
     """Run the sim (from SIM_ROOT so relative NED lookups work) and return the
     total application-level messages sent, summed from the per-type `sent_total`
     scalars each protocol records in finish(). This counts routing messages on
@@ -233,11 +235,12 @@ def message_count(proto, ini_path, tag="", extra_args=None):
     timers, packet wrappers, and per-send dups. `tag` disambiguates result dirs
     for the same ini run under different overrides (e.g. holdInterval); the
     trailing .sca is left in place for batch_stats to read."""
-    res = os.path.join(INI_DIR, f"res_{proto}{tag}_{os.path.basename(ini_path)}")
+    res = rep_path(
+        os.path.join(INI_DIR, f"res_{proto}{tag}_{os.path.basename(ini_path)}"), rep)
     for old in glob.glob(os.path.join(res, "*.sca")):
         os.remove(old)
     cmd = [BIN, "-u", "Cmdenv", ini_path, "--result-dir", res] + (extra_args or [])
-    run_sim(cmd, cwd=SIM_ROOT)
+    run_sim(cmd, cwd=SIM_ROOT, rep=rep)
     scas = glob.glob(os.path.join(res, "*.sca"))
     if not scas:
         print(f"  !! {proto} produced no .sca.")
@@ -249,12 +252,12 @@ def message_count(proto, ini_path, tag="", extra_args=None):
     return total
 
 
-def batch_stats(ini_path, tag=""):
+def batch_stats(ini_path, tag="", rep=0):
     """Read the GP run's already-written .sca (message_count ran first) and
     return (n_batches, avg_entries, max_entries) for the inter-ring UPDATE
     batching. n_batches = sum of sent_update_batch (packets on the wire);
     avg = batch_entries_total / n_batches (mean chains coalesced per packet)."""
-    res = os.path.join(INI_DIR, f"res_gp{tag}_{os.path.basename(ini_path)}")
+    res = rep_path(os.path.join(INI_DIR, f"res_gp{tag}_{os.path.basename(ini_path)}"), rep)
     scas = glob.glob(os.path.join(res, "*.sca"))
     if not scas:
         return 0, 0.0, 0
@@ -279,44 +282,60 @@ def sweep(items, nobatch=False, conv=False):
         rings = ring_label_lines(topo)
         ls_ini = write_ini("ls", topo, rings)
         gp_ini = write_ini("gp", topo, rings)
-        ls_extra = []
-        gp_extra = ['--**.holdInterval=0s'] if nobatch else []
-        if conv:
-            stem = os.path.splitext(os.path.basename(topo))[0]
-            ls_dump = os.path.join(INI_DIR, f"dump_ls_{stem}.txt")
-            gp_dump = os.path.join(INI_DIR, f"dump_gp_{stem}.txt")
-            for d in (ls_dump, gp_dump):   # C++ appends; clear stale prior runs
-                if os.path.exists(d):
-                    os.remove(d)
-            ls_extra += [f'--**.oracleDumpFile="{ls_dump}"',
-                         f'--**.snapshotInterval={CONV_SNAP}',
-                         '--**.snapshotFormat="stats"',
-                         f'--sim-time-limit={CONV_SIMTIME}']
-            gp_extra += [f'--**.ribDumpFile="{gp_dump}"',
-                         f'--**.snapshotInterval={CONV_SNAP}',
-                         '--**.snapshotFormat="stats"',
-                         f'--sim-time-limit={CONV_SIMTIME}',
-                         f'--**.collectWarmupDuration={CONV_GP_WARMUP}']
-        ls_n = message_count("ls", ls_ini, extra_args=ls_extra or None)
-        gp_n = message_count("gp", gp_ini, extra_args=gp_extra or None)
-        nb, avg, mx = batch_stats(gp_ini)
+
+        # One repeat = this topology's LS+GP pair (plus its batch/convergence
+        # readouts) on one seed; repeat_mean averages the numbers across repeats.
+        def one(rep, ls_ini=ls_ini, gp_ini=gp_ini, topo=topo):
+            ls_extra = []
+            gp_extra = ['--**.holdInterval=0s'] if nobatch else []
+            if conv:
+                stem = os.path.splitext(os.path.basename(topo))[0]
+                ls_dump = rep_path(os.path.join(INI_DIR, f"dump_ls_{stem}.txt"), rep)
+                gp_dump = rep_path(os.path.join(INI_DIR, f"dump_gp_{stem}.txt"), rep)
+                for d in (ls_dump, gp_dump):   # C++ appends; clear stale prior runs
+                    if os.path.exists(d):
+                        os.remove(d)
+                ls_extra += [f'--**.oracleDumpFile="{ls_dump}"',
+                             f'--**.snapshotInterval={CONV_SNAP}',
+                             '--**.snapshotFormat="stats"',
+                             f'--sim-time-limit={CONV_SIMTIME}']
+                gp_extra += [f'--**.ribDumpFile="{gp_dump}"',
+                             f'--**.snapshotInterval={CONV_SNAP}',
+                             '--**.snapshotFormat="stats"',
+                             f'--sim-time-limit={CONV_SIMTIME}',
+                             f'--**.collectWarmupDuration={CONV_GP_WARMUP}']
+            r = {"ls": message_count("ls", ls_ini, extra_args=ls_extra or None, rep=rep),
+                 "gp": message_count("gp", gp_ini, extra_args=gp_extra or None, rep=rep)}
+            r["nb"], r["avg_sz"], r["max_sz"] = batch_stats(gp_ini, rep=rep)
+            if conv:
+                warmup_s = float(CONV_GP_WARMUP.rstrip("s"))
+                r["ls_ct"] = (convergence_time(parse_stats(ls_dump))
+                              if os.path.exists(ls_dump) else None)
+                raw = (convergence_time(parse_stats(gp_dump))
+                       if os.path.exists(gp_dump) else None)
+                r["gp_ct"] = (raw - warmup_s) if raw is not None else None
+            return r
+
+        r = repeat_mean(one)
         out["labels"].append(label)
-        out["ls"].append(ls_n)
-        out["gp"].append(gp_n)
-        out["avg_sz"].append(avg)
-        out["max_sz"].append(mx)
+        out["ls"].append(r["ls"])
+        out["gp"].append(r["gp"])
+        out["avg_sz"].append(r["avg_sz"])
+        out["max_sz"].append(r["max_sz"])
         mode = "no-batch" if nobatch else "batched"
         ct_str = ""
         if conv:
-            warmup_s = float(CONV_GP_WARMUP.rstrip("s"))
-            ls_ct = convergence_time(parse_stats(ls_dump)) if os.path.exists(ls_dump) else None
-            raw_gp_ct = convergence_time(parse_stats(gp_dump)) if os.path.exists(gp_dump) else None
-            gp_ct = (raw_gp_ct - warmup_s) if raw_gp_ct is not None else None
-            out["ls_ct"].append(ls_ct)
-            out["gp_ct"].append(gp_ct)
-            ct_str = f"  LS_ct={ls_ct}s  GP_ct={gp_ct}s"
-        print(f"  {label:<6} LS={ls_n}  GP({mode})={gp_n}  "
-              f"batches={nb} avg_sz={avg:.1f} max_sz={mx}{ct_str}")
+            out["ls_ct"].append(r["ls_ct"])
+            out["gp_ct"].append(r["gp_ct"])
+            def _ct(v):
+                return "None" if v is None else f"{v:.2f}{pm(v, '.2f')}s"
+            ct_str = f"  LS_ct={_ct(r['ls_ct'])}  GP_ct={_ct(r['gp_ct'])}"
+        # message_count returns None when a run produced no .sca
+        def _n(v):
+            return "None" if v is None else f"{v:.0f}{pm(v, '.0f')}"
+        print(f"  {label:<6} LS={_n(r['ls'])}  GP({mode})={_n(r['gp'])}  "
+              f"batches={r['nb']:.0f} avg_sz={r['avg_sz']:.1f} "
+              f"max_sz={r['max_sz']:.0f}{ct_str}")
     return out
 
 
@@ -513,7 +532,9 @@ def main(args=None):
                         help="run GP+LS on ONE topology .txt and print counts (no "
                              "sweep, no plot). Path relative to simulations/topologies "
                              "or absolute.")
+        add_repeat_args(ap)
         args = ap.parse_args()
+        apply_repeat_args(args)
 
     # Nest all outputs under a per-basis subfolder so min_cycles and all_cycles
     # keep separate cached labels, inis, and plots.
@@ -550,6 +571,10 @@ def main(args=None):
         print(f"== single topology ({BASIS} cycles): {label} ==")
         sweep([(label, topo)], args.nobatch)
         return
+
+    note = repeats_note()
+    if note:
+        print(f"(repeats{note})")
 
     if args.quick:
         square_dims = [(n, n) for n in range(3, 6)]
