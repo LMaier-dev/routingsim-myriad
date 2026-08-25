@@ -16,6 +16,29 @@ COMMON_INI  = str(MYRIAD_DIR / "eval_common.ini")
 
 _PROGRESS_RE = re.compile(r"Elapsed:|% done|% complete|\bETA\b|\d+%")
 
+# Stamp of the binary that last passed the oracle gate, so repeat eval runs on an
+# unchanged build skip the (slow) regression. mtime+size is enough for a local
+# build artifact — no need to hash 4.5MB every run.
+_GATE_STAMP = MYRIAD_DIR / "eval" / ".oracle_gate_ok"
+
+
+def _bin_sig():
+    st = Path(BIN).stat()
+    return f"{st.st_mtime_ns}:{st.st_size}"
+
+
+def gate_up_to_date():
+    """True if the oracle gate already passed for the current binary."""
+    try:
+        return _GATE_STAMP.read_text().strip() == _bin_sig()
+    except (OSError, FileNotFoundError):
+        return False
+
+
+def mark_gate_passed():
+    _GATE_STAMP.parent.mkdir(parents=True, exist_ok=True)
+    _GATE_STAMP.write_text(_bin_sig())
+
 
 def ensure_ring_labels(topo_path, basis="all"):
     """Return path to <stem>.<basis>.ringlabels.ini, generating it if absent."""

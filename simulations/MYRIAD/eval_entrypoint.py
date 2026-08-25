@@ -9,13 +9,17 @@ Runs the oracle regression test first, then dispatches to the selected eval.
 import argparse
 import sys
 
-from eval_harness import add_topo_args
+from eval_harness import add_topo_args, gate_up_to_date, mark_gate_passed
 
 
 def _oracle_gate(args):
+    if gate_up_to_date():
+        print("=== oracle regression gate: skipped (binary unchanged) ===\n")
+        return
     import test_rib_oracle
     print("=== oracle regression gate ===")
-    test_rib_oracle.main(args)
+    test_rib_oracle.main(args)   # sys.exit on failure, so reaching here == pass
+    mark_gate_passed()
     print()
 
 
@@ -24,9 +28,12 @@ def main():
                                 description="Run MYRIAD evals (oracle gate runs first)")
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    for name in ("convergence", "costdrift", "overhead", "recovery"):
+    for name in ("convergence", "costdrift", "overhead", "recovery", "reconverge"):
         sp = sub.add_parser(name)
         add_topo_args(sp)
+        if name == "reconverge":
+            sp.add_argument("--fractions", default=None,
+                            help="comma-separated failure fractions, e.g. 0.1,0.3")
 
     sc = sub.add_parser("scaling")
     sc.add_argument("--quick", action="store_true")
@@ -46,6 +53,7 @@ def main():
         "costdrift":   "eval_costdrift",
         "overhead":    "eval_overhead",
         "recovery":    "eval_recovery",
+        "reconverge":  "eval_reconverge",
         "scaling":     "eval_scaling",
     }
     mod = __import__(dispatch[args.cmd])
