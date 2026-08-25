@@ -511,6 +511,14 @@ nodeid_t MyriadGP::otherRingNeighbor(uint32_t ring, nodeid_t sender) {
     return undefined_node;
 }
 
+bool MyriadGP::isTwoNodeRing(uint32_t ring) {
+    // Echo Path check
+    size_t claimants = 0;
+    for (auto& [nid, n] : neighbors)
+        for (uint32_t r : n.sharedRings) if (r == ring) { ++claimants; break; }
+    return claimants <= 1;
+}
+
 std::vector<nodeid_t> MyriadGP::ringNeighbors(uint32_t ring) {
     std::vector<nodeid_t> out;
     for (auto& [nid, n] : neighbors) {
@@ -632,7 +640,7 @@ void MyriadGP::insertAndForwardCollect(MyriadGpCollect* pkt, uint32_t R, nodeid_
         // Genuine 2-node ring: echo back to the sender so the king still gets
         // its circular ACK. A degraded larger ring (had >1 neighbor) instead
         // drops, letting the budget expire → DEGRADE.
-        if (m.maxRingNeighbors <= 1) {
+        if (isTwoNodeRing(R)) {
             to = sender;
             MLOG_N_DEBUG(sender) << "echo COLLECT ring='" << R << "' (2-node ring)\n";
         } else {
@@ -1022,7 +1030,7 @@ void MyriadGP::forwardUpdateInRing(MyriadGpUpdate* pkt, uint32_t ring, nodeid_t 
     if (to == undefined_node) {
         // Genuine 2-node ring: echo to the sender to close the lap. A degraded
         // larger ring drops, letting the budget expire → DEGRADE.
-        if (mem(rings[ring]).maxRingNeighbors > 1) return;
+        if (!isTwoNodeRing(ring)) return;
         to = sender;
     }
     auto np = std::make_unique<NodePkt>("Myriad_GP_Update_Pkt");
@@ -1279,7 +1287,7 @@ void MyriadGP::forwardBatchInRing(MyriadGpUpdateBatch* pkt, uint32_t ring, nodei
     if (to == undefined_node) {
         // Genuine 2-node ring: echo to the sender to close the batch lap (see
         // forwardUpdateInRing). A degraded larger ring drops → budget expiry.
-        if (mem(rings[ring]).maxRingNeighbors > 1) return;
+        if (!isTwoNodeRing(ring)) return;
         to = sender;
     }
     auto np = std::make_unique<NodePkt>("Myriad_GP_Update_Batch_Pkt");

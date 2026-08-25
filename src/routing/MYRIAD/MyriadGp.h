@@ -159,6 +159,8 @@ namespace routingsim {
             nodeid_t otherRingNeighbor(uint32_t ring, nodeid_t sender);
             // Both TWOWAY+ ring-neighbors for R (0, 1, or 2).
             std::vector<nodeid_t> ringNeighbors(uint32_t ring);
+            // True iff R is a genuine 2-node ring, from ring-ids neighbors advertise in hello
+            bool isTwoNodeRing(uint32_t ring);
             void originateUpdate(uint32_t ring);
             void forwardUpdateInRing(MyriadGpUpdate* pkt, uint32_t ring, nodeid_t sender);
             // Forward a whole batch intra-ring; it never unpacks, lapping as one
