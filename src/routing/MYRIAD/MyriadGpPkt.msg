@@ -70,10 +70,12 @@ packet MyriadGpCollect extends MyriadGpNLRI {
     // King seeds 1, each forwarder increments; on own-return it equals the
     // ring's size.
     uint32_t member_count;
-    // Originator lacked state (memberCount==0): loses election to any live node.
+    // Originator lacked state (memberCount==0): loses the king election to any
+    // live member (formation tie-break by id).
     bool originator_crashed;
-    // OR'd by any forwarder lacking state; tells the king to replay on own-return.
-    bool crashed_present;
+    // Replay beacon: a live member originates this when a ring-mate (re)joins.
+    // It is forwarded UNCONDITIONALLY.
+    bool beacon;
 }
 
 packet MyriadGpUpdate extends MyriadGpNLRI {

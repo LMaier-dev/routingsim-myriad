@@ -55,7 +55,7 @@ namespace routingsim {
     // State a router keeps ONLY for rings it is itself a member of: king/collect
     // bookkeeping and the in-flight ring laps.
     struct RingMembership {
-        uint32_t originSeq = 0;     // my sequence for this ring (COLLECT + origin-UPDATE)
+        uint32_t originSeq = 1;     // my sequence for this ring (COLLECT + origin-UPDATE)
         uint32_t memberCount = 0;   // ring size; set when a COLLECT lap closes
         RingInflight collectInflight;
         // Reliable UPDATE traversals I own here, keyed by chain (empty = my
@@ -142,7 +142,7 @@ namespace routingsim {
             // A newer generation of `ring` proves it healed → drop its degrade.
             void clearDegradeIfRecovered(uint32_t ring);
 
-            void originateCollect(uint32_t ring, nodeid_t to);
+            void originateCollect(uint32_t ring, nodeid_t to, bool beacon = false);
             // Fresh COLLECT for a ring I own (picks a ring-neighbor).
             void reoriginateCollect(uint32_t ring);
             void startRefresh(uint32_t ring);   // king: periodic re-collect
@@ -226,6 +226,7 @@ namespace routingsim {
             bool snapshotStats = false; // periodic snapshot as aggregate stats, not full RIB
             simtime_t collectWarmupDuration; // delay UPDATE origination until COLLECTs settle
             simtime_t collectWarmupInterval; // how often to re-run COLLECTs during warmup
+            bool rebooted = false;
             // Held transitions bucketed by (target ring, next-hop primary).
             std::map<std::pair<uint32_t, nodeid_t>, std::vector<PendingTransition>> pendingTransitions;
             TimerMsg* holdTimer = nullptr;   // per-node; armed on the first held chain
@@ -244,6 +245,9 @@ namespace routingsim {
             // operates on the current generation only. Returns whether candChain
             // survived.
             bool capEcmp(RingState& rs, const std::vector<uint32_t>& candChain);
+            bool frontRepresented(const RingState& rs, uint32_t front, size_t except) const;
+            // New-best erase that keeps each front-ring's sole current-gen.
+            void dropCurGenKeepingFronts(RingState& rs, uint32_t candFront);
             // Best across all of ribIn (strictlyBetter, then lex-min chain),
             // ignoring seq — so preferred may lag curSeq (see ribIn in RingState).
             void selectPreferred(RingState& rs);

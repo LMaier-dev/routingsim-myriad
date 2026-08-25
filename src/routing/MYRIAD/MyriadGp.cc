@@ -14,7 +14,7 @@ namespace {
 using namespace msgsize;
 
 int64_t gpCollectBytes(const MyriadGpCollect* p) {
-    return MYRIADGP_HDR + U32 + 2 * BOOL                   // member_count + crash bits
+    return MYRIADGP_HDR + U32 + 2 * BOOL                   // member_count + crashed/beacon bits
          + (int64_t) p->getRrArraySize() * RR
          + (int64_t) p->getTransitionsArraySize() * TRANSITION;
 }
@@ -108,7 +108,12 @@ void MyriadGP::onTwoWayReached(GpNeighbor& nbr) {
         // Originate once >=1 ring-neighbor is two-way (a genuine 2-node ring has
         // exactly one and closes its lap via echo; see the echo sites below).
         if (count >= 1 && count <= 2 && m.collectInflight.tx == nullptr) {
-            originateCollect(R, nbr.id);
+            // A new ring-neighbor appeared. Only a rebooted node fires a replay
+            // beacon (every member it passes replays its front-R chains back to me);
+            // anyone else is still forming, so a normal election COLLECT to elect the
+            // king. Keeping the beacon bit exact this way is what lets the replay
+            // sites skip a warmup check: a beacon cannot exist during formation.
+            originateCollect(R, nbr.id, /*beacon=*/rebooted);
         } else if (count > 2) {
             MLOG_N_WARN(nbr.id) << "ring '" << R
                 << "' has >2 ring-neighbors (misconfig); ignoring\n";
@@ -116,7 +121,7 @@ void MyriadGP::onTwoWayReached(GpNeighbor& nbr) {
     }
 }
 
-void MyriadGP::originateCollect(uint32_t ring, nodeid_t to) {
+void MyriadGP::originateCollect(uint32_t ring, nodeid_t to, bool beacon) {
     RingMembership& m = mem(rings[ring]);
     m.originSeq += 1;
     m.collectInflight.seq_no = m.originSeq;
@@ -128,11 +133,11 @@ void MyriadGP::originateCollect(uint32_t ring, nodeid_t to) {
     pkt->setCurrent_ring(ring);
     pkt->setMember_count(1); // forwarders increment
 
-    // A stateless (recovered/fresh) king loses the election to any live member;
-    // seeds crashed_present so a live king that wins instead learns to replay.
-    bool crashed = m.memberCount == 0;
-    pkt->setOriginator_crashed(crashed);
-    pkt->setCrashed_present(crashed);
+    // Stateless (fresh) originator loses the king election to any live member.
+    pkt->setOriginator_crashed(m.memberCount == 0);
+    // Replay beacon: a live member fires this when a mate (re)joins, so every
+    // member replays its front-ring chains toward the recovered node.
+    pkt->setBeacon(beacon);
 
     // Insert my (subnet, myId) pairs.
     pkt->setRrArraySize(mySubnets.size());
@@ -428,6 +433,15 @@ void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t sender) {
             }
             EV << "]\n";
 
+            // Replay beacon I fired (a mate rejoined) has lapped back.
+            // Do NOT become king or originate an UPDATE.
+            if (collect->getBeacon()) {
+                MLOG_INFO() << "replay beacon complete ring='" << R << "' seq=" << seq << "\n";
+                if (recoveryReplayEnabled)
+                    replayInto(R);
+                return;
+            }
+
             // Winning the lap makes me (or keeps me) king. The very first
             // origination per ring is jittered: all rings' COLLECTs settle at
             // roughly the same time, so firing UPDATEs immediately storms the
@@ -446,10 +460,6 @@ void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t sender) {
             }
 
             startRefresh(R);
-
-            // A recovered member lapped this COLLECT: hand back its RIB.
-            if (recoveryReplayEnabled && collect->getCrashed_present())
-                replayInto(R);
         } else {
             MLOG_N_WARN(sender) << "stale own COLLECT return ring='" << R
                                 << "' seq=" << seq << " (cur=" << m.collectInflight.seq_no << ")\n";
@@ -457,17 +467,25 @@ void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t sender) {
         return;
     }
 
-    // A COLLECT from another node proves that ring's king is alive: reset my
-    // watchdog so I don't launch a coup. Kings don't watch (they originate).
+    // A COLLECT from another node proves ring activity: reset my watchdog.
     if (!m.isKing) startWatchdog(R);
 
-    // Contention: I'm also asserting this ring if I have a collect inflight or
-    // I'm the established king. Priority is (live, id): a live node beats any
-    // crashed one, else higher id wins. I yield/demote to a winner, or hold and
-    // ignore a loser (my next collect makes them yield).
-    bool incomingCrashed = collect->getOriginator_crashed();
+    // Replay beacon: forward UNCONDITIONALLY (never supress) so it laps the whole ring.
+    // The union of every member's replay restores the recovered routers RIB.
+    if (collect->getBeacon()) {
+        if (m.memberCount > 0 && recoveryReplayEnabled)
+            replayInto(R);
+        insertAndForwardCollect(collect, R, sender);
+        return;
+    }
+
+    bool crashed = collect->getOriginator_crashed();
+
+    // Election (formation, refresh, or coup). Priority is (live, id): a live node
+    // beats a crashed one, else higher id wins. I yield/demote to a winner, or hold
+    // and ignore a loser (my next collect makes them yield).
     if (m.collectInflight.tx != nullptr || m.isKing) {
-        if (collectWins(incomingCrashed, king, R)) {
+        if (collectWins(crashed, king, R)) {
             MLOG_N_INFO(sender) << "yield COLLECT ring='" << R
                                 << "' to king=" << (int)king << "\n";
             cancelCollect(R);                     // no-op if no inflight
@@ -477,13 +495,6 @@ void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t sender) {
             MLOG_N_DEBUG(sender) << "ignore COLLECT ring='" << R
                                  << "' from king=" << (int)king << "\n";
         }
-        return;
-    }
-
-    // A live member drops a stateless originator's COLLECT so the recovered node
-    // can't win the ring; the live king/neighbor re-collects instead.
-    if (m.memberCount > 0 && incomingCrashed) {
-        MLOG_N_DEBUG(sender) << "drop crashed COLLECT ring='" << R << "'\n";
         return;
     }
 
@@ -582,9 +593,6 @@ void MyriadGP::insertAndForwardCollect(MyriadGpCollect* pkt, uint32_t R, nodeid_
     // Count myself as a ring member
     pkt->setMember_count(pkt->getMember_count() + 1);
 
-    // Stateless: flag a recovered member so the king replays on own-return.
-    if (m.memberCount == 0) pkt->setCrashed_present(true);
-
     // 1. Append my (subnet, myId) pairs.
     size_t n = pkt->getRrArraySize();
     pkt->setRrArraySize(n + mySubnets.size());
@@ -669,6 +677,44 @@ bool MyriadGP::coBest(const RibEntry& a, const RibEntry& b) const {
         && a.chain_cost == b.chain_cost;
 }
 
+// Sole front-ring guard: is `front` held by any CURRENT-GEN chain in rs.ribIn
+// other than index `except`? Used to keep the last chain entering an origin via
+// a given ring, so some member can still replay that (origin, front-ring) to a
+// recovered ring-mate under best-only storage. (except=SIZE_MAX excludes none.)
+bool MyriadGP::frontRepresented(const RingState& rs, uint32_t front, size_t except) const {
+    for (size_t i = 0; i < rs.ribIn.size(); ++i) {
+        if (i == except) continue;
+        const RibEntry& e = rs.ribIn[i];
+        if (e.seq_no == rs.curSeq && !e.chain.empty() && e.chain.front() == front)
+            return true;
+    }
+    return false;
+}
+
+// New-best erase with the sole front-ring guard: drop the now-inferior
+// current-gen entries, but keep the single best current-gen chain of every
+// front-ring != candFront (candFront is covered by the incoming best). Older
+// holdovers (seq_no != curSeq) are untouched — make-before-break owns those.
+void MyriadGP::dropCurGenKeepingFronts(RingState& rs, uint32_t candFront) {
+    std::map<uint32_t /*front*/, size_t /*best idx*/> bestPerFront;
+    for (size_t i = 0; i < rs.ribIn.size(); ++i) {
+        const RibEntry& e = rs.ribIn[i];
+        if (e.seq_no != rs.curSeq || e.chain.empty() || e.chain.front() == candFront)
+            continue;
+        auto it = bestPerFront.find(e.chain.front());
+        if (it == bestPerFront.end() || strictlyBetter(e, rs.ribIn[it->second]))
+            bestPerFront[e.chain.front()] = i;
+    }
+    std::set<size_t> keep;
+    for (auto& [f, idx] : bestPerFront) keep.insert(idx);
+    std::vector<RibEntry> out;
+    for (size_t i = 0; i < rs.ribIn.size(); ++i) {
+        if (rs.ribIn[i].seq_no == rs.curSeq && !keep.count(i)) continue;  // now-inferior
+        out.push_back(std::move(rs.ribIn[i]));
+    }
+    rs.ribIn.swap(out);
+}
+
 bool MyriadGP::capEcmp(RingState& rs, const std::vector<uint32_t>& candChain) {
     // Cap the current generation (seq_no==curSeq) to maxEcmpPaths; retained older
     // holdovers aren't ECMP siblings, so skip them. Drop the member leaving the
@@ -687,15 +733,21 @@ bool MyriadGP::capEcmp(RingState& rs, const std::vector<uint32_t>& candChain) {
         }
         return u.size();
     };
+    auto droppable = [&](size_t i) {
+        return isCur(i) && (rs.ribIn[i].chain.empty()
+                            || frontRepresented(rs, rs.ribIn[i].chain.front(), i));
+    };
     while ((long)curCount() > maxEcmpPaths) {
         size_t candIdx = SIZE_MAX;   // last current-gen entry (just appended)
         for (size_t i = rs.ribIn.size(); i-- > 0; ) if (isCur(i)) { candIdx = i; break; }
-        size_t drop = candIdx, bestUnion = unionSansIndex(candIdx);
+        size_t drop = SIZE_MAX, bestUnion = 0;
+        if (droppable(candIdx)) { drop = candIdx; bestUnion = unionSansIndex(candIdx); }
         for (size_t i = 0; i < candIdx; ++i) {
-            if (!isCur(i)) continue;
+            if (!droppable(i)) continue;
             size_t u = unionSansIndex(i);
-            if (u > bestUnion) { drop = i; bestUnion = u; }
+            if (drop == SIZE_MAX || u > bestUnion) { drop = i; bestUnion = u; }
         }
+        if (drop == SIZE_MAX) break;   // every over-cap entry is a sole front rep
         rs.ribIn.erase(rs.ribIn.begin() + drop);
     }
     for (auto& e : rs.ribIn) if (e.chain == candChain) return true;
@@ -846,8 +898,10 @@ void MyriadGP::processChain(uint32_t curRing, uint32_t seq, uint32_t spof,
     RingState& originRs = rings[origin];
 
     // Don't store or bridge an inter-ring update arriving on a ring whose COLLECT
-    // hasn't landed here yet (the dup guard blocks re-forwarding)
-    if (!chain.empty() && memberCountOf(curRing) == 0) {
+    // hasn't landed here yet (the dup guard blocks re-forwarding). Excludes seq==0
+    // replay: it's adopted into the RIB and never re-forwarded, so the dup-guard
+    // rationale doesn't apply
+    if (!chain.empty() && seq != 0 && memberCountOf(curRing) == 0) {
         MLOG_DEBUG() << "inter-ring UPDATE on ring='" << curRing
                      << "' deferred: own COLLECT not yet complete\n";
         return;
@@ -927,18 +981,23 @@ void MyriadGP::processChain(uint32_t curRing, uint32_t seq, uint32_t spof,
         if (!curBest) {
             originRs.ribIn.push_back(cand);                      // first of this gen
         } else if (strictlyBetter(cand, *curBest)) {
-            // New best: drop this generation's now-inferior entries, keep holdovers.
-            auto& v = originRs.ribIn;
-            v.erase(std::remove_if(v.begin(), v.end(),
-                [&](const RibEntry& e) { return e.seq_no == originRs.curSeq; }),
-                v.end());
+            // New best: drop now-inferior current-gen entries and keep holdovers,
+            // but still keep sole front-ring guard) so the king can still replay 
+            // every (origin, front-ring).
+            dropCurGenKeepingFronts(originRs, fullChain.front());
             originRs.ribIn.push_back(cand);
         } else if (coBest(cand, *curBest)) {
             originRs.ribIn.push_back(cand);
             if ((long)originRs.ribIn.size() > maxEcmpPaths)
                 doInterRing = capEcmp(originRs, fullChain);
         } else {
-            doInterRing = false;                                 // inferior
+            // Inferior — not propagated. But if no other current-gen chain enters
+            // this origin via fullChain.front(), keep it (sole front-ring guard)
+            if (!frontRepresented(originRs, fullChain.front(), SIZE_MAX)) {
+                originRs.ribIn.push_back(cand);
+                selectPreferred(originRs);
+            }
+            doInterRing = false;
         }
 
         if (doInterRing) {
@@ -1332,6 +1391,8 @@ void MyriadGP::reset() {
     if (holdTimer) { cancelAndDelete(holdTimer); holdTimer = nullptr; }
     if (snapshotTimer) { cancelAndDelete(snapshotTimer); snapshotTimer = nullptr; }
     cancelHelloTimer();
+
+    rebooted = true;   // stateless from here on means recovery, not formation
 
     scheduleHello(helloInterval);
     if (snapshotInterval > 0 && !par("ribDumpFile").stdstringValue().empty())
