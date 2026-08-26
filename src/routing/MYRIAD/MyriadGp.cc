@@ -433,6 +433,8 @@ void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t sender) {
             if (collect->getKind() != COLLECT_ELECTION) {
                 MLOG_INFO() << (collect->getKind() == COLLECT_PROBE ? "probe" : "replay")
                             << " COLLECT complete ring='" << R << "' seq=" << seq << "\n";
+                // A rebooted node returns here a non-king member with no watchdog
+                if (!m.isKing && !m.watchdogTimer) startWatchdog(R);
                 return;
             }
 
@@ -461,10 +463,12 @@ void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t sender) {
         return;
     }
 
-    // Only an election lap proves the king is alive; a peer's probe or replay
-    // says nothing about it, and letting those reset the watchdog would delay the
-    // coup that is now the only way to replace a king that died with its ring.
-    if (!m.isKing && collect->getKind() == COLLECT_ELECTION) startWatchdog(R);
+    // Arm a watchdog the moment I'm a non-king member, however I learned
+    // the ring. Only an ELECTION lap RESETS it.
+    if (!m.isKing) {
+        if (collect->getKind() == COLLECT_ELECTION || !m.watchdogTimer)
+            startWatchdog(R);
+    }
 
     // Probe and replay laps are forwarded UNCONDITIONALLY (never suppressed by
     // contention) so they always reach the originator. On a replay lap the union
