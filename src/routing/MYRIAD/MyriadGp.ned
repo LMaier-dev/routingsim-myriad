@@ -13,10 +13,11 @@ simple myriadgp extends routingsim.foundation.Protocol
         double rxmtInterval @unit(s) = default(5s);
         double helloJitter @unit(s) = default(0s);
 
-        // King re-originates a COLLECT every refreshInterval; members watchdog at
-        // 2*refreshInterval + uniform(0, refreshJitter).
+        // King re-originates a COLLECT every refreshInterval; a member watchdogs
+        // at refreshInterval + refreshJitter + watchdogMargin
         double refreshInterval @unit(s) = default(30s);
         double refreshJitter @unit(s) = default(refreshInterval * 0.1);
+        double watchdogMargin @unit(s) = default(2s);
 
         // Spread the initial UPDATE storm: all rings' COLLECTs settle at roughly
         // the same time, so the very first origination per ring is delayed by

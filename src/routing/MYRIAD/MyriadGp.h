@@ -178,6 +178,7 @@ namespace routingsim {
             std::vector<uint32_t> mySubnets;    // (subnet, myId) pairs, set at init
             simtime_t refreshInterval;
             simtime_t refreshJitter;
+            simtime_t watchdogMargin; // coup this long after a refresh could last arrive
             simtime_t updateJitter;   // spread the initial per-ring UPDATE storm
             bool degradeEnabled = true;
             bool recoveryReplayEnabled = true;

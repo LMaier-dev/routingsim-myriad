@@ -58,6 +58,7 @@ void MyriadGP::onInitialize() {
 
     refreshInterval = par("refreshInterval");
     refreshJitter = par("refreshJitter");
+    watchdogMargin = par("watchdogMargin");
     updateJitter = par("updateJitter");
     rib.configure(par("ringCostExponent"), par("rankUseSpof"), par("maxEcmpPaths"));
     degradeEnabled = par("degradeEnabled");
@@ -209,7 +210,8 @@ void MyriadGP::startWarmupCollects() {
 void MyriadGP::startWatchdog(uint32_t ring) {
     RingMembership& rs = memberships[ring];
     if (rs.watchdogTimer) { cancelAndDelete(rs.watchdogTimer); rs.watchdogTimer = nullptr; }
-    simtime_t delay = 2 * refreshInterval + uniform(0, refreshJitter);
+    // Fire just after a healthy king's refresh SHOULD have re-armed us.
+    simtime_t delay = refreshInterval + refreshJitter + watchdogMargin;
     rs.watchdogTimer = addOneShotTimer(delay, [this, ring](short) {
         memberships[ring].watchdogTimer = nullptr;
         MLOG_INFO() << "watchdog fired for ring='" << ring
