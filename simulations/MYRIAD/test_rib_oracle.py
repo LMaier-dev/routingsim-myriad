@@ -23,7 +23,8 @@ alternative, which we don't yet have a fixture for.
 import os
 import sys
 
-from eval_harness import BIN, SIM_ROOT, ensure_ring_labels, run_sim, write_proto_ini, add_topo_args
+from eval_harness import (BIN, SIM_ROOT, add_topo_args, apply_repeat_args,
+                          ensure_ring_labels, overrides, run_sim, write_proto_ini)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 GP_INI = os.path.join(HERE, "myriadgp.ini")
@@ -47,7 +48,8 @@ CONFIGS = {
 # refreshInterval lives in myriadgp.ini's Grid10/PaperTopology configs (not here),
 # so the run condition travels with the config; test_rib_batching disables refresh
 # on the CLI because it only needs reachability, which holds mid-convergence.
-CONV = ["--sim-time-limit=120s"]
+# Final RIB only: snapshots off, or the t=-prefixed samples land in the dump.
+CONV = overrides(sim_time_limit="120s", snapshotInterval="0s")
 
 # For self-contained inis (arbitrary topo), replicate the fast-refresh that the
 # named fixtures get via myriadgp.ini's [Config Grid10] section.
@@ -126,7 +128,7 @@ def _run_oracle_ini(ini, dump, label):
     if os.path.exists(dump):
         os.remove(dump)
     print(f"  -> LS oracle {label} …", flush=True)
-    run_sim([BIN, "-u", "Cmdenv", ini, "--sim-time-limit=120s",
+    run_sim([BIN, "-u", "Cmdenv", ini, *CONV,
              f'--**.oracleDumpFile="{dump}"',
              "--result-dir", os.path.join(OUT, f"ls_{label}")])
     if not os.path.exists(dump):
@@ -153,8 +155,8 @@ def run_oracle(config, dump):
     if os.path.exists(dump):
         os.remove(dump)
     print(f"  -> LS oracle {config} …", flush=True)
-    run_sim([BIN, "-u", "Cmdenv", LS_INI, COMMON_INI, "-c", config,
-             "--sim-time-limit=120s", f'--**.oracleDumpFile="{dump}"',
+    run_sim([BIN, "-u", "Cmdenv", LS_INI, COMMON_INI, "-c", config, *CONV,
+             f'--**.oracleDumpFile="{dump}"',
              "--result-dir", os.path.join(OUT, f"ls_{config}")])
     if not os.path.exists(dump):
         sys.exit(f"FAIL: LS {config} produced no oracle dump")
@@ -168,6 +170,7 @@ def main(args=None):
         p = argparse.ArgumentParser()
         add_topo_args(p)
         args = p.parse_args()
+        apply_repeat_args(args)
 
     os.makedirs(OUT, exist_ok=True)
     if not os.path.exists(BIN):

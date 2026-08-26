@@ -1,0 +1,434 @@
+#!/usr/bin/env python3
+"""Control-plane cost and failure response of MyriadGP vs MyriadLS.
+
+Three scenarios, one run each per protocol, every run scored on BOTH families:
+traffic (messages/bytes per PDU type) and, where nodes fail, reconvergence time.
+
+    static      no dynamics                      → overhead floor
+    link        LinkFailure, repeating flaps     → overhead per unit of churn
+    node        CatastrophicFailure, one wave    → reconvergence vs failure size,
+                swept over --fractions, with the GP recovery-replay ablation
+
+    python3 simulations/MYRIAD/eval_dynamics.py [--topo PATH] [--only static|link|node]
+
+Replaces eval_overhead.py, eval_recovery.py and eval_reconverge.py: same runs,
+one set of conditions, and the two metric families now describe the same sim.
+Outputs tables + plots under simulations/MYRIAD/eval/dynamics/.
+"""
+import argparse
+import glob
+import os
+import re
+import sys
+from collections import defaultdict
+
+from eval_harness import (BIN, MYRIAD_DIR, add_topo_args, announce,
+                          apply_repeat_args, common, dynamics_args,
+                          ensure_ring_labels, overrides, pm, refresh_s, rep_path,
+                          repeat_mean, repeats_note, run_sim, simtime,
+                          write_proto_ini)
+
+OUT = os.path.join(str(MYRIAD_DIR), "eval", "dynamics")
+RECOVERY_NETWORK = "routingsim.simulations.MYRIAD.RecoveryNetwork"
+
+DEFAULT_FRACTIONS = [0.05, 0.1, 0.2, 0.4, 0.8]
+DOWN_MIN, DOWN_JITTER = 2.0, 8.0   # per-node downtime: DOWN_MIN + U(0, JITTER)
+
+SENT_RE = re.compile(r"^scalar\s+\S+\s+sent_(\S+)\s+([0-9.]+)", re.M)
+BYTES_RE = re.compile(r"^scalar\s+\S+\s+bytes_(\S+)\s+([0-9.]+)", re.M)
+STATS_RE = re.compile(r"^t=([0-9.]+)s?\s+(\d+)\s+n=(\d+)", re.M)
+# EscalatingFailure records when each node it failed came back: down_<node>_<wave>
+DOWN_RE = re.compile(r"^scalar\s+\S+\s+down_(\d+)_(\d+)\s+([0-9.]+)", re.M)
+
+# name -> (protocol, dump parameter, recoveryReplayEnabled).
+# gp_noreplay is the refresh-bound baseline; opt in with --noreplay.
+CONFIGS = {"gp": ("gp", "ribDumpFile", "true"),
+           "gp_noreplay": ("gp", "ribDumpFile", "false"),
+           "ls": ("ls", "oracleDumpFile", None)}
+
+COLORS = {"gp": "C0", "gp_noreplay": "C3", "ls": "C2"}
+
+
+def traffic_simtime():
+    return simtime(cycles=1.5)
+
+
+def node_simtime(nwaves, spacing):
+    return f"{(nwaves + 1) * spacing:g}s"
+
+
+def wave_times(fractions, spacing):
+    """Wave i at (i+1)*spacing: equally spaced from t=0, so the first window is
+    as long as the rest."""
+    return [(f, (i + 1) * spacing) for i, f in enumerate(fractions)]
+
+
+def node_refresh(spacing):
+    """One refresh cycle per wave. Origins whose ring king co-failed need its
+    re-election first (2*refresh watchdog) and so land a wave or more later —
+    that lag is a result of the wave series, not something to tune away."""
+    return spacing
+
+
+def node_conditions(spacing):
+    """Refresh phase half a period off the waves, so the cycle falls between the
+    reboot and the next wave (the king clock re-arms from the last warmup
+    collect)."""
+    return overrides(refreshInterval=f"{node_refresh(spacing):g}s",
+                     collectWarmupDuration=f"{spacing / 2:g}s")
+
+
+def scenario_dynamics(scenario, fractions=None, spacing=None):
+    """(cli options, human description) for one scenario. Periods derive from the
+    central refresh interval so churn scales with --refresh."""
+    if scenario == "static":
+        return [], None
+    if scenario == "link":
+        r = refresh_s()
+        return dynamics_args("link", numLinksFail=4,
+                             period=f"{max(5, round(r / 6)):g}s",
+                             duration=f"{max(2, round(r / 15)):g}s",
+                             oneFailure="false")
+    return dynamics_args("node", fractions='"' + ",".join(f"{f:g}" for f in fractions) + '"',
+                         waveSpacing=f"{spacing:g}s", warmup=f"{spacing:g}s",
+                         downMin=f"{DOWN_MIN:g}s", downJitter=f"{DOWN_JITTER:g}s",
+                         minDegree=0)
+
+
+def measure(name, ini, scenario, dyn, simt=None, rep=0):
+    """One run: traffic totals always, route-count series when nodes fail."""
+    tag = f"{name}_{scenario}"
+    resdir = rep_path(os.path.join(OUT, f"res_{tag}"), rep)
+    dump = rep_path(os.path.join(OUT, f"{tag}.rib"), rep)
+    for stale in (dump, *glob.glob(resdir + "/*.sca")):
+        if os.path.exists(stale):
+            os.remove(stale)
+
+    proto, dumppar, replay = CONFIGS[name]
+    cmd = [BIN, "-u", "Cmdenv", ini,
+           *overrides(sim_time_limit=simt or traffic_simtime()), *dyn,
+           "--result-dir", resdir]
+    if scenario == "node":
+        cmd += [f'--**.{dumppar}="{dump}"', '--**.snapshotFormat="stats"']
+    if replay is not None:
+        cmd.append(f"--**.recoveryReplayEnabled={replay}")
+    run_sim(cmd, allow_budget_expired=True, rep=rep)
+
+    counts, byts, maxb, reboots = {}, {}, 0, defaultdict(dict)
+    for sca in glob.glob(resdir + "/*.sca"):
+        txt = open(sca).read()
+        for m in DOWN_RE.finditer(txt):
+            reboots[int(m.group(2))][int(m.group(1))] = float(m.group(3))
+        for m in SENT_RE.finditer(txt):
+            if m.group(1) != "total":
+                counts[m.group(1)] = counts.get(m.group(1), 0) + int(float(m.group(2)))
+        for m in BYTES_RE.finditer(txt):
+            t, v = m.group(1), int(float(m.group(2)))
+            if t == "max":
+                maxb = max(maxb, v)
+            elif not t.startswith("max") and t != "total":
+                byts[t] = byts.get(t, 0) + v
+    if not counts:
+        sys.exit(f"FAIL: no .sca in {resdir}")
+
+    series = defaultdict(dict)
+    if scenario == "node" and os.path.exists(dump):
+        for m in STATS_RE.finditer(open(dump).read()):
+            series[int(m.group(2))][float(m.group(1))] = int(m.group(3))
+    return ({"counts": counts, "msgs": sum(counts.values()),
+             "bytes": sum(byts.values()), "per_type_bytes": byts, "max_b": maxb},
+            series, reboots)
+
+
+def network_reachability(series, wave0):
+    """(times, % of the pre-wave route total present network-wide). Samples are
+    ragged — a down node stops emitting — so each node's last value is held."""
+    if not series:
+        return [], []
+    last, ts, tot = {}, sorted({t for s in series.values() for t in s}), []
+    for t in ts:
+        for nid, s in series.items():
+            if t in s:
+                last[nid] = s[t]
+        tot.append(sum(last.values()))
+    base = max((v for t, v in zip(ts, tot) if t < wave0), default=0)
+    if not base:
+        return [], []
+    return ts, [100.0 * v / base for v in tot]
+
+
+def reconverge_latencies(series, wave_t, reboots, end_t=float("inf")):
+    """Per affected router: seconds from ITS OWN reboot until its route count is
+    back at the count it held just BEFORE the wave, and stays there.
+
+    Scored inside [wave_t, end_t) so escalating waves in one run stay separate.
+    The pre-wave count is each router's own baseline. A cross-protocol target is
+    not usable here: after the wave the rebooted routers are exactly the ones
+    whose counts may still be degraded at the end of the run, in EVERY config, so
+    taking one config's final counts as truth silently lowers the bar for the
+    others. Returns (latencies of recovered routers, {id: % of its routes still
+    missing at the end of the window} for those that did not recover)."""
+    out, never = {}, {}
+    for nid, ser in series.items():
+        pre = [t for t in ser if t < wave_t]
+        if not pre:
+            continue
+        tgt = ser[max(pre)]
+        post = sorted(t for t in ser if wave_t <= t < end_t)
+        if not tgt or not any(ser[t] < tgt for t in post):
+            continue
+        rec = next((t for i, t in enumerate(post)
+                    if all(ser[t2] >= tgt for t2 in post[i:])), None)
+        if rec is None:
+            never[nid] = 100.0 * (tgt - ser[post[-1]]) / tgt
+        else:
+            out[nid] = max(0.0, rec - reboots.get(nid, wave_t))
+    return out, never
+
+
+def main(args=None):
+    if args is None:
+        p = argparse.ArgumentParser()
+        add_topo_args(p)
+        p.add_argument("--only", choices=["static", "link", "node"])
+        p.add_argument("--fractions", default=None,
+                       help="node-wave failure fractions, e.g. 0.1,0.3")
+        p.add_argument("--wave-spacing", type=float, default=None,
+                       help="seconds between waves; also the refresh interval "
+                            "of the node scenario (default 30)")
+        p.add_argument("--noreplay", action="store_true",
+                       help="also run GP with recoveryReplayEnabled=false")
+        args = p.parse_args()
+        apply_repeat_args(args)
+
+    if not hasattr(args, "wave_spacing"):
+        args.wave_spacing = None
+    if not getattr(args, "noreplay", False):
+        CONFIGS.pop("gp_noreplay", None)
+
+    fractions = ([float(x) for x in args.fractions.split(",")]
+                 if getattr(args, "fractions", None) else DEFAULT_FRACTIONS)
+    scenarios = [args.only] if getattr(args, "only", None) else ["static", "link", "node"]
+
+    os.makedirs(OUT, exist_ok=True)
+    if not os.path.exists(BIN):
+        sys.exit(f"RoutingSim binary not found at {BIN} — build it first.")
+
+    labels = ensure_ring_labels(args.topo, args.basis)
+    inis = {}
+    for proto in ("gp", "ls"):
+        for net, key in ((None, "flat"), (RECOVERY_NETWORK, "recovery")):
+            inis[(proto, key)] = write_proto_ini(
+                os.path.join(OUT, f"{proto}_{key}.ini"), proto, args.topo, labels,
+                update_jitter=args.update_jitter if proto == "gp" else None,
+                **({"network": net} if net else {}))
+
+    traffic, series0 = {}, {}
+    reconv = {name: {} for name in CONFIGS}
+    spacing, waves = args.wave_spacing or 30.0, []
+
+    # --- traffic scenarios ---
+    for scenario in [s for s in scenarios if s != "node"]:
+        dyn, desc = scenario_dynamics(scenario)
+        print(f"\n=== {scenario} ({traffic_simtime()}) ===")
+        announce(scenario, opts=dyn + overrides(sim_time_limit=traffic_simtime()),
+                 dynamics=desc)
+        for name in ("gp", "ls"):
+            print(f"  → {name.upper()} …", flush=True)
+            r = repeat_mean(lambda rep, n=name, s=scenario, d=dyn:
+                            measure(n, inis[(CONFIGS[n][0], "flat")], s, d, rep=rep)[0])
+            traffic[(name, scenario)] = r
+            print(f"  ✓ {r['msgs']:.0f} msgs, {r['bytes']/1000:.0f} KB")
+
+    # --- escalating node waves: ONE run per config, scored per wave ---
+    if "node" in scenarios:
+        waves = wave_times(fractions, spacing)
+        dyn, desc = scenario_dynamics("node", fractions, spacing)
+        dyn += node_conditions(spacing)
+        st = node_simtime(len(fractions), spacing)
+        print(f"\n=== escalating node waves ({st}) ===")
+        announce("node", opts=dyn + overrides(sim_time_limit=st), dynamics=desc)
+
+        def one(rep):
+            out = {}
+            for name in CONFIGS:
+                if rep == 0:
+                    print(f"  → {name} …", flush=True)
+                tr, ser, reboots = measure(name, inis[(CONFIGS[name][0], "recovery")],
+                                           "node", dyn, st, rep)
+                if rep == 0:
+                    series0.setdefault(name, ser)
+                res = {"traffic": tr}
+                for i, (frac, wt) in enumerate(waves):
+                    end = waves[i + 1][1] if i + 1 < len(waves) else float("inf")
+                    lat, never = reconverge_latencies(ser, wt, reboots.get(i, {}), end)
+                    vals = sorted(lat.values())
+                    res[frac] = {"n": len(vals) + len(never), "never": len(never),
+                                 "short": (sum(never.values()) / len(never)
+                                           if never else 0.0),
+                                 "mean": sum(vals) / len(vals) if vals else 0.0,
+                                 "median": vals[len(vals) // 2] if vals else 0.0,
+                                 "max": max(vals) if vals else 0.0}
+                out[name] = res
+            return out
+
+        agg = repeat_mean(one)
+        for name in series0:                 # stacking waves must not overlap
+            ts, pct = network_reachability(series0[name], waves[0][1])
+            for frac, wt in waves:
+                at = max((p for t, p in zip(ts, pct) if t <= wt), default=100.0)
+                if at < 99.9:
+                    print(f"  ! {name}: the {frac:.0%} wave hit a network still at "
+                          f"{at:.0f}% from the previous one — widen --wave-spacing")
+        for name, r in agg.items():
+            traffic[(name, "node")] = r["traffic"]
+            for frac, _ in waves:
+                reconv[name][frac] = r[frac]
+                warn = (f", {r[frac]['never']:.0f} still {r[frac]['short']:.0f}% "
+                        "short when the next wave hit" if r[frac]["never"] else "")
+                print(f"  ✓ {name} {frac:.0%}: {r[frac]['n']:.0f} affected, "
+                      f"mean={r[frac]['mean']:.1f}{pm(r[frac]['mean'])}s, "
+                      f"net(max)={r[frac]['max']:.0f}s{warn}")
+
+    report(traffic, reconv, fractions, scenarios, spacing)
+    plots(traffic, reconv, fractions, scenarios, series0, waves)
+
+
+def report(traffic, reconv, fractions, scenarios, spacing):
+    rows = [(n, s) for (n, s) in traffic if not s.startswith("node")]
+    if rows:
+        print(f"\n=== control-plane traffic over {traffic_simtime()}{repeats_note()} ===")
+        print(f"{'config':>12}{'scenario':>10}{'messages':>20}{'bytes':>22}"
+              f"{'B/msg':>9}{'max B':>9}")
+        for name, scenario in sorted(rows, key=lambda x: (x[1], x[0])):
+            r = traffic[(name, scenario)]
+            m, b = r["msgs"], r["bytes"]
+            ms, bs = f"{m:.0f}" + pm(m, ".0f"), f"{b:.0f}" + pm(b, ".0f")
+            print(f"{name:>12}{scenario:>10}{ms:>20}{bs:>22}"
+                  f"{(b/m if m else 0):>9.1f}{r['max_b']:>9.0f}")
+        for name in ("gp", "ls"):
+            base, churn = traffic.get((name, "static")), traffic.get((name, "link"))
+            if base and churn:
+                print(f"  {name.upper()} churn cost (link−static): "
+                      f"+{churn['msgs']-base['msgs']:.0f} msgs, "
+                      f"+{churn['bytes']-base['bytes']:.0f} bytes")
+
+        for name in ("gp", "ls"):
+            r = traffic.get((name, "static"))
+            if not r:
+                continue
+            print(f"\n--- {name.upper()} static per-type ---")
+            print(f"{'type':>14}{'messages':>20}{'bytes':>22}{'B/msg':>9}{'%bytes':>8}")
+            tot = sum(r["per_type_bytes"].values()) or 1
+            for t in sorted(r["counts"], key=lambda k: -r["per_type_bytes"].get(k, 0)):
+                c, b = r["counts"][t], r["per_type_bytes"].get(t, 0)
+                cs, bs = f"{c:.0f}" + pm(c, ".0f"), f"{b:.0f}" + pm(b, ".0f")
+                print(f"{t:>14}{cs:>20}{bs:>22}{(b/c if c else 0):>9.0f}"
+                      f"{100*b/tot:>7.1f}%")
+
+    if "node" not in scenarios:
+        return
+    r_s = node_refresh(spacing)
+    print(f"\n=== reconvergence after a node wave (down {DOWN_MIN:g}-"
+          f"{DOWN_MIN + DOWN_JITTER:g}s, waves every {spacing:g}s, "
+          f"refresh {r_s:g}s){repeats_note()} ===")
+    print(f"{'fraction':>9}{'config':>13}{'affected':>10}{'late':>6}{'late -%':>9}"
+          f"{'mean':>15}{'median':>9}{'net(max)':>13}{'mean/refresh':>14}")
+    for frac in fractions:
+        for name in CONFIGS:
+            r = reconv[name].get(frac)
+            if r is None or not r["n"]:
+                print(f"{frac:>8.0%}{name:>13}{'-':>10}{'-':>6}{'-':>9}{'-':>15}"
+                      f"{'-':>9}{'-':>13}{'-':>14}")
+                continue
+            recovered = r["n"] - r["never"]
+            mean = (f"{r['mean']:.1f}" + pm(r["mean"]) + "s") if recovered else "-"
+            net = (f"{r['max']:.0f}" + pm(r["max"], ".0f") + "s") if recovered else "-"
+            med = f"{r['median']:.0f}s" if recovered else "-"
+            ratio = f"{r['mean']/r_s:.2f}×" if recovered else "-"
+            late = f"{r['short']:.0f}%" if r["never"] else "-"
+            print(f"{frac:>8.0%}{name:>13}{r['n']:>10.0f}{r['never']:>6.0f}{late:>9}"
+                  f"{mean:>15}{med:>9}{net:>13}{ratio:>14}")
+    print("\naffected = routers whose route count dropped below its pre-wave value; "
+          "late = still below it when the next wave hit, and by how much on average "
+          "(mean/median/max cover the rest). Target is each router's OWN pre-wave "
+          "count.")
+
+
+def plots(traffic, reconv, fractions, scenarios, series0, waves):
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+    except ImportError:
+        print("\n(matplotlib not available — skipping plots)")
+        return
+
+    made = []
+    tscen = [s for s in scenarios if s != "node"]
+    if tscen:
+        protos = ["gp", "ls"]
+        x = range(len(protos))
+        w = 0.8 / len(tscen)
+        for key, ylabel, fname, scale in (("msgs", "sent messages", "traffic_messages.png", 1),
+                                          ("bytes", "bytes (KB)", "traffic_bytes.png", 1000)):
+            fig, ax = plt.subplots()
+            for i, s in enumerate(tscen):
+                bars = ax.bar([p + i * w - 0.4 + w/2 for p in x],
+                              [traffic[(n, s)][key] / scale for n in protos], w,
+                              label=s, color=f"C{i}")
+                ax.bar_label(bars, fmt="%.0f", fontsize=8)
+            ax.set_xticks(list(x)); ax.set_xticklabels([p.upper() for p in protos])
+            ax.set(ylabel=ylabel, title=f"Control plane ({traffic_simtime()})")
+            ax.legend(fontsize=8); fig.tight_layout()
+            fig.savefig(os.path.join(OUT, fname), dpi=120)
+            made.append(fname)
+
+    if "node" in scenarios and any(reconv[n] for n in reconv):
+        fig, ax = plt.subplots()
+        for name, color in COLORS.items():
+            fr = sorted(f for f in reconv.get(name, {}) if reconv[name][f]["n"])
+            if not fr:
+                continue
+            ax.plot([f * 100 for f in fr], [reconv[name][f]["max"] for f in fr],
+                    "o-", color=color, label=f"{name} network-wide (max)")
+            ax.plot([f * 100 for f in fr], [reconv[name][f]["mean"] for f in fr],
+                    "s--", color=color, alpha=0.6, label=f"{name} mean")
+        ax.axhline(refresh_s(), ls=":", color="gray",
+                   label=f"refreshInterval ({common('refreshInterval')})")
+        ax.set(xlabel="nodes failed (%)", ylabel="reconvergence time (s)",
+               title="Reconvergence vs failure size")
+        ax.legend(fontsize=7); fig.tight_layout()
+        fig.savefig(os.path.join(OUT, "reconverge_vs_fraction.png"), dpi=120)
+        made.append("reconverge_vs_fraction.png")
+
+        # One run, waves growing over time: the whole network's route total as a
+        # percentage of its pre-wave value, so a 5% node wave shows as a ~5% dip.
+        fig, ax = plt.subplots(figsize=(3 + 1.6 * len(waves), 4.5))
+        drew = False
+        for name, color in COLORS.items():
+            ts, pct = network_reachability(series0.get(name, {}), waves[0][1])
+            if not ts:
+                continue
+            ax.plot(ts, pct, color=color, lw=1.2, label=name)
+            drew = True
+        if drew:
+            for frac, wt in waves:
+                ax.axvline(wt, color="gray", lw=0.8)
+                ax.axvspan(wt + DOWN_MIN, wt + DOWN_MIN + DOWN_JITTER,
+                           color="gray", alpha=0.12, lw=0)
+                ax.text(wt, 101, f" {frac:.0%}", fontsize=9, color="gray")
+            ax.set(xlim=(0, max(ts)),
+                   xlabel="time (s) — solid: wave fails, shaded: reboot window",
+                   ylabel="network-wide routes present (%)",
+                   title="Route table refill under growing node failures")
+            ax.legend(fontsize=8, loc="lower right"); fig.tight_layout()
+            fig.savefig(os.path.join(OUT, "recovery_node.png"), dpi=120)
+            made.append("recovery_node.png")
+
+    if made:
+        print(f"\nplots -> {OUT}/{{{','.join(sorted(made))}}}")
+
+
+if __name__ == "__main__":
+    main()

@@ -13,18 +13,16 @@ import argparse
 import os
 import sys
 
-from eval_harness import (BIN, SIM_ROOT, MYRIAD_DIR, apply_repeat_args,
-                          ensure_ring_labels, pm, rep_path, repeat_mean,
-                          repeats_note, run_sim, write_proto_ini, add_topo_args)
+from eval_harness import (BIN, SIM_ROOT, MYRIAD_DIR, announce, apply_repeat_args,
+                          ensure_ring_labels, overrides, pm, rep_path, repeat_mean,
+                          repeats_note, run_sim, simtime, write_proto_ini,
+                          add_topo_args)
 
 HERE = str(MYRIAD_DIR)
 OUT = os.path.join(HERE, "eval", "costdrift")
 
-SNAP = "5s"
-SIMTIME = "80s"   # two refresh cycles at 15s; enough to heal transients
-
-# Fast refresh so multiple cycles complete within SIMTIME.
-_REFRESH_LINES = ["**.refreshInterval = 15s", "**.refreshJitter = 0s"]
+# Two refresh cycles: the second heals the first round's size transients.
+SIMTIME = simtime(cycles=2)
 
 
 def parse_snapshots(path):
@@ -51,8 +49,7 @@ def _run(ini, dump_param, dumpfile, resdir, rep=0):
     dumpfile, resdir = rep_path(dumpfile, rep), rep_path(resdir, rep)
     if os.path.exists(dumpfile):
         os.remove(dumpfile)
-    cmd = [BIN, "-u", "Cmdenv", ini,
-           f"--sim-time-limit={SIMTIME}", f"--**.snapshotInterval={SNAP}",
+    cmd = [BIN, "-u", "Cmdenv", ini, *overrides(sim_time_limit=SIMTIME),
            f'--**.{dump_param}="{dumpfile}"', "--result-dir", resdir]
     run_sim(cmd, rep=rep)
     if not os.path.exists(dumpfile):
@@ -75,11 +72,10 @@ def main(args=None):
         sys.exit(f"RoutingSim binary not found at {BIN} — build first.")
 
     labels = ensure_ring_labels(args.topo, args.basis)
-    gp_ini = write_proto_ini(os.path.join(OUT, "gp.ini"), "gp",
-                             args.topo, labels, extra_lines=_REFRESH_LINES,
-                             update_jitter=args.update_jitter, warmup=args.warmup)
-    ls_ini = write_proto_ini(os.path.join(OUT, "ls.ini"), "ls",
-                             args.topo, labels, extra_lines=_REFRESH_LINES)
+    gp_ini = write_proto_ini(os.path.join(OUT, "gp.ini"), "gp", args.topo, labels,
+                             update_jitter=args.update_jitter)
+    ls_ini = write_proto_ini(os.path.join(OUT, "ls.ini"), "ls", args.topo, labels)
+    announce("costdrift", opts=overrides(sim_time_limit=SIMTIME))
 
     # One repeat = the LS+GP pair on the same seed (the drift is a per-run
     # comparison, so both sides must come from the same repeat). Rep 0's raw

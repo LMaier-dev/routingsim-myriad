@@ -16,7 +16,7 @@ simple myriadgp extends routingsim.foundation.Protocol
         // King re-originates a COLLECT every refreshInterval; members watchdog at
         // 2*refreshInterval + uniform(0, refreshJitter).
         double refreshInterval @unit(s) = default(30s);
-        double refreshJitter @unit(s) = default(5s);
+        double refreshJitter @unit(s) = default(refreshInterval * 0.1);
 
         // Spread the initial UPDATE storm: all rings' COLLECTs settle at roughly
         // the same time, so the very first origination per ring is delayed by

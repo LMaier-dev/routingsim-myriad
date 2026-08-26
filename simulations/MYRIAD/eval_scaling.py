@@ -37,8 +37,9 @@ import subprocess
 import sys
 
 from eval_harness import (BIN, SIM_ROOT, SRC, REPO, MYRIAD_DIR, add_repeat_args,
-                          apply_repeat_args, pm, rep_path, repeat_mean,
-                          repeats_note, run_sim)
+                          announce, apply_repeat_args, common, overrides, pm,
+                          rep_path, repeat_mean, repeats_note, run_sim, simtime,
+                          warmup_s)
 
 HERE = str(MYRIAD_DIR)
 GRAPHGEN = str(REPO / "scripts" / "graphgen.py")
@@ -51,9 +52,8 @@ TOPO_DIR = os.path.join(EVAL_DIR, "topologies")
 INI_DIR = os.path.join(EVAL_DIR, "ini")
 PLOT_DIR = os.path.join(EVAL_DIR, "plots")
 BASIS = "min"   # ring basis for topo2rings; set from --basis in main()
-CONV_SNAP = "0.5s"        # stats-mode snapshots are tiny, so poll finely
-CONV_SIMTIME = "100s"   # convergence runs need more headroom (50s default too tight for 20x20)
-CONV_GP_WARMUP = "10s"  # periodic re-COLLECTs every 1s stabilise memberCounts by then
+CONV_SNAP = "0.5s"      # stats snapshots are tiny; poll finely for convergence times
+CONV_SIMTIME = simtime(cycles=1)
 
 # Canonical fair-timing knobs live in eval_common.ini (single source of truth,
 # shared with test_rib_batching.py). Each generated per-run ini `include`s it;
@@ -217,9 +217,6 @@ def write_ini(proto, topo_path, ring_lines):
         "network = routingsim.simulations.DefaultNetwork",
         f'*.manager.topologyFile = "{topo_path}"',
         "*.mainStatistics.samplingInterval = 0.01s",
-        "*.dynamics.fraction = 0",
-        "*.dynamics.warmup = 0s",
-        "**.mobility = false",
     ]
     lines += [ln.rstrip("\n") for ln in ring_lines]
     with open(ini_path, "w") as f:
@@ -287,7 +284,7 @@ def sweep(items, nobatch=False, conv=False):
         # readouts) on one seed; repeat_mean averages the numbers across repeats.
         def one(rep, ls_ini=ls_ini, gp_ini=gp_ini, topo=topo):
             ls_extra = []
-            gp_extra = ['--**.holdInterval=0s'] if nobatch else []
+            gp_extra = overrides(holdInterval="0s") if nobatch else []
             if conv:
                 stem = os.path.splitext(os.path.basename(topo))[0]
                 ls_dump = rep_path(os.path.join(INI_DIR, f"dump_ls_{stem}.txt"), rep)
@@ -295,25 +292,20 @@ def sweep(items, nobatch=False, conv=False):
                 for d in (ls_dump, gp_dump):   # C++ appends; clear stale prior runs
                     if os.path.exists(d):
                         os.remove(d)
-                ls_extra += [f'--**.oracleDumpFile="{ls_dump}"',
-                             f'--**.snapshotInterval={CONV_SNAP}',
-                             '--**.snapshotFormat="stats"',
-                             f'--sim-time-limit={CONV_SIMTIME}']
-                gp_extra += [f'--**.ribDumpFile="{gp_dump}"',
-                             f'--**.snapshotInterval={CONV_SNAP}',
-                             '--**.snapshotFormat="stats"',
-                             f'--sim-time-limit={CONV_SIMTIME}',
-                             f'--**.collectWarmupDuration={CONV_GP_WARMUP}']
+                conv_opts = overrides(snapshotInterval=CONV_SNAP,
+                                      snapshotFormat='"stats"',
+                                      sim_time_limit=CONV_SIMTIME)
+                ls_extra += [f'--**.oracleDumpFile="{ls_dump}"', *conv_opts]
+                gp_extra += [f'--**.ribDumpFile="{gp_dump}"', *conv_opts]
             r = {"ls": message_count("ls", ls_ini, extra_args=ls_extra or None, rep=rep),
                  "gp": message_count("gp", gp_ini, extra_args=gp_extra or None, rep=rep)}
             r["nb"], r["avg_sz"], r["max_sz"] = batch_stats(gp_ini, rep=rep)
             if conv:
-                warmup_s = float(CONV_GP_WARMUP.rstrip("s"))
                 r["ls_ct"] = (convergence_time(parse_stats(ls_dump))
                               if os.path.exists(ls_dump) else None)
                 raw = (convergence_time(parse_stats(gp_dump))
                        if os.path.exists(gp_dump) else None)
-                r["gp_ct"] = (raw - warmup_s) if raw is not None else None
+                r["gp_ct"] = (raw - warmup_s()) if raw is not None else None
             return r
 
         r = repeat_mean(one)
@@ -572,9 +564,9 @@ def main(args=None):
         sweep([(label, topo)], args.nobatch)
         return
 
-    note = repeats_note()
-    if note:
-        print(f"(repeats{note})")
+    announce("scaling", opts=overrides(sim_time_limit=CONV_SIMTIME) if args.convergence else [])
+    if repeats_note():
+        print(f" repeats{repeats_note()}")
 
     if args.quick:
         square_dims = [(n, n) for n in range(3, 6)]

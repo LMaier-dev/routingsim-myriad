@@ -42,7 +42,8 @@ CONFIGS = {"Grid10": "grid_10,10.txt"}
 # states — a latency artefact, not a routing bug). Command line beats both inis.
 PARAMS = [
     "--sim-time-limit=120s",
-    "--**.refreshInterval=200s", "--**.refreshJitter=0s",
+    "--**.refreshInterval=200s",
+    "--**.snapshotInterval=0s",   # final RIB only
 ]
 
 

@@ -24,9 +24,10 @@ import os
 import re
 import sys
 
-from eval_harness import (BIN, SIM_ROOT, MYRIAD_DIR, apply_repeat_args,
-                          ensure_ring_labels, pm, rep_path, repeat_mean,
-                          repeats_note, run_sim, write_proto_ini, add_topo_args)
+from eval_harness import (BIN, SIM_ROOT, MYRIAD_DIR, announce, apply_repeat_args,
+                          common, ensure_ring_labels, overrides, pm, rep_path,
+                          repeat_mean, repeats_note, run_sim, simtime, warmup_s,
+                          write_proto_ini, add_topo_args)
 
 HERE = str(MYRIAD_DIR)
 OUT = os.path.join(HERE, "eval", "convergence")
@@ -37,17 +38,10 @@ OUT = os.path.join(HERE, "eval", "convergence")
 # overlapping refresh generations compound; 2s never converges).
 HOLDS = ["0s", "1us", "4us", "16us", "64us", "256us", "1024us", "4096us",
          "16384us", "65536us", "262144us", "1s"]
-SNAP = "2s"
-SIMTIME = "120s"     # warmup=10s + convergence + one refresh cycle headroom
-# Warmup: run COLLECTs without UPDATEs so memberCounts are pre-populated before
-# the measurement window starts. Eliminates the ~100s refresh-cycle artifact
-# (some inter-ring UPDATEs dropped on first round if local COLLECT hasn't set
-# memberCount yet). Convergence times are reported relative to warmup end.
-GP_WARMUP = "10s"
 
-# Fast refresh so several cycles complete within SIMTIME; eval_common defaults
-# to 100s which would leave only one cycle — not enough to heal transients.
-_REFRESH_LINES = ["**.refreshInterval = 15s", "**.refreshJitter = 0s"]
+# Warmup + one refresh cycle: convergence lands well inside the first cycle, the
+# rest is headroom for a refresh generation to heal first-round transients.
+SIMTIME = simtime(cycles=1)
 
 
 def _to_seconds(s):
@@ -99,8 +93,7 @@ def run_proto(ini, dump_param, dumpfile, resdir, extra, rep=0):
     dumpfile, resdir = rep_path(dumpfile, rep), rep_path(resdir, rep)
     if os.path.exists(dumpfile):
         os.remove(dumpfile)
-    cmd = [BIN, "-u", "Cmdenv", ini,
-           f"--sim-time-limit={SIMTIME}", f"--**.snapshotInterval={SNAP}",
+    cmd = [BIN, "-u", "Cmdenv", ini, *overrides(sim_time_limit=SIMTIME),
            *extra, f'--**.{dump_param}="{dumpfile}"', "--result-dir", resdir]
     run_sim(cmd, rep=rep)
     if not os.path.exists(dumpfile):
@@ -134,10 +127,9 @@ def main(args=None):
 
     labels = ensure_ring_labels(args.topo, args.basis)
     gp_ini = write_proto_ini(os.path.join(OUT, "gp.ini"), "gp",
-                             args.topo, labels, extra_lines=_REFRESH_LINES,
-                             update_jitter=args.update_jitter)
-    ls_ini = write_proto_ini(os.path.join(OUT, "ls.ini"), "ls",
-                             args.topo, labels, extra_lines=_REFRESH_LINES)
+                             args.topo, labels, update_jitter=args.update_jitter)
+    ls_ini = write_proto_ini(os.path.join(OUT, "ls.ini"), "ls", args.topo, labels)
+    announce("convergence", opts=overrides(sim_time_limit=SIMTIME))
 
     # LS reference; its final costs are the proven optimum (truth for the curves).
     # The optimum is seed-independent, so rep 0 alone defines truth; the other
@@ -157,19 +149,14 @@ def main(args=None):
     # — required for the %-optimal curve to be meaningful (else spof-first ranking
     # picks costlier redundant paths and never matches the pure-cost truth).
     gp = {}  # hold -> {"ct", "msgs", "fo", "curve"}
-    warmup = args.warmup or GP_WARMUP        # harness override; NED default is 10s
-    if warmup[-1].isdigit():
-        warmup += "s"
-    warmup_s = _to_seconds(warmup)
     for h in HOLDS:
         print(f"  → GP hold={h} …", flush=True)
         dump = os.path.join(OUT, f"gp_{h}.txt")
         gp[h] = repeat_mean(lambda rep, h=h, dump=dump: derive(
             *run_proto(gp_ini, "ribDumpFile", dump,
                        os.path.join(OUT, f"res_gp_{h}"),
-                       [f"--**.holdInterval={h}", "--**.rankUseSpof=false",
-                        f"--**.collectWarmupDuration={warmup}"], rep),
-            truth, warmup_s))
+                       overrides(holdInterval=h, rankUseSpof="false"), rep),
+            truth, warmup_s()))
         print(f"  ✓ hold={h}: conv={gp[h]['ct']}s, msgs={gp[h]['msgs']:.0f}, "
               f"{gp[h]['fo']:.1f}% optimal")
 
@@ -177,7 +164,7 @@ def main(args=None):
     print(f"\n=== convergence vs holdInterval "
           f"(LS ref: conv={ls_ct:.1f}s, msgs={ls_msgs:.0f}, {len(truth)} pairs)"
           f"{repeats_note()} ===")
-    print(f"  GP warmup={warmup} (subtracted from GP conv times)")
+    print(f"  GP warmup={common('collectWarmupDuration')} (subtracted from GP conv times)")
     print(f"{'hold':>8}{'conv_time':>16}{'sent_total':>18}{'final %opt':>12}")
 
     def row(label, r):

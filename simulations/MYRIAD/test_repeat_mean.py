@@ -38,6 +38,20 @@ def main():
     # ± suffix only for aggregated values
     assert H.pm(H.Stat(1.0, 0.25)) == "±0.2" and H.pm(1.0) == ""
 
+    # central conditions come from eval_common.ini, not from the scripts
+    assert H.common("refreshInterval") and H.common("collectWarmupDuration")
+    assert H.simtime(cycles=2) == f"{H.warmup_s() + 2*H.refresh_s():g}s"
+
+    # overrides build CLI options and are diffed against the file
+    assert H.overrides(holdInterval="0s") == ["--**.holdInterval=0s"]
+    assert H.overrides(sim_time_limit="42s") == ["--sim-time-limit=42s"]
+    assert H._changed(H.overrides(refreshInterval=H.common("refreshInterval"))) == []
+    assert H._changed(["--**.refreshInterval=7s"])[0][0] == "refreshInterval"
+
+    # an active scenario describes itself
+    opts, desc = H.dynamics_args("link", numLinksFail=4, period="5s", duration="2s")
+    assert "--**.dynamics.numLinksFail=4" in opts and "4 links" in desc, (opts, desc)
+
     print("test_repeat_mean: OK")
 
 

@@ -20,6 +20,124 @@ COMMON_INI  = str(MYRIAD_DIR / "eval_common.ini")
 
 _PROGRESS_RE = re.compile(r"Elapsed:|% done|% complete|\bETA\b|\d+%")
 
+# --- central run conditions --------------------------------------------------
+# Everything below is read from eval_common.ini; scripts never hardcode a value
+# that lives there. CLI flags (--refresh/--warmup/--snapshot/--set) land here too
+# and are announced, so a printed run always matches the conditions used.
+EXTRA_OPTS = []          # from --set, applied to every run
+RNG_ISOLATE = True       # dynamics RNG isolated from the protocols'
+_announced = set()
+
+
+def _parse_common():
+    out = {}
+    for ln in Path(COMMON_INI).read_text().splitlines():
+        ln = ln.split("#", 1)[0].strip()
+        if "=" in ln and not ln.startswith("["):
+            k, v = ln.split("=", 1)
+            out[k.strip().removeprefix("**.").removeprefix("*.")] = v.strip()
+    return out
+
+
+COMMON = _parse_common()      # the file, for diffing
+EFFECTIVE = dict(COMMON)      # the file plus CLI overrides
+
+
+def common(name, default=None):
+    """The value in force, i.e. eval_common.ini unless a CLI flag changed it."""
+    return EFFECTIVE.get(name, default)
+
+
+def _sec(v):
+    v = str(v).strip()
+    for suf, mul in (("ms", 1e-3), ("us", 1e-6), ("ns", 1e-9), ("s", 1.0)):
+        if v.endswith(suf):
+            return float(v[:-len(suf)]) * mul
+    return float(v)
+
+
+def refresh_s():
+    return _sec(common("refreshInterval", "120s"))
+
+
+def warmup_s():
+    return _sec(common("collectWarmupDuration", "10s"))
+
+
+def simtime(cycles=2, extra=0.0):
+    """Run horizon as warmup + `cycles` refresh cycles + `extra` seconds, so
+    every script's window tracks --refresh instead of pinning its own."""
+    return f"{warmup_s() + cycles * refresh_s() + extra:g}s"
+
+
+def overrides(**kv):
+    """Per-run parameter overrides as CLI options, recorded for the announce
+    line. Keys are NED parameter names ('**.' is added) or omnetpp options
+    ('sim-time-limit'); values are literal ini values."""
+    out = []
+    for k, v in kv.items():
+        if k in ("sim_time_limit", "sim-time-limit"):
+            out.append(f"--sim-time-limit={v}")
+        else:
+            out.append(f"--**.{k}={v}")
+    return out
+
+
+def _changed(opts):
+    """(name, common value, run value) for options that differ from eval_common."""
+    diff = []
+    for o in opts:
+        if not o.startswith("--"):
+            continue
+        k, _, v = o[2:].partition("=")
+        k = k.removeprefix("**.").removeprefix("*.")
+        was = COMMON.get(k if k != "sim-time-limit" else "sim-time-limit")
+        if was is None or was.strip('"') == v.strip('"'):
+            continue
+        diff.append((k, was, v))
+    return diff
+
+
+def announce(what, opts=(), dynamics=None, once=True):
+    """Print the run conditions, what deviates from eval_common, the dynamics in
+    force and the RNG setup. Called once per script section."""
+    if once and what in _announced:
+        return
+    _announced.add(what)
+    j = refresh_s() * 0.1
+    print(f"  conditions: refresh {common('refreshInterval')} (jitter {j:g}s = NED 10%), "
+          f"warmup {common('collectWarmupDuration')}, snapshot {common('snapshotInterval')}, "
+          f"rxmt {common('rxmtInterval')}")
+    diff = _changed(list(opts) + EXTRA_OPTS)
+    if diff:
+        print("  changed vs eval_common: "
+              + ", ".join(f"{k} {was} → {now}" for k, was, now in diff))
+    print(f"  dynamics: {dynamics or 'none (static topology)'}")
+    print(f"  RNG: seed-set per repeat"
+          + (", dynamics RNG isolated (identical failure schedule for every protocol)"
+             if RNG_ISOLATE else ", SHARED with the protocols (schedules differ per protocol)"))
+
+
+def dynamics_args(model, **kv):
+    """CLI options + a one-line description for an active dynamics scenario.
+    model: 'link' (LinkFailure) or 'node' (EscalatingFailure)."""
+    if model == "link":
+        kv.setdefault("linkSelection", '"random"')
+        kv.setdefault("linkFraction", 0)     # >0 would override numLinksFail
+
+        desc = (f"LinkFailure/{str(kv['linkSelection']).strip('\"')} — "
+                f"{kv.get('numLinksFail', '?')} links, every {kv.get('period')} "
+                f"for {kv.get('duration')}, "
+                + ("once" if str(kv.get("oneFailure")) == "true" else "repeating"))
+    else:
+        waves = str(kv.get("fractions", "")).strip('"')
+        desc = ("EscalatingFailure — waves of "
+                + ", ".join(f"{float(f):.0%}" for f in waves.split(",") if f)
+                + f" of nodes, first at t={kv.get('warmup')}, then every "
+                f"{kv.get('waveSpacing')}, each node back after "
+                f"{kv.get('downMin')}+U(0,{kv.get('downJitter')})")
+    return [f"--**.dynamics.{k}={v}" for k, v in kv.items()], desc
+
 # Stamp of the binary that last passed the oracle gate, so repeat eval runs on an
 # unchanged build skip the (slow) regression. mtime+size is enough for a local
 # build artifact — no need to hash 4.5MB every run.
@@ -80,8 +198,10 @@ def run_sim(cmd, cwd=None, allow_budget_expired=False, rep=0):
     rep: repeat index. Its seed-set replaces any the caller passed, so repeats
     differ in RNG draws while rep 0 reproduces the scripts' historic --seed-set=1.
     Only rep 0 streams progress — parallel repeats would fight over the line."""
-    full_cmd = [a for a in cmd if not str(a).startswith("--seed-set")]
-    full_cmd += [f"--seed-set={rep + 1}", "--cmdenv-status-frequency=2s"]
+    full_cmd = [a for a in cmd if not str(a).startswith(("--seed-set", "--num-rngs"))]
+    full_cmd += EXTRA_OPTS + [f"--seed-set={rep + 1}", "--cmdenv-status-frequency=2s"]
+    if RNG_ISOLATE:
+        full_cmd += ["--num-rngs=2", "--**.dynamics.rng-0=1"]
     proc = subprocess.Popen(full_cmd, cwd=str(cwd or SIM_ROOT),
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                             text=True, bufsize=1)
@@ -106,19 +226,9 @@ def run_sim(cmd, cwd=None, allow_budget_expired=False, rep=0):
 def write_proto_ini(out_path, proto, topo_path, ring_labels_path,
                     extra_lines=None, update_jitter=None, warmup=None,
                     network="routingsim.simulations.DefaultNetwork"):
-    """Write a self-contained ini for one protocol+topology.
-
-    Includes eval_common.ini (fair-timing knobs) then adds topology + ring
-    labels. Avoids loading myriad{gp,ls}.ini so their [Config] overrides
-    (e.g. refreshInterval=15s vs eval_common's 100s) don't fire.
-
-    update_jitter: override MyriadGp's initial-UPDATE jitter (NED default 1s).
-    Pass a larger value for big topologies where 1s isn't enough to spread the
-    startup storm. Accepts "10s" or bare "10" (seconds assumed). Ignored by LS.
-
-    warmup: override MyriadGp's collectWarmupDuration (NED default 10s). Same
-    unit handling as update_jitter. Ignored by LS.
-    """
+    """Self-contained ini for one protocol+topology: eval_common plus the per-run
+    bits. myriad{gp,ls}.ini is deliberately not loaded — its [Config] sections
+    would override eval_common."""
     lines = [
         f"include {COMMON_INI}",
         "[General]",
@@ -126,7 +236,6 @@ def write_proto_ini(out_path, proto, topo_path, ring_labels_path,
         f'**.protocols = "routingsim.routing.MYRIAD.myriad{proto}"',
         f"network = {network}",
         f'*.manager.topologyFile = "{Path(topo_path).resolve()}"',
-        "**.mobility = false",
         "*.mainStatistics.samplingInterval = 0.01s",
     ]
     for par, val in (("updateJitter", update_jitter), ("collectWarmupDuration", warmup)):
@@ -213,16 +322,40 @@ def add_repeat_args(parser):
                         help="run every measurement N times and report mean±sd")
     parser.add_argument("--jobs", type=int, default=None, metavar="J",
                         help="parallel sims (default: min(--repeat, cpu count))")
+    parser.add_argument("--refresh", default=None, metavar="T",
+                        help=f"refreshInterval for every run (eval_common: "
+                             f"{common('refreshInterval')}); jitter follows at 10%%")
+    parser.add_argument("--snapshot", default=None, metavar="T",
+                        help=f"snapshotInterval = latency resolution (eval_common: "
+                             f"{common('snapshotInterval')})")
+    parser.add_argument("--set", dest="set_opts", action="append", default=[],
+                        metavar="KEY=VALUE",
+                        help="override any NED parameter on every run, repeatable "
+                             "(e.g. --set holdInterval=0s)")
+    parser.add_argument("--no-rng-isolate", dest="rng_isolate", action="store_false",
+                        help="let dynamics draw from the shared RNG; protocols then "
+                             "see different failure schedules (default: isolated)")
 
 
 def apply_repeat_args(args):
-    global REPEATS, JOBS
+    """Bind the shared CLI flags into the module state run_sim reads."""
+    global REPEATS, JOBS, EXTRA_OPTS, RNG_ISOLATE
     REPEATS = max(1, getattr(args, "repeat", 1) or 1)
     JOBS = getattr(args, "jobs", None)
+    RNG_ISOLATE = getattr(args, "rng_isolate", True)
+    EXTRA_OPTS = [f"--**.{s}" if not s.startswith("-") else s
+                  for s in getattr(args, "set_opts", [])]
+    for flag, par in (("refresh", "refreshInterval"), ("snapshot", "snapshotInterval"),
+                      ("warmup", "collectWarmupDuration")):
+        v = getattr(args, flag, None)
+        if v:
+            if str(v)[-1].isdigit():
+                v = f"{v}s"
+            EXTRA_OPTS.append(f"--**.{par}={v}")
+            EFFECTIVE[par] = str(v)
 
 
 def add_topo_args(parser):
-    """Add --topo, --basis, --update-jitter, --repeat/--jobs to an ArgumentParser."""
     add_repeat_args(parser)
     parser.add_argument(
         "--topo", default=str(DEFAULT_TOPO),
@@ -232,9 +365,7 @@ def add_topo_args(parser):
         help="ring basis: all=cycle_basis (default), min=minimum_cycle_basis")
     parser.add_argument(
         "--update-jitter", dest="update_jitter", default=None,
-        help="override GP initial-UPDATE jitter (default 1s); raise for large "
-             "topologies to spread the startup storm, e.g. --update-jitter 15s")
+        help="GP initial-UPDATE jitter; raise on large topologies, e.g. 15s")
     parser.add_argument(
         "--warmup", dest="warmup", default=None,
-        help="override GP collectWarmupDuration (default 10s); raise for large "
-             "topologies where counts need longer to settle, e.g. --warmup 30s")
+        help=f"collectWarmupDuration (eval_common: {common('collectWarmupDuration')})")

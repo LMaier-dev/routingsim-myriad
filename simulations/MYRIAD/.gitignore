@@ -1,4 +1,4 @@
 *.png
 *.ringlabels.ini
 eval
-eval_before
+eval_before*
