@@ -1,6 +1,6 @@
 # Building
 
-Rerun only when new directory in src (Protocol) or new .msg file or new libraries or smthg
+Rerun only when new .cc/.msg file or new directory in src (Protocol) or new libraries or smthg
 
 ```
 source /opt/omnetpp-6.3.0/setenv
