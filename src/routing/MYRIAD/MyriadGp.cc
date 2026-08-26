@@ -63,6 +63,7 @@ void MyriadGP::onInitialize() {
     rib.configure(par("ringCostExponent"), par("rankUseSpof"), par("maxEcmpPaths"));
     degradeEnabled = par("degradeEnabled");
     recoveryReplayEnabled = par("recoveryReplayEnabled");
+    refreshFloodsUpdate = par("refreshFloodsUpdate");
     carryRr = par("carryRr");
     maxBatchBytes = par("maxBatchBytes");
     holdInterval = par("holdInterval");
@@ -166,7 +167,7 @@ void MyriadGP::originateCollect(uint32_t ring, nodeid_t to, MyriadGpCollectKind 
         << "' seq=" << m.originSeq << "\n";
 }
 
-void MyriadGP::reoriginateCollect(uint32_t ring) {
+void MyriadGP::reoriginateCollect(uint32_t ring, bool routine) {
     // Pick either ring-neighbor as the send target (alternation covers the
     // other direction on retransmit); skip if the ring isn't fully seen.
     std::vector<nodeid_t> nbrs = ringNeighbors(ring);
@@ -176,6 +177,7 @@ void MyriadGP::reoriginateCollect(uint32_t ring) {
         return;
     }
     if (memberships[ring].collectInflight.tx != nullptr) return; // one at a time
+    memberships[ring].routineRefreshPending = routine;
     originateCollect(ring, nbrs[0]);
 }
 
@@ -185,7 +187,7 @@ void MyriadGP::startRefresh(uint32_t ring) {
     if (rs.refreshTimer)  { cancelAndDelete(rs.refreshTimer);  rs.refreshTimer = nullptr; }
     rs.refreshTimer = addOneShotTimer(refreshInterval + uniform(0, refreshJitter), [this, ring](short) {
         memberships[ring].refreshTimer = nullptr;
-        reoriginateCollect(ring);
+        reoriginateCollect(ring, /*routine=*/true);
         if (memberships[ring].isKing) startRefresh(ring); // reschedule
         return false;
     });
@@ -459,7 +461,10 @@ void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t sender) {
                 else
                     originateUpdate(R);
             } else {
-                originateUpdate(R);
+                bool routine = m.routineRefreshPending;
+                m.routineRefreshPending = false;
+                if (refreshFloodsUpdate || !routine)
+                    originateUpdate(R);
             }
 
             startRefresh(R);

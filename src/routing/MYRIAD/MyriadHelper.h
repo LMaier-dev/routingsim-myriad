@@ -67,12 +67,17 @@ class MyriadHelper : public Protocol {
         std::map<std::string, unsigned long long> sentBytes;
         std::map<std::string, unsigned long long> sentMaxBytes;  // largest single PDU per type
         unsigned long long sentMaxBytesOverall = 0;              // largest single PDU, any type
+        // Per-PDU byte samples over time (OMNeT++ vector, .vec output): sum across
+        // all nodes' txBytes in a time window for network-wide overhead-over-time,
+        // e.g. to see it spike during a failure wave.
+        cOutVector* txBytesVec = nullptr;
         void countSend(const std::string& type, unsigned long long bytes = 0) {
             sentCounts[type]++;
             sentBytes[type] += bytes;
             auto& m = sentMaxBytes[type];
             if (bytes > m) m = bytes;
             if (bytes > sentMaxBytesOverall) sentMaxBytesOverall = bytes;
+            if (txBytesVec) txBytesVec->record((double) bytes);
         }
         static std::string sendTypeLabel(const char* pktName);
         void recordSendScalars() {
@@ -98,6 +103,7 @@ class MyriadHelper : public Protocol {
             myId = node().getNodeId();
             logLevel = parseLogLevel(par("logLevel").stringValue());
             colorLog = par("colorLog").boolValue();
+            txBytesVec = new cOutVector("txBytes");
         }
 
         // Default dispatch for TimerMsg callbacks (used by addOneShotTimer and

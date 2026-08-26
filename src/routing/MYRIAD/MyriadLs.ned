@@ -12,6 +12,9 @@ simple myriadls extends routingsim.foundation.Protocol
         // Jitter added to each hello. Default 0: LS's DBD master/slave
         // negotiation reads hello ordering, so jitter would wedge it.
         double helloJitter @unit(s) = default(0s);
+        // One-time stagger of the first hello at cold start; startup only (reboots
+        // are spread by the failure scenario). A single offset, not per-hello.
+        double joinJitter @unit(s) = default(0s);
         // Max number of LSA headers per DBD packet, or LsaRequests per LSR packet.
         int dbExchangeBatchSize = default(100);
 

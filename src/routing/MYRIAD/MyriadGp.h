@@ -61,6 +61,8 @@ namespace routingsim {
         bool isKing = false;
         TimerMsg* refreshTimer = nullptr;   // king: periodic re-collect
         TimerMsg* watchdogTimer = nullptr;  // member: coup if the king goes silent
+        // Distinguishes "routine, nothing new" refresh from warmup
+        bool routineRefreshPending = false;
         // High-water mark of ring-neighbors. 1 = genuine 2-node ring; a drop from
         // 2 to 1 is degradation, so we let the lap fail and DEGRADE fires.
         size_t maxRingNeighbors = 0;
@@ -111,7 +113,7 @@ namespace routingsim {
             void originateCollect(uint32_t ring, nodeid_t to,
                                   MyriadGpCollectKind kind = COLLECT_ELECTION);
             // Fresh COLLECT for a ring I own (picks a ring-neighbor).
-            void reoriginateCollect(uint32_t ring);
+            void reoriginateCollect(uint32_t ring, bool routine = false);
             void startRefresh(uint32_t ring);   // king: periodic re-collect
             void startWatchdog(uint32_t ring);  // member: coup if the king goes silent
             // Observational periodic RIB snapshot (snapshotInterval)
@@ -184,6 +186,9 @@ namespace routingsim {
             // RibEntry never carries rr. (For eval)
             bool carryRr = true;
             bool recoveryReplayEnabled = true;
+            // Only re-verifies ring state and resets members' watchdogs; it does
+            // NOT re-flood an UPDATE. Meant to pair with recoveryReplayEnabled
+            bool refreshFloodsUpdate = true;
             long maxBatchBytes;  // flush splits the held set under this size
             simtime_t holdInterval;  // batch window; 0 = send immediately
             simtime_t snapshotInterval;      // periodic RIB snapshot; 0 = off (finish() only)

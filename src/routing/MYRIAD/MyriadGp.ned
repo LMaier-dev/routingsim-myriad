@@ -12,6 +12,10 @@ simple myriadgp extends routingsim.foundation.Protocol
         double deadInterval @unit(s) = default(40s);
         double rxmtInterval @unit(s) = default(5s);
         double helloJitter @unit(s) = default(0s);
+        // One-time stagger of the first hello at cold start (uniform(0, joinJitter)),
+        // so ring formation isn't a synchronized herd. Reboots are already spread
+        // by the failure scenario, so this applies to initial startup only.
+        double joinJitter @unit(s) = default(0s);
 
         // King re-originates a COLLECT every refreshInterval; a member watchdogs
         // at refreshInterval + refreshJitter + watchdogMargin
@@ -46,6 +50,11 @@ simple myriadgp extends routingsim.foundation.Protocol
         // ring, the king replays its current front-of-ring chains as seq=0
         // UPDATEs so the recovered node repopulates without waiting for refresh.
         bool recoveryReplayEnabled = default(true);
+
+        // false = the king's routine refresh (already king, nothing new) only
+        // re-verifies ring state and resets watchdogs, without re-flooding an
+        // UPDATE.
+        bool refreshFloodsUpdate = default(true);
 
         // ECMP fan-out cap; excess co-best chains dropped keeping the most
         // ring-diverse subset (see capEcmp). 1 = no multipath. Needed because

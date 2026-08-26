@@ -36,6 +36,7 @@ namespace routingsim {
             simtime_t deadInterval;
             simtime_t rxmtInterval;
             simtime_t helloJitter;
+            simtime_t joinJitter;   // one-time cold-start hello stagger, see subclass onInitialize
 
             void onInitialize() override {
                 MyriadHelper::onInitialize();
@@ -43,6 +44,7 @@ namespace routingsim {
                 deadInterval = par("deadInterval");
                 rxmtInterval = par("rxmtInterval");
                 helloJitter = par("helloJitter");
+                joinJitter = par("joinJitter");
                 initSelfRings();
             }
 

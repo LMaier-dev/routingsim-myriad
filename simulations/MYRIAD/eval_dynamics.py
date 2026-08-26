@@ -16,11 +16,15 @@ one set of conditions, and the two metric families now describe the same sim.
 Outputs tables + plots under simulations/MYRIAD/eval/dynamics/.
 """
 import argparse
+import csv
 import glob
 import os
 import re
+import subprocess
 import sys
 from collections import defaultdict
+
+csv.field_size_limit(sys.maxsize)  # a node's whole txBytes series is one CSV-R cell
 
 from eval_harness import (BIN, MYRIAD_DIR, _sec, add_topo_args, announce,
                           apply_repeat_args, common, dynamics_args,
@@ -41,11 +45,15 @@ STATS_RE = re.compile(r"^t=([0-9.]+)s?\s+(\d+)\s+n=(\d+)", re.M)
 # EscalatingFailure records when each node it failed came back: down_<node>_<wave>
 DOWN_RE = re.compile(r"^scalar\s+\S+\s+down_(\d+)_(\d+)\s+([0-9.]+)", re.M)
 
-# name -> (protocol, dump parameter, recoveryReplayEnabled).
-# gp_noreplay is the refresh-bound baseline; opt in with --noreplay.
-CONFIGS = {"gp": ("gp", "ribDumpFile", "true"),
-           "gp_noreplay": ("gp", "ribDumpFile", "false"),
-           "ls": ("ls", "oracleDumpFile", None)}
+# name -> (protocol, dump parameter, recoveryReplayEnabled, refreshFloodsUpdate).
+# Last two: None = don't override (NED default, true). gp_noreplay is the
+# refresh-bound baseline; opt in with --noreplay. It NEEDS refreshFloodsUpdate's
+# default (true) — periodic reflood is its only propagation path without replay
+# — so --no-refresh-flood (below) only touches the "gp" entry, never this one.
+# A blanket --set refreshFloodsUpdate=... would hit both and cripple gp_noreplay.
+CONFIGS = {"gp": ("gp", "ribDumpFile", "true", None),
+           "gp_noreplay": ("gp", "ribDumpFile", "false", None),
+           "ls": ("ls", "oracleDumpFile", None, None)}
 
 COLORS = {"gp": "C0", "gp_noreplay": "C3", "ls": "C2"}
 
@@ -121,7 +129,7 @@ def measure(name, ini, scenario, dyn, simt=None, rep=0):
         if os.path.exists(stale):
             os.remove(stale)
 
-    proto, dumppar, replay = CONFIGS[name]
+    proto, dumppar, replay, refreshFlood = CONFIGS[name]
     cmd = [BIN, "-u", "Cmdenv", ini,
            *overrides(sim_time_limit=simt or traffic_simtime()), *dyn,
            "--result-dir", resdir]
@@ -129,6 +137,8 @@ def measure(name, ini, scenario, dyn, simt=None, rep=0):
         cmd += [f'--**.{dumppar}="{dump}"', '--**.snapshotFormat="stats"']
     if replay is not None:
         cmd.append(f"--**.recoveryReplayEnabled={replay}")
+    if refreshFlood is not None:
+        cmd.append(f"--**.refreshFloodsUpdate={refreshFlood}")
     run_sim(cmd, allow_budget_expired=True, rep=rep)
 
     counts, byts, maxb, reboots = {}, {}, 0, defaultdict(dict)
@@ -155,6 +165,37 @@ def measure(name, ini, scenario, dyn, simt=None, rep=0):
     return ({"counts": counts, "msgs": sum(counts.values()),
              "bytes": sum(byts.values()), "per_type_bytes": byts, "max_b": maxb},
             series, reboots)
+
+
+def bytes_over_time(resdir, bin_s=1.0):
+    """(bin start times, network-wide bytes/s in that bin), from the per-node
+    txBytes OMNeT++ vector (see MyriadHelper::countSend) rather than the
+    finish()-time byte scalars, which only give the run total. Every node
+    records one sample per PDU sent (time, byte length); summing all nodes'
+    samples into fixed windows gives the network-wide control-plane rate over
+    time, so a failure wave's traffic spike is visible directly."""
+    vecs = glob.glob(os.path.join(resdir, "*.vec"))
+    if not vecs:
+        return [], []
+    for stale in glob.glob(os.path.join(resdir, "*.vci")):
+        os.remove(stale)  # reused result-dir: old index's byte offsets don't match this run's .vec
+    csv_path = os.path.join(resdir, "txbytes_export.csv")
+    subprocess.run(["opp_scavetool", "export", "-f", "name =~ txBytes",
+                    "-F", "CSV-R", "-o", csv_path, vecs[0]],
+                   check=True, capture_output=True, text=True)
+    bins = defaultdict(float)
+    with open(csv_path, newline="") as f:
+        for row in csv.DictReader(f):
+            if row["type"] != "vector":
+                continue
+            for t, v in zip(row["vectime"].split(), row["vecvalue"].split()):
+                bins[int(float(t) // bin_s)] += float(v)
+    os.remove(csv_path)
+    if not bins:
+        return [], []
+    lo, hi = min(bins), max(bins)
+    times = [b * bin_s for b in range(lo, hi + 1)]
+    return times, [bins.get(b, 0.0) / bin_s for b in range(lo, hi + 1)]
 
 
 def network_reachability(series, wave0):
@@ -220,6 +261,11 @@ def main(args=None):
                             "of the node scenario (default 30)")
         p.add_argument("--noreplay", action="store_true",
                        help="also run GP with recoveryReplayEnabled=false")
+        p.add_argument("--no-refresh-flood", action="store_true",
+                       help="GP's routine (already-king) refresh only re-verifies "
+                            "ring state, no reflood — only the 'gp' config, since "
+                            "gp_noreplay needs its default (true) as its sole "
+                            "propagation path without replay")
         args = p.parse_args()
         apply_repeat_args(args)
 
@@ -229,6 +275,9 @@ def main(args=None):
     DOWN_JITTER = getattr(args, "down_jitter", None) or DOWN_JITTER
     if not getattr(args, "noreplay", False):
         CONFIGS.pop("gp_noreplay", None)
+    if getattr(args, "no_refresh_flood", False):
+        proto, dumppar, replay, _ = CONFIGS["gp"]
+        CONFIGS["gp"] = (proto, dumppar, replay, "false")
 
     fractions = ([float(x) for x in args.fractions.split(",")]
                  if getattr(args, "fractions", None) else DEFAULT_FRACTIONS)
@@ -247,7 +296,7 @@ def main(args=None):
                 update_jitter=args.update_jitter if proto == "gp" else None,
                 **({"network": net} if net else {}))
 
-    traffic, series0 = {}, {}
+    traffic, series0, bytes0 = {}, {}, {}
     reconv = {name: {} for name in CONFIGS}
     spacing, waves = args.wave_spacing or 30.0, []
 
@@ -283,6 +332,8 @@ def main(args=None):
                                            "node", dyn, st, rep)
                 if rep == 0:
                     series0.setdefault(name, ser)
+                    resdir = rep_path(os.path.join(OUT, f"res_{name}_node"), rep)
+                    bytes0.setdefault(name, bytes_over_time(resdir))
                 res = {"traffic": tr}
                 for i, (frac, wt) in enumerate(waves):
                     end = waves[i + 1][1] if i + 1 < len(waves) else float("inf")
@@ -316,7 +367,7 @@ def main(args=None):
                       f"net(max)={r[frac]['max']:.0f}s{warn}")
 
     report(traffic, reconv, fractions, scenarios, spacing)
-    plots(traffic, reconv, fractions, scenarios, series0, waves)
+    plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0)
 
 
 def report(traffic, reconv, fractions, scenarios, spacing):
@@ -380,7 +431,7 @@ def report(traffic, reconv, fractions, scenarios, spacing):
           "count.")
 
 
-def plots(traffic, reconv, fractions, scenarios, series0, waves):
+def plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0=None):
     try:
         import matplotlib
         matplotlib.use("Agg")
@@ -447,7 +498,27 @@ def plots(traffic, reconv, fractions, scenarios, series0, waves):
                    xlabel="time (s) — solid: wave fails, shaded: reboot window",
                    ylabel="network-wide routes present (%)",
                    title="Route table refill under growing node failures")
-            ax.legend(fontsize=8, loc="lower right"); fig.tight_layout()
+            handles, labels = ax.get_legend_handles_labels()
+
+            # Right axis: network-wide control-plane bytes/s, from the per-node
+            # txBytes OMNeT++ vector (bytes_over_time) — real send events, not a
+            # post-hoc estimate, so the failure-wave spike is the protocol's
+            # actual instantaneous cost, not an artifact of message counting.
+            if bytes0 and any(bytes0.get(n, ([], []))[0] for n in COLORS):
+                ax2 = ax.twinx()
+                for name, color in COLORS.items():
+                    bts, bps = bytes0.get(name, ([], []))
+                    if not bts:
+                        continue
+                    ax2.plot(bts, bps, color=color, lw=0.8, ls=":", alpha=0.6,
+                             label=f"{name} bytes/s")
+                ax2.set_yscale("log")
+                ax2.set_ylabel("control-plane bytes/s (log)")
+                h2, l2 = ax2.get_legend_handles_labels()
+                handles, labels = handles + h2, labels + l2
+
+            ax.legend(handles, labels, fontsize=7, loc="lower right")
+            fig.tight_layout()
             fig.savefig(os.path.join(OUT, "recovery_node.png"), dpi=120)
             made.append("recovery_node.png")
 

@@ -52,7 +52,7 @@ void MyriadLS::onInitialize() {
     installSelfLsas();
 
     // periodically send hellos to all neighbors
-    scheduleHello(helloInterval);
+    scheduleHello(helloInterval + uniform(0, joinJitter));
 
     if (snapshotInterval > 0 && !par("oracleDumpFile").stdstringValue().empty())
         startSnapshot();
@@ -549,11 +549,16 @@ void MyriadLS::handleDBD(MyriadDBD* dbd, nodeid_t from) {
     }
     if (myId > from) { // master
         if (dbd->getInit()) { // Phase 1 master negotioation
-            nbr.amMaster = true;
-            nbr.ddSeq = nbr.ddSeq + 1;
-            // Phase 2 intiated by master
-            cancelReliable(nbr.inflightDbd);
-            sendDBD(from, /*init=*/false, nbr.amMaster, nbr.ddSeq);
+            if (nbr.ddSeq != 0) {
+                // Exchange already started: this is a stale slave-init retransmit
+                MLOG_N_DEBUG(from) << "ignoring stale slave init after exchange start\n";
+            } else {
+                nbr.amMaster = true;
+                nbr.ddSeq = nbr.ddSeq + 1;
+                // Phase 2 intiated by master
+                cancelReliable(nbr.inflightDbd);
+                sendDBD(from, /*init=*/false, nbr.amMaster, nbr.ddSeq);
+            }
         } else {
             if (!dbd->getMaster() && dbd->getSeq_no() == nbr.ddSeq && nbr.state < NSTATE_FULL) {
                 processDBD(dbd, nbr); // expected DBD, process and respond with next one
@@ -578,8 +583,11 @@ void MyriadLS::handleDBD(MyriadDBD* dbd, nodeid_t from) {
         if (dbd->getInit()) { // Phase 1 master negotioation
             nbr.amMaster = false;
             nbr.ddSeq = dbd->getSeq_no() + 1;
-            // slave does not retransmit
-            cancelReliable(nbr.inflightDbd);
+            // Keep our own init retransmitting (do NOT cancel it here). The master
+            // starts the exchange only from its getInit handler, so it must receive
+            // our init AFTER it reaches TWO-WAY — otherwise a staggered join, where
+            // the master ignored our earlier inits, deadlocks in ExStart. The init
+            // is cancelled once the master's phase-2 arrives (the else branch below).
         } else {
             // slaves never retransmit (cancel just in case, but it should be null)
             cancelReliable(nbr.inflightDbd);
