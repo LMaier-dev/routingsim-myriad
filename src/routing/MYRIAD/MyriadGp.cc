@@ -63,6 +63,7 @@ void MyriadGP::onInitialize() {
     rib.configure(par("ringCostExponent"), par("rankUseSpof"), par("maxEcmpPaths"));
     degradeEnabled = par("degradeEnabled");
     recoveryReplayEnabled = par("recoveryReplayEnabled");
+    carryRr = par("carryRr");
     maxBatchBytes = par("maxBatchBytes");
     holdInterval = par("holdInterval");
     snapshotInterval = par("snapshotInterval");
@@ -72,8 +73,10 @@ void MyriadGP::onInitialize() {
 
     MLOG_INFO() << "MyriadGP up\n";
 
-    // Periodically send hellos to all neighbors. The hello / dead / two-way
-    scheduleHello(helloInterval);
+    // Periodically send hellos to all neighbors. Cold start staggers the first
+    // hello over joinJitter so formation isn't a synchronized herd, mirroring the
+    // reboot spread; a reboot's stagger already comes from the failure scenario.
+    scheduleHello(helloInterval + uniform(0, joinJitter));
 
     if (snapshotInterval > 0 && !par("ribDumpFile").stdstringValue().empty())
         startSnapshot();
@@ -134,11 +137,13 @@ void MyriadGP::originateCollect(uint32_t ring, nodeid_t to, MyriadGpCollectKind 
     pkt->setKind(kind);
 
     // Insert my (subnet, myId) pairs.
-    pkt->setRrArraySize(mySubnets.size());
-    for (size_t i = 0; i < mySubnets.size(); ++i) {
-        MyriadGpRr rr_entry; rr_entry.subnet = mySubnets[i];
-        rr_entry.owner = myId;
-        pkt->setRr(i, rr_entry);
+    if (carryRr) {
+        pkt->setRrArraySize(mySubnets.size());
+        for (size_t i = 0; i < mySubnets.size(); ++i) {
+            MyriadGpRr rr_entry; rr_entry.subnet = mySubnets[i];
+            rr_entry.owner = myId;
+            pkt->setRr(i, rr_entry);
+        }
     }
 
     // Seed transitions with my OTHER rings, all isRedundant=false; the ring
@@ -596,13 +601,15 @@ void MyriadGP::insertAndForwardCollect(MyriadGpCollect* pkt, uint32_t R, nodeid_
     pkt->setMember_count(pkt->getMember_count() + 1);
 
     // 1. Append my (subnet, myId) pairs.
-    size_t n = pkt->getRrArraySize();
-    pkt->setRrArraySize(n + mySubnets.size());
-    for (size_t i = 0; i < mySubnets.size(); ++i) {
-        MyriadGpRr rr_entry;
-        rr_entry.subnet = mySubnets[i];
-        rr_entry.owner = myId;
-        pkt->setRr(n + i, rr_entry);
+    if (carryRr) {
+        size_t n = pkt->getRrArraySize();
+        pkt->setRrArraySize(n + mySubnets.size());
+        for (size_t i = 0; i < mySubnets.size(); ++i) {
+            MyriadGpRr rr_entry;
+            rr_entry.subnet = mySubnets[i];
+            rr_entry.owner = myId;
+            pkt->setRr(n + i, rr_entry);
+        }
     }
 
     // 2. Update transitions for each of my OTHER rings.

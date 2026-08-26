@@ -39,6 +39,9 @@ simple myriadgp extends routingsim.foundation.Protocol
         // rely on refresh/purge alone (broken paths linger until reconvergence).
         bool degradeEnabled = default(true);
 
+        // Eval only: Disable RR
+        bool carryRr = default(true);
+
         // On COLLECT own-return, if a recovered (stateless) member is on the
         // ring, the king replays its current front-of-ring chains as seq=0
         // UPDATEs so the recovered node repopulates without waiting for refresh.
