@@ -18,6 +18,16 @@ enum NeighborState {
     NSTATE_FULL,
 };
 
+inline std::string formatChain(const std::vector<uint32_t>& chain) {
+    std::string s = "[";
+    for (size_t i = 0; i < chain.size(); ++i) {
+        if (i) s += ',';
+        s += std::to_string(chain[i]);
+    }
+    s += ']';
+    return s;
+}
+
 inline const char* nstateName(NeighborState s) {
     switch (s) {
         case NSTATE_DOWN:   return "DOWN";
@@ -112,16 +122,6 @@ class MyriadHelper : public Protocol {
         static MyriadLogLevel parseLogLevel(const char* s);
         static const char* levelColor(const char* level);
         
-        static std::string formatChain(const std::vector<uint32_t>& chain) {
-            std::string s = "[";
-            for (size_t i = 0; i < chain.size(); ++i) {
-                if (i) s += ',';
-                s += std::to_string(chain[i]);
-            }
-            s += ']';
-            return s;
-        }
-
         TimerMsg* addOneShotTimer(simtime_t delay, TimerMsg::cbfunc_t callback) {
             auto* msg = new TimerMsg(-1, callback);
             scheduleAt(simTime() + delay, msg);

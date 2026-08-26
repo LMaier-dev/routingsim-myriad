@@ -3,6 +3,7 @@
 
 #include "routing/MYRIAD/MyriadHello.h"
 #include "routing/MYRIAD/MyriadGpPkt_m.h"
+#include "routing/MYRIAD/MyriadGpRib.h"
 #include <boost/container/flat_map.hpp>
 #include <unordered_map>
 #include <map>
@@ -36,15 +37,6 @@ namespace routingsim {
         TimerMsg* budgetTimer = nullptr;
     };
 
-    // A learned path to an origin ring. chain is prepend-order:
-    // chain[0] = latest ring, chain.back() = origin.
-    struct RibEntry {
-        std::vector<uint32_t> chain;
-        uint64_t chain_cost = 0;           // sum of memberCount^ringCostExponent over chain
-        uint32_t seq_no = 0;
-        uint32_t spof_count = 0;
-    };
-
     // isRedundant: false = one router bridges to this ring (a SPOF),
     // true = two or more do. Filled during the Collect lap.
     struct AdjacentRingState {
@@ -53,7 +45,7 @@ namespace routingsim {
     };
 
     // State a router keeps ONLY for rings it is itself a member of: king/collect
-    // bookkeeping and the in-flight ring laps.
+    // bookkeeping and the in-flight ring laps. Route state lives in MyriadGpRib.
     struct RingMembership {
         uint32_t originSeq = 1;     // my sequence for this ring (COLLECT + origin-UPDATE)
         uint32_t memberCount = 0;   // ring size; set when a COLLECT lap closes
@@ -72,27 +64,6 @@ namespace routingsim {
         // High-water mark of ring-neighbors. 1 = genuine 2-node ring; a drop from
         // 2 to 1 is degradation, so we let the lap fail and DEGRADE fires.
         size_t maxRingNeighbors = 0;
-    };
-
-    struct RingState {
-        // Origin-scoped: kept for EVERY ring this router knows a route to.
-        std::vector<MyriadGpRr> rr; // (subnet, owner) pairs; refreshed when curSeq advances
-        uint32_t curSeq = 0;        // highest seq_no seen for this origin ring
-        // Learned chains for this origin. Usually one generation (all co-best).
-        // Make-before-break may also keep PREVIOUS-generation chains (seq_no ==
-        // curSeq-1) that beat the current one, so the data plane keeps a good
-        // redundant route while reconverging.
-        // At most two adjacent generations coexist.
-        std::vector<RibEntry> ribIn;
-        size_t preferred = SIZE_MAX; // index into ribIn; SIZE_MAX = none
-        // Member-scoped state; present only if this router is on the ring.
-        std::unique_ptr<RingMembership> member;
-    };
-
-    struct RouteEntry {
-        uint32_t origin_ring = 0;
-        std::vector<uint32_t> chain; // prepend-order, like RibEntry
-        nodeid_t owner = 0;
     };
 
     // An inter-ring transition held for batching (see holdInterval); origin is
@@ -136,11 +107,6 @@ namespace routingsim {
             // (re-beaconed on each retry). floodDegrade skips the hop we got it from.
             void originateDegrade(uint32_t ring);
             void floodDegrade(uint32_t ring, uint32_t seq, uint32_t beacon, nodeid_t skip);
-            // A chain is degraded iff any ring on it has an active degrade.
-            bool chainDegraded(const std::vector<uint32_t>& chain) const;
-            void reselectAll();
-            // A newer generation of `ring` proves it healed → drop its degrade.
-            void clearDegradeIfRecovered(uint32_t ring);
 
             void originateCollect(uint32_t ring, nodeid_t to, bool beacon = false);
             // Fresh COLLECT for a ring I own (picks a ring-neighbor).
@@ -212,15 +178,8 @@ namespace routingsim {
             simtime_t refreshInterval;
             simtime_t refreshJitter;
             simtime_t updateJitter;   // spread the initial per-ring UPDATE storm
-            // Path cost = sum of member_count^ringCostExponent over the chain.
-            // Integer exponent (a>=1) keeps costs in uint64 so co-best ties are
-            // exact (no float ULP mismatch), which ECMP needs.
-            long ringCostExponent;
-            // false = rank purely by cost (oracle mode); see MyriadGp.ned.
-            bool rankUseSpof = true;
             bool degradeEnabled = true;
             bool recoveryReplayEnabled = true;
-            long maxEcmpPaths;   // max co-best chains kept per origin
             long maxBatchBytes;  // flush splits the held set under this size
             simtime_t holdInterval;  // batch window; 0 = send immediately
             simtime_t snapshotInterval;      // periodic RIB snapshot; 0 = off (finish() only)
@@ -236,33 +195,12 @@ namespace routingsim {
             unsigned long batchEntriesTotal = 0;
             unsigned long batchMaxEntries = 0;
             unsigned long batchesCreated = 0;
-            uint64_t sizeToCost(uint32_t s) const;
-            // Rank order: spof, then cost, then chain length. Used by both the
-            // store cascade and selectPreferred.
-            bool strictlyBetter(const RibEntry& a, const RibEntry& b) const;
-            // Co-best: equal on (spof, cost, chain-length). Chain order is not in
-            // the key, so genuine ties are retained for ECMP.
-            bool coBest(const RibEntry& a, const RibEntry& b) const;
-            // Trim ribIn to maxEcmpPaths, keeping the most ring-diverse subset;
-            // operates on the current generation only. Returns whether candChain
-            // survived.
-            bool capEcmp(RingState& rs, const std::vector<uint32_t>& candChain);
-            bool frontRepresented(const RingState& rs, uint32_t front, size_t except) const;
-            // New-best erase that keeps each front-ring's sole current-gen.
-            void dropCurGenKeepingFronts(RingState& rs, uint32_t candFront);
-            // Best across all of ribIn (strictlyBetter, then lex-min chain),
-            // ignoring seq — so preferred may lag curSeq (see ribIn in RingState).
-            void selectPreferred(RingState& rs);
 
         private:
-            std::unordered_map<uint32_t /*ring*/, RingState> rings;
-            // Degrade state per culprit ring, kept here (not per-chain) so RIB-In
-            // purges don't lose it; chains re-mark from this.
-            std::unordered_map<uint32_t /*culprit ring*/,
-                               std::pair<uint32_t /*seq_no*/, uint32_t /*beacon_no*/>> degrades;
-            std::unordered_map<uint32_t /*subnet*/, RouteEntry> routes;
-            std::unordered_map<uint32_t /*subnet*/, std::vector<uint32_t> /*ring_ids*/> subnetToRing;
-            std::vector<uint32_t /*subnet*/> keys; // random destination picks in sim
+            MyriadGpRib rib;
+            // Present iff I am a member of the ring; see RibRing in MyriadGpRib.h
+            // for the route state kept per origin ring.
+            std::unordered_map<uint32_t /*ring*/, RingMembership> memberships;
     };
 
 } // namespace routingsim

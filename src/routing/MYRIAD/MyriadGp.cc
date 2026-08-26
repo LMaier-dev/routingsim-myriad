@@ -37,21 +37,14 @@ int64_t gpBatchBytes(const MyriadGpUpdateBatch* p) {
     return b;
 }
 
-// Get-or-create the member-only state for a ring this router belongs to. Only
-// ever called on rings we're a member of, so remote origins stay member==null.
-RingMembership& mem(RingState& rs) {
-    if (!rs.member) rs.member = std::make_unique<RingMembership>();
-    return *rs.member;
-}
-
 static uint64_t satAdd(uint64_t a, uint64_t b) {
     return (b > std::numeric_limits<uint64_t>::max() - a) ? std::numeric_limits<uint64_t>::max() : a + b;
 }
 } // namespace
 
 uint32_t MyriadGP::memberCountOf(uint32_t ring) const {
-    auto it = rings.find(ring);
-    return (it != rings.end() && it->second.member) ? it->second.member->memberCount : 0;
+    auto it = memberships.find(ring);
+    return it == memberships.end() ? 0 : it->second.memberCount;
 }
 
 void MyriadGP::onInitialize() {
@@ -66,11 +59,9 @@ void MyriadGP::onInitialize() {
     refreshInterval = par("refreshInterval");
     refreshJitter = par("refreshJitter");
     updateJitter = par("updateJitter");
-    ringCostExponent = par("ringCostExponent");
-    rankUseSpof = par("rankUseSpof");
+    rib.configure(par("ringCostExponent"), par("rankUseSpof"), par("maxEcmpPaths"));
     degradeEnabled = par("degradeEnabled");
     recoveryReplayEnabled = par("recoveryReplayEnabled");
-    maxEcmpPaths = par("maxEcmpPaths");
     maxBatchBytes = par("maxBatchBytes");
     holdInterval = par("holdInterval");
     snapshotInterval = par("snapshotInterval");
@@ -103,7 +94,7 @@ void MyriadGP::onTwoWayReached(GpNeighbor& nbr) {
             if (n.state < NSTATE_TWOWAY) continue;
             for (uint32_t r : n.sharedRings) if (r == R) { ++count; break; }
         }
-        RingMembership& m = mem(rings[R]);
+        RingMembership& m = memberships[R];
         if (count > m.maxRingNeighbors) m.maxRingNeighbors = count;
         // Originate once >=1 ring-neighbor is two-way (a genuine 2-node ring has
         // exactly one and closes its lap via echo; see the echo sites below).
@@ -122,7 +113,7 @@ void MyriadGP::onTwoWayReached(GpNeighbor& nbr) {
 }
 
 void MyriadGP::originateCollect(uint32_t ring, nodeid_t to, bool beacon) {
-    RingMembership& m = mem(rings[ring]);
+    RingMembership& m = memberships[ring];
     m.originSeq += 1;
     m.collectInflight.seq_no = m.originSeq;
 
@@ -176,18 +167,18 @@ void MyriadGP::reoriginateCollect(uint32_t ring) {
                      << "' skipped: no ring-neighbors\n";
         return;
     }
-    if (mem(rings[ring]).collectInflight.tx != nullptr) return; // one at a time
+    if (memberships[ring].collectInflight.tx != nullptr) return; // one at a time
     originateCollect(ring, nbrs[0]);
 }
 
 void MyriadGP::startRefresh(uint32_t ring) {
-    RingMembership& rs = mem(rings[ring]);
+    RingMembership& rs = memberships[ring];
     if (rs.watchdogTimer) { cancelAndDelete(rs.watchdogTimer); rs.watchdogTimer = nullptr; }
     if (rs.refreshTimer)  { cancelAndDelete(rs.refreshTimer);  rs.refreshTimer = nullptr; }
     rs.refreshTimer = addOneShotTimer(refreshInterval + uniform(0, refreshJitter), [this, ring](short) {
-        mem(rings[ring]).refreshTimer = nullptr;
+        memberships[ring].refreshTimer = nullptr;
         reoriginateCollect(ring);
-        if (mem(rings[ring]).isKing) startRefresh(ring); // reschedule
+        if (memberships[ring].isKing) startRefresh(ring); // reschedule
         return false;
     });
 }
@@ -205,8 +196,8 @@ void MyriadGP::startSnapshot() {
 
 void MyriadGP::startWarmupCollects() {
     addOneShotTimer(collectWarmupInterval, [this](short) -> bool {
-        for (auto& [ring, rs] : rings)
-            if (rs.member && rs.member->isKing) reoriginateCollect(ring);
+        for (auto& [ring, m] : memberships)
+            if (m.isKing) reoriginateCollect(ring);
         if (simTime() < collectWarmupDuration)
             startWarmupCollects();
         return false;
@@ -214,11 +205,11 @@ void MyriadGP::startWarmupCollects() {
 }
 
 void MyriadGP::startWatchdog(uint32_t ring) {
-    RingMembership& rs = mem(rings[ring]);
+    RingMembership& rs = memberships[ring];
     if (rs.watchdogTimer) { cancelAndDelete(rs.watchdogTimer); rs.watchdogTimer = nullptr; }
     simtime_t delay = 2 * refreshInterval + uniform(0, refreshJitter);
     rs.watchdogTimer = addOneShotTimer(delay, [this, ring](short) {
-        mem(rings[ring]).watchdogTimer = nullptr;
+        memberships[ring].watchdogTimer = nullptr;
         MLOG_INFO() << "watchdog fired for ring='" << ring
                     << "' — starting coup\n";
         reoriginateCollect(ring); // become king only on own-return
@@ -227,7 +218,7 @@ void MyriadGP::startWatchdog(uint32_t ring) {
 }
 
 void MyriadGP::cancelKingship(uint32_t ring) {
-    RingMembership& rs = mem(rings[ring]);
+    RingMembership& rs = memberships[ring];
     rs.isKing = false;
     if (rs.refreshTimer) { cancelAndDelete(rs.refreshTimer); rs.refreshTimer = nullptr; }
     startWatchdog(ring);
@@ -293,13 +284,13 @@ void MyriadGP::cancelRingReliable(RingInflight& fl) {
 }
 
 void MyriadGP::cancelCollect(uint32_t ring) {
-    auto it = rings.find(ring);
-    if (it == rings.end() || !it->second.member) return;
-    cancelRingReliable(it->second.member->collectInflight);
+    auto it = memberships.find(ring);
+    if (it == memberships.end()) return;
+    cancelRingReliable(it->second.collectInflight);
 }
 
 void MyriadGP::onCollectBudgetExpired(uint32_t ring) {
-    RingMembership& m = mem(rings[ring]);
+    RingMembership& m = memberships[ring];
     // This runs from the budgetTimer's own callback; the harness frees that
     // message after we return, so drop our handle before cancelRingReliable
     // (which would otherwise cancelAndDelete the message we're executing).
@@ -314,9 +305,9 @@ void MyriadGP::onCollectBudgetExpired(uint32_t ring) {
 }
 
 void MyriadGP::onUpdateBudgetExpired(uint32_t ring, std::vector<uint32_t> chain) {
-    auto rit = rings.find(ring);
-    if (rit == rings.end() || !rit->second.member) return;
-    auto& infl = rit->second.member->updateInflights;
+    auto rit = memberships.find(ring);
+    if (rit == memberships.end()) return;
+    auto& infl = rit->second.updateInflights;
     auto it = infl.find(chain);
     if (it == infl.end()) return;
     // Drop the budget-timer handle first (see onCollectBudgetExpired).
@@ -329,9 +320,9 @@ void MyriadGP::onUpdateBudgetExpired(uint32_t ring, std::vector<uint32_t> chain)
 }
 
 void MyriadGP::onBatchBudgetExpired(uint32_t ring, uint32_t batchLapSeq) {
-    auto rit = rings.find(ring);
-    if (rit == rings.end() || !rit->second.member) return;
-    auto& infl = rit->second.member->batchInflights;
+    auto rit = memberships.find(ring);
+    if (rit == memberships.end()) return;
+    auto& infl = rit->second.batchInflights;
     auto it = infl.find(batchLapSeq);
     if (it == infl.end()) return;
     it->second.budgetTimer = nullptr;   // see onCollectBudgetExpired
@@ -349,7 +340,7 @@ void MyriadGP::onNeighborDead(GpNeighbor& nbr, bool /*wasFull*/) {
     // budget, the collect completes; otherwise the budget timer fires DEGRADE.
     // If an inflight already exists, do nothing and let its budget run.
     for (uint32_t R : nbr.sharedRings) {
-        if (mem(rings[R]).collectInflight.tx != nullptr) continue;
+        if (memberships[R].collectInflight.tx != nullptr) continue;
         MLOG_N_INFO(nbr.id) << "grace COLLECT ring='" << R
                             << "' to dead neighbor\n";
         originateCollect(R, nbr.id);
@@ -399,8 +390,7 @@ void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t sender) {
     uint32_t R = collect->getCurrent_ring();
     nodeid_t king = collect->getRouter_id_src();
     uint32_t seq = collect->getSeq_no();
-    RingState& rs = rings[R];
-    RingMembership& m = mem(rs);
+    RingMembership& m = memberships[R];
 
     // Own return — circular ACK completes the collection.
     if (king == myId) {
@@ -411,10 +401,11 @@ void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t sender) {
             m.memberCount = collect->getMember_count();
 
             // Snapshot the collected data onto ring state.
-            rs.rr.clear();
-            rs.rr.reserve(collect->getRrArraySize());
+            std::vector<MyriadGpRr> collected;
+            collected.reserve(collect->getRrArraySize());
             for (size_t i = 0; i < collect->getRrArraySize(); ++i)
-                rs.rr.push_back(collect->getRr(i));
+                collected.push_back(collect->getRr(i));
+            rib.setRr(R, std::move(collected));
 
             m.adjacentRings.clear();
             m.adjacentRings.reserve(collect->getTransitionsArraySize());
@@ -425,7 +416,7 @@ void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t sender) {
 
             MLOG_INFO() << "COLLECT complete ring='" << R
                         << "' seq=" << seq
-                        << " rr=" << rs.rr.size()
+                        << " rr=" << rib.rr(R).size()
                         << " transitions=[";
             for (size_t i = 0; i < m.adjacentRings.size(); ++i) {
                 auto& a = m.adjacentRings[i];
@@ -529,19 +520,10 @@ std::vector<nodeid_t> MyriadGP::ringNeighbors(uint32_t ring) {
 }
 
 void MyriadGP::originateUpdate(uint32_t ring) {
-    RingState& rs = rings[ring];
-    RingMembership& m = mem(rs);
-
-    // Install my own trivial [ring] route, as members do when this UPDATE
-    // reaches them — else the king has no entry to its own ring and backfills a
-    // looped-back detour.
-    if (m.originSeq > rs.curSeq) { rs.curSeq = m.originSeq; rs.ribIn.clear(); }
-    clearDegradeIfRecovered(ring);
-    RibEntry self{{ring}, sizeToCost(m.memberCount ? m.memberCount : UNKNOWN_RING_SIZE),
-                  m.originSeq, 0};
-    bool haveSelf = false;
-    for (auto& e : rs.ribIn) if (e.chain == self.chain) { haveSelf = true; break; }
-    if (!haveSelf) { rs.ribIn.push_back(self); selectPreferred(rs); }
+    RingMembership& m = memberships[ring];
+    rib.installSelfChain(ring, m.originSeq,
+        rib.sizeToCost(m.memberCount ? m.memberCount : UNKNOWN_RING_SIZE));
+    const std::vector<MyriadGpRr>& rr = rib.rr(ring);
 
     std::vector<nodeid_t> nbrs = ringNeighbors(ring);
     if (nbrs.empty()) {
@@ -563,8 +545,8 @@ void MyriadGP::originateUpdate(uint32_t ring) {
     pkt->setMember_count(m.memberCount);  // origin ring size (trailer)
     pkt->setSpof_count(0);
 
-    pkt->setRrArraySize(rs.rr.size());
-    for (size_t i = 0; i < rs.rr.size(); ++i) pkt->setRr(i, rs.rr[i]);
+    pkt->setRrArraySize(rr.size());
+    for (size_t i = 0; i < rr.size(); ++i) pkt->setRr(i, rr[i]);
 
     // Trailer: my (the king's) transition widths for this ring, so members can
     // set spof_count correctly when they transition this update onward.
@@ -581,7 +563,7 @@ void MyriadGP::originateUpdate(uint32_t ring) {
     // rings I fan into so sibling bridges on the origin lap don't duplicate.
     std::vector<uint32_t> handled;
     std::vector<uint32_t> emptyChain;
-    forwardChainInterRing(ring, m.originSeq, 0, emptyChain, 0, rs.rr, handled);
+    forwardChainInterRing(ring, m.originSeq, 0, emptyChain, 0, rr, handled);
     pkt->setHandled_ringsArraySize(handled.size());
     for (size_t i = 0; i < handled.size(); ++i) pkt->setHandled_rings(i, handled[i]);
 
@@ -593,11 +575,11 @@ void MyriadGP::originateUpdate(uint32_t ring) {
                      [this, ring, emptyChain]() { onUpdateBudgetExpired(ring, emptyChain); });
 
     MLOG_N_INFO(nbrs[0]) << "originate UPDATE ring='" << ring
-        << "' seq=" << m.originSeq << " rr=" << rs.rr.size() << "\n";
+        << "' seq=" << m.originSeq << " rr=" << rr.size() << "\n";
 }
 
 void MyriadGP::insertAndForwardCollect(MyriadGpCollect* pkt, uint32_t R, nodeid_t sender) {
-    RingMembership& m = mem(rings[R]);
+    RingMembership& m = memberships[R];
     // Count myself as a ring member
     pkt->setMember_count(pkt->getMember_count() + 1);
 
@@ -661,150 +643,9 @@ void MyriadGP::insertAndForwardCollect(MyriadGpCollect* pkt, uint32_t R, nodeid_
                      << " king=" << (int)pkt->getRouter_id_src() << "\n";
 }
 
-uint64_t MyriadGP::sizeToCost(uint32_t s) const {
-    // s^ringCostExponent with u64 saturation; UNKNOWN_RING_SIZE at e>=4 overflows,
-    // saturating to max keeps it costly rather than wrapping to 0.
-    uint64_t term = 1;
-    for (long k = 0; k < ringCostExponent; ++k) {
-        if (term > std::numeric_limits<uint64_t>::max() / (s ? s : 1))
-            return std::numeric_limits<uint64_t>::max();
-        term *= s;
-    }
-    return term;
-}
-
-bool MyriadGP::strictlyBetter(const RibEntry& a, const RibEntry& b) const {
-    if (rankUseSpof && a.spof_count != b.spof_count) return a.spof_count < b.spof_count;
-    if (a.chain_cost != b.chain_cost) return a.chain_cost < b.chain_cost;
-    return a.chain.size() < b.chain.size();
-}
-
-bool MyriadGP::coBest(const RibEntry& a, const RibEntry& b) const {
-    return (!rankUseSpof || a.spof_count == b.spof_count)
-        && a.chain.size() == b.chain.size()
-        && a.chain_cost == b.chain_cost;
-}
-
-// Sole front-ring guard: is `front` held by any CURRENT-GEN chain in rs.ribIn
-// other than index `except`? Used to keep the last chain entering an origin via
-// a given ring, so some member can still replay that (origin, front-ring) to a
-// recovered ring-mate under best-only storage. (except=SIZE_MAX excludes none.)
-bool MyriadGP::frontRepresented(const RingState& rs, uint32_t front, size_t except) const {
-    for (size_t i = 0; i < rs.ribIn.size(); ++i) {
-        if (i == except) continue;
-        const RibEntry& e = rs.ribIn[i];
-        if (e.seq_no == rs.curSeq && !e.chain.empty() && e.chain.front() == front)
-            return true;
-    }
-    return false;
-}
-
-// New-best erase with the sole front-ring guard: drop the now-inferior
-// current-gen entries, but keep the single best current-gen chain of every
-// front-ring != candFront (candFront is covered by the incoming best). Older
-// holdovers (seq_no != curSeq) are untouched — make-before-break owns those.
-void MyriadGP::dropCurGenKeepingFronts(RingState& rs, uint32_t candFront) {
-    std::map<uint32_t /*front*/, size_t /*best idx*/> bestPerFront;
-    for (size_t i = 0; i < rs.ribIn.size(); ++i) {
-        const RibEntry& e = rs.ribIn[i];
-        if (e.seq_no != rs.curSeq || e.chain.empty() || e.chain.front() == candFront)
-            continue;
-        auto it = bestPerFront.find(e.chain.front());
-        if (it == bestPerFront.end() || strictlyBetter(e, rs.ribIn[it->second]))
-            bestPerFront[e.chain.front()] = i;
-    }
-    std::set<size_t> keep;
-    for (auto& [f, idx] : bestPerFront) keep.insert(idx);
-    std::vector<RibEntry> out;
-    for (size_t i = 0; i < rs.ribIn.size(); ++i) {
-        if (rs.ribIn[i].seq_no == rs.curSeq && !keep.count(i)) continue;  // now-inferior
-        out.push_back(std::move(rs.ribIn[i]));
-    }
-    rs.ribIn.swap(out);
-}
-
-bool MyriadGP::capEcmp(RingState& rs, const std::vector<uint32_t>& candChain) {
-    // Cap the current generation (seq_no==curSeq) to maxEcmpPaths; retained older
-    // holdovers aren't ECMP siblings, so skip them. Drop the member leaving the
-    // largest ring-union, biased to the just-appended candidate. K is tiny.
-    auto isCur = [&](size_t i) { return rs.ribIn[i].seq_no == rs.curSeq; };
-    auto curCount = [&]() {
-        size_t n = 0;
-        for (size_t i = 0; i < rs.ribIn.size(); ++i) if (isCur(i)) ++n;
-        return n;
-    };
-    auto unionSansIndex = [&](size_t skip) {
-        std::set<uint32_t> u;
-        for (size_t i = 0; i < rs.ribIn.size(); ++i) {
-            if (i == skip || !isCur(i)) continue;
-            for (uint32_t r : rs.ribIn[i].chain) u.insert(r);
-        }
-        return u.size();
-    };
-    auto droppable = [&](size_t i) {
-        return isCur(i) && (rs.ribIn[i].chain.empty()
-                            || frontRepresented(rs, rs.ribIn[i].chain.front(), i));
-    };
-    while ((long)curCount() > maxEcmpPaths) {
-        size_t candIdx = SIZE_MAX;   // last current-gen entry (just appended)
-        for (size_t i = rs.ribIn.size(); i-- > 0; ) if (isCur(i)) { candIdx = i; break; }
-        size_t drop = SIZE_MAX, bestUnion = 0;
-        if (droppable(candIdx)) { drop = candIdx; bestUnion = unionSansIndex(candIdx); }
-        for (size_t i = 0; i < candIdx; ++i) {
-            if (!droppable(i)) continue;
-            size_t u = unionSansIndex(i);
-            if (drop == SIZE_MAX || u > bestUnion) { drop = i; bestUnion = u; }
-        }
-        if (drop == SIZE_MAX) break;   // every over-cap entry is a sole front rep
-        rs.ribIn.erase(rs.ribIn.begin() + drop);
-    }
-    for (auto& e : rs.ribIn) if (e.chain == candChain) return true;
-    return false;
-}
-
-void MyriadGP::selectPreferred(RingState& rs) {
-    // Best across ALL of ribIn (may span two generations): a degraded chain (one
-    // transiting a ring under an active DEGRADE) loses to any non-degraded one,
-    // overriding spof/cost; within a class, strictlyBetter then lex-min chain.
-    // Ignores seq, so a retained older chain that beats the current generation
-    // wins — preferred may lag curSeq (see ribIn).
-    rs.preferred = SIZE_MAX;
-    for (size_t i = 0; i < rs.ribIn.size(); ++i) {
-        if (rs.preferred == SIZE_MAX) { rs.preferred = i; continue; }
-        bool di = chainDegraded(rs.ribIn[i].chain);
-        bool dp = chainDegraded(rs.ribIn[rs.preferred].chain);
-        if (di != dp) { if (!di) rs.preferred = i; continue; }
-        if (strictlyBetter(rs.ribIn[i], rs.ribIn[rs.preferred])
-            || (!strictlyBetter(rs.ribIn[rs.preferred], rs.ribIn[i])
-                && rs.ribIn[i].chain < rs.ribIn[rs.preferred].chain))
-            rs.preferred = i;
-    }
-}
-
-bool MyriadGP::chainDegraded(const std::vector<uint32_t>& chain) const {
-    for (uint32_t r : chain) if (degrades.count(r)) return true;
-    return false;
-}
-
-void MyriadGP::reselectAll() {
-    for (auto& [ring, rs] : rings) selectPreferred(rs);
-}
-
-void MyriadGP::clearDegradeIfRecovered(uint32_t ring) {
-    auto it = degrades.find(ring);
-    if (it != degrades.end() && it->second.first < rings[ring].curSeq) {
-        degrades.erase(it);
-        reselectAll();
-    }
-}
-
 void MyriadGP::originateDegrade(uint32_t ring) {
-    uint32_t seq = rings[ring].curSeq;
-    auto& d = degrades[ring];               // culprit ring -> (seq, beacon)
-    if (d.first < seq) d = {seq, 0};        // new generation
-    else d.second += 1;                     // re-beacon the current one
-    reselectAll();
-    floodDegrade(ring, d.first, d.second, undefined_node);
+    auto [seq, beacon] = rib.markDegraded(ring);
+    floodDegrade(ring, seq, beacon, undefined_node);
 }
 
 void MyriadGP::floodDegrade(uint32_t ring, uint32_t seq, uint32_t beacon, nodeid_t skip) {
@@ -836,8 +677,7 @@ void MyriadGP::handleUpdate(MyriadGpUpdate* update, nodeid_t sender) {
     chain.reserve(chainLen);
     for (size_t i = 0; i < chainLen; ++i) chain.push_back(update->getRing_chain(i));
 
-    RingState& curRs = rings[curRing];
-    RingMembership& m = mem(curRs);
+    RingMembership& m = memberships[curRing];
 
     // Own ACK: my traversal of this chain returned on the other interface.
     if (king == myId) {
@@ -870,10 +710,8 @@ void MyriadGP::handleUpdate(MyriadGpUpdate* update, nodeid_t sender) {
     }
     // Origin UPDATE also carries this ring's size.
     if (chainLen == 0 && update->getMember_count() > 0) {
-        if (m.memberCount > 0 && m.memberCount != update->getMember_count()) {
-            curRs.ribIn.clear();
-            curRs.preferred = SIZE_MAX;
-        }
+        if (m.memberCount > 0 && m.memberCount != update->getMember_count())
+            rib.invalidate(curRing);
         m.memberCount = update->getMember_count();
     }
 
@@ -903,7 +741,9 @@ void MyriadGP::processChain(uint32_t curRing, uint32_t seq, uint32_t spof,
                             const std::vector<MyriadGpRr>* originRrTrailer,
                             std::vector<uint32_t>& handled) {
     uint32_t origin = chain.empty() ? curRing : chain.back();
-    RingState& originRs = rings[origin];
+
+    // The gates below and the loop guard stay here rather than in the RIB: they
+    // read membership and selfRings, which are protocol state.
 
     // Don't store or bridge an inter-ring update arriving on a ring whose COLLECT
     // hasn't landed here yet (the dup guard blocks re-forwarding). Excludes seq==0
@@ -915,11 +755,6 @@ void MyriadGP::processChain(uint32_t curRing, uint32_t seq, uint32_t spof,
         return;
     }
 
-    // Replay (seq==0) repopulates stateless nodes only: a node that already knows
-    // this origin ignores it (the caller still forwards the lap to the recovered
-    // node). Without this, live members treat it as a stale chain and re-store it.
-    if (seq == 0 && !originRs.ribIn.empty()) return;
-
     // Full path identity = current_ring :: packet chain, with sizes parallel.
     std::vector<uint32_t> fullChain;
     fullChain.reserve(chain.size() + 1);
@@ -927,101 +762,27 @@ void MyriadGP::processChain(uint32_t curRing, uint32_t seq, uint32_t spof,
     for (uint32_t c : chain) fullChain.push_back(c);
 
     uint32_t curSize = memberCountOf(curRing);
-    uint64_t fullCost = satAdd(sizeToCost(curSize ? curSize : UNKNOWN_RING_SIZE), chainCost);
+    uint64_t fullCost = satAdd(rib.sizeToCost(curSize ? curSize : UNKNOWN_RING_SIZE), chainCost);
 
-    bool doInterRing = true;
-    RibEntry cand{fullChain, fullCost, seq, spof};
-
-    // Drop entries >=2 generations behind (see the ribIn comment in RingState).
-    auto purgeStale = [&]() {
-        auto& v = originRs.ribIn;
-        v.erase(std::remove_if(v.begin(), v.end(),
-            [&](const RibEntry& e) { return originRs.curSeq - e.seq_no >= 2; }),
-            v.end());
-    };
-
-    // Seq-advance: adopt the new generation, purge stale, but keep old-gen chains
-    // strictly better than this candidate (make-before-break); drop the rest.
-    // Same-chain entries are always replaced — cost can increase (echo-path gives
-    // a low transient count; full COLLECT corrects it upward), so a stale cheaper
-    // same-chain entry is wrong data, not a genuine backup path.
-    if (seq > originRs.curSeq) {
-        originRs.curSeq = seq;
-        clearDegradeIfRecovered(origin);
-        if (originRrTrailer) originRs.rr = *originRrTrailer;
-        purgeStale();
-        auto& v = originRs.ribIn;
-        v.erase(std::remove_if(v.begin(), v.end(),
-            [&](const RibEntry& e) { return e.chain == cand.chain || !strictlyBetter(e, cand); }),
-            v.end());
-    }
-
-    // Older-than-current chain that isn't strictly better: stale, ignore it.
-    if (seq < originRs.curSeq) {
-        bool useful = originRs.ribIn.empty();
-        for (auto& e : originRs.ribIn)
-            if (strictlyBetter(cand, e)) { useful = true; break; }
-        if (!useful) return;
-    }
-
-    // Recovered node: a seq=0 replay carries no seq advance, so adopt the
-    // origin's rr here to repopulate empty state.
-    if (originRs.rr.empty() && originRrTrailer && !originRrTrailer->empty())
-        originRs.rr = *originRrTrailer;
-
-    // Exact chain already held at >= seq: transition already happened, don't re-forward.
-    bool isDup = false;
-    for (auto& e : originRs.ribIn)
-        if (e.chain == fullChain && e.seq_no >= seq) { isDup = true; break; }
-
-    if (isDup) {
+    StoreResult r = rib.store(origin, fullChain, fullCost, seq, spof, originRrTrailer);
+    if (r.dup) {
         MLOG_DEBUG() << "UPDATE co-best dup origin='" << origin
                      << "' seq=" << seq << " chain=" << formatChain(fullChain) << "\n";
-        doInterRing = false;
-    } else {
-        // Rank against the current generation only, so retained holdovers can't
-        // make a valid new-gen chain look inferior (it still must propagate).
-        RibEntry* curBest = nullptr;
-        for (auto& e : originRs.ribIn)
-            if (e.seq_no == originRs.curSeq
-                && (!curBest || strictlyBetter(e, *curBest))) curBest = &e;
-
-        if (!curBest) {
-            originRs.ribIn.push_back(cand);                      // first of this gen
-        } else if (strictlyBetter(cand, *curBest)) {
-            // New best: drop now-inferior current-gen entries and keep holdovers,
-            // but still keep sole front-ring guard) so the king can still replay 
-            // every (origin, front-ring).
-            dropCurGenKeepingFronts(originRs, fullChain.front());
-            originRs.ribIn.push_back(cand);
-        } else if (coBest(cand, *curBest)) {
-            originRs.ribIn.push_back(cand);
-            if ((long)originRs.ribIn.size() > maxEcmpPaths)
-                doInterRing = capEcmp(originRs, fullChain);
-        } else {
-            // Inferior — not propagated. But if no other current-gen chain enters
-            // this origin via fullChain.front(), keep it (sole front-ring guard)
-            if (!frontRepresented(originRs, fullChain.front(), SIZE_MAX)) {
-                originRs.ribIn.push_back(cand);
-                selectPreferred(originRs);
-            }
-            doInterRing = false;
-        }
-
-        if (doInterRing) {
-            selectPreferred(originRs);
-            MLOG_INFO() << "UPDATE store origin='" << origin
-                        << "' seq=" << seq << " chain=" << formatChain(fullChain)
-                        << " spof=" << spof << " cobest=" << originRs.ribIn.size() << "\n";
-            // Loop prevention: any of my rings already in the chain means I bridged
-            // this origin's flood on an earlier lap, so don't re-bridge it now.
-            for (uint32_t myRing : selfRings)
-                for (uint32_t c : chain) if (c == myRing) { doInterRing = false; break; }
-        }
+        return;
     }
+    if (!r.propagate) return;
+
+    MLOG_INFO() << "UPDATE store origin='" << origin
+                << "' seq=" << seq << " chain=" << formatChain(fullChain)
+                << " spof=" << spof << " cobest=" << r.cobest << "\n";
+
+    // Loop prevention: any of my rings already in the chain means I bridged
+    // this origin's flood on an earlier lap, so don't re-bridge it now.
+    for (uint32_t myRing : selfRings)
+        for (uint32_t c : chain) if (c == myRing) return;
 
     // Only the current generation propagates
-    if (doInterRing && seq >= originRs.curSeq)
+    if (seq >= rib.curSeq(origin))
         forwardChainInterRing(curRing, seq, spof, chain, chainCost, rr, handled);
 }
 
@@ -1107,12 +868,12 @@ void MyriadGP::forwardChainInterRing(uint32_t curRing, uint32_t seq, uint32_t sp
 
         // +1 spof unless the width trailer marked this transition redundant.
         bool doubleTransition = false;
-        for (auto& a : mem(rings[curRing]).adjacentRings)
+        for (auto& a : memberships[curRing].adjacentRings)
             if (a.ring == R2) { doubleTransition = a.isRedundant; break; }
         uint32_t fwdSpof = spof + (doubleTransition ? 0 : 1);
 
         uint32_t curSize = memberCountOf(curRing);
-        uint64_t fwdCost = satAdd(sizeToCost(curSize ? curSize : UNKNOWN_RING_SIZE), chainCost);
+        uint64_t fwdCost = satAdd(rib.sizeToCost(curSize ? curSize : UNKNOWN_RING_SIZE), chainCost);
 
         if (holdInterval > SIMTIME_ZERO) {
             // Queue for the next flush; RIB dedup + handled marks prevent double-queue.
@@ -1128,7 +889,7 @@ void MyriadGP::forwardChainInterRing(uint32_t curRing, uint32_t seq, uint32_t sp
                 << "' chain=" << formatChain(fwdChain) << " spof=" << fwdSpof << "\n";
         } else {
             // hold=0: send now, with the same-chain dup-guard on updateInflights.
-            RingMembership& m2 = mem(rings[R2]);
+            RingMembership& m2 = memberships[R2];
             if (m2.updateInflights.count(fwdChain)) {
                 MLOG_N_DEBUG(primary) << "transition dup into ring='" << R2
                                       << "' chain-len=" << fwdChain.size() << "; skipping\n";
@@ -1154,7 +915,7 @@ void MyriadGP::flushPendingTransitions() {
     for (auto& [key, chains] : buckets) {
         uint32_t R2 = key.first;
         nodeid_t primary = key.second;
-        RingMembership& rs2 = mem(rings[R2]);
+        RingMembership& rs2 = memberships[R2];
 
         // Send ALL queued, no re-validation: a chain that was winner-on-arrival
         // already propagated downstream, and via loop prevention may be the only
@@ -1222,25 +983,21 @@ void MyriadGP::replayInto(uint32_t ring) {
     if (nbrs.empty()) return;
     nodeid_t primary = nbrs[0];
     nodeid_t fallback = nbrs.size() > 1 ? nbrs[1] : nbrs[0];
-    RingMembership& rs = mem(rings[ring]);
+    RingMembership& rs = memberships[ring];
 
     // Every current-gen chain entering via `ring`, across all origins.
-    std::vector<const RibEntry*> replay;
-    for (auto& [origin, ors] : rings)
-        for (auto& e : ors.ribIn)
-            if (e.seq_no == ors.curSeq && !e.chain.empty() && e.chain.front() == ring)
-                replay.push_back(&e);
+    std::vector<MyriadGpRib::ReplayChain> replay = rib.chainsEnteringVia(ring);
     if (replay.empty()) return;
 
-    auto entryBytes = [&](const RibEntry* e) {
-        return (long)(e->chain.size() * 8 + rings[e->chain.back()].rr.size() * 6 + 16);
+    auto entryBytes = [](const MyriadGpRib::ReplayChain& e) {
+        return (long)(e.chain->size() * 8 + e.rr->size() * 6 + 16);
     };
 
     // Pack into batches up to maxBatchBytes (see flushPendingTransitions); each
     // laps `ring` under its own circular-ACK.
     size_t i = 0;
     while (i < replay.size()) {
-        std::vector<const RibEntry*> group;
+        std::vector<MyriadGpRib::ReplayChain> group;
         long bytes = 16;
         while (i < replay.size()
                && (group.empty() || bytes + entryBytes(replay[i]) <= maxBatchBytes)) {
@@ -1256,14 +1013,14 @@ void MyriadGP::replayInto(uint32_t ring) {
         batch->setSeq_no(lapSeq);
         batch->setEntriesArraySize(group.size());
         for (size_t g = 0; g < group.size(); ++g) {
-            const RibEntry* e = group[g];
-            const std::vector<MyriadGpRr>& rr = rings[e->chain.back()].rr;
+            const MyriadGpRib::ReplayChain& e = group[g];
+            const std::vector<MyriadGpRr>& rr = *e.rr;
             MyriadGpUpdateEntry en;
             en.setSeq_no(0);                      // sentinel: replay, adopt-if-empty
-            en.setSpof_count(e->spof_count);
-            en.setRing_chainArraySize(e->chain.size());
-            for (size_t j = 0; j < e->chain.size(); ++j) en.setRing_chain(j, e->chain[j]);
-            en.setChain_cost(e->chain_cost);
+            en.setSpof_count(e.spof);
+            en.setRing_chainArraySize(e.chain->size());
+            for (size_t j = 0; j < e.chain->size(); ++j) en.setRing_chain(j, (*e.chain)[j]);
+            en.setChain_cost(e.cost);
             en.setRrArraySize(rr.size());
             for (size_t j = 0; j < rr.size(); ++j) en.setRr(j, rr[j]);
             batch->setEntries(g, en);
@@ -1305,7 +1062,7 @@ void MyriadGP::handleUpdateBatch(MyriadGpUpdateBatch* batch, nodeid_t sender) {
     uint32_t R2 = batch->getCurrent_ring();
     nodeid_t owner = batch->getRouter_id_src();
     uint32_t lapSeq = batch->getSeq_no();
-    RingMembership& rs2 = mem(rings[R2]);
+    RingMembership& rs2 = memberships[R2];
 
     // Own ACK: my batch lapped R2 and returned. Its entries were processed on
     // the way out, so don't unpack or re-forward.
@@ -1349,17 +1106,7 @@ void MyriadGP::handleDegrade(MyriadGpDegrade* degrade, nodeid_t from) {
     if (!degradeEnabled) return;
     uint32_t R = degrade->getRing_id();
     uint32_t seq = degrade->getSeq_no(), beacon = degrade->getBeacon_no();
-    // Stale: R has already re-originated past this generation (recovered).
-    auto rit = rings.find(R);
-    if (rit != rings.end() && seq < rit->second.curSeq) return;
-    // Dedup: act only on a strictly newer (seq, beacon) — else the flood loops.
-    auto it = degrades.find(R);
-    if (it != degrades.end()
-        && (seq < it->second.first
-            || (seq == it->second.first && beacon <= it->second.second)))
-        return;
-    degrades[R] = {seq, beacon};
-    reselectAll();
+    if (!rib.applyDegrade(R, seq, beacon)) return;
     floodDegrade(R, seq, beacon, from);   // skip-sender
     MLOG_N_DEBUG(from) << "degrade ring='" << R << "' seq=" << seq << "\n";
 }
@@ -1373,9 +1120,7 @@ void MyriadGP::reset() {
         }
     }
     neighbors.clear();
-    for (auto& [rid, currentRingState] : rings) {
-        if (!currentRingState.member) continue;
-        RingMembership& m = *currentRingState.member;
+    for (auto& [rid, m] : memberships) {
         cancelRingReliable(m.collectInflight);
         for (auto& [chain, fl] : m.updateInflights)
             cancelRingReliable(fl);
@@ -1392,9 +1137,8 @@ void MyriadGP::reset() {
             m.watchdogTimer = nullptr;
         }
     }
-    rings.clear();
-    degrades.clear();
-    routes.clear();
+    memberships.clear();
+    rib.clear();
     pendingTransitions.clear();
     if (holdTimer) { cancelAndDelete(holdTimer); holdTimer = nullptr; }
     if (snapshotTimer) { cancelAndDelete(snapshotTimer); snapshotTimer = nullptr; }
@@ -1408,37 +1152,7 @@ void MyriadGP::reset() {
 }
 
 void MyriadGP::dumpRibTo(std::ostream& f, const std::string& tprefix, bool stats) {
-    std::vector<uint32_t> originIds;
-    for (auto& [rid, rs] : rings)
-        if (rs.preferred != SIZE_MAX) originIds.push_back(rid);
-    std::sort(originIds.begin(), originIds.end());
-
-    if (stats) {
-        uint64_t n = 0, sum = 0, mx = 0;
-        for (uint32_t rid : originIds) {
-            RingState& rs = rings[rid];
-            uint64_t c = rs.ribIn[rs.preferred].chain_cost;
-            ++n; sum += c; if (c > mx) mx = c;
-        }
-        f << tprefix << (int)myId << " n=" << n
-          << " cost_sum=" << sum << " cost_max=" << mx << "\n";
-        return;
-    }
-
-    // One line per origin with the primary chain.
-    for (uint32_t rid : originIds) {
-        RingState& rs = rings[rid];
-        const RibEntry& e = rs.ribIn[rs.preferred];
-        size_t ecmp = 0;
-        for (auto& c : rs.ribIn) if (c.seq_no == rs.curSeq) ++ecmp;
-        f << tprefix << (int)myId << " origin=" << rid
-          << " len=" << e.chain.size()
-          << " spof=" << e.spof_count
-          << " seq=" << e.seq_no
-          << " cost=" << e.chain_cost
-          << " ecmp=" << ecmp
-          << " chain=" << formatChain(e.chain) << "\n";
-    }
+    rib.dumpTo(f, tprefix, stats, (int)myId);
 }
 
 void MyriadGP::finish() {
