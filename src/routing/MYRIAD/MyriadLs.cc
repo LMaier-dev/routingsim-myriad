@@ -61,6 +61,7 @@ void MyriadLS::onInitialize() {
 void MyriadLS::onTwoWayReached(NeighborEntry& nbr) {
     nbr.ddSeq = 0; // arbitrary starting seq no based on node ids
     nbr.amMaster = true;
+    nbr.dbdStarted = false;
     buildPendingDbd(nbr);
     sendDBD(nbr.id, /*init=*/true, nbr.amMaster, nbr.ddSeq);
 }
@@ -73,6 +74,7 @@ void MyriadLS::onNeighborDead(NeighborEntry& nbr, bool wasFull) {
     nbr.floodQueue.clear();
     nbr.amMaster = false;
     nbr.ddSeq = 0;
+    nbr.dbdStarted = false;
     nbr.dbdQueue.clear();
     nbr.lsrQueue.clear();
     nbr.peerDbdDone = false;
@@ -539,6 +541,12 @@ void MyriadLS::finish() {
 void MyriadLS::handleDBD(MyriadDBD* dbd, nodeid_t from) {
     NeighborEntry& nbr = neighbors[from];
     logDbd(dbd, from);
+    // Before our own ExStart the DBD queue isn't built yet; acting on a peer's
+    // DBD here would answer with an empty summary and then be wiped by ExStart.
+    if (nbr.state < NSTATE_TWOWAY) {
+        MLOG_N_DEBUG(from) << "ignoring DBD before TWO-WAY\n";
+        return;
+    }
     if (myId > from) { // master
         if (dbd->getInit()) { // Phase 1 master negotioation
             nbr.amMaster = true;
@@ -576,7 +584,14 @@ void MyriadLS::handleDBD(MyriadDBD* dbd, nodeid_t from) {
             // slaves never retransmit (cancel just in case, but it should be null)
             cancelReliable(nbr.inflightDbd);
             // Phase 2 response by slave
-            if (dbd->getMaster() && dbd->getSeq_no() == nbr.ddSeq && nbr.state < NSTATE_FULL) {
+            if (dbd->getMaster() && (dbd->getSeq_no() == nbr.ddSeq || !nbr.dbdStarted)
+                    && nbr.state < NSTATE_FULL) {
+                // The master owns the sequence: adopt it on the exchange's first
+                // DBD instead of insisting on the value our own init negotiated,
+                // which is stale whenever the master ExStarted before we did.
+                nbr.amMaster = false;
+                nbr.ddSeq = dbd->getSeq_no();
+                nbr.dbdStarted = true;
                 processDBD(dbd, nbr); // expected DBD, process and respond with next one
                 MLOG_N_DEBUG(from) << "received expected DBD from master, seq=" << dbd->getSeq_no() << "\n";
                 if (!dbd->getMore()) nbr.peerDbdDone = true;

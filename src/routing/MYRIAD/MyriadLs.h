@@ -40,6 +40,8 @@ namespace routingsim {
         std::deque<LsaKey> lsrQueue;
         // Set when peer sent a non-init DBD with M=0.
         bool peerDbdDone = false;
+        // Slave-only: cleared at ExStart, set once we adopt the master's ddSeq.
+        bool dbdStarted = false;
         // Slave-only: cached last DBD response so we can repeat it if the
         // master retransmits its previous DBD (RFC 2328 §10.6).
         std::unique_ptr<cPacket> lastSentDbd;
