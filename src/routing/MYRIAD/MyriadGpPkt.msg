@@ -24,6 +24,19 @@ enum MyriadGpPDUType {
     MYRIADGP_UPDATE_BATCH = 4;
 }
 
+// What a COLLECT lap is for. Only ELECTION may crown a king and re-announce the
+// ring; the other two exist so churn never originates an UPDATE.
+enum MyriadGpCollectKind {
+    // Formation, king refresh, watchdog coup. Contention rules apply.
+    COLLECT_ELECTION = 0;
+    // Liveness check after a ring-neighbor died: forwarded unconditionally, and
+    // only its budget expiry matters (that is what fires DEGRADE).
+    COLLECT_PROBE = 1;
+    // A rebooted node's rejoin lap: forwarded unconditionally, every live member
+    // replays its front-ring chains into it, own-return restores member size.
+    COLLECT_REPLAY = 2;
+}
+
 // directly from Kira (mirrors MyriadLsPkt.msg)
 class nodeid_t {
       @cppType(routingsim::nodeid_t);
@@ -73,9 +86,8 @@ packet MyriadGpCollect extends MyriadGpNLRI {
     // Originator lacked state (memberCount==0): loses the king election to any
     // live member (formation tie-break by id).
     bool originator_crashed;
-    // Replay beacon: a live member originates this when a ring-mate (re)joins.
-    // It is forwarded UNCONDITIONALLY.
-    bool beacon;
+    // See MyriadGpCollectKind.
+    uint8_t kind = COLLECT_ELECTION;
 }
 
 packet MyriadGpUpdate extends MyriadGpNLRI {

@@ -14,7 +14,7 @@ namespace {
 using namespace msgsize;
 
 int64_t gpCollectBytes(const MyriadGpCollect* p) {
-    return MYRIADGP_HDR + U32 + 2 * BOOL                   // member_count + crashed/beacon bits
+    return MYRIADGP_HDR + U32 + 2 * BOOL                   // member_count + crashed bit + kind
          + (int64_t) p->getRrArraySize() * RR
          + (int64_t) p->getTransitionsArraySize() * TRANSITION;
 }
@@ -95,16 +95,20 @@ void MyriadGP::onTwoWayReached(GpNeighbor& nbr) {
             for (uint32_t r : n.sharedRings) if (r == R) { ++count; break; }
         }
         RingMembership& m = memberships[R];
-        if (count > m.maxRingNeighbors) m.maxRingNeighbors = count;
+        // The high-water mark separates formation from repair: it only grows, so
+        // a count we have never reached means the ring is still coming up, while
+        // a mate merely returning cannot exceed it. A survivor stays silent on a
+        // repair — the standing king's refresh re-announces the ring, and if the
+        // king itself died a watchdog coup elects a new one.
+        bool grew = count > m.maxRingNeighbors;
+        if (grew) m.maxRingNeighbors = count;
         // Originate once >=1 ring-neighbor is two-way (a genuine 2-node ring has
         // exactly one and closes its lap via echo; see the echo sites below).
-        if (count >= 1 && count <= 2 && m.collectInflight.tx == nullptr) {
-            // A new ring-neighbor appeared. Only a rebooted node fires a replay
-            // beacon (every member it passes replays its front-R chains back to me);
-            // anyone else is still forming, so a normal election COLLECT to elect the
-            // king. Keeping the beacon bit exact this way is what lets the replay
-            // sites skip a warmup check: a beacon cannot exist during formation.
-            originateCollect(R, nbr.id, /*beacon=*/rebooted);
+        if (grew && count <= 2 && m.collectInflight.tx == nullptr) {
+            // reset() wipes memberships, so a rebooted node always "grows" and its
+            // lap is the replay kind: every member it passes replays its front-R
+            // chains back to it, and its own return restores member size/rr.
+            originateCollect(R, nbr.id, rebooted ? COLLECT_REPLAY : COLLECT_ELECTION);
         } else if (count > 2) {
             MLOG_N_WARN(nbr.id) << "ring '" << R
                 << "' has >2 ring-neighbors (misconfig); ignoring\n";
@@ -112,7 +116,7 @@ void MyriadGP::onTwoWayReached(GpNeighbor& nbr) {
     }
 }
 
-void MyriadGP::originateCollect(uint32_t ring, nodeid_t to, bool beacon) {
+void MyriadGP::originateCollect(uint32_t ring, nodeid_t to, MyriadGpCollectKind kind) {
     RingMembership& m = memberships[ring];
     m.originSeq += 1;
     m.collectInflight.seq_no = m.originSeq;
@@ -126,9 +130,7 @@ void MyriadGP::originateCollect(uint32_t ring, nodeid_t to, bool beacon) {
 
     // Stateless (fresh) originator loses the king election to any live member.
     pkt->setOriginator_crashed(m.memberCount == 0);
-    // Replay beacon: a live member fires this when a mate (re)joins, so every
-    // member replays its front-ring chains toward the recovered node.
-    pkt->setBeacon(beacon);
+    pkt->setKind(kind);
 
     // Insert my (subnet, myId) pairs.
     pkt->setRrArraySize(mySubnets.size());
@@ -335,15 +337,16 @@ void MyriadGP::onBatchBudgetExpired(uint32_t ring, uint32_t batchLapSeq) {
 
 void MyriadGP::onNeighborDead(GpNeighbor& nbr, bool /*wasFull*/) {
     // For each ring shared with the dead neighbor: if no inflight for that
-    // ring, originate a probe COLLECT to the dead neighbor. Its retransmits
-    // act as the liveness grace period — if the neighbor recovers within the
-    // budget, the collect completes; otherwise the budget timer fires DEGRADE.
+    // ring, probe the dead neighbor. Its retransmits act as the liveness grace
+    // period — the probe closing means the ring is whole, the budget expiring
+    // fires DEGRADE. A probe never crowns a king or re-announces the ring, so a
+    // failure costs no UPDATE; that is the refresh's job.
     // If an inflight already exists, do nothing and let its budget run.
     for (uint32_t R : nbr.sharedRings) {
         if (memberships[R].collectInflight.tx != nullptr) continue;
-        MLOG_N_INFO(nbr.id) << "grace COLLECT ring='" << R
+        MLOG_N_INFO(nbr.id) << "probe COLLECT ring='" << R
                             << "' to dead neighbor\n";
-        originateCollect(R, nbr.id);
+        originateCollect(R, nbr.id, COLLECT_PROBE);
     }
 }
 
@@ -424,12 +427,12 @@ void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t sender) {
             }
             EV << "]\n";
 
-            // Replay beacon I fired (a mate rejoined) has lapped back.
-            // Do NOT become king or originate an UPDATE.
-            if (collect->getBeacon()) {
-                MLOG_INFO() << "replay beacon complete ring='" << R << "' seq=" << seq << "\n";
-                if (recoveryReplayEnabled)
-                    replayInto(R);
+            // Only an election lap crowns a king and re-announces the ring. A
+            // probe or replay lap has already done its job above: it proved the
+            // ring whole and restored my member size / rr / transitions.
+            if (collect->getKind() != COLLECT_ELECTION) {
+                MLOG_INFO() << (collect->getKind() == COLLECT_PROBE ? "probe" : "replay")
+                            << " COLLECT complete ring='" << R << "' seq=" << seq << "\n";
                 return;
             }
 
@@ -458,13 +461,16 @@ void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t sender) {
         return;
     }
 
-    // A COLLECT from another node proves ring activity: reset my watchdog.
-    if (!m.isKing) startWatchdog(R);
+    // Only an election lap proves the king is alive; a peer's probe or replay
+    // says nothing about it, and letting those reset the watchdog would delay the
+    // coup that is now the only way to replace a king that died with its ring.
+    if (!m.isKing && collect->getKind() == COLLECT_ELECTION) startWatchdog(R);
 
-    // Replay beacon: forward UNCONDITIONALLY (never supress) so it laps the whole ring.
-    // The union of every member's replay restores the recovered routers RIB.
-    if (collect->getBeacon()) {
-        if (m.memberCount > 0 && recoveryReplayEnabled)
+    // Probe and replay laps are forwarded UNCONDITIONALLY (never suppressed by
+    // contention) so they always reach the originator. On a replay lap the union
+    // of every member's replay is what restores the recovered router's RIB.
+    if (collect->getKind() != COLLECT_ELECTION) {
+        if (collect->getKind() == COLLECT_REPLAY && m.memberCount > 0 && recoveryReplayEnabled)
             replayInto(R);
         insertAndForwardCollect(collect, R, sender);
         return;

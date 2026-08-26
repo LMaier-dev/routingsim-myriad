@@ -43,6 +43,10 @@ def main():
             sp.add_argument("--only", choices=["static", "link", "node"])
             sp.add_argument("--fractions", default=None,
                             help="node-wave failure fractions, e.g. 0.1,0.3")
+            sp.add_argument("--down-min", type=float, default=None,
+                            help="minimum node downtime in seconds (default 2)")
+            sp.add_argument("--down-jitter", type=float, default=None,
+                            help="node downtime jitter in seconds (default 8)")
             sp.add_argument("--wave-spacing", type=float, default=None,
                             help="seconds between waves; also the refresh "
                                  "interval of the node scenario (default 30)")

@@ -108,7 +108,8 @@ namespace routingsim {
             void originateDegrade(uint32_t ring);
             void floodDegrade(uint32_t ring, uint32_t seq, uint32_t beacon, nodeid_t skip);
 
-            void originateCollect(uint32_t ring, nodeid_t to, bool beacon = false);
+            void originateCollect(uint32_t ring, nodeid_t to,
+                                  MyriadGpCollectKind kind = COLLECT_ELECTION);
             // Fresh COLLECT for a ring I own (picks a ring-neighbor).
             void reoriginateCollect(uint32_t ring);
             void startRefresh(uint32_t ring);   // king: periodic re-collect

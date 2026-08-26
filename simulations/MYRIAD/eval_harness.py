@@ -345,6 +345,10 @@ def apply_repeat_args(args):
     RNG_ISOLATE = getattr(args, "rng_isolate", True)
     EXTRA_OPTS = [f"--**.{s}" if not s.startswith("-") else s
                   for s in getattr(args, "set_opts", [])]
+    for s in getattr(args, "set_opts", []):        # --set must move EFFECTIVE too
+        k, _, v = s.lstrip("-").partition("=")
+        if v:
+            EFFECTIVE[k.rsplit(".", 1)[-1]] = v
     for flag, par in (("refresh", "refreshInterval"), ("snapshot", "snapshotInterval"),
                       ("warmup", "collectWarmupDuration")):
         v = getattr(args, flag, None)

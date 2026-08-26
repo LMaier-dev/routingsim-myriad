@@ -22,7 +22,7 @@ import re
 import sys
 from collections import defaultdict
 
-from eval_harness import (BIN, MYRIAD_DIR, add_topo_args, announce,
+from eval_harness import (BIN, MYRIAD_DIR, _sec, add_topo_args, announce,
                           apply_repeat_args, common, dynamics_args,
                           ensure_ring_labels, overrides, pm, refresh_s, rep_path,
                           repeat_mean, repeats_note, run_sim, simtime,
@@ -33,6 +33,7 @@ RECOVERY_NETWORK = "routingsim.simulations.MYRIAD.RecoveryNetwork"
 
 DEFAULT_FRACTIONS = [0.05, 0.1, 0.2, 0.4, 0.8]
 DOWN_MIN, DOWN_JITTER = 2.0, 8.0   # per-node downtime: DOWN_MIN + U(0, JITTER)
+COLLECT_RETRY_LIMIT = 3            # mirrors MyriadGp.h
 
 SENT_RE = re.compile(r"^scalar\s+\S+\s+sent_(\S+)\s+([0-9.]+)", re.M)
 BYTES_RE = re.compile(r"^scalar\s+\S+\s+bytes_(\S+)\s+([0-9.]+)", re.M)
@@ -61,6 +62,22 @@ def wave_times(fractions, spacing):
     """Wave i at (i+1)*spacing: equally spaced from t=0, so the first window is
     as long as the rest."""
     return [(f, (i + 1) * spacing) for i, f in enumerate(fractions)]
+
+
+def grace_note():
+    """Which side of the crash-probe budget this run's downtime falls on. Churn
+    never re-announces a ring: a dead ring-neighbour only draws a PROBE lap, whose
+    sole outcomes are 'closed, ring whole' or 'expired, flood DEGRADE'. The budget
+    decides which."""
+    b = (COLLECT_RETRY_LIMIT + 0.5) * _sec(common("rxmtInterval"))
+    lo, hi = DOWN_MIN, DOWN_MIN + DOWN_JITTER
+    verdict = ("probes close on reboot, so no DEGRADE" if hi <= b else
+               "probes expire into DEGRADE" if lo >= b else
+               "probes close only for the shorter outages")
+    return (f"downtime {lo:g}-{hi:g}s vs {b:g}s probe budget "
+            f"(({COLLECT_RETRY_LIMIT}+0.5)*rxmtInterval): {verdict}. A rebooted "
+            "router refills from its own replay lap; everything else waits for "
+            "the king's refresh or a watchdog coup")
 
 
 def node_refresh(spacing):
@@ -187,12 +204,17 @@ def reconverge_latencies(series, wave_t, reboots, end_t=float("inf")):
 
 
 def main(args=None):
+    global DOWN_MIN, DOWN_JITTER
     if args is None:
         p = argparse.ArgumentParser()
         add_topo_args(p)
         p.add_argument("--only", choices=["static", "link", "node"])
         p.add_argument("--fractions", default=None,
                        help="node-wave failure fractions, e.g. 0.1,0.3")
+        p.add_argument("--down-min", type=float, default=None,
+                       help="minimum downtime in seconds (default 2)")
+        p.add_argument("--down-jitter", type=float, default=None,
+                       help="downtime jitter in seconds (default 8)")
         p.add_argument("--wave-spacing", type=float, default=None,
                        help="seconds between waves; also the refresh interval "
                             "of the node scenario (default 30)")
@@ -203,6 +225,8 @@ def main(args=None):
 
     if not hasattr(args, "wave_spacing"):
         args.wave_spacing = None
+    DOWN_MIN = getattr(args, "down_min", None) or DOWN_MIN
+    DOWN_JITTER = getattr(args, "down_jitter", None) or DOWN_JITTER
     if not getattr(args, "noreplay", False):
         CONFIGS.pop("gp_noreplay", None)
 
@@ -245,6 +269,7 @@ def main(args=None):
         waves = wave_times(fractions, spacing)
         dyn, desc = scenario_dynamics("node", fractions, spacing)
         dyn += node_conditions(spacing)
+        desc += "\n            " + grace_note()
         st = node_simtime(len(fractions), spacing)
         print(f"\n=== escalating node waves ({st}) ===")
         announce("node", opts=dyn + overrides(sim_time_limit=st), dynamics=desc)
