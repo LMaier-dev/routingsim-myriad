@@ -99,9 +99,20 @@ namespace routingsim {
             void handleUpdate(MyriadGpUpdate* update, nodeid_t from);
             void handleUpdateBatch(MyriadGpUpdateBatch* batch, nodeid_t from);
             void handleDegrade(MyriadGpDegrade* degrade, nodeid_t from);
-            // A recovered member needs its RIB back: replay every current-gen chain
+            // Push my whole RIB into `ring` as seq==0 UPDATEs, each chain rebased
+            // onto it, so a recovered member there gets its routes back.
             void replayInto(uint32_t ring);
+            // A COLLECT carries the largest origin count seen so far on its lap;
+            // if I beat it, I replay my RIB into the ring and raise the mark, so
+            // only successive high-water members send, not every member. This,
+            // not kingship, is what re-seeds a recovering node: a king crowned
+            // mid-recovery would otherwise seed only its own gaps into everyone.
+            // Self-limiting — store() drops a seq==0 entry at any node that
+            // already knows the origin, and at steady state all counts are equal.
+            void topUpOriginator(MyriadGpCollect* collect, uint32_t ring);
             // COLLECT election key: live (memberCount>0) beats crashed, ties by id.
+            // Deliberately NOT ranked by RIB richness: counts move during
+            // convergence, so there is no fixed point and kingship churns.
             bool collectWins(bool incomingCrashed, nodeid_t incomingId, uint32_t ring) const;
             // Null-safe member count: 0 if I hold no membership for `ring`
             uint32_t memberCountOf(uint32_t ring) const;

@@ -14,7 +14,7 @@ namespace {
 using namespace msgsize;
 
 int64_t gpCollectBytes(const MyriadGpCollect* p) {
-    return MYRIADGP_HDR + U32 + 2 * BOOL                   // member_count + crashed bit + kind
+    return MYRIADGP_HDR + U32 + U32 + 2 * BOOL             // member_count + routes + crashed bit + kind
          + (int64_t) p->getRrArraySize() * RR
          + (int64_t) p->getTransitionsArraySize() * TRANSITION;
 }
@@ -135,6 +135,7 @@ void MyriadGP::originateCollect(uint32_t ring, nodeid_t to, MyriadGpCollectKind 
 
     // Stateless (fresh) originator loses the king election to any live member.
     pkt->setOriginator_crashed(m.memberCount == 0);
+    pkt->setLap_max_routes(rib.knownOrigins());
     pkt->setKind(kind);
 
     // Insert my (subnet, myId) pairs.
@@ -300,6 +301,16 @@ void MyriadGP::cancelCollect(uint32_t ring) {
     cancelRingReliable(it->second.collectInflight);
 }
 
+void MyriadGP::topUpOriginator(MyriadGpCollect* collect, uint32_t ring) {
+    if (!recoveryReplayEnabled || simTime() < collectWarmupDuration) return;
+    if (memberCountOf(ring) == 0) return;
+    if (collect->getLap_max_routes() >= rib.knownOrigins()) return;
+    MLOG_INFO() << "topping up ring='" << ring << "' lap carries "
+                << collect->getLap_max_routes() << " < " << rib.knownOrigins() << "\n";
+    replayInto(ring);
+    collect->setLap_max_routes(rib.knownOrigins());
+}
+
 void MyriadGP::onCollectBudgetExpired(uint32_t ring) {
     RingMembership& m = memberships[ring];
     // This runs from the budgetTimer's own callback; the harness frees that
@@ -442,8 +453,16 @@ void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t sender) {
             if (collect->getKind() != COLLECT_ELECTION) {
                 MLOG_INFO() << (collect->getKind() == COLLECT_PROBE ? "probe" : "replay")
                             << " COLLECT complete ring='" << R << "' seq=" << seq << "\n";
-                // A rebooted node returns here a non-king member with no watchdog
-                if (!m.isKing && !m.watchdogTimer) startWatchdog(R);
+                // The lap doubles as a king probe: any king it passed cleared the
+                // flag. Still set means the king co-failed with me, so nothing
+                // re-announces this ring until a watchdog fires a whole refresh
+                // period from now. Coup now instead.
+                if (collect->getKind() == COLLECT_REPLAY && collect->getOriginator_crashed()) {
+                    MLOG_INFO() << "replay lap met no king on ring='" << R << "' — coup\n";
+                    reoriginateCollect(R);
+                } else if (!m.isKing && !m.watchdogTimer) {
+                    startWatchdog(R);  // rebooted node returns a plain member
+                }
                 return;
             }
 
@@ -483,11 +502,11 @@ void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t sender) {
     }
 
     // Probe and replay laps are forwarded UNCONDITIONALLY (never suppressed by
-    // contention) so they always reach the originator. On a replay lap the union
-    // of every member's replay is what restores the recovered router's RIB.
+    // contention) so they always reach the originator. The replay itself is not
+    // keyed on the kind: insertAndForwardCollect tops the originator up whenever
+    // I know more origins than it does, on any lap.
     if (collect->getKind() != COLLECT_ELECTION) {
-        if (collect->getKind() == COLLECT_REPLAY && m.memberCount > 0 && recoveryReplayEnabled)
-            replayInto(R);
+        if (m.isKing) collect->setOriginator_crashed(false);  // king alive: no coup
         insertAndForwardCollect(collect, R, sender);
         return;
     }
@@ -602,6 +621,7 @@ void MyriadGP::originateUpdate(uint32_t ring) {
 
 void MyriadGP::insertAndForwardCollect(MyriadGpCollect* pkt, uint32_t R, nodeid_t sender) {
     RingMembership& m = memberships[R];
+    topUpOriginator(pkt, R);   // single chokepoint: covers every lap kind
     // Count myself as a ring member
     pkt->setMember_count(pkt->getMember_count() + 1);
 
@@ -1009,23 +1029,54 @@ void MyriadGP::replayInto(uint32_t ring) {
     nodeid_t fallback = nbrs.size() > 1 ? nbrs[1] : nbrs[0];
     RingMembership& rs = memberships[ring];
 
-    // Every current-gen chain entering via `ring`, across all origins.
-    std::vector<MyriadGpRib::ReplayChain> replay = rib.chainsEnteringVia(ring);
+    // A replay is a plain seq==0 UPDATE, so the receiver prepends `ring` and adds
+    // its cost like any inter-ring transition (see processChain). We therefore
+    // send what lies BEYOND `ring`: as king I am a converged member of it, so
+    // rebasing my whole RIB onto it hands the recovered node a route to every
+    // origin I know, whichever of my rings I actually reach it through.
+    // ponytail: a chain transiting a ring the recovered node is itself in gives it
+    // a via-`ring` detour where a direct entry exists. Not special-cased — that
+    // ring's own replay lap delivers the direct chain, which is strictly cheaper
+    // and wins selectPreferred.
+    struct RebasedChain { std::vector<uint32_t> chain; uint64_t cost; uint32_t spof;
+                          const std::vector<MyriadGpRr>* rr; };
+    std::vector<RebasedChain> replay;
+    uint64_t ringCost = rib.sizeToCost(memberCountOf(ring));
+
+    for (auto& e : rib.preferredChains()) {
+        if (e.chain->front() == ring) {
+            // Already enters via `ring`: strip it and its cost, the receiver
+            // re-adds both. The [ring] self-chain strips to an empty chain, which
+            // processChain reads as origin==current_ring — exactly the recovered
+            // node's own-ring entry, which otherwise waits for the next refresh.
+            replay.push_back({{e.chain->begin() + 1, e.chain->end()},
+                              e.cost > ringCost ? e.cost - ringCost : 0, e.spof, e.rr});
+        } else if (std::find(e.chain->begin(), e.chain->end(), ring) != e.chain->end()) {
+            continue;   // `ring` mid-chain: prepending it would loop
+        } else {
+            // I bridge this one in myself: +1 spof for the ring->front hop unless
+            // the transition is redundant, mirroring forwardChainInterRing.
+            bool redundant = false;
+            for (auto& a : rs.adjacentRings)
+                if (a.ring == e.chain->front()) { redundant = a.isRedundant; break; }
+            replay.push_back({*e.chain, e.cost, e.spof + (redundant ? 0 : 1), e.rr});
+        }
+    }
     if (replay.empty()) return;
 
-    auto entryBytes = [](const MyriadGpRib::ReplayChain& e) {
-        return (long)(e.chain->size() * 8 + e.rr->size() * 6 + 16);
+    auto entryBytes = [](const RebasedChain& e) {
+        return (long)(e.chain.size() * 8 + e.rr->size() * 6 + 16);
     };
 
     // Pack into batches up to maxBatchBytes (see flushPendingTransitions); each
     // laps `ring` under its own circular-ACK.
     size_t i = 0;
     while (i < replay.size()) {
-        std::vector<MyriadGpRib::ReplayChain> group;
+        std::vector<const RebasedChain*> group;
         long bytes = 16;
         while (i < replay.size()
                && (group.empty() || bytes + entryBytes(replay[i]) <= maxBatchBytes)) {
-            group.push_back(replay[i]);
+            group.push_back(&replay[i]);
             bytes += entryBytes(replay[i]);
             ++i;
         }
@@ -1037,13 +1088,13 @@ void MyriadGP::replayInto(uint32_t ring) {
         batch->setSeq_no(lapSeq);
         batch->setEntriesArraySize(group.size());
         for (size_t g = 0; g < group.size(); ++g) {
-            const MyriadGpRib::ReplayChain& e = group[g];
+            const RebasedChain& e = *group[g];
             const std::vector<MyriadGpRr>& rr = *e.rr;
             MyriadGpUpdateEntry en;
             en.setSeq_no(0);                      // sentinel: replay, adopt-if-empty
             en.setSpof_count(e.spof);
-            en.setRing_chainArraySize(e.chain->size());
-            for (size_t j = 0; j < e.chain->size(); ++j) en.setRing_chain(j, (*e.chain)[j]);
+            en.setRing_chainArraySize(e.chain.size());
+            for (size_t j = 0; j < e.chain.size(); ++j) en.setRing_chain(j, e.chain[j]);
             en.setChain_cost(e.cost);
             en.setRrArraySize(rr.size());
             for (size_t j = 0; j < rr.size(); ++j) en.setRr(j, rr[j]);

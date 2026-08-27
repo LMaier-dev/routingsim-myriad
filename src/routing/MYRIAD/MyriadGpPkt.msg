@@ -32,8 +32,8 @@ enum MyriadGpCollectKind {
     // Liveness check after a ring-neighbor died: forwarded unconditionally, and
     // only its budget expiry matters (that is what fires DEGRADE).
     COLLECT_PROBE = 1;
-    // A rebooted node's rejoin lap: forwarded unconditionally, every live member
-    // replays its front-ring chains into it, own-return restores member size.
+    // A rebooted node's rejoin lap: forwarded unconditionally, better-informed
+    // members replay into it (lap_max_routes), own-return restores member size.
     COLLECT_REPLAY = 2;
 }
 
@@ -86,6 +86,10 @@ packet MyriadGpCollect extends MyriadGpNLRI {
     // Originator lacked state (memberCount==0): loses the king election to any
     // live member (formation tie-break by id).
     bool originator_crashed;
+    // High-water mark of "origins I know" along the lap: seeded by the
+    // originator, raised by any forwarder that beats it and therefore replays
+    // (MyriadGP::topUpOriginator). Not part of the election.
+    uint32_t lap_max_routes;
     // See MyriadGpCollectKind.
     uint8_t kind = COLLECT_ELECTION;
 }

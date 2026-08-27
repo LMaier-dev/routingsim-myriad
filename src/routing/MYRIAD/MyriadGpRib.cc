@@ -285,12 +285,21 @@ StoreResult MyriadGpRib::store(uint32_t origin, const std::vector<uint32_t>& ful
     return res;
 }
 
-std::vector<MyriadGpRib::ReplayChain> MyriadGpRib::chainsEnteringVia(uint32_t ring) const {
+size_t MyriadGpRib::knownOrigins() const {
+    size_t n = 0;
+    for (auto& [origin, rs] : rings) if (rs.preferred != SIZE_MAX) ++n;
+    return n;
+}
+
+std::vector<MyriadGpRib::ReplayChain> MyriadGpRib::preferredChains() const {
     std::vector<ReplayChain> out;
-    for (auto& [origin, ors] : rings)
-        for (auto& e : ors.ribIn)
-            if (e.seq_no == ors.curSeq && !e.chain.empty() && e.chain.front() == ring)
-                out.push_back({&e.chain, e.chain_cost, e.spof_count, &rr(e.chain.back())});
+    out.reserve(rings.size());
+    for (auto& [origin, ors] : rings) {
+        if (ors.preferred == SIZE_MAX) continue;
+        const RibEntry& e = ors.ribIn[ors.preferred];
+        if (e.chain.empty()) continue;
+        out.push_back({&e.chain, e.chain_cost, e.spof_count, &rr(origin)});
+    }
     return out;
 }
 
