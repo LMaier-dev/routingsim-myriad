@@ -175,6 +175,8 @@ namespace routingsim {
                 if (it == neighbors.end()) return;
                 cancelAndDelete(it->second.deadTimer); // nullptr ok
                 it->second.deadTimer = addOneShotTimer(deadInterval, [this, nid](short) {
+                    auto it2 = neighbors.find(nid);
+                    if (it2 != neighbors.end()) it2->second.deadTimer = nullptr;
                     handleDead(nid);
                     return false;
                 });
@@ -186,7 +188,7 @@ namespace routingsim {
                 N& nbr = it->second;
                 bool wasFull = (nbr.state == NSTATE_FULL);
                 MLOG_N_WARN(nid) << "neighbor timed out (DEAD)\n";
-                nbr.deadTimer = nullptr;
+                if (nbr.deadTimer) { cancelAndDelete(nbr.deadTimer); nbr.deadTimer = nullptr; }
                 nbr.state = NSTATE_DOWN;
                 onNeighborDead(nbr, wasFull);
             }
