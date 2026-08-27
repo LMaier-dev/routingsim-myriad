@@ -299,6 +299,15 @@ protected:
 		/// Returns the TOTAL number of links irregarding their state (active/inactive)
 		inline unsigned long getNumberLinks() const { return num_edges(*BGLtopology); }
 
+		/// Returns the node's STRUCTURAL degree: total incident links in the
+		/// underlying topology, regardless of whether the node or its neighbors
+		/// are currently active. Unlike getNodeDegree()/getNodeDegrees(), this
+		/// doesn't collapse toward 0 just because several neighbors happen to be
+		/// down at the same moment (overlapping/cascading failures) — use it
+		/// for filters meant to reflect the topology's fixed connectivity
+		/// (e.g. EscalatingFailure's minDegree/maxDegree), not live reachability.
+		inline unsigned long getStructuralDegree(nodeid_t node) const { return out_degree(node, *BGLtopology); }
+
 		/// Returns the number of ACTIVE nodes in the network
 		unsigned long getActiveNumberNodes() const;
 

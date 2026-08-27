@@ -54,6 +54,9 @@ struct PendingTx {
 };
 
 class MyriadHelper : public Protocol {
+    public:
+        ~MyriadHelper() override { delete txBytesVec; }
+
     protected:
         nodeid_t myId;
         MyriadLogLevel logLevel = MLOG_LEVEL_DEBUG;

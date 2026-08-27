@@ -22,22 +22,36 @@ simtime_t EscalatingFailure::scheduleDynamics() {
 	// We are called at t=0 for the first wave and at the wave time afterwards.
 	simtime_t delay = (idx == 0) ? warmup : 0;
 
-	std::map<nodeid_t, unsigned long> candidates;
-	getTopology().getNodeDegrees(candidates);
-	for (auto it = candidates.begin(); it != candidates.end();) {
-		if (it->second <= minDegree || it->second >= maxDegree) candidates.erase(it++);
-		else ++it;
+	// Eligibility (currently active) and the degree filter are deliberately two
+	// different views: eligibility must be live (can't fail an already-down
+	// node), but the degree filter should reflect the topology's fixed
+	// connectivity. getNodeDegrees() conflates them — its degree only counts
+	// links to currently-active neighbors, so during a big overlapping wave a
+	// perfectly healthy node can show degree 0 just because its neighbors are
+	// simultaneously down from OTHER, unrelated failures, wrongly excluding it
+	// and shrinking the candidate pool as churn escalates.
+	std::vector<nodeid_t> activeIds;
+	getTopology().getNodeIDs(activeIds);
+	std::vector<nodeid_t> candidates;
+	for (nodeid_t id : activeIds) {
+		size_t deg = getTopology().getStructuralDegree(id);
+		if (deg > minDegree && deg < maxDegree) candidates.push_back(id);
 	}
 
 	size_t want = (double) getTopology().getActiveNumberNodes() * waves[idx];
-	EV << "wave " << idx << ": failing " << std::min(want, candidates.size())
+	// Frozen once, before the loop: candidates.size() shrinks by one each
+	// iteration (pop_back below), so using it directly as the loop bound would
+	// re-shrink the target every step — for want > pool/2 that silently stalls
+	// partway (e.g. want=80 of pool=100 previously stopped at exactly 50).
+	size_t n = std::min(want, candidates.size());
+	EV << "wave " << idx << ": failing " << n
 	   << " nodes (" << waves[idx] * 100 << "%)" << endl;
 
-	for (size_t i = 0; i < std::min(want, candidates.size()); i++) {
-		auto it = candidates.begin();
-		std::advance(it, getRNG(0)->intRand(candidates.size()));
-		nodeid_t node = it->first;
-		candidates.erase(it);
+	for (size_t i = 0; i < n; i++) {
+		size_t pick = getRNG(0)->intRand(candidates.size());
+		nodeid_t node = candidates[pick];
+		candidates[pick] = candidates.back();
+		candidates.pop_back();
 
 		double down = downMin + getRNG(0)->doubleRand() * downJitter;
 		scheduleNodeFailure(node, delay, down);
