@@ -157,16 +157,26 @@ namespace routingsim {
                     EV << "\n";
                 }
 
-                if (nbr.state >= NSTATE_TWOWAY) return;
-
+                bool listed = false;
                 int size = hello->getKnownNeighborsArraySize();
-                for (int i = 0; i < size; i++) {
-                    if (hello->getKnownNeighbors(i) == myId) {
-                        nbr.state = NSTATE_TWOWAY;
-                        MLOG_N_INFO(from) << "now in TWO-WAY state\n";
-                        onTwoWayReached(nbr);
-                        break;
+                for (int i = 0; i < size; i++)
+                    if (hello->getKnownNeighbors(i) == myId) { listed = true; break; }
+
+                // 1-WAY: an established neighbor that stopped listing us lost
+                // its state or the link went one-way. Drops the adjacency before
+                // the dead interval would; the next hello rebuilds it.
+                if (nbr.state >= NSTATE_TWOWAY) {
+                    if (!listed) {
+                        MLOG_N_INFO(from) << "hello no longer lists us (1-WAY)\n";
+                        handleDead(from);
                     }
+                    return;
+                }
+
+                if (listed) {
+                    nbr.state = NSTATE_TWOWAY;
+                    MLOG_N_INFO(from) << "now in TWO-WAY state\n";
+                    onTwoWayReached(nbr);
                 }
             }
 
