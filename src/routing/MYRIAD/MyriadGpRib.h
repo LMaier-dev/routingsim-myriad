@@ -81,9 +81,8 @@ namespace routingsim {
                 uint32_t spof;
                 const std::vector<MyriadGpRr>* rr;   // the origin ring's rr
             };
-            // My best route to every origin I know. The king replays this whole
-            // set into a recovering ring; see MyriadGP::replayInto for how each
-            // chain is rebased onto that ring.
+            // My best route to every origin I know; see MyriadGP::replayInto
+            // for how each chain is rebased onto the ring it is replayed into.
             std::vector<ReplayChain> preferredChains() const;
             // Origins I currently hold a route to. Used as a RIB-richness test:
             // a just-recovered node knows only its own rings, a converged one

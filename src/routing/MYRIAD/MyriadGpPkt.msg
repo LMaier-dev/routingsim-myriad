@@ -29,11 +29,12 @@ enum MyriadGpPDUType {
 enum MyriadGpCollectKind {
     // Formation, king refresh, watchdog coup. Contention rules apply.
     COLLECT_ELECTION = 0;
-    // Liveness check after a ring-neighbor died: forwarded unconditionally, and
-    // only its budget expiry matters (that is what fires DEGRADE).
+    // Liveness check after a ring-neighbor died, and the lap a rebooted node
+    // sends to rejoin: forwarded unconditionally, carries no routing entries.
+    // Its budget expiry is what fires DEGRADE.
     COLLECT_PROBE = 1;
-    // A rebooted node's rejoin lap: forwarded unconditionally, better-informed
-    // members replay into it (lap_max_routes), own-return restores member size.
+    // Sent once a probe closed and reported a better-informed member: the only
+    // kind that makes a member replay its RIB into the ring.
     COLLECT_REPLAY = 2;
 }
 
@@ -86,9 +87,11 @@ packet MyriadGpCollect extends MyriadGpNLRI {
     // Originator lacked state (memberCount==0): loses the king election to any
     // live member (formation tie-break by id).
     bool originator_crashed;
-    // High-water mark of "origins I know" along the lap: seeded by the
-    // originator, raised by any forwarder that beats it and therefore replays
-    // (MyriadGP::topUpOriginator). Not part of the election.
+    // Origins the originator knows, raised by any forwarder that knows more, so
+    // a closed lap reports the ring's best-informed member. On a REPLAY lap that
+    // member replays and saturates the field instead, which caps a lap at one
+    // replay and tells the originator on return that one was sent. Not part of
+    // the election.
     uint32_t lap_max_routes;
     // See MyriadGpCollectKind.
     uint8_t kind = COLLECT_ELECTION;

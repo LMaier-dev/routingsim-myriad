@@ -14,7 +14,7 @@ namespace {
 using namespace msgsize;
 
 int64_t gpCollectBytes(const MyriadGpCollect* p) {
-    return MYRIADGP_HDR + U32 + U32 + 2 * BOOL             // member_count + routes + crashed bit + kind
+    return MYRIADGP_HDR + U32 + U32 + 2 * BOOL             // member_count + lap max + crashed bit + kind
          + (int64_t) p->getRrArraySize() * RR
          + (int64_t) p->getTransitionsArraySize() * TRANSITION;
 }
@@ -110,10 +110,9 @@ void MyriadGP::onTwoWayReached(GpNeighbor& nbr) {
         // Originate once >=1 ring-neighbor is two-way (a genuine 2-node ring has
         // exactly one and closes its lap via echo; see the echo sites below).
         if (grew && count <= 2 && m.collectInflight.tx == nullptr) {
-            // reset() wipes memberships, so a rebooted node always "grows" and its
-            // lap is the replay kind: every member it passes replays its front-R
-            // chains back to it, and its own return restores member size/rr.
-            originateCollect(R, nbr.id, rebooted ? COLLECT_REPLAY : COLLECT_ELECTION);
+            // reset() wipes memberships, so a rebooted node always "grows". It
+            // probes first; only a closed lap is worth a replay (handleCollect).
+            originateCollect(R, nbr.id, rebooted ? COLLECT_PROBE : COLLECT_ELECTION);
         } else if (count > 2) {
             MLOG_N_WARN(nbr.id) << "ring '" << R
                 << "' has >2 ring-neighbors (misconfig); ignoring\n";
@@ -301,14 +300,17 @@ void MyriadGP::cancelCollect(uint32_t ring) {
     cancelRingReliable(it->second.collectInflight);
 }
 
-void MyriadGP::topUpOriginator(MyriadGpCollect* collect, uint32_t ring) {
-    if (!recoveryReplayEnabled || simTime() < collectWarmupDuration) return;
-    if (memberCountOf(ring) == 0) return;
-    if (collect->getLap_max_routes() >= rib.knownOrigins()) return;
-    MLOG_INFO() << "topping up ring='" << ring << "' lap carries "
-                << collect->getLap_max_routes() << " < " << rib.knownOrigins() << "\n";
+void MyriadGP::replayIfBest(MyriadGpCollect* lap, uint32_t ring) {
+    if (rib.knownOrigins() <= lap->getLap_max_routes()) return;
+    if (lap->getKind() != COLLECT_REPLAY || !recoveryReplayEnabled
+        || simTime() < collectWarmupDuration || memberCountOf(ring) == 0) {
+        lap->setLap_max_routes(rib.knownOrigins());
+        return;
+    }
+    MLOG_INFO() << "replaying into ring='" << ring << "' (lap carries "
+                << lap->getLap_max_routes() << " < " << rib.knownOrigins() << ")\n";
     replayInto(ring);
-    collect->setLap_max_routes(rib.knownOrigins());
+    lap->setLap_max_routes(rib.knownOrigins());
 }
 
 void MyriadGP::onCollectBudgetExpired(uint32_t ring) {
@@ -447,6 +449,12 @@ void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t sender) {
             }
             EV << "]\n";
 
+            // Lap closed, so the ring is whole and a replay reaches every
+            // member. Terminates: a lap reporting nothing new asks for nothing.
+            if (recoveryReplayEnabled && simTime() >= collectWarmupDuration
+                && collect->getLap_max_routes() > rib.knownOrigins())
+                originateCollect(R, sender, COLLECT_REPLAY);
+
             // Only an election lap crowns a king and re-announces the ring. A
             // probe or replay lap has already done its job above: it proved the
             // ring whole and restored my member size / rr / transitions.
@@ -457,7 +465,7 @@ void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t sender) {
                 // flag. Still set means the king co-failed with me, so nothing
                 // re-announces this ring until a watchdog fires a whole refresh
                 // period from now. Coup now instead.
-                if (collect->getKind() == COLLECT_REPLAY && collect->getOriginator_crashed()) {
+                if (collect->getOriginator_crashed()) {
                     MLOG_INFO() << "replay lap met no king on ring='" << R << "' — coup\n";
                     reoriginateCollect(R);
                 } else if (!m.isKing && !m.watchdogTimer) {
@@ -501,10 +509,8 @@ void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t sender) {
             startWatchdog(R);
     }
 
-    // Probe and replay laps are forwarded UNCONDITIONALLY (never suppressed by
-    // contention) so they always reach the originator. The replay itself is not
-    // keyed on the kind: insertAndForwardCollect tops the originator up whenever
-    // I know more origins than it does, on any lap.
+    // Non-election laps are forwarded UNCONDITIONALLY (never suppressed by
+    // contention) so they always reach the originator.
     if (collect->getKind() != COLLECT_ELECTION) {
         if (m.isKing) collect->setOriginator_crashed(false);  // king alive: no coup
         insertAndForwardCollect(collect, R, sender);
@@ -621,7 +627,7 @@ void MyriadGP::originateUpdate(uint32_t ring) {
 
 void MyriadGP::insertAndForwardCollect(MyriadGpCollect* pkt, uint32_t R, nodeid_t sender) {
     RingMembership& m = memberships[R];
-    topUpOriginator(pkt, R);   // single chokepoint: covers every lap kind
+    replayIfBest(pkt, R);
     // Count myself as a ring member
     pkt->setMember_count(pkt->getMember_count() + 1);
 
@@ -1044,15 +1050,18 @@ void MyriadGP::replayInto(uint32_t ring) {
     uint64_t ringCost = rib.sizeToCost(memberCountOf(ring));
 
     for (auto& e : rib.preferredChains()) {
-        if (e.chain->front() == ring) {
-            // Already enters via `ring`: strip it and its cost, the receiver
-            // re-adds both. The [ring] self-chain strips to an empty chain, which
-            // processChain reads as origin==current_ring — exactly the recovered
-            // node's own-ring entry, which otherwise waits for the next refresh.
-            replay.push_back({{e.chain->begin() + 1, e.chain->end()},
-                              e.cost > ringCost ? e.cost - ringCost : 0, e.spof, e.rr});
-        } else if (std::find(e.chain->begin(), e.chain->end(), ring) != e.chain->end()) {
-            continue;   // `ring` mid-chain: prepending it would loop
+        auto rit = std::find(e.chain->rbegin(), e.chain->rend(), ring);
+        if (rit != e.chain->rend()) {
+            // Send what lies beyond the LAST occurrence of `ring`; anything
+            // before it is a detour out of the ring and back. [ring] itself
+            // reduces to an empty chain = origin==current_ring at the receiver.
+            size_t cut = e.chain->size() - (size_t)(rit - e.chain->rbegin());
+            // Exact only if the ring was the front; a mid-cut keeps the full
+            // cost/spof, over-stating both, which is the safe direction.
+            bool exact = (cut == 1);
+            replay.push_back({{e.chain->begin() + cut, e.chain->end()},
+                              exact && e.cost > ringCost ? e.cost - ringCost : e.cost,
+                              e.spof, e.rr});
         } else {
             // I bridge this one in myself: +1 spof for the ring->front hop unless
             // the transition is redundant, mirroring forwardChainInterRing.
