@@ -17,6 +17,10 @@ simple myriadls extends routingsim.foundation.Protocol
         double joinJitter @unit(s) = default(0s);
         // Max number of LSA headers per DBD packet, or LsaRequests per LSR packet.
         int dbExchangeBatchSize = default(100);
+        // OSPF MinLSInterval: at most one self-LSA origination per (origin,type)
+        // per this window; bursts (e.g. many neighbors reaching FULL at once, or
+        // a high-degree node) coalesce into one re-origination at the window edge.
+        double minLsInterval @unit(s) = default(1s);
 
         // Ring membership, e.g. "A,B". Set per node via **.NodeN.*.ringLabel.
         string ringLabel = default("");

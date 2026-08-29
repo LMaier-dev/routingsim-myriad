@@ -69,7 +69,9 @@ namespace routingsim {
             void onNeighborDead(NeighborEntry& nbr, bool wasFull) override;
 
             void installSelfLsas();
+            // Debounced entry point (see doOriginateSelfLsa + minLsInterval).
             void originateSelfLsa(MyriadLSAType type, uint16_t minSeq = 0);
+            void doOriginateSelfLsa(MyriadLSAType type, uint16_t minSeq);
             void logLsdb();
             void buildPendingDbd(NeighborEntry& nbr);
             void logDbd(const MyriadDBD* dbd, nodeid_t from);
@@ -91,6 +93,12 @@ namespace routingsim {
             Lsdb lsdb;
 
             int dbExchangeBatchSize = 220;
+            simtime_t minLsInterval;
+
+            // MinLSInterval debounce state, see doOriginateSelfLsa.
+            std::unordered_map<LsaKey, simtime_t, LsaKeyHash> lastOriginated;
+            struct PendingOriginate { uint16_t minSeq = 0; TimerMsg* timer = nullptr; };
+            std::unordered_map<LsaKey, PendingOriginate, LsaKeyHash> pendingOriginate;
 
             simtime_t snapshotInterval;      // periodic oracle snapshot; 0 = off
             TimerMsg* snapshotTimer = nullptr;

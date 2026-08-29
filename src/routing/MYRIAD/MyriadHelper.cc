@@ -64,6 +64,7 @@ PendingTx* MyriadHelper::sendReliable(nodeid_t to, cPacket* pkt, simtime_t inter
     // First send: dup() so we keep the template for retransmits
     auto np = std::make_unique<NodePkt>(pkt->getName());
     np->setType(packetType);
+    np->setAttributes(np->getAttributes() | NODEPKT_ATTR_CONTROL_PLANE_PROCESSING_DELAY);
     np->encapsulate(pkt->dup());
     countSend(sendTypeLabel(pkt->getName()), np->getByteLength());
     sendToNode(to, std::move(np));
@@ -78,6 +79,7 @@ PendingTx* MyriadHelper::sendReliable(nodeid_t to, cPacket* pkt, simtime_t inter
 void MyriadHelper::retxFire(PendingTx* h) {
     auto np = std::make_unique<NodePkt>(h->pkt->getName());
     np->setType(packetType);
+    np->setAttributes(np->getAttributes() | NODEPKT_ATTR_CONTROL_PLANE_PROCESSING_DELAY);
     np->encapsulate(h->pkt->dup());
     countSend(sendTypeLabel(h->pkt->getName()), np->getByteLength());
     sendToNode(h->dest, std::move(np));

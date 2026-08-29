@@ -43,6 +43,7 @@ void MyriadLS::onInitialize() {
     MyriadHelloProto::onInitialize();
     packetType = MYRIADLS_PACKET_TYPE;
     dbExchangeBatchSize = par("dbExchangeBatchSize");
+    minLsInterval = par("minLsInterval");
     snapshotInterval = par("snapshotInterval");
     snapshotStats = par("snapshotFormat").stdstringValue() == "stats";
 
@@ -126,6 +127,9 @@ void MyriadLS::reset() {
     }
     neighbors.clear();
     lsdb.clear();
+    for (auto& [key, pend] : pendingOriginate) cancelAndDelete(pend.timer);
+    pendingOriginate.clear();
+    lastOriginated.clear();
     installSelfLsas();
 
     if (snapshotTimer) { cancelAndDelete(snapshotTimer); snapshotTimer = nullptr; }
@@ -182,6 +186,30 @@ void MyriadLS::installSelfLsas() {
 
 void MyriadLS::originateSelfLsa(MyriadLSAType type, uint16_t minSeq) {
     LsaKey key{myId, type};
+    simtime_t now = simTime();
+    auto lit = lastOriginated.find(key);
+    if (lit == lastOriginated.end() || now - lit->second >= minLsInterval) {
+        doOriginateSelfLsa(type, minSeq);
+        return;
+    }
+    // Within the debounce window (OSPF MinLSInterval): coalesce bursts (e.g.
+    // many neighbors reaching FULL together, or a high-degree hub) into one
+    // re-origination scheduled at the window edge, instead of one per event.
+    auto& pend = pendingOriginate[key];
+    if (minSeq > pend.minSeq) pend.minSeq = minSeq;
+    if (pend.timer) return; // already scheduled
+    simtime_t delay = minLsInterval - (now - lit->second);
+    pend.timer = addOneShotTimer(delay, [this, type, key](short) {
+        uint16_t seq = pendingOriginate[key].minSeq;
+        pendingOriginate.erase(key);
+        doOriginateSelfLsa(type, seq);
+        return false;
+    });
+}
+
+void MyriadLS::doOriginateSelfLsa(MyriadLSAType type, uint16_t minSeq) {
+    LsaKey key{myId, type};
+    lastOriginated[key] = simTime();
     auto it = lsdb.find(key);
     uint16_t newSeq = (it != lsdb.end()) ? it->second->getSeq_no() + 1 : 1;
     if (static_cast<uint16_t>(minSeq + 1) > newSeq) newSeq = minSeq + 1;
@@ -338,6 +366,7 @@ void MyriadLS::handleLSR(MyriadLSR* lsr, nodeid_t from) {
     MLOG_N_DEBUG(from) << "sending LSU with " << dups.size() << " LSA(s)\n";
     auto np = std::make_unique<NodePkt>("Myriad_LSU_Pkt");
     np->setType(MYRIADLS_PACKET_TYPE);
+    np->setAttributes(np->getAttributes() | NODEPKT_ATTR_CONTROL_PLANE_PROCESSING_DELAY);
     lsu->setByteLength(lsuBytes(lsu));
     np->encapsulate(lsu);
     countSend("lsu", np->getByteLength());
@@ -458,6 +487,7 @@ void MyriadLS::sendAck(nodeid_t to, const std::vector<const LsaHeader*>& headers
 
     auto np = std::make_unique<NodePkt>("Myriad_LSAck_Pkt");
     np->setType(MYRIADLS_PACKET_TYPE);
+    np->setAttributes(np->getAttributes() | NODEPKT_ATTR_CONTROL_PLANE_PROCESSING_DELAY);
     ack->setByteLength(ackBytes(ack));
     np->encapsulate(ack);
     countSend("ack", np->getByteLength());
@@ -612,6 +642,7 @@ void MyriadLS::handleDBD(MyriadDBD* dbd, nodeid_t from) {
                                    << ", repeating last response\n";
                 auto np = std::make_unique<NodePkt>("Myriad_DBD_Pkt");
                 np->setType(MYRIADLS_PACKET_TYPE);
+                np->setAttributes(np->getAttributes() | NODEPKT_ATTR_CONTROL_PLANE_PROCESSING_DELAY);
                 np->encapsulate(nbr.lastSentDbd->dup());
                 countSend("dbd", np->getByteLength());
                 sendToNode(from, std::move(np));
@@ -668,6 +699,7 @@ void MyriadLS::sendDBD(nodeid_t to, bool init, bool master, uint16_t seq_no) {
     }
     auto np = std::make_unique<NodePkt>("Myriad_DBD_Pkt");
     np->setType(MYRIADLS_PACKET_TYPE);
+    np->setAttributes(np->getAttributes() | NODEPKT_ATTR_CONTROL_PLANE_PROCESSING_DELAY);
     np->encapsulate(dbd);
     countSend("dbd", np->getByteLength());
     sendToNode(to, std::move(np));
