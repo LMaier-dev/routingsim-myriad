@@ -26,9 +26,11 @@ struct RingRoute {
     uint32_t hops;
 };
 
-// perNodeRings: node id -> rings it belongs to
-std::map<NodeId, std::map<RingId, RingRoute>>
-shortestRingCosts(const std::map<NodeId, std::vector<RingId>>& perNodeRings, long exp);
+// Optimal cost/hops from `self` to every reachable origin ring.
+// perNodeRings: node id -> rings it belongs to.
+std::map<RingId, RingRoute>
+shortestRingCostsFor(const std::map<NodeId, std::vector<RingId>>& perNodeRings, long exp,
+                     NodeId self);
 
 void dumpOracle(const std::string& path, NodeId self,
                 const std::map<NodeId, std::vector<RingId>>& perNodeRings, long exp,
