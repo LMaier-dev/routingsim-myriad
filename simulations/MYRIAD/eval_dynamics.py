@@ -31,7 +31,7 @@ csv.field_size_limit(sys.maxsize)  # a node's whole txBytes series is one CSV-R 
 from eval_harness import (BIN, MYRIAD_DIR, _sec, add_topo_args, announce,
                           apply_repeat_args, common, dynamics_args,
                           ensure_ring_labels, overrides, pm, refresh_s, rep_path,
-                          repeat_mean, repeats_note, run_sim, simtime, warmup_s,
+                          repeat_mean, repeats_note, run_sim, simtime, title, warmup_s,
                           write_proto_ini)
 
 OUT = os.path.join(str(MYRIAD_DIR), "eval", "dynamics")
@@ -40,6 +40,7 @@ CHURN_NETWORK = "routingsim.simulations.MYRIAD.ChurnNetwork"
 
 DEFAULT_FRACTIONS = [0.05, 0.1, 0.2, 0.4, 0.8]
 CHURN_NODES, CHURN_PERIOD = 1, 1.0  # churn scenario: nodes down per period, seconds
+CHURN_SETTLE = 10.0                # extra seconds after warmup before churn starts
 DOWN_MIN, DOWN_JITTER = 2.0, 8.0   # per-node downtime: DOWN_MIN + U(0, JITTER)
 COLLECT_RETRY_LIMIT = 3            # mirrors MyriadGp.h
 
@@ -60,6 +61,12 @@ CONFIGS = {"gp": ("gp", "ribDumpFile", "true", None),
            "ls": ("ls", "oracleDumpFile", None, None)}
 
 COLORS = {"gp": "C0", "gp_noreplay": "C3", "ls": "C2"}
+
+
+def churn_start():
+    """When the first churn failure fires: warmup plus a settle window, so the
+    measured steady state is churn cost, not leftover initial convergence."""
+    return warmup_s() + CHURN_SETTLE
 
 
 def traffic_simtime():
@@ -111,8 +118,12 @@ def scenario_dynamics(scenario, fractions=None, spacing=None):
     """(cli options, human description) for one scenario. Periods derive from the
     central refresh interval so churn scales with --refresh."""
     if scenario == "churn":
+        # Not warmup_s(): collectWarmupDuration is also when GP unblocks
+        # forwardChainInterRing, so churn starting there superimposes the initial
+        # propagation burst on the first failure. Settle first, then churn.
         return dynamics_args("churn", numNodes=CHURN_NODES,
-                             period=f"{CHURN_PERIOD:g}s", warmup=f"{warmup_s():g}s",
+                             period=f"{CHURN_PERIOD:g}s",
+                             warmup=f"{churn_start():g}s",
                              downMin=f"{DOWN_MIN:g}s", downJitter=f"{DOWN_JITTER:g}s",
                              minDegree=0)
     if scenario == "link":
@@ -450,12 +461,12 @@ def report(traffic, reconv, fractions, scenarios, spacing, churn_bytes=None):
         # Only after warmup: the formation burst is a one-off, the number that
         # matters is what the protocol costs per second to hold steady state.
         print(f"\n=== steady-state cost under churn ({CHURN_NODES} node(s) every "
-              f"{CHURN_PERIOD:g}s, after t={warmup_s():g}s) ===")
+              f"{CHURN_PERIOD:g}s, after t={churn_start():g}s) ===")
         print(f"{'config':>12}{'mean B/s':>14}{'peak B/s':>14}{'vs LS':>9}")
         means = {}
         for name in COLORS:
             ts, bps = churn_bytes.get(name, ([], []))
-            v = [b for t, b in zip(ts, bps) if t >= warmup_s()]
+            v = [b for t, b in zip(ts, bps) if t >= churn_start()]
             if v:
                 means[name] = (sum(v) / len(v), max(v))
         ref = means.get("ls", (0, 0))[0]
@@ -517,7 +528,7 @@ def plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0=None,
                               label=s, color=f"C{i}")
                 ax.bar_label(bars, fmt="%.0f", fontsize=8)
             ax.set_xticks(list(x)); ax.set_xticklabels([p.upper() for p in protos])
-            ax.set(ylabel=ylabel, title=f"Control plane ({traffic_simtime()})")
+            ax.set(ylabel=ylabel, title=title(f"Control plane ({traffic_simtime()})"))
             ax.legend(fontsize=8); fig.tight_layout()
             fig.savefig(os.path.join(OUT, fname), dpi=120)
             made.append(fname)
@@ -533,13 +544,13 @@ def plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0=None,
             if not ts:
                 continue
             ax.plot(ts, bps, color=color, lw=1.0, label=name)
-        ax.axvline(warmup_s(), color="gray", lw=0.8)
-        ax.text(warmup_s(), ax.get_ylim()[1], " churn starts", fontsize=8,
+        ax.axvline(churn_start(), color="gray", lw=0.8)
+        ax.text(churn_start(), ax.get_ylim()[1], " churn starts", fontsize=8,
                 color="gray", va="top")
         ax.set_yscale("log")
         ax.set(xlabel="time (s)", ylabel="control-plane bytes/s (log)",
-               title=f"Control-plane cost under steady churn "
-                     f"({CHURN_NODES} node(s) every {CHURN_PERIOD:g}s)")
+               title=title(f"Control-plane cost under steady churn "
+                           f"({CHURN_NODES} node(s) every {CHURN_PERIOD:g}s)"))
         ax.legend(fontsize=8); fig.tight_layout()
         fig.savefig(os.path.join(OUT, "churn_bytes.png"), dpi=120)
         made.append("churn_bytes.png")
@@ -557,7 +568,7 @@ def plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0=None,
         ax.axhline(refresh_s(), ls=":", color="gray",
                    label=f"refreshInterval ({common('refreshInterval')})")
         ax.set(xlabel="nodes failed (%)", ylabel="reconvergence time (s)",
-               title="Reconvergence vs failure size")
+               title=title("Reconvergence vs failure size"))
         ax.legend(fontsize=7); fig.tight_layout()
         fig.savefig(os.path.join(OUT, "reconverge_vs_fraction.png"), dpi=120)
         made.append("reconverge_vs_fraction.png")
@@ -581,7 +592,7 @@ def plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0=None,
             ax.set(xlim=(0, max(ts)),
                    xlabel="time (s) — solid: wave fails, shaded: reboot window",
                    ylabel="network-wide routes present (%)",
-                   title="Route table refill under growing node failures")
+                   title=title("Route table refill under growing node failures"))
             handles, labels = ax.get_legend_handles_labels()
 
             # Right axis: network-wide control-plane bytes/s, from the per-node

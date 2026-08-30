@@ -15,7 +15,7 @@ import sys
 
 from eval_harness import (BIN, SIM_ROOT, MYRIAD_DIR, announce, apply_repeat_args,
                           ensure_ring_labels, overrides, pm, rep_path, repeat_mean,
-                          repeats_note, run_sim, simtime, write_proto_ini,
+                          repeats_note, run_sim, simtime, title, write_proto_ini,
                           add_topo_args)
 
 HERE = str(MYRIAD_DIR)
@@ -161,7 +161,7 @@ def main(args=None):
     ax.set_xticks(pos)
     ax.set_xticklabels([str(c) for c in cxs], rotation=45, ha="right", fontsize=7)
     ax.set(xlabel="cost-drift bucket  GP − oracle", ylabel="drift (GP − oracle)",
-           title="Cost vs length drift: GP production vs oracle")
+           title=title("Cost vs length drift: GP production vs oracle"))
     ax.legend(fontsize=8)
     if negative:
         ax.text(0.02, 0.95, f"BUG: {len(negative)} negative cost drift",
@@ -177,7 +177,7 @@ def main(args=None):
     ax.scatter(ox, gy, s=4, alpha=0.4, color="C0")
     ax.plot([lo, hi], [lo, hi], "k--", lw=0.8, label="y = x  (optimal)")
     ax.set(xlabel="oracle cost (Dijkstra)", ylabel="GP cost (production)",
-           title="GP vs oracle path cost")
+           title=title("GP vs oracle path cost"))
     ax.legend(fontsize=8)
     fig.tight_layout()
     fig.savefig(os.path.join(OUT, "scatter.png"), dpi=120)

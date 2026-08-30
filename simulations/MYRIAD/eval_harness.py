@@ -350,7 +350,9 @@ def add_repeat_args(parser):
 
 def apply_repeat_args(args):
     """Bind the shared CLI flags into the module state run_sim reads."""
-    global REPEATS, JOBS, EXTRA_OPTS, RNG_ISOLATE
+    global REPEATS, JOBS, EXTRA_OPTS, RNG_ISOLATE, TOPO_LABEL
+    if getattr(args, "topo", None):
+        TOPO_LABEL = topo_label(args.topo)
     REPEATS = max(1, getattr(args, "repeat", 1) or 1)
     JOBS = getattr(args, "jobs", None)
     RNG_ISOLATE = getattr(args, "rng_isolate", True)
@@ -368,6 +370,29 @@ def apply_repeat_args(args):
                 v = f"{v}s"
             EXTRA_OPTS.append(f"--**.{par}={v}")
             EFFECTIVE[par] = str(v)
+
+
+TOPO_LABEL = ""          # set by apply_repeat_args, for plot titles
+
+
+def topo_label(path):
+    """Short plot-title name for a topology file: 'rgg_n750_d4.5_seed0.txt' ->
+    'RGG 750', 'grid_10,10.txt' -> 'GRID 10,10'. Family tokens uppercase, the
+    size kept, generator parameters (seed/d/m/p/r/k/cs) dropped."""
+    fam, size = [], []
+    for t in Path(path).stem.split("_"):
+        if re.fullmatch(r"n?\d[\d.,]*", t):           # n750, 10,10, 100
+            size.append(t.lstrip("n"))
+        elif re.fullmatch(r"(seed|d|m|p|r|k|cs)[\d.]+", t):
+            continue                                  # generator knob, not identity
+        elif not size:                                # family words precede the size
+            fam.append(t.upper())
+    return " ".join(fam + size)
+
+
+def title(base):
+    """Plot title with the topology appended, when a script bound one."""
+    return f"{base} — {TOPO_LABEL}" if TOPO_LABEL else base
 
 
 def add_topo_args(parser):

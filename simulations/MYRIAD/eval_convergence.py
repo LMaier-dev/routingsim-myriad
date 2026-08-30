@@ -26,7 +26,7 @@ import sys
 
 from eval_harness import (BIN, SIM_ROOT, MYRIAD_DIR, announce, apply_repeat_args,
                           common, ensure_ring_labels, overrides, pm, rep_path,
-                          repeat_mean, repeats_note, run_sim, simtime, warmup_s,
+                          repeat_mean, repeats_note, run_sim, simtime, title, warmup_s,
                           write_proto_ini, add_topo_args)
 
 HERE = str(MYRIAD_DIR)
@@ -209,7 +209,7 @@ def main(args=None):
                              label=f"LS messages ({ls_msgs:.0f})"))
     axL.set(xlabel="holdInterval (s, log scale)", ylabel="convergence time (s)")
     axR.set_ylabel("total sent messages")
-    axL.set_title("Batching tradeoff: convergence time vs messages")
+    axL.set_title(title("Batching tradeoff: convergence time vs messages"))
     axL.legend(handles=lines, fontsize=7, loc="center left")
     fig.tight_layout()
     fig.savefig(os.path.join(OUT, "tradeoff.png"), dpi=120)
@@ -222,7 +222,7 @@ def main(args=None):
     ts = sorted(ls["curve"])
     ax.plot(ts, [ls["curve"][t] for t in ts], "k--", label="LS")
     ax.set(xlabel="sim time (s)", ylabel="% of optimal RIB reached",
-           title="Convergence curve")
+           title=title("Convergence curve"))
     ax.legend(fontsize=8)
     fig.savefig(os.path.join(OUT, "optimal_vs_time.png"), dpi=120)
 
