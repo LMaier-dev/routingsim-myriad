@@ -59,6 +59,11 @@ simple myriadgp extends routingsim.foundation.Protocol
         // equal-cost paths are combinatorial on symmetric meshes.
         int maxEcmpPaths = default(3);
 
+        // Relative cost band counting two chains as co-best (0.2 = 20%). 0 =
+        // exact equality, which on an irregular topology almost never holds,
+        // leaving maxEcmpPaths inert. Must stay 0 for the Dijkstra oracle gate.
+        double ecmpCostMargin = default(0.2);
+
         // Max serialized bytes of one inter-ring UPDATE batch; the flush splits
         // the held set across frame-sized batches (real path-vector protocols
         // cap PDU size too). 1400 ≈ one Ethernet payload.

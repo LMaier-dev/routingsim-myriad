@@ -46,10 +46,12 @@ namespace routingsim {
     // protocol, timer or packet state — MyriadGP owns those.
     class MyriadGpRib {
         public:
-            void configure(long costExponent, bool useSpof, long maxEcmp) {
+            void configure(long costExponent, bool useSpof, long maxEcmp,
+                           double ecmpMargin = 0.0) {
                 ringCostExponent = costExponent;
                 rankUseSpof = useSpof;
                 maxEcmpPaths = maxEcmp;
+                ecmpCostMargin = ecmpMargin;
             }
             void clear() { rings.clear(); degrades.clear(); }
 
@@ -104,12 +106,14 @@ namespace routingsim {
             // false = rank purely by cost (oracle mode); see MyriadGp.ned.
             bool rankUseSpof = true;
             long maxEcmpPaths = 1;
-
-            // Rank order: spof, then cost, then chain length. Used by both the
-            // store cascade and selectPreferred.
+            // See MyriadGp.ned. 0 = exact-equality co-best.
+            double ecmpCostMargin = 0.0;
+            bool withinMargin(uint64_t a, uint64_t b) const;
+            // Rank order: spof, then cost margin, then chain length. Used by both
+            // the store cascade and selectPreferred.
             bool strictlyBetter(const RibEntry& a, const RibEntry& b) const;
-            // Co-best: equal on (spof, cost, chain-length). Chain order is not in
-            // the key, so genuine ties are retained for ECMP.
+            // Co-best: equal spof and mutually within the cost margin. Chain order
+            // is not in the key, so genuine ties are retained for ECMP.
             bool coBest(const RibEntry& a, const RibEntry& b) const;
             bool frontRepresented(const RibRing& rs, uint32_t front, size_t except) const;
             // New-best erase that keeps each front-ring's sole current-gen.

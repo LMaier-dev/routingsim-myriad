@@ -60,7 +60,8 @@ void MyriadGP::onInitialize() {
     refreshJitter = par("refreshJitter");
     watchdogMargin = par("watchdogMargin");
     updateJitter = par("updateJitter");
-    rib.configure(par("ringCostExponent"), par("rankUseSpof"), par("maxEcmpPaths"));
+    rib.configure(par("ringCostExponent"), par("rankUseSpof"), par("maxEcmpPaths"),
+                  par("ecmpCostMargin"));
     degradeEnabled = par("degradeEnabled");
     recoveryReplayEnabled = par("recoveryReplayEnabled");
     refreshFloodsUpdate = par("refreshFloodsUpdate");

@@ -117,6 +117,7 @@ def _run_gp_ini(ini, dump, label):
     print(f"  -> GP {label} …", flush=True)
     run_sim([BIN, "-u", "Cmdenv", ini, *CONV,
              "--**.rankUseSpof=false",
+             "--**.ecmpCostMargin=0",   # oracle is exact least-cost
              f'--**.ribDumpFile="{dump}"',
              "--result-dir", os.path.join(OUT, f"gp_{label}")])
     if not os.path.exists(dump):
@@ -143,6 +144,7 @@ def run_gp(config, dump):
     print(f"  -> GP {config} …", flush=True)
     run_sim([BIN, "-u", "Cmdenv", GP_INI, COMMON_INI, "-c", config, *CONV,
              "--**.rankUseSpof=false",
+             "--**.ecmpCostMargin=0",   # oracle is exact least-cost
              f'--**.ribDumpFile="{dump}"',
              "--result-dir", os.path.join(OUT, f"gp_{config}")])
     if not os.path.exists(dump):

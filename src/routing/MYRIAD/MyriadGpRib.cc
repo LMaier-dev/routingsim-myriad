@@ -47,16 +47,29 @@ void MyriadGpRib::installSelfChain(uint32_t ring, uint32_t originSeq, uint64_t c
     selectPreferred(rs);
 }
 
+bool MyriadGpRib::withinMargin(uint64_t a, uint64_t b) const {
+    if (ecmpCostMargin <= 0) return a <= b;
+    // double, since b may be sizeToCost's uint64 saturation where b*(1+m) wraps.
+    double lim = (double)b * (1.0 + ecmpCostMargin);
+    double cap = (double)std::numeric_limits<uint64_t>::max();
+    return (double)a <= (lim > cap ? cap : lim);
+}
+
 bool MyriadGpRib::strictlyBetter(const RibEntry& a, const RibEntry& b) const {
     if (rankUseSpof && a.spof_count != b.spof_count) return a.spof_count < b.spof_count;
-    if (a.chain_cost != b.chain_cost) return a.chain_cost < b.chain_cost;
-    return a.chain.size() < b.chain.size();
+    if (!withinMargin(a.chain_cost, b.chain_cost)) return false;
+    if (!withinMargin(b.chain_cost, a.chain_cost)) return a.chain_cost < b.chain_cost;
+    // Mutually in-margin: siblings, so neither wins — else store()'s new-best
+    // branch erases them. At margin 0 in-margin means equal cost; length breaks it.
+    return ecmpCostMargin > 0 ? false : a.chain.size() < b.chain.size();
 }
 
 bool MyriadGpRib::coBest(const RibEntry& a, const RibEntry& b) const {
     return (!rankUseSpof || a.spof_count == b.spof_count)
-        && a.chain.size() == b.chain.size()
-        && a.chain_cost == b.chain_cost;
+        // With a margin, length is already strictlyBetter's tiebreak.
+        && (ecmpCostMargin > 0 || a.chain.size() == b.chain.size())
+        && withinMargin(a.chain_cost, b.chain_cost)
+        && withinMargin(b.chain_cost, a.chain_cost);
 }
 
 // Sole front-ring guard: is `front` held by any CURRENT-GEN chain in rs.ribIn
