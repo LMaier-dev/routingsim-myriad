@@ -4,12 +4,13 @@
 Three scenarios, one run each per protocol, every run scored on BOTH families:
 traffic (messages/bytes per PDU type) and, where nodes fail, reconvergence time.
 
-    static      no dynamics                      → overhead floor
-    link        LinkFailure, repeating flaps     → overhead per unit of churn
-    node        CatastrophicFailure, one wave    → reconvergence vs failure size,
+    churn       NodeChurn, a node down/up every  → overhead under a background
+                --churn-period                      failure rate the network absorbs
+    link        LinkFailure, repeating flaps     → overhead per unit of link churn
+    node        EscalatingFailure, growing waves → reconvergence vs failure size,
                 swept over --fractions, with the GP recovery-replay ablation
 
-    python3 simulations/MYRIAD/eval_dynamics.py [--topo PATH] [--only static|link|node]
+    python3 simulations/MYRIAD/eval_dynamics.py [--topo PATH] [--only churn|link|node]
 
 Replaces eval_overhead.py, eval_recovery.py and eval_reconverge.py: same runs,
 one set of conditions, and the two metric families now describe the same sim.
@@ -29,13 +30,15 @@ csv.field_size_limit(sys.maxsize)  # a node's whole txBytes series is one CSV-R 
 from eval_harness import (BIN, MYRIAD_DIR, _sec, add_topo_args, announce,
                           apply_repeat_args, common, dynamics_args,
                           ensure_ring_labels, overrides, pm, refresh_s, rep_path,
-                          repeat_mean, repeats_note, run_sim, simtime,
+                          repeat_mean, repeats_note, run_sim, simtime, warmup_s,
                           write_proto_ini)
 
 OUT = os.path.join(str(MYRIAD_DIR), "eval", "dynamics")
 RECOVERY_NETWORK = "routingsim.simulations.MYRIAD.RecoveryNetwork"
+CHURN_NETWORK = "routingsim.simulations.MYRIAD.ChurnNetwork"
 
 DEFAULT_FRACTIONS = [0.05, 0.1, 0.2, 0.4, 0.8]
+CHURN_NODES, CHURN_PERIOD = 1, 1.0  # churn scenario: nodes down per period, seconds
 DOWN_MIN, DOWN_JITTER = 2.0, 8.0   # per-node downtime: DOWN_MIN + U(0, JITTER)
 COLLECT_RETRY_LIMIT = 3            # mirrors MyriadGp.h
 
@@ -106,8 +109,11 @@ def node_conditions(spacing):
 def scenario_dynamics(scenario, fractions=None, spacing=None):
     """(cli options, human description) for one scenario. Periods derive from the
     central refresh interval so churn scales with --refresh."""
-    if scenario == "static":
-        return [], None
+    if scenario == "churn":
+        return dynamics_args("churn", numNodes=CHURN_NODES,
+                             period=f"{CHURN_PERIOD:g}s", warmup=f"{warmup_s():g}s",
+                             downMin=f"{DOWN_MIN:g}s", downJitter=f"{DOWN_JITTER:g}s",
+                             minDegree=0)
     if scenario == "link":
         r = refresh_s()
         return dynamics_args("link", numLinksFail=4,
@@ -245,11 +251,15 @@ def reconverge_latencies(series, wave_t, reboots, end_t=float("inf")):
 
 
 def main(args=None):
-    global DOWN_MIN, DOWN_JITTER
+    global DOWN_MIN, DOWN_JITTER, CHURN_NODES, CHURN_PERIOD
     if args is None:
         p = argparse.ArgumentParser()
         add_topo_args(p)
-        p.add_argument("--only", choices=["static", "link", "node"])
+        p.add_argument("--only", choices=["churn", "link", "node"])
+        p.add_argument("--churn-nodes", type=int, default=None,
+                       help="nodes failing per churn period (default 1)")
+        p.add_argument("--churn-period", type=float, default=None,
+                       help="seconds between churn failures (default 1)")
         p.add_argument("--fractions", default=None,
                        help="node-wave failure fractions, e.g. 0.1,0.3")
         p.add_argument("--down-min", type=float, default=None,
@@ -273,6 +283,8 @@ def main(args=None):
         args.wave_spacing = None
     DOWN_MIN = getattr(args, "down_min", None) or DOWN_MIN
     DOWN_JITTER = getattr(args, "down_jitter", None) or DOWN_JITTER
+    CHURN_NODES = getattr(args, "churn_nodes", None) or CHURN_NODES
+    CHURN_PERIOD = getattr(args, "churn_period", None) or CHURN_PERIOD
     if not getattr(args, "noreplay", False):
         CONFIGS.pop("gp_noreplay", None)
     if getattr(args, "no_refresh_flood", False):
@@ -281,7 +293,7 @@ def main(args=None):
 
     fractions = ([float(x) for x in args.fractions.split(",")]
                  if getattr(args, "fractions", None) else DEFAULT_FRACTIONS)
-    scenarios = [args.only] if getattr(args, "only", None) else ["static", "link", "node"]
+    scenarios = [args.only] if getattr(args, "only", None) else ["churn", "link", "node"]
 
     os.makedirs(OUT, exist_ok=True)
     if not os.path.exists(BIN):
@@ -290,13 +302,14 @@ def main(args=None):
     labels = ensure_ring_labels(args.topo, args.basis)
     inis = {}
     for proto in ("gp", "ls"):
-        for net, key in ((None, "flat"), (RECOVERY_NETWORK, "recovery")):
+        for net, key in ((None, "flat"), (RECOVERY_NETWORK, "recovery"),
+                         (CHURN_NETWORK, "churn")):
             inis[(proto, key)] = write_proto_ini(
                 os.path.join(OUT, f"{proto}_{key}.ini"), proto, args.topo, labels,
                 update_jitter=args.update_jitter if proto == "gp" else None,
                 **({"network": net} if net else {}))
 
-    traffic, series0, bytes0 = {}, {}, {}
+    traffic, series0, bytes0, churn_bytes = {}, {}, {}, {}
     reconv = {name: {} for name in CONFIGS}
     spacing, waves = args.wave_spacing or 30.0, []
 
@@ -306,11 +319,15 @@ def main(args=None):
         print(f"\n=== {scenario} ({traffic_simtime()}) ===")
         announce(scenario, opts=dyn + overrides(sim_time_limit=traffic_simtime()),
                  dynamics=desc)
+        net = "churn" if scenario == "churn" else "flat"
         for name in ("gp", "ls"):
             print(f"  → {name.upper()} …", flush=True)
             r = repeat_mean(lambda rep, n=name, s=scenario, d=dyn:
-                            measure(n, inis[(CONFIGS[n][0], "flat")], s, d, rep=rep)[0])
+                            measure(n, inis[(CONFIGS[n][0], net)], s, d, rep=rep)[0])
             traffic[(name, scenario)] = r
+            if scenario == "churn":   # same byte-rate series the wave plot uses
+                churn_bytes[name] = bytes_over_time(
+                    os.path.join(OUT, f"res_{name}_churn"))
             print(f"  ✓ {r['msgs']:.0f} msgs, {r['bytes']/1000:.0f} KB")
 
     # --- escalating node waves: ONE run per config, scored per wave ---
@@ -366,11 +383,12 @@ def main(args=None):
                       f"mean={r[frac]['mean']:.1f}{pm(r[frac]['mean'])}s, "
                       f"net(max)={r[frac]['max']:.0f}s{warn}")
 
-    report(traffic, reconv, fractions, scenarios, spacing)
-    plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0)
+    report(traffic, reconv, fractions, scenarios, spacing, churn_bytes)
+    plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0,
+          churn_bytes)
 
 
-def report(traffic, reconv, fractions, scenarios, spacing):
+def report(traffic, reconv, fractions, scenarios, spacing, churn_bytes=None):
     rows = [(n, s) for (n, s) in traffic if not s.startswith("node")]
     if rows:
         print(f"\n=== control-plane traffic over {traffic_simtime()}{repeats_note()} ===")
@@ -383,17 +401,17 @@ def report(traffic, reconv, fractions, scenarios, spacing):
             print(f"{name:>12}{scenario:>10}{ms:>20}{bs:>22}"
                   f"{(b/m if m else 0):>9.1f}{r['max_b']:>9.0f}")
         for name in ("gp", "ls"):
-            base, churn = traffic.get((name, "static")), traffic.get((name, "link"))
-            if base and churn:
-                print(f"  {name.upper()} churn cost (link−static): "
-                      f"+{churn['msgs']-base['msgs']:.0f} msgs, "
-                      f"+{churn['bytes']-base['bytes']:.0f} bytes")
+            base, lnk = traffic.get((name, "churn")), traffic.get((name, "link"))
+            if base and lnk:
+                print(f"  {name.upper()} link-churn cost (link−churn): "
+                      f"+{lnk['msgs']-base['msgs']:.0f} msgs, "
+                      f"+{lnk['bytes']-base['bytes']:.0f} bytes")
 
         for name in ("gp", "ls"):
-            r = traffic.get((name, "static"))
+            r = traffic.get((name, "churn"))
             if not r:
                 continue
-            print(f"\n--- {name.upper()} static per-type ---")
+            print(f"\n--- {name.upper()} churn per-type ---")
             print(f"{'type':>14}{'messages':>20}{'bytes':>22}{'B/msg':>9}{'%bytes':>8}")
             tot = sum(r["per_type_bytes"].values()) or 1
             for t in sorted(r["counts"], key=lambda k: -r["per_type_bytes"].get(k, 0)):
@@ -401,6 +419,23 @@ def report(traffic, reconv, fractions, scenarios, spacing):
                 cs, bs = f"{c:.0f}" + pm(c, ".0f"), f"{b:.0f}" + pm(b, ".0f")
                 print(f"{t:>14}{cs:>20}{bs:>22}{(b/c if c else 0):>9.0f}"
                       f"{100*b/tot:>7.1f}%")
+
+    if churn_bytes and any(churn_bytes.get(n, ([], []))[0] for n in COLORS):
+        # Only after warmup: the formation burst is a one-off, the number that
+        # matters is what the protocol costs per second to hold steady state.
+        print(f"\n=== steady-state cost under churn ({CHURN_NODES} node(s) every "
+              f"{CHURN_PERIOD:g}s, after t={warmup_s():g}s) ===")
+        print(f"{'config':>12}{'mean B/s':>14}{'peak B/s':>14}{'vs LS':>9}")
+        means = {}
+        for name in COLORS:
+            ts, bps = churn_bytes.get(name, ([], []))
+            v = [b for t, b in zip(ts, bps) if t >= warmup_s()]
+            if v:
+                means[name] = (sum(v) / len(v), max(v))
+        ref = means.get("ls", (0, 0))[0]
+        for name, (mean, peak) in means.items():
+            rel = f"{mean/ref:.1f}×" if ref else "-"
+            print(f"{name:>12}{mean:>14.0f}{peak:>14.0f}{rel:>9}")
 
     if "node" not in scenarios:
         return
@@ -431,7 +466,8 @@ def report(traffic, reconv, fractions, scenarios, spacing):
           "count.")
 
 
-def plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0=None):
+def plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0=None,
+          churn_bytes=None):
     try:
         import matplotlib
         matplotlib.use("Agg")
@@ -459,6 +495,28 @@ def plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0=None):
             ax.legend(fontsize=8); fig.tight_layout()
             fig.savefig(os.path.join(OUT, fname), dpi=120)
             made.append(fname)
+
+    # Steady churn: the same byte-rate series recovery_node.png draws under its
+    # waves, but with a constant failure rate — a flat trace is the protocol's
+    # sustained cost of keeping the topology converged, a rising one is damage
+    # accumulating. Log y, since GP and LS differ by more than an order.
+    if churn_bytes and any(churn_bytes.get(n, ([], []))[0] for n in COLORS):
+        fig, ax = plt.subplots(figsize=(8, 4.5))
+        for name, color in COLORS.items():
+            ts, bps = churn_bytes.get(name, ([], []))
+            if not ts:
+                continue
+            ax.plot(ts, bps, color=color, lw=1.0, label=name)
+        ax.axvline(warmup_s(), color="gray", lw=0.8)
+        ax.text(warmup_s(), ax.get_ylim()[1], " churn starts", fontsize=8,
+                color="gray", va="top")
+        ax.set_yscale("log")
+        ax.set(xlabel="time (s)", ylabel="control-plane bytes/s (log)",
+               title=f"Control-plane cost under steady churn "
+                     f"({CHURN_NODES} node(s) every {CHURN_PERIOD:g}s)")
+        ax.legend(fontsize=8); fig.tight_layout()
+        fig.savefig(os.path.join(OUT, "churn_bytes.png"), dpi=120)
+        made.append("churn_bytes.png")
 
     if "node" in scenarios and any(reconv[n] for n in reconv):
         fig, ax = plt.subplots()

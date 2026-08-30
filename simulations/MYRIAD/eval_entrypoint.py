@@ -40,9 +40,13 @@ def main():
         sp = sub.add_parser(name)
         add_topo_args(sp)
         if name == "dynamics":
-            sp.add_argument("--only", choices=["static", "link", "node"])
+            sp.add_argument("--only", choices=["churn", "link", "node"])
             sp.add_argument("--fractions", default=None,
                             help="node-wave failure fractions, e.g. 0.1,0.3")
+            sp.add_argument("--churn-nodes", type=int, default=None,
+                            help="nodes failing per churn period (default 1)")
+            sp.add_argument("--churn-period", type=float, default=None,
+                            help="seconds between churn failures (default 1)")
             sp.add_argument("--down-min", type=float, default=None,
                             help="minimum node downtime in seconds (default 2)")
             sp.add_argument("--down-jitter", type=float, default=None,

@@ -120,8 +120,13 @@ def announce(what, opts=(), dynamics=None, once=True):
 
 def dynamics_args(model, **kv):
     """CLI options + a one-line description for an active dynamics scenario.
-    model: 'link' (LinkFailure) or 'node' (EscalatingFailure)."""
-    if model == "link":
+    model: 'link' (LinkFailure), 'node' (EscalatingFailure) or 'churn'
+    (NodeChurn)."""
+    if model == "churn":
+        desc = (f"NodeChurn — {kv.get('numNodes')} node(s) every {kv.get('period')} "
+                f"from t={kv.get('warmup')}, each back after "
+                f"{kv.get('downMin')}+U(0,{kv.get('downJitter')})")
+    elif model == "link":
         kv.setdefault("linkSelection", '"random"')
         kv.setdefault("linkFraction", 0)     # >0 would override numLinksFail
 
