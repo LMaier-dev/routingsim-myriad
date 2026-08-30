@@ -92,9 +92,13 @@ simple myriadgp extends routingsim.foundation.Protocol
         // corrections diffuse only ~1 ring-hop per refresh cycle. 0s = off.
         double collectWarmupDuration @unit(s) = default(10s);
 
-        // Interval at which COLLECTs are re-triggered during warmup. Should be
-        // long enough for one COLLECT to complete (~ms in practice, 1s is safe).
-        double collectWarmupInterval @unit(s) = default(1s);
+        // Interval at which COLLECTs are re-triggered during warmup. 0s (the
+        // default) derives it as 0.3 * collectWarmupDuration, i.e. ~3 COLLECTs
+        // per ring across the window. On ring-dense topologies a shorter fixed
+        // interval floods the network faster than laps can close (each expiring
+        // into a DEGRADE), so keep this tied to the warmup length; raise the
+        // warmup itself for large topologies rather than shortening this.
+        double collectWarmupInterval @unit(s) = default(0s);
 
         // Ring membership override, e.g. "1000000,999999". Empty = built-in
         // per-id table. Set via **.NodeN.*.ringLabel or a node property.

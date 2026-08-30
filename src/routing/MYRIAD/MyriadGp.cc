@@ -71,6 +71,11 @@ void MyriadGP::onInitialize() {
     snapshotStats = par("snapshotFormat").stdstringValue() == "stats";
     collectWarmupDuration = par("collectWarmupDuration");
     collectWarmupInterval = par("collectWarmupInterval");
+    // 0s (default) means derive: ~3 COLLECTs per ring over the warmup window.
+    // Tying the cadence to the warmup length keeps ring-dense topologies from
+    // flooding COLLECTs faster than their laps can close (see the .ned).
+    if (collectWarmupInterval <= SIMTIME_ZERO)
+        collectWarmupInterval = 0.3 * collectWarmupDuration;
 
     MLOG_INFO() << "MyriadGP up\n";
 
@@ -206,8 +211,15 @@ void MyriadGP::startSnapshot() {
 
 void MyriadGP::startWarmupCollects() {
     addOneShotTimer(collectWarmupInterval, [this](short) -> bool {
+        // Spread each king's re-COLLECT uniformly across the interval instead of
+        // firing them all at once: a synchronized herd every tick is itself a
+        // flood spike on ring-dense topologies. uniform(0, interval) = 0.3*warmup.
         for (auto& [ring, m] : memberships)
-            if (m.isKing) reoriginateCollect(ring);
+            if (m.isKing) {
+                uint32_t r = ring;
+                addOneShotTimer(uniform(0, collectWarmupInterval),
+                                [this, r](short) { reoriginateCollect(r); return false; });
+            }
         if (simTime() < collectWarmupDuration)
             startWarmupCollects();
         return false;
