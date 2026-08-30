@@ -130,7 +130,8 @@ def dynamics_args(model, **kv):
         kv.setdefault("linkSelection", '"random"')
         kv.setdefault("linkFraction", 0)     # >0 would override numLinksFail
 
-        desc = (f"LinkFailure/{str(kv['linkSelection']).strip('\"')} — "
+        sel = str(kv["linkSelection"]).strip('"')  # not inline: py<3.12 bans \ in f-strings
+        desc = (f"LinkFailure/{sel} — "
                 f"{kv.get('numLinksFail', '?')} links, every {kv.get('period')} "
                 f"for {kv.get('duration')}, "
                 + ("once" if str(kv.get("oneFailure")) == "true" else "repeating"))
