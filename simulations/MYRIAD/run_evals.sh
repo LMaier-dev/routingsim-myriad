@@ -28,6 +28,18 @@ tmux has-session -t "$SESSION" 2>/dev/null && {
 mkdir -p "$LOGDIR"
 NCPU=$(getconf _NPROCESSORS_ONLN)
 
+# tmux windows inherit the tmux *server's* environment, not the caller's, so
+# sourcing setenv before running this script does not reach them. Resolve
+# OMNeT++'s bin dir here and push it into each window; without opp_scavetool the
+# evals still produce their tables but skip the byte-rate plots.
+if ! command -v opp_scavetool >/dev/null; then
+    for d in "${OMNETPP_ROOT:-}" "$HOME/omnetpp-6.3.0" /opt/omnetpp-6.3.0; do
+        [[ -x "$d/bin/opp_scavetool" ]] && { export PATH="$d/bin:$PATH"; break; }
+    done
+    command -v opp_scavetool >/dev/null \
+        || echo "note: opp_scavetool not found — byte-rate plots will be skipped" >&2
+fi
+
 mapfile -t RUNS < <(grep -vE '^\s*(#|$)' "$RUNFILE")
 (( ${#RUNS[@]} )) || { echo "no runs in $RUNFILE" >&2; exit 1; }
 (( ${#RUNS[@]} <= NCPU )) || echo "note: ${#RUNS[@]} runs on $NCPU cores — they will share" >&2
@@ -66,7 +78,7 @@ for cmd in "${RUNS[@]}"; do
     # line with quotes/globs reaches python exactly as written in the runfile.
     # `exec bash` keeps the pane alive after the run so its tail is readable.
     body_sh="$LOGDIR/.$name.sh"
-    { printf '#!/usr/bin/env bash\ncd %q || exit 1\n' "$WORKDIR"
+    { printf '#!/usr/bin/env bash\nexport PATH=%q\ncd %q || exit 1\n' "$PATH" "$WORKDIR"
       printf 'printf "$ %%s\\n" %q | tee %q\n' "$cmd" "$log"
       printf '{ %s; } 2>&1 | tee -a %q\n' "$run" "$log"
       printf 'echo; echo "[exit ${PIPESTATUS[0]}] log: %s"\nexec bash\n' "$log"

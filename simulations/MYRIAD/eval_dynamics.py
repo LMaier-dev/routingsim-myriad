@@ -21,6 +21,7 @@ import csv
 import glob
 import os
 import re
+import shutil
 import subprocess
 import sys
 from collections import defaultdict
@@ -173,6 +174,18 @@ def measure(name, ini, scenario, dyn, simt=None, rep=0):
             series, reboots)
 
 
+def _scavetool():
+    """Path to opp_scavetool. Not on PATH when OMNeT++'s setenv wasn't sourced
+    (login shells on the testbed), so fall back to the install dir. Returns None
+    if it is genuinely absent — the byte-rate plots are then skipped, not fatal."""
+    return (shutil.which("opp_scavetool")
+            or next((p for p in (os.path.join(r, "bin", "opp_scavetool")
+                                 for r in (os.environ.get("OMNETPP_ROOT", ""),
+                                           "/opt/omnetpp-6.3.0",
+                                           os.path.expanduser("~/omnetpp-6.3.0")) if r)
+                     if os.access(p, os.X_OK)), None))
+
+
 def bytes_over_time(resdir, bin_s=1.0):
     """(bin start times, network-wide bytes/s in that bin), from the per-node
     txBytes OMNeT++ vector (see MyriadHelper::countSend) rather than the
@@ -181,12 +194,16 @@ def bytes_over_time(resdir, bin_s=1.0):
     samples into fixed windows gives the network-wide control-plane rate over
     time, so a failure wave's traffic spike is visible directly."""
     vecs = glob.glob(os.path.join(resdir, "*.vec"))
-    if not vecs:
+    tool = _scavetool()
+    if not vecs or not tool:
+        if vecs:
+            print("  ! opp_scavetool not found — skipping byte-rate plot "
+                  "(source omnetpp/setenv or set OMNETPP_ROOT)", flush=True)
         return [], []
     for stale in glob.glob(os.path.join(resdir, "*.vci")):
         os.remove(stale)  # reused result-dir: old index's byte offsets don't match this run's .vec
     csv_path = os.path.join(resdir, "txbytes_export.csv")
-    subprocess.run(["opp_scavetool", "export", "-f", "name =~ txBytes",
+    subprocess.run([tool, "export", "-f", "name =~ txBytes",
                     "-F", "CSV-R", "-o", csv_path, vecs[0]],
                    check=True, capture_output=True, text=True)
     bins = defaultdict(float)
