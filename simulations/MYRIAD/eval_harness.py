@@ -230,7 +230,12 @@ def run_sim(cmd, cwd=None, allow_budget_expired=False, rep=0):
     if proc.returncode != 0:
         sys.exit(f"FAIL: sim exited {proc.returncode}\n{log[-1500:]}")
     if not allow_budget_expired and ("budget expired" in log or "ring broken" in log):
-        sys.exit(f"FAIL: budget expired or ring broken\n{log[-1500:]}")
+        grace = (warmup_s() + _sec(common("deadInterval", "40s"))
+                 + _sec(common("helloInterval", "10s")))
+        stamps = [float(m.group(1)) for m in
+                  re.finditer(r"\[t=([0-9.]+)[^\]]*\][^\n]*(?:budget expired|ring broken)", log)]
+        if not stamps or any(t > grace for t in stamps):
+            sys.exit(f"FAIL: budget expired or ring broken\n{log[-1500:]}")
     return proc
 
 

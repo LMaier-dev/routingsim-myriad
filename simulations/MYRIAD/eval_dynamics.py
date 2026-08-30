@@ -138,28 +138,30 @@ def scenario_dynamics(scenario, fractions=None, spacing=None):
                          minDegree=0)
 
 
-def measure(name, ini, scenario, dyn, simt=None, rep=0):
-    """One run: traffic totals always, route-count series when nodes fail."""
+def measure(name, ini, scenario, dyn, simt=None, rep=0, run=True):
+    """One run: traffic totals always, route-count series when nodes fail. run=False
+    (post mode) skips the sim and re-parses the on-disk result dir a prior run left."""
     tag = f"{name}_{scenario}"
     resdir = rep_path(os.path.join(OUT, f"res_{tag}"), rep)
     dump = rep_path(os.path.join(OUT, f"{tag}.rib"), rep)
-    for stale in (dump, *glob.glob(resdir + "/*.sca")):
-        if os.path.exists(stale):
-            os.remove(stale)
+    if run:
+        for stale in (dump, *glob.glob(resdir + "/*.sca")):
+            if os.path.exists(stale):
+                os.remove(stale)
 
-    proto, dumppar, replay, refreshFlood = CONFIGS[name]
-    cmd = [BIN, "-u", "Cmdenv", ini,
-           *overrides(sim_time_limit=simt or traffic_simtime()), *dyn,
-           "--result-dir", resdir]
-    if scenario == "node":
-        cmd += [f'--**.{dumppar}="{dump}"', '--**.snapshotFormat="stats"']
-    else:
-        cmd.append("--**.snapshotInterval=0s")
-    if replay is not None:
-        cmd.append(f"--**.recoveryReplayEnabled={replay}")
-    if refreshFlood is not None:
-        cmd.append(f"--**.refreshFloodsUpdate={refreshFlood}")
-    run_sim(cmd, allow_budget_expired=True, rep=rep)
+        proto, dumppar, replay, refreshFlood = CONFIGS[name]
+        cmd = [BIN, "-u", "Cmdenv", ini,
+               *overrides(sim_time_limit=simt or traffic_simtime()), *dyn,
+               "--result-dir", resdir]
+        if scenario == "node":
+            cmd += [f'--**.{dumppar}="{dump}"', '--**.snapshotFormat="stats"']
+        else:
+            cmd.append("--**.snapshotInterval=0s")
+        if replay is not None:
+            cmd.append(f"--**.recoveryReplayEnabled={replay}")
+        if refreshFlood is not None:
+            cmd.append(f"--**.refreshFloodsUpdate={refreshFlood}")
+        run_sim(cmd, allow_budget_expired=True, rep=rep)
 
     counts, byts, maxb, reboots = {}, {}, 0, defaultdict(dict)
     for sca in glob.glob(resdir + "/*.sca"):
@@ -176,7 +178,8 @@ def measure(name, ini, scenario, dyn, simt=None, rep=0):
             elif not t.startswith("max") and t != "total":
                 byts[t] = byts.get(t, 0) + v
     if not counts:
-        sys.exit(f"FAIL: no .sca in {resdir}")
+        sys.exit(f"FAIL: no .sca in {resdir}" +
+                 ("" if run else f" — run this config first (e.g. --protos {name.split('_')[0]}) before --post"))
 
     series = defaultdict(dict)
     if scenario == "node" and os.path.exists(dump):
@@ -314,20 +317,45 @@ def main(args=None):
                             "ring state, no reflood — only the 'gp' config, since "
                             "gp_noreplay needs its default (true) as its sole "
                             "propagation path without replay")
+        p.add_argument("--protos", default=None,
+                       help="comma list of protocol families to run: gp, ls "
+                            "(default both). Split GP and LS across parallel panes, "
+                            "then --post to draw the combined plots")
+        p.add_argument("--post", action="store_true",
+                       help="don't simulate; re-parse the result dirs prior runs "
+                            "left and (re)draw the combined tables + plots")
         args = p.parse_args()
         apply_repeat_args(args)
 
     if not hasattr(args, "wave_spacing"):
         args.wave_spacing = None
-    DOWN_MIN = getattr(args, "down_min", None) or DOWN_MIN
+    # A failure is only detected once neighbors miss enough hellos to declare the
+    # node dead (deadInterval). Downtime below that reboots before detection, so
+    # nothing fires — floor the default at deadInterval + one hello. --down-min
+    # overrides (e.g. to probe the sub-detection regime deliberately).
+    if getattr(args, "down_min", None) is None:
+        DOWN_MIN = _sec(common("deadInterval", "40s")) + _sec(common("helloInterval", "10s"))
+    else:
+        DOWN_MIN = args.down_min
     DOWN_JITTER = getattr(args, "down_jitter", None) or DOWN_JITTER
     CHURN_NODES = getattr(args, "churn_nodes", None) or CHURN_NODES
     CHURN_PERIOD = getattr(args, "churn_period", None) or CHURN_PERIOD
     if not getattr(args, "noreplay", False):
         CONFIGS.pop("gp_noreplay", None)
-    if getattr(args, "no_refresh_flood", False):
+    if getattr(args, "no_refresh_flood", False) and "gp" in CONFIGS:
         proto, dumppar, replay, _ = CONFIGS["gp"]
         CONFIGS["gp"] = (proto, dumppar, replay, "false")
+
+    # GP and LS can run in separate panes (--protos gp / --protos ls), then --post
+    # recombines. Post mode simulates nothing — it re-parses whatever result dirs
+    # the prior runs left under the (identical) topo-scoped OUT.
+    run_sims = not getattr(args, "post", False)
+    if getattr(args, "protos", None) and run_sims:
+        fam = {p.strip() for p in args.protos.split(",")}
+        for k in [k for k in CONFIGS if k.split("_")[0] not in fam]:
+            CONFIGS.pop(k)
+        if not CONFIGS:
+            sys.exit(f"--protos {args.protos}: no matching config (gp, ls)")
 
     fractions = ([float(x) for x in args.fractions.split(",")]
                  if getattr(args, "fractions", None) else DEFAULT_FRACTIONS)
@@ -349,7 +377,8 @@ def main(args=None):
                                 getattr(args, 'max_ring_size', 0),
                                 not getattr(args, 'no_echo_rings', False))
     inis = {}
-    for proto in ("gp", "ls"):
+    need_protos = {CONFIGS[n][0] for n in CONFIGS}  # "gp"/"ls" bases actually used
+    for proto in [p for p in ("gp", "ls") if p in need_protos] if run_sims else []:
         for net, key in ((None, "flat"), (RECOVERY_NETWORK, "recovery"),
                          (CHURN_NETWORK, "churn")):
             inis[(proto, key)] = write_proto_ini(
@@ -368,10 +397,11 @@ def main(args=None):
         announce(scenario, opts=dyn + overrides(sim_time_limit=traffic_simtime()),
                  dynamics=desc)
         net = "churn" if scenario == "churn" else "flat"
-        for name in ("gp", "ls"):
+        for name in [n for n in ("gp", "ls") if n in CONFIGS]:
             print(f"  → {name.upper()} …", flush=True)
             r = repeat_mean(lambda rep, n=name, s=scenario, d=dyn:
-                            measure(n, inis[(CONFIGS[n][0], net)], s, d, rep=rep)[0])
+                            measure(n, inis.get((CONFIGS[n][0], net)), s, d,
+                                    rep=rep, run=run_sims)[0])
             traffic[(name, scenario)] = r
             if scenario == "churn":   # same byte-rate series the wave plot uses
                 churn_bytes[name] = bytes_over_time(
@@ -399,8 +429,8 @@ def main(args=None):
             for name in CONFIGS:
                 if rep == 0:
                     print(f"  → {name} …", flush=True)
-                tr, ser, reboots = measure(name, inis[(CONFIGS[name][0], "recovery")],
-                                           "node", dyn, st, rep)
+                tr, ser, reboots = measure(name, inis.get((CONFIGS[name][0], "recovery")),
+                                           "node", dyn, st, rep, run=run_sims)
                 if rep == 0:
                     series0.setdefault(name, ser)
                     resdir = rep_path(os.path.join(OUT, f"res_{name}_node"), rep)
@@ -438,8 +468,15 @@ def main(args=None):
                       f"net(max)={r[frac]['max']:.0f}s{warn}")
 
     report(traffic, reconv, fractions, scenarios, spacing, churn_bytes)
-    plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0,
-          churn_bytes)
+    # A --protos pane holds only half the data; the PNGs overlay GP and LS, so let
+    # --post (or a full run) draw them once both halves exist on disk.
+    if run_sims and getattr(args, "protos", None):
+        print(f"\nrun-only (--protos {args.protos}); once the other pane is done, "
+              f"draw the combined plots with:\n  … dynamics --post "
+              f"[same --topo/--only/--tag …]")
+    else:
+        plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0,
+              churn_bytes)
 
 
 def report(traffic, reconv, fractions, scenarios, spacing, churn_bytes=None):

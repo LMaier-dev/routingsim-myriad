@@ -59,6 +59,12 @@ def main():
             sp.add_argument("--no-refresh-flood", action="store_true",
                             help="GP's routine refresh only re-verifies ring "
                                  "state, no reflood (gp config only)")
+            sp.add_argument("--protos", default=None,
+                            help="protocol families to run: gp, ls (default both); "
+                                 "split across panes, then --post to combine")
+            sp.add_argument("--post", action="store_true",
+                            help="re-parse prior runs' result dirs and draw the "
+                                 "combined plots without simulating")
 
     sc = sub.add_parser("scaling")
     sc.add_argument("--quick", action="store_true")
@@ -84,7 +90,9 @@ def main():
         _oracle_gate(args)
         return
 
-    if args.cmd != "scaling":
+    # Post mode re-parses on-disk results and never simulates, so the oracle gate
+    # (which runs a sim) would be pure waste.
+    if args.cmd != "scaling" and not (args.cmd == "dynamics" and getattr(args, "post", False)):
         _oracle_gate(args)
 
     dispatch = {

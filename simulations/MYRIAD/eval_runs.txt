@@ -6,21 +6,26 @@
 #
 # --tag <name> suffixes the output dir; use it when two runs share a topology
 # and scenario (e.g. basis=min vs tree) so they don't overwrite each other.
+#
+# Prefix a dynamics line with `SPLIT ` to run its GP and LS halves as parallel
+# processes, then auto-combine the plots (--post). Same window, ~2x faster, and
+# the flags stay written once. Example:
+#   SPLIT python3 ../simulations/MYRIAD/eval_entrypoint.py dynamics --topo ../simulations/topologies/grid_10,10.txt --only churn --basis tree
 
 python3 ../simulations/MYRIAD/eval_scaling.py --basis min
 python3 ../simulations/MYRIAD/eval_scaling.py --basis tree
 python3 ../simulations/MYRIAD/eval_entrypoint.py dynamics --topo ../simulations/topologies/grid_10,10.txt --only node --noreplay --basis min --set carryRr=false
 
-python3 ../simulations/MYRIAD/eval_entrypoint.py dynamics --topo ../simulations/topologies/random_geometric_n100_r0.1692_seed0.txt --only churn --basis min --set carryRr=false --no-refresh-flood --noreplay --tag min
-python3 ../simulations/MYRIAD/eval_entrypoint.py dynamics --topo ../simulations/topologies/random_geometric_n100_r0.1692_seed0.txt --only churn --basis tree --set carryRr=false --no-refresh-flood
-python3 ../simulations/MYRIAD/eval_entrypoint.py dynamics --topo ../simulations/topologies/random_geometric_n1000_r0.0521_seed0.txt --only churn --basis tree --set carryRr=false --no-refresh-flood
-python3 ../simulations/MYRIAD/eval_entrypoint.py dynamics --topo ../simulations/topologies/random_geometric_n5000_r0.022762_seed0.txt --only churn --basis tree --set carryRr=false --no-refresh-flood --fractions 0.1
-python3 ../simulations/MYRIAD/eval_entrypoint.py dynamics --topo ../simulations/topologies/random_geometric_n50000_r0.00716_seed0.txt --only churn --basis tree --set carryRr=false --no-refresh-flood --fractions 0.1
+SPLIT  python3 ../simulations/MYRIAD/eval_entrypoint.py dynamics --topo ../simulations/topologies/random_geometric_n100_r0.1692_seed0.txt --only churn --basis min --set carryRr=false --no-refresh-flood --noreplay --tag min
+SPLIT python3 ../simulations/MYRIAD/eval_entrypoint.py dynamics --topo ../simulations/topologies/random_geometric_n100_r0.1692_seed0.txt --only churn --basis tree --set carryRr=false --no-refresh-flood
+SPLIT python3 ../simulations/MYRIAD/eval_entrypoint.py dynamics --topo ../simulations/topologies/random_geometric_n1000_r0.0521_seed0.txt --only churn --basis tree --set carryRr=false --no-refresh-flood
+SPLIT python3 ../simulations/MYRIAD/eval_entrypoint.py dynamics --topo ../simulations/topologies/random_geometric_n5000_r0.022762_seed0.txt --only churn --basis tree --set carryRr=false --no-refresh-flood --fractions 0.1
+SPLIT python3 ../simulations/MYRIAD/eval_entrypoint.py dynamics --topo ../simulations/topologies/random_geometric_n50000_r0.00716_seed0.txt --only churn --basis tree --set carryRr=false --no-refresh-flood --fractions 0.1
 
 
 
-python3 ../simulations/MYRIAD/eval_entrypoint.py dynamics --topo ../simulations/topologies/random_geometric_n100_r0.1692_seed0.txt --only node --basis min --set carryRr=false --no-refresh-flood --noreplay --tag min
-python3 ../simulations/MYRIAD/eval_entrypoint.py dynamics --topo ../simulations/topologies/random_geometric_n100_r0.1692_seed0.txt --only node --basis tree --set carryRr=false --no-refresh-flood
-python3 ../simulations/MYRIAD/eval_entrypoint.py dynamics --topo ../simulations/topologies/random_geometric_n1000_r0.0521_seed0.txt --only node --basis tree --set carryRr=false --no-refresh-flood
-python3 ../simulations/MYRIAD/eval_entrypoint.py dynamics --topo ../simulations/topologies/random_geometric_n5000_r0.022762_seed0.txt --only node --basis tree --set carryRr=false --no-refresh-flood
-python3 ../simulations/MYRIAD/eval_entrypoint.py dynamics --topo ../simulations/topologies/random_geometric_n50000_r0.00716_seed0.txt --only node --basis tree --set carryRr=false --no-refresh-flood
+SPLIT python3 ../simulations/MYRIAD/eval_entrypoint.py dynamics --topo ../simulations/topologies/random_geometric_n100_r0.1692_seed0.txt --only node --basis min --set carryRr=false --no-refresh-flood --noreplay --tag min
+SPLIT python3 ../simulations/MYRIAD/eval_entrypoint.py dynamics --topo ../simulations/topologies/random_geometric_n100_r0.1692_seed0.txt --only node --basis tree --set carryRr=false --no-refresh-flood
+SPLIT python3 ../simulations/MYRIAD/eval_entrypoint.py dynamics --topo ../simulations/topologies/random_geometric_n1000_r0.0521_seed0.txt --only node --basis tree --set carryRr=false --no-refresh-flood
+SPLIT python3 ../simulations/MYRIAD/eval_entrypoint.py dynamics --topo ../simulations/topologies/random_geometric_n5000_r0.022762_seed0.txt --only node --basis tree --set carryRr=false --no-refresh-flood
+SPLIT python3 ../simulations/MYRIAD/eval_entrypoint.py dynamics --topo ../simulations/topologies/random_geometric_n50000_r0.00716_seed0.txt --only node --basis tree --set carryRr=false --no-refresh-flood

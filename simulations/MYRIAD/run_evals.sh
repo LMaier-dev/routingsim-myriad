@@ -70,7 +70,16 @@ for cmd in "${RUNS[@]}"; do
     log="$LOGDIR/$name.log"
 
     run="$cmd"
-    if [[ "${PIN:-0}" == 1 ]]; then
+    if [[ "$cmd" == SPLIT\ * ]]; then
+        # SPLIT <dynamics run>: run GP and LS as parallel processes into the same
+        # (topo-scoped) output dir, then --post re-reads both halves and draws the
+        # combined plots. Roughly halves wall-clock for a two-protocol dynamics
+        # run. The pre-run oracle gate above is already stamped, so both skip it.
+        # ponytail: `wait` returns the last job's status, so a mid-run GP failure
+        # still surfaces in the log and in --post's "run this config first" error.
+        base="${cmd#SPLIT }"
+        run="( $base --protos gp & $base --protos ls & wait ) && $base --post"
+    elif [[ "${PIN:-0}" == 1 ]]; then
         run="taskset -c $(( i % NCPU )) $cmd"
     fi
     # The run goes into a temp script rather than being interpolated into the
