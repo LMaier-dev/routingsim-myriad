@@ -32,6 +32,17 @@ mapfile -t RUNS < <(grep -vE '^\s*(#|$)' "$RUNFILE")
 (( ${#RUNS[@]} )) || { echo "no runs in $RUNFILE" >&2; exit 1; }
 (( ${#RUNS[@]} <= NCPU )) || echo "note: ${#RUNS[@]} runs on $NCPU cores — they will share" >&2
 
+# The oracle gate writes shared scratch under eval/oracle/, so letting every run
+# start it at once interleaves the RIB dumps (KeyError: 'cost'). Run it once here;
+# it stamps the binary and each eval below then skips it. GATE=0 to skip entirely.
+if [[ "${GATE:-1}" == 1 ]]; then
+    echo "running oracle gate once (serial) …"
+    ( cd "$WORKDIR" && python3 "$MYRIAD_DIR/eval_entrypoint.py" gate ) \
+        2>&1 | tee "$LOGDIR/gate.log" | tail -3
+    # tee hides the exit status; PIPESTATUS[0] is the gate's.
+    (( ${PIPESTATUS[0]} == 0 )) || { echo "oracle gate FAILED — see $LOGDIR/gate.log" >&2; exit 1; }
+fi
+
 i=0
 for cmd in "${RUNS[@]}"; do
     # Window name from the distinguishing options, so tabs are tellable apart:

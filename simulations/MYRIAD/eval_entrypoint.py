@@ -69,8 +69,20 @@ def main():
     sc.add_argument("--single", metavar="TOPO")
     add_repeat_args(sc)
 
+    # Run the oracle gate on its own and exit. run_evals.sh calls this once,
+    # serially, before fanning out: the gate writes shared scratch under
+    # eval/oracle/, so N evals starting at once would race that dir (interleaved
+    # RIB dumps -> KeyError). One pre-run sets the binary-keyed stamp and every
+    # parallel eval then skips the gate.
+    g = sub.add_parser("gate")
+    add_topo_args(g)
+
     args = p.parse_args()
     apply_repeat_args(args)
+
+    if args.cmd == "gate":
+        _oracle_gate(args)
+        return
 
     if args.cmd != "scaling":
         _oracle_gate(args)

@@ -295,6 +295,13 @@ def main(args=None):
                  if getattr(args, "fractions", None) else DEFAULT_FRACTIONS)
     scenarios = [args.only] if getattr(args, "only", None) else ["churn", "link", "node"]
 
+    # Scope the output dir to topology + scenario: several eval_dynamics runs
+    # execute in parallel (run_evals.sh), and a shared dir means they overwrite
+    # each other's inis and .vec/.sca mid-write — opp_scavetool then dies on a
+    # truncated vector file.
+    global OUT
+    OUT = os.path.join(OUT, os.path.splitext(os.path.basename(args.topo))[0]
+                       + (f"_{args.only}" if getattr(args, "only", None) else ""))
     os.makedirs(OUT, exist_ok=True)
     if not os.path.exists(BIN):
         sys.exit(f"RoutingSim binary not found at {BIN} — build it first.")
