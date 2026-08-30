@@ -299,7 +299,9 @@ def main(args=None):
     if not os.path.exists(BIN):
         sys.exit(f"RoutingSim binary not found at {BIN} — build it first.")
 
-    labels = ensure_ring_labels(args.topo, args.basis)
+    labels = ensure_ring_labels(args.topo, args.basis,
+                                getattr(args, 'max_ring_size', 0),
+                                not getattr(args, 'no_echo_rings', False))
     inis = {}
     for proto in ("gp", "ls"):
         for net, key in ((None, "flat"), (RECOVERY_NETWORK, "recovery"),

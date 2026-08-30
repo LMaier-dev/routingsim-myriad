@@ -1,0 +1,12 @@
+# USE -4 WITH TESTBED SSH
+
+# One eval run per line, executed from the repo's src/ directory.
+# Blank lines and #-comments are ignored. run_evals.sh gives each line its own
+# tmux window, so a run that hangs doesn't hold up the rest.
+
+python3 ../simulations/MYRIAD/eval_scaling.py --basis min
+python3 ../simulations/MYRIAD/eval_scaling.py --basis tree
+python3 ../simulations/MYRIAD/eval_entrypoint.py dynamics --topo ../simulations/topologies/grid_10,10.txt --only node --noreplay --basis min --set carryRr=false
+python3 ../simulations/MYRIAD/eval_entrypoint.py dynamics --topo ../simulations/topologies/grid_10,10.txt --only churn --basis min --set carryRr=false --no-refresh-flood
+python3 ../simulations/MYRIAD/eval_entrypoint.py dynamics --topo ../simulations/topologies/rgg_n100_d4.5_seed0.txt --only churn --basis tree --set carryRr=false --no-refresh-flood
+python3 ../simulations/MYRIAD/eval_entrypoint.py dynamics --topo ../simulations/topologies/rgg_n750_d4.5_seed0.txt --only churn --basis tree --set carryRr=false --no-refresh-flood

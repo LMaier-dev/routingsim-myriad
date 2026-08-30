@@ -167,17 +167,22 @@ def mark_gate_passed():
     _GATE_STAMP.write_text(_bin_sig())
 
 
-def ensure_ring_labels(topo_path, basis="all"):
-    """Return path to <stem>.<basis>.ringlabels.ini, generating it if absent."""
+def ensure_ring_labels(topo_path, basis="tree", max_ring_size=0, echo=True):
+    """Return path to <stem>.<basis>[.mN][.noecho].ringlabels.ini, generating it
+    if absent. The pruning options are part of the file name so a run never picks
+    up labels built under different ones."""
     import time
     p = Path(topo_path)
-    out = MYRIAD_DIR / f"{p.stem}.{basis}.ringlabels.ini"
+    tag = basis + (f".m{max_ring_size}" if max_ring_size else "") + ("" if echo else ".noecho")
+    out = MYRIAD_DIR / f"{p.stem}.{tag}.ringlabels.ini"
     if not out.exists():
-        print(f"  [ring labels] {p.name} ({basis}) …", flush=True)
+        print(f"  [ring labels] {p.name} ({tag}) …", flush=True)
         t0 = time.time()
         proc = subprocess.Popen(
             [sys.executable, str(MYRIAD_DIR / "topo2rings.py"),
-             str(p), "--out", str(out), "--no-png"],
+             str(p), "--out", str(out), "--no-png",
+             *(["--max-ring-size", str(max_ring_size)] if max_ring_size else []),
+             *([] if echo else ["--no-echo"])],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
         for line in proc.stdout:
             sys.stderr.write(f"\r    {line.rstrip()[:100]:<100}")
@@ -370,8 +375,17 @@ def add_topo_args(parser):
         "--topo", default=str(DEFAULT_TOPO),
         help=f"topology file (default: {DEFAULT_TOPO.name})")
     parser.add_argument(
-        "--basis", choices=["min", "all"], default="all",
-        help="ring basis: all=cycle_basis (default), min=minimum_cycle_basis")
+        "--basis", choices=["min", "tree", "all"], default="tree",
+        help="ring basis: tree=cycle_basis (spanning-tree, default), "
+             "min=minimum_cycle_basis; 'all' is a legacy alias for tree")
+    parser.add_argument(
+        "--max-ring-size", dest="max_ring_size", type=int, default=0,
+        help="drop rings larger than this; members fall back to echo rings "
+             "(0 = keep all). Long rings dominate GP's fan-out and lap latency")
+    parser.add_argument(
+        "--no-echo-rings", dest="no_echo_rings", action="store_true",
+        help="omit 2-node echo rings; combined with --max-ring-size this can "
+             "leave nodes in no ring at all, which the label step reports")
     parser.add_argument(
         "--update-jitter", dest="update_jitter", default=None,
         help="GP initial-UPDATE jitter; raise on large topologies, e.g. 15s")

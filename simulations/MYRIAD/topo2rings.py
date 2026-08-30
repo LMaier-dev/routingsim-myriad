@@ -77,15 +77,22 @@ def main():
     ap.add_argument("--out", default=None,
                     help="exact output path for .ringlabels.ini (overrides --out-dir naming)")
     ap.add_argument("--no-png", action="store_true", help="skip the drawing")
-    ap.add_argument("--basis", choices=["min", "all"], default="all",
-                    help="ring basis: all=cycle_basis (default), min=minimum_cycle_basis")
+    ap.add_argument("--basis", choices=["min", "tree", "all"], default="tree",
+                    help="ring basis: tree=cycle_basis (spanning-tree, default), "
+                         "min=minimum_cycle_basis; 'all' is a legacy alias for tree")
+    ap.add_argument("--max-ring-size", type=int, default=0,
+                    help="drop rings with more than this many members (0 = keep all); "
+                         "members of a dropped ring fall back to echo rings")
+    ap.add_argument("--no-echo", action="store_true",
+                    help="omit 2-node echo rings; may leave nodes in no ring at all")
     args = ap.parse_args()
 
     g = read_topology(args.topology)
     stem = os.path.splitext(os.path.basename(args.topology))[0]
 
     # runs the generate_ring_membership.py by daniel
-    rings_idx, n_echo = get_ring_per_node(g, args.basis)
+    rings_idx, n_echo, n_dropped = get_ring_per_node(
+        g, args.basis, max_ring_size=args.max_ring_size, echo=not args.no_echo)
     n_rings = max((max(v) + 1 for v in rings_idx.values() if v), default=0)
     def ring_id(idx):
         return RING_ID_BASE - idx
@@ -103,11 +110,21 @@ def main():
             labels = ",".join(str(rid) for rid in ring_of[n])
             f.write(f'**.Node{n}.*.ringLabel = "{labels}"\n')
 
+    sizes = [len(v) for v in ring_of.values() if v]
+    per_ring = {}
+    for n in nodes:
+        for rid in ring_of[n]:
+            per_ring[rid] = per_ring.get(rid, 0) + 1
     print(f"{g.number_of_nodes()} nodes, {g.number_of_edges()} edges, {n_rings} rings "
-          f"({n_echo} of them 2-node echo rings covering bridges/leaves)")
+          f"({n_echo} of them 2-node echo rings covering bridges/leaves"
+          f"{f'; {n_dropped} over --max-ring-size dropped' if n_dropped else ''})")
+    if per_ring:
+        print(f"  rings/node max={max(sizes)} mean={sum(sizes)/len(nodes):.2f} | "
+              f"ringsize max={max(per_ring.values())} "
+              f"mean={sum(per_ring.values())/len(per_ring):.2f}")
     empty = [n for n in nodes if not ring_of[n]]
     if empty:
-        print(f"  WARNING: {len(empty)} node(s) in no ring (unreachable): {empty[:10]}"
+        print(f"  WARNING: {len(empty)} node(s) in no ring (unroutable): {empty[:10]}"
               f"{' ...' if len(empty) > 10 else ''}")
     print(f"  wrote {ini}")
 

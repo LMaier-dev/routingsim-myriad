@@ -22,12 +22,12 @@ the tracked myriad{gp,ls}.ini. Run from anywhere:
     python3 simulations/MYRIAD/eval_scaling.py --single powerlaw_cluster_graph_n100_m3_p0.5_seed0.txt
     python3 simulations/MYRIAD/eval_scaling.py --single powerlaw_cluster_graph_n200_m3_p0.5_seed0.txt
 
-    # ring basis: --basis min (minimum_cycle_basis, default) or all (cycle_basis).
+    # ring basis: --basis min (minimum_cycle_basis, default) or tree (cycle_basis).
     # minimum_cycle_basis is ~O(dim^3) in the cycle-space dimension (E-V+C), so it
     # is only feasible up to dim~400 (e.g. n200 m3 ~47s; n500 m3 / n1000+ too slow).
-    # For large graphs (e.g. the full ASgraph-2024, dim~98k) use --basis all, which
+    # For large graphs (e.g. the full ASgraph-2024, dim~98k) use --basis tree, which
     # is linear and tractable:
-    python3 simulations/MYRIAD/eval_scaling.py --single ASgraph-2024-10-09-1200.txt --basis all
+    python3 simulations/MYRIAD/eval_scaling.py --single ASgraph-2024-10-09-1200.txt --basis tree
 """
 import argparse
 import glob
@@ -47,7 +47,7 @@ TOPO2RINGS = str(MYRIAD_DIR / "topo2rings.py")
 
 EVAL_DIR = os.path.join(HERE, "eval")
 # TOPO_DIR/INI_DIR/PLOT_DIR are rebound under a per-basis subfolder in main()
-# (min_cycles / all_cycles) so the two ring bases don't share cached labels.
+# (min_cycles / tree_cycles) so the two ring bases don't share cached labels.
 TOPO_DIR = os.path.join(EVAL_DIR, "topologies")
 INI_DIR = os.path.join(EVAL_DIR, "ini")
 PLOT_DIR = os.path.join(EVAL_DIR, "plots")
@@ -517,9 +517,10 @@ def main(args=None):
         ap.add_argument("--convergence", action="store_true",
                         help="also measure convergence time per topology (extends "
                              f"sim-time-limit to {CONV_SIMTIME}; adds a third plot panel).")
-        ap.add_argument("--basis", choices=["min", "all"], default="min",
+        ap.add_argument("--basis", choices=["min", "tree", "all"], default="min",
                         help="ring basis: min=minimum_cycle_basis (default), "
-                             "all=cycle_basis. Results nest under eval/<basis>_cycles/.")
+                             "tree=cycle_basis (spanning-tree; 'all' is a legacy "
+                             "alias). Results nest under eval/<basis>_cycles/.")
         ap.add_argument("--single", metavar="TOPO",
                         help="run GP+LS on ONE topology .txt and print counts (no "
                              "sweep, no plot). Path relative to simulations/topologies "
@@ -528,7 +529,7 @@ def main(args=None):
         args = ap.parse_args()
         apply_repeat_args(args)
 
-    # Nest all outputs under a per-basis subfolder so min_cycles and all_cycles
+    # Nest all outputs under a per-basis subfolder so min_cycles and tree_cycles
     # keep separate cached labels, inis, and plots.
     global BASIS, TOPO_DIR, INI_DIR, PLOT_DIR
     BASIS = args.basis

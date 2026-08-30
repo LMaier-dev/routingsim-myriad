@@ -3,8 +3,8 @@
 
 Runs the oracle regression test first, then dispatches to the selected eval.
 
-    python3 eval_entrypoint.py {convergence,costdrift,dynamics} [--topo PATH] [--basis {min,all}]
-    python3 eval_entrypoint.py scaling [--quick] [--only ...] [--basis {min,all}] [--single TOPO] ...
+    python3 eval_entrypoint.py {convergence,costdrift,dynamics} [--topo PATH] [--basis {min,tree}]
+    python3 eval_entrypoint.py scaling [--quick] [--only ...] [--basis {min,tree}] [--single TOPO] ...
 
 Run conditions come from eval_common.ini; --refresh/--warmup/--snapshot/--set
 change them globally and every script prints what deviates.
@@ -65,7 +65,7 @@ def main():
     sc.add_argument("--only", choices=["square", "width", "ladder", "flower", "topos"])
     sc.add_argument("--no-batch", dest="nobatch", action="store_true")
     sc.add_argument("--convergence", action="store_true")
-    sc.add_argument("--basis", choices=["min", "all"], default="min")
+    sc.add_argument("--basis", choices=["min", "tree", "all"], default="min")
     sc.add_argument("--single", metavar="TOPO")
     add_repeat_args(sc)
 

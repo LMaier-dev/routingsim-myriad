@@ -12,7 +12,7 @@ Per run we parse the timestamped snapshots into {t: {(node,origin): cost}} and
 derive: convergence time (last t at which the RIB changed), the %-optimal-vs-time
 curve (vs the LS final costs = the proven optimum), and total sent messages.
 
-    python3 simulations/MYRIAD/eval_convergence.py [--topo PATH] [--basis {min,all}]
+    python3 simulations/MYRIAD/eval_convergence.py [--topo PATH] [--basis {min,tree}]
 
 Outputs two plots + a summary table under simulations/MYRIAD/eval/convergence/.
 Convergence is diffed on COST (refresh-invariant once ring sizes are known), so
@@ -125,7 +125,9 @@ def main(args=None):
     if not os.path.exists(BIN):
         sys.exit(f"RoutingSim binary not found at {BIN} — build it first.")
 
-    labels = ensure_ring_labels(args.topo, args.basis)
+    labels = ensure_ring_labels(args.topo, args.basis,
+                                getattr(args, 'max_ring_size', 0),
+                                not getattr(args, 'no_echo_rings', False))
     gp_ini = write_proto_ini(os.path.join(OUT, "gp.ini"), "gp",
                              args.topo, labels, update_jitter=args.update_jitter)
     ls_ini = write_proto_ini(os.path.join(OUT, "ls.ini"), "ls", args.topo, labels)

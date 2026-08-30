@@ -5,7 +5,7 @@ GP's spof-first ranking deliberately picks costlier but more-redundant paths.
 This measures by how much — the "redundancy premium" per (node, origin) route.
 Any negative drift (GP cheaper than optimal) is a bug flag.
 
-    python3 simulations/MYRIAD/eval_costdrift.py [--topo PATH] [--basis {min,all}]
+    python3 simulations/MYRIAD/eval_costdrift.py [--topo PATH] [--basis {min,tree}]
 
 Outputs histogram.png + scatter.png under simulations/MYRIAD/eval/costdrift/.
 """
@@ -71,7 +71,9 @@ def main(args=None):
     if not os.path.exists(BIN):
         sys.exit(f"RoutingSim binary not found at {BIN} — build first.")
 
-    labels = ensure_ring_labels(args.topo, args.basis)
+    labels = ensure_ring_labels(args.topo, args.basis,
+                                getattr(args, 'max_ring_size', 0),
+                                not getattr(args, 'no_echo_rings', False))
     gp_ini = write_proto_ini(os.path.join(OUT, "gp.ini"), "gp", args.topo, labels,
                              update_jitter=args.update_jitter)
     ls_ini = write_proto_ini(os.path.join(OUT, "ls.ini"), "ls", args.topo, labels)
