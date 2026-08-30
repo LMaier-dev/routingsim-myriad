@@ -24,7 +24,8 @@ import os
 import sys
 
 from eval_harness import (BIN, SIM_ROOT, add_topo_args, apply_repeat_args,
-                          ensure_ring_labels, overrides, run_sim, write_proto_ini)
+                          ensure_ring_labels, overrides, run_sim, warmup_s,
+                          write_proto_ini)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 GP_INI = os.path.join(HERE, "myriadgp.ini")
@@ -39,21 +40,15 @@ CONFIGS = {
     "PaperTopology": None,
 }
 
-# GP must run several re-collect (refresh) cycles before the snapshot. A single
-# collect round leaves first-round size-propagation transients: a node can
-# transition a chain out of a ring before that ring's member-count trailer
-# reached it, freezing an UNKNOWN_RING_SIZE (or a slightly-long path) into the RIB
-# because re-forwarding the same (chain, seq) is dup-guarded. A seq advance
-# (refresh) re-propagates with all sizes known and heals it. The fast
-# refreshInterval lives in myriadgp.ini's Grid10/PaperTopology configs (not here),
-# so the run condition travels with the config; test_rib_batching disables refresh
-# on the CLI because it only needs reachability, which holds mid-convergence.
-# Final RIB only: snapshots off, or the t=-prefixed samples land in the dump.
-CONV = overrides(sim_time_limit="120s", snapshotInterval="0s")
-
 # For self-contained inis (arbitrary topo), replicate the fast-refresh that the
 # named fixtures get via myriadgp.ini's [Config Grid10] section.
-_REFRESH_LINES = ["**.refreshInterval = 15s", "**.refreshJitter = 0s"]
+_REFRESH = 15.0
+_REFRESH_LINES = [f"**.refreshInterval = {_REFRESH:g}s", "**.refreshJitter = 0s"]
+
+_CYCLES = 10
+# Final RIB only: snapshots off, or the t=-prefixed samples land in the dump.
+CONV = overrides(sim_time_limit=f"{warmup_s() + _CYCLES * _REFRESH:g}s",
+                 snapshotInterval="0s")
 
 
 def _parse_gp(dump):

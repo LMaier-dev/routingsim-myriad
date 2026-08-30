@@ -153,6 +153,8 @@ def measure(name, ini, scenario, dyn, simt=None, rep=0):
            "--result-dir", resdir]
     if scenario == "node":
         cmd += [f'--**.{dumppar}="{dump}"', '--**.snapshotFormat="stats"']
+    else:
+        cmd.append("--**.snapshotInterval=0s")
     if replay is not None:
         cmd.append(f"--**.recoveryReplayEnabled={replay}")
     if refreshFlood is not None:
@@ -230,6 +232,14 @@ def bytes_over_time(resdir, bin_s=1.0):
     lo, hi = min(bins), max(bins)
     times = [b * bin_s for b in range(lo, hi + 1)]
     return times, [bins.get(b, 0.0) / bin_s for b in range(lo, hi + 1)]
+
+
+def bytes_after(series, t0):
+    """Total bytes in the (times, bytes/s) series from t0 on, or None if the
+    series is unavailable (no opp_scavetool). Bins are 1s wide by construction,
+    so bytes/s summed over bins IS the byte total."""
+    ts, bps = series
+    return sum(b for t, b in zip(ts, bps) if t >= t0) if ts else None
 
 
 def network_reachability(series, wave0):
@@ -365,6 +375,12 @@ def main(args=None):
             if scenario == "churn":   # same byte-rate series the wave plot uses
                 churn_bytes[name] = bytes_over_time(
                     os.path.join(OUT, f"res_{name}_churn"))
+                # The scalars are whole-run sums, so they carry the formation
+                # burst — which on RGG n=100 read 6.6x LS where the steady state
+                # is 1.4x. Only the .vec series has a time axis, so post-warmup
+                # bytes come from there; messages have no such series and stay
+                # run-total, hence reported separately below.
+                r["bytes_post"] = bytes_after(churn_bytes[name], churn_start())
             print(f"  ✓ {r['msgs']:.0f} msgs, {r['bytes']/1000:.0f} KB")
 
     # --- escalating node waves: ONE run per config, scored per wave ---
@@ -429,13 +445,16 @@ def report(traffic, reconv, fractions, scenarios, spacing, churn_bytes=None):
     rows = [(n, s) for (n, s) in traffic if not s.startswith("node")]
     if rows:
         print(f"\n=== control-plane traffic over {traffic_simtime()}{repeats_note()} ===")
+        # bytes(post) excludes the formation burst; blank where no time series
+        # exists (link scenario, or opp_scavetool missing).
         print(f"{'config':>12}{'scenario':>10}{'messages':>20}{'bytes':>22}"
-              f"{'B/msg':>9}{'max B':>9}")
+              f"{'bytes(post)':>22}{'B/msg':>9}{'max B':>9}")
         for name, scenario in sorted(rows, key=lambda x: (x[1], x[0])):
             r = traffic[(name, scenario)]
-            m, b = r["msgs"], r["bytes"]
+            m, b, bp = r["msgs"], r["bytes"], r.get("bytes_post")
             ms, bs = f"{m:.0f}" + pm(m, ".0f"), f"{b:.0f}" + pm(b, ".0f")
-            print(f"{name:>12}{scenario:>10}{ms:>20}{bs:>22}"
+            bps = f"{bp:.0f}" if bp is not None else "-"
+            print(f"{name:>12}{scenario:>10}{ms:>20}{bs:>22}{bps:>22}"
                   f"{(b/m if m else 0):>9.1f}{r['max_b']:>9.0f}")
         for name in ("gp", "ls"):
             base, lnk = traffic.get((name, "churn")), traffic.get((name, "link"))
