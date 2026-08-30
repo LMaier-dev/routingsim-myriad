@@ -339,7 +339,8 @@ def main(args=None):
     # truncated vector file.
     global OUT
     OUT = os.path.join(OUT, os.path.splitext(os.path.basename(args.topo))[0]
-                       + (f"_{args.only}" if getattr(args, "only", None) else ""))
+                       + (f"_{args.only}" if getattr(args, "only", None) else "")
+                       + (f"_{args.tag}" if getattr(args, "tag", None) else ""))
     os.makedirs(OUT, exist_ok=True)
     if not os.path.exists(BIN):
         sys.exit(f"RoutingSim binary not found at {BIN} — build it first.")

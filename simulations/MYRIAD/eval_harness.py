@@ -418,3 +418,8 @@ def add_topo_args(parser):
     parser.add_argument(
         "--warmup", dest="warmup", default=None,
         help=f"collectWarmupDuration (eval_common: {common('collectWarmupDuration')})")
+    parser.add_argument(
+        "--tag", default=None,
+        help="suffix appended to the output dir, to keep several runs on the "
+             "same topology (different --set/--basis/…) from overwriting each "
+             "other, e.g. --tag noflood")

@@ -121,6 +121,11 @@ def main(args=None):
         args = p.parse_args()
         apply_repeat_args(args)
 
+    # Scope OUT to topology (+ optional --tag), like eval_dynamics: otherwise
+    # two topologies — or two configs on one topology — overwrite each other.
+    global OUT
+    OUT = os.path.join(OUT, os.path.splitext(os.path.basename(args.topo))[0]
+                       + (f"_{args.tag}" if getattr(args, "tag", None) else ""))
     os.makedirs(OUT, exist_ok=True)
     if not os.path.exists(BIN):
         sys.exit(f"RoutingSim binary not found at {BIN} — build it first.")
