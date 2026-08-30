@@ -388,7 +388,10 @@ def main(args=None):
 
     traffic, series0, bytes0, churn_bytes = {}, {}, {}, {}
     reconv = {name: {} for name in CONFIGS}
-    spacing, waves = args.wave_spacing or 30.0, []
+    # Waves must be spaced so that a failed node's downtime AND its refill both
+    # finish before the next wave.
+    spacing = args.wave_spacing or round(2 * (DOWN_MIN + DOWN_JITTER))
+    waves = []
 
     # --- traffic scenarios ---
     for scenario in [s for s in scenarios if s != "node"]:

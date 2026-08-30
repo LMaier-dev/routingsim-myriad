@@ -497,23 +497,23 @@ void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t sender) {
                 return;
             }
 
-            // Winning the lap makes me (or keeps me) king. The very first
-            // origination per ring is jittered: all rings' COLLECTs settle at
-            // roughly the same time, so firing UPDATEs immediately storms the
-            // network. Refresh re-originations are already desynced by
-            // refreshJitter, so only the first (isKing still false) is delayed.
+            // Winning the lap makes me (or keeps me) king.
             if (!m.isKing) {
                 m.isKing = true;
                 MLOG_INFO() << "became king of ring='" << R << "'\n";
-                if (updateJitter > 0)
-                    addOneShotTimer(uniform(0, updateJitter),
+                simtime_t wait = collectWarmupDuration > simTime()
+                                 ? collectWarmupDuration - simTime() : SIMTIME_ZERO;
+                wait += uniform(0, updateJitter);
+                if (wait > SIMTIME_ZERO)
+                    addOneShotTimer(wait,
                                     [this, R](short) { originateUpdate(R); return false; });
                 else
                     originateUpdate(R);
             } else {
                 bool routine = m.routineRefreshPending;
                 m.routineRefreshPending = false;
-                if (refreshFloodsUpdate || !routine)
+                // During warmup the re-collects only settle member counts
+                if ((refreshFloodsUpdate || !routine) && simTime() >= collectWarmupDuration)
                     originateUpdate(R);
             }
 

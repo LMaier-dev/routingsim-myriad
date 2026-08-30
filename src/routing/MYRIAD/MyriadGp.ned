@@ -23,11 +23,9 @@ simple myriadgp extends routingsim.foundation.Protocol
         double refreshJitter @unit(s) = default(refreshInterval * 0.1);
         double watchdogMargin @unit(s) = default(2s);
 
-        // Spread the initial UPDATE storm: all rings' COLLECTs settle at roughly
-        // the same time, so the very first origination per ring is delayed by
-        // uniform(0, updateJitter). Raise for large topologies (many rings
-        // originating at once); refreshes are already desynced by refreshJitter.
-        double updateJitter @unit(s) = default(1s);
+        // Spread the first propagating UPDATE. Inter-ring forwarding is gated
+        // until collectWarmupDuration.
+        double updateJitter @unit(s) = default(10s);
 
         // Path-cost exponent for summing up member_count^a; see MyriadGp.h.
         // a>1 is convex (penalises one huge ring over several small ones), a=1
