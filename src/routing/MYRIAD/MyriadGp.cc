@@ -117,7 +117,18 @@ void MyriadGP::onTwoWayReached(GpNeighbor& nbr) {
         if (grew && count <= 2 && m.collectInflight.tx == nullptr) {
             // reset() wipes memberships, so a rebooted node always "grows". It
             // probes first; only a closed lap is worth a replay (handleCollect).
-            originateCollect(R, nbr.id, rebooted ? COLLECT_PROBE : COLLECT_ELECTION);
+            if (rebooted) {
+                originateCollect(R, nbr.id, COLLECT_PROBE);  // reboot: immediate, recovery latency matters
+            } else if (collectWarmupInterval > 0) {
+                // with helloJitter/joinJitter at 0 every node's first hello fires
+                // together, so every ring would originate its election COLLECT at
+                // the same instant. Spread the first election over uniform(0, collectWarmupInterval)
+                uint32_t r = R;
+                addOneShotTimer(uniform(0, collectWarmupInterval),
+                                [this, r](short) { reoriginateCollect(r); return false; });
+            } else {
+                originateCollect(R, nbr.id, COLLECT_ELECTION);
+            }
         } else if (count > 2) {
             MLOG_N_WARN(nbr.id) << "ring '" << R
                 << "' has >2 ring-neighbors (misconfig); ignoring\n";
