@@ -61,11 +61,16 @@ for cmd in "${RUNS[@]}"; do
     # script, topology stem, and the flags that actually vary between runs.
     # `|| true` on each: grep exits 1 when a run has no --topo/--only, and
     # set -e would abort the whole script on that.
-    script=$(sed -E 's#.*eval_([a-z_]+)\.py.*#\1#' <<<"$cmd")
+    # eval_entrypoint is every dynamics run, so it distinguishes nothing.
+    script=$(sed -E 's#.*eval_([a-z_]+)\.py.*#\1#; s#^entrypoint$##' <<<"$cmd")
     topo=$(grep -oE '\-\-topo +\S+' <<<"$cmd" | sed -E 's#.*/##; s/\.txt//') || true
+    # Node count first, so the tabs sort by scale at a glance; drop it from the
+    # stem so the basis/scenario survives the length cut below.
+    size=$(grep -oE '_n[0-9]+' <<<"$topo" | head -1 | tr -d '_') || true
+    [[ -n "$size" ]] && topo=${topo/_$size/}
     opts=$(grep -oE '\-\-(only|basis) +\S+' <<<"$cmd" | awk '{print $2}' | paste -sd_ -) || true
     slug=$(sed -E 's/[^a-zA-Z0-9]+/_/g; s/^_|_$//g' \
-           <<<"${script}_${topo}_${opts}" | cut -c1-32)
+           <<<"${size}_${script}_${topo}_${opts}" | cut -c1-32)
     name="$(printf '%02d' $i)_${slug}"
     log="$LOGDIR/$name.log"
 

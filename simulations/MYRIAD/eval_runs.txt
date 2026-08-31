@@ -14,6 +14,9 @@
 
 python3 ../simulations/MYRIAD/eval_scaling.py --basis min
 python3 ../simulations/MYRIAD/eval_scaling.py --basis tree
+
+python3 ../simulations/MYRIAD/eval_entrypoint.py convergence --topo ../simulations/topologies/rgg_n100_d4.5_seed0.txt
+
 python3 ../simulations/MYRIAD/eval_entrypoint.py dynamics --topo ../simulations/topologies/grid_10,10.txt --only node --noreplay --basis min --set carryRr=false
 
 SPLIT python3 ../simulations/MYRIAD/eval_entrypoint.py dynamics --topo ../simulations/topologies/rgg_n100_d4.5_seed0.txt --only churn --basis min --set carryRr=false --no-refresh-flood --noreplay --tag min
@@ -21,8 +24,6 @@ SPLIT python3 ../simulations/MYRIAD/eval_entrypoint.py dynamics --topo ../simula
 SPLIT python3 ../simulations/MYRIAD/eval_entrypoint.py dynamics --topo ../simulations/topologies/rgg_n250_d4.5_seed0.txt --only churn --basis tree --set carryRr=false --no-refresh-flood
 SPLIT python3 ../simulations/MYRIAD/eval_entrypoint.py dynamics --topo ../simulations/topologies/rgg_n750_d4.5_seed0.txt --only churn --basis tree --set carryRr=false --no-refresh-flood
 SPLIT python3 ../simulations/MYRIAD/eval_entrypoint.py dynamics --topo ../simulations/topologies/rgg_n1500_d4.5_seed0.txt --only churn --basis tree --set carryRr=false --no-refresh-flood
-
-
 
 SPLIT python3 ../simulations/MYRIAD/eval_entrypoint.py dynamics --topo ../simulations/topologies/rgg_n100_d4.5_seed0.txt --only node --basis min --set carryRr=false --no-refresh-flood --noreplay --tag min
 SPLIT python3 ../simulations/MYRIAD/eval_entrypoint.py dynamics --topo ../simulations/topologies/rgg_n100_d4.5_seed0.txt --only node --basis tree --set carryRr=false --no-refresh-flood
