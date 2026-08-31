@@ -64,6 +64,13 @@ simple myriadgp extends routingsim.foundation.Protocol
         // leaving maxEcmpPaths inert. Must stay 0 for the Dijkstra oracle gate.
         double ecmpCostMargin = default(0.2);
 
+        // Which co-best chain the ECMP cap evicts: true = the one leaving the
+        // largest ring-union behind (a failover set stays ring-diverse), false =
+        // the costliest, so the set is the K cheapest in-band chains. Only the
+        // eviction order; acceptance is always the margin, and the cheapest
+        // chain is preferred either way.
+        bool ecmpDiverseEviction = default(true);
+
         // Max serialized bytes of one inter-ring UPDATE batch; the flush splits
         // the held set across frame-sized batches (real path-vector protocols
         // cap PDU size too). 1400 ≈ one Ethernet payload.

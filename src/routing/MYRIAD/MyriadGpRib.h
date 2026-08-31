@@ -47,11 +47,12 @@ namespace routingsim {
     class MyriadGpRib {
         public:
             void configure(long costExponent, bool useSpof, long maxEcmp,
-                           double ecmpMargin = 0.0) {
+                           double ecmpMargin = 0.0, bool diverseEvict = true) {
                 ringCostExponent = costExponent;
                 rankUseSpof = useSpof;
                 maxEcmpPaths = maxEcmp;
                 ecmpCostMargin = ecmpMargin;
+                ecmpDiverseEviction = diverseEvict;
             }
             void clear() { rings.clear(); degrades.clear(); }
 
@@ -108,10 +109,17 @@ namespace routingsim {
             long maxEcmpPaths = 1;
             // See MyriadGp.ned. 0 = exact-equality co-best.
             double ecmpCostMargin = 0.0;
+            bool ecmpDiverseEviction = true;
             bool withinMargin(uint64_t a, uint64_t b) const;
-            // Rank order: spof, then cost margin, then chain length. Used by both
-            // the store cascade and selectPreferred.
+            // Rank order: spof, then cost margin, then chain length. Used by the
+            // store cascade to decide new-best vs co-best — deliberately blind
+            // to cost differences inside the margin, so an in-band arrival
+            // widens the ECMP set instead of erasing it.
             bool strictlyBetter(const RibEntry& a, const RibEntry& b) const;
+            // Exact rank: spof, then cost, then length, then chain order. Total
+            // and margin-blind, for choosing WITHIN a co-best set (preference,
+            // cost-ordered eviction) where strictlyBetter reports a flat tie.
+            bool betterExact(const RibEntry& a, const RibEntry& b) const;
             // Co-best: equal spof and mutually within the cost margin. Chain order
             // is not in the key, so genuine ties are retained for ECMP.
             bool coBest(const RibEntry& a, const RibEntry& b) const;
@@ -122,8 +130,8 @@ namespace routingsim {
             // operates on the current generation only. Returns whether candChain
             // survived.
             bool capEcmp(RibRing& rs, const std::vector<uint32_t>& candChain);
-            // Best across all of ribIn (strictlyBetter, then lex-min chain),
-            // ignoring seq — so preferred may lag curSeq (see ribIn in RibRing).
+            // Best across all of ribIn (betterExact, so the cheapest of a co-best
+            // set wins), ignoring seq — preferred may lag curSeq (see ribIn).
             void selectPreferred(RibRing& rs);
             void reselectAll();
             // A chain is degraded iff any ring on it has an active degrade.

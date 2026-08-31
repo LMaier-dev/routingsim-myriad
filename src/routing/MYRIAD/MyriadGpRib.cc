@@ -64,6 +64,13 @@ bool MyriadGpRib::strictlyBetter(const RibEntry& a, const RibEntry& b) const {
     return ecmpCostMargin > 0 ? false : a.chain.size() < b.chain.size();
 }
 
+bool MyriadGpRib::betterExact(const RibEntry& a, const RibEntry& b) const {
+    if (rankUseSpof && a.spof_count != b.spof_count) return a.spof_count < b.spof_count;
+    if (a.chain_cost != b.chain_cost) return a.chain_cost < b.chain_cost;
+    if (a.chain.size() != b.chain.size()) return a.chain.size() < b.chain.size();
+    return a.chain < b.chain;   // total order, so preference is deterministic
+}
+
 bool MyriadGpRib::coBest(const RibEntry& a, const RibEntry& b) const {
     return (!rankUseSpof || a.spof_count == b.spof_count)
         // With a margin, length is already strictlyBetter's tiebreak.
@@ -97,8 +104,8 @@ void MyriadGpRib::dropCurGenKeepingFronts(RibRing& rs, uint32_t candFront) {
         if (e.seq_no != rs.curSeq || e.chain.empty() || e.chain.front() == candFront)
             continue;
         auto it = bestPerFront.find(e.chain.front());
-        if (it == bestPerFront.end() || strictlyBetter(e, rs.ribIn[it->second]))
-            bestPerFront[e.chain.front()] = i;
+        if (it == bestPerFront.end() || betterExact(e, rs.ribIn[it->second]))
+            bestPerFront[e.chain.front()] = i;   // cheapest survivor per front ring
     }
     std::set<size_t> keep;
     for (auto& [f, idx] : bestPerFront) keep.insert(idx);
@@ -112,8 +119,9 @@ void MyriadGpRib::dropCurGenKeepingFronts(RibRing& rs, uint32_t candFront) {
 
 bool MyriadGpRib::capEcmp(RibRing& rs, const std::vector<uint32_t>& candChain) {
     // Cap the current generation (seq_no==curSeq) to maxEcmpPaths; retained older
-    // holdovers aren't ECMP siblings, so skip them. Drop the member leaving the
-    // largest ring-union, biased to the just-appended candidate. K is tiny.
+    // holdovers aren't ECMP siblings, so skip them. Which one goes is
+    // ecmpDiverseEviction: the member leaving the largest ring-union behind
+    // (default — the set is a failover set), else simply the costliest. K is tiny.
     auto isCur = [&](size_t i) { return rs.ribIn[i].seq_no == rs.curSeq; };
     auto curCount = [&]() {
         size_t n = 0;
@@ -135,12 +143,16 @@ bool MyriadGpRib::capEcmp(RibRing& rs, const std::vector<uint32_t>& candChain) {
     while ((long)curCount() > maxEcmpPaths) {
         size_t candIdx = SIZE_MAX;   // last current-gen entry (just appended)
         for (size_t i = rs.ribIn.size(); i-- > 0; ) if (isCur(i)) { candIdx = i; break; }
+        // Seeded with the candidate so it loses every tie: an incumbent is only
+        // displaced by a strictly better score, not by arrival order.
         size_t drop = SIZE_MAX, bestUnion = 0;
         if (droppable(candIdx)) { drop = candIdx; bestUnion = unionSansIndex(candIdx); }
         for (size_t i = 0; i < candIdx; ++i) {
             if (!droppable(i)) continue;
-            size_t u = unionSansIndex(i);
-            if (drop == SIZE_MAX || u > bestUnion) { drop = i; bestUnion = u; }
+            bool wins = drop == SIZE_MAX;
+            if (!wins && ecmpDiverseEviction) wins = unionSansIndex(i) > bestUnion;
+            else if (!wins) wins = betterExact(rs.ribIn[drop], rs.ribIn[i]);
+            if (wins) { drop = i; bestUnion = unionSansIndex(i); }
         }
         if (drop == SIZE_MAX) break;   // every over-cap entry is a sole front rep
         rs.ribIn.erase(rs.ribIn.begin() + drop);
@@ -152,16 +164,16 @@ bool MyriadGpRib::capEcmp(RibRing& rs, const std::vector<uint32_t>& candChain) {
 void MyriadGpRib::selectPreferred(RibRing& rs) {
     // Best across ALL of ribIn (may span two generations): a degraded chain (one
     // transiting a ring under an active DEGRADE) loses to any non-degraded one,
-    // overriding spof/cost; within a class, strictlyBetter then lex-min chain.
+    // overriding spof/cost; within a class, betterExact. The margin governs which
+    // chains are KEPT, never which of them is used — preferring anything but the
+    // cheapest would pay the whole margin as stretch on the data plane.
     rs.preferred = SIZE_MAX;
     for (size_t i = 0; i < rs.ribIn.size(); ++i) {
         if (rs.preferred == SIZE_MAX) { rs.preferred = i; continue; }
         bool di = chainDegraded(rs.ribIn[i].chain);
         bool dp = chainDegraded(rs.ribIn[rs.preferred].chain);
         if (di != dp) { if (!di) rs.preferred = i; continue; }
-        if (strictlyBetter(rs.ribIn[i], rs.ribIn[rs.preferred])
-            || (!strictlyBetter(rs.ribIn[rs.preferred], rs.ribIn[i])
-                && rs.ribIn[i].chain < rs.ribIn[rs.preferred].chain))
+        if (betterExact(rs.ribIn[i], rs.ribIn[rs.preferred]))
             rs.preferred = i;
     }
 }
@@ -266,10 +278,14 @@ StoreResult MyriadGpRib::store(uint32_t origin, const std::vector<uint32_t>& ful
 
     // Rank against the current generation only, so retained holdovers can't
     // make a valid new-gen chain look inferior (it still must propagate).
+    // betterExact, not strictlyBetter: the incumbents are mutually in-margin, so
+    // strictlyBetter is flat among them and would leave curBest at whichever
+    // entry happens to sit first — making the branch below depend on insertion
+    // order rather than cost.
     RibEntry* curBest = nullptr;
     for (auto& e : originRs.ribIn)
         if (e.seq_no == originRs.curSeq
-            && (!curBest || strictlyBetter(e, *curBest))) curBest = &e;
+            && (!curBest || betterExact(e, *curBest))) curBest = &e;
 
     if (!curBest) {
         originRs.ribIn.push_back(cand);                      // first of this gen
