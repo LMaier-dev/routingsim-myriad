@@ -45,23 +45,40 @@ struct RingGraph {
 };
 
 RingGraph buildRingGraph(const std::map<NodeId, std::vector<RingId>>& perNodeRings, long exp,
-                         long echoSize) {
+                         long echoSize,
+                         const std::map<NodeId, std::vector<RingId>>& weightRings) {
     RingGraph rg;
 
-    // member_count per ring = number of nodes listing it.
+    // member_count per ring = number of nodes listing it. Counted over
+    // weightRings (persistent membership) so a failure does not reprice the
+    // graph — see the header. The vertex set still comes from perNodeRings:
+    // only rings reachable in the live view are routable.
     std::map<RingId, uint32_t> members;
-    for (const auto& [node, rs] : perNodeRings)
+    for (const auto& [node, rs] : weightRings)
         for (RingId r : rs) ++members[r];
 
+    std::set<RingId> liveRings;
+    for (const auto& [node, rs] : perNodeRings)
+        for (RingId r : rs) liveRings.insert(r);
+
     // Dense index for the graph vertices.
-    for (const auto& [r, cnt] : members) {
+    for (RingId r : liveRings) {
         rg.idx[r] = (int) rg.ringList.size();
         rg.ringList.push_back(r);
     }
     const int R = (int) rg.ringList.size();
 
     rg.w.resize(R);
-    for (int i = 0; i < R; ++i) rg.w[i] = ringWeight(members[rg.ringList[i]], exp, echoSize);
+    for (int i = 0; i < R; ++i) {
+        auto mit = members.find(rg.ringList[i]);
+        // A ring absent from weightRings can only be one born after the weight
+        // view was taken; fall back to its live count.
+        uint32_t cnt = mit != members.end() ? mit->second : 0;
+        if (!cnt)
+            for (const auto& [node, rs] : perNodeRings)
+                cnt += std::count(rs.begin(), rs.end(), rg.ringList[i]);
+        rg.w[i] = ringWeight(cnt, exp, echoSize);
+    }
 
     // Adjacency: rings sharing a member node. Directed pairs so each edge is
     // weighted by its destination ring — node weights are asymmetric, which a
@@ -118,9 +135,11 @@ ringDijkstra(RingGraph& rg, int s) {
 
 std::map<RingId, RingRoute>
 shortestRingCostsFor(const std::map<NodeId, std::vector<RingId>>& perNodeRings, long exp,
-                     long echoSize, NodeId self) {
+                     long echoSize, NodeId self,
+                     const std::map<NodeId, std::vector<RingId>>* weightRings) {
     auto sit = perNodeRings.find(self);
     if (sit == perNodeRings.end()) return {};
+    const auto& wr = weightRings ? *weightRings : perNodeRings;
 
     // Only `self`'s row is ever used, so Dijkstra runs from self's member rings
     // (its possible graph entry points) rather than from all R rings. Costs
@@ -132,12 +151,14 @@ shortestRingCostsFor(const std::map<NodeId, std::vector<RingId>>& perNodeRings, 
     // one build and each ring is sourced at most once per snapshot. During churn
     // views differ per node, the memo misses, and correctness is unaffected.
     static long lastExp = 0, lastEcho = 0;
-    static std::map<NodeId, std::vector<RingId>> lastRings;
+    static std::map<NodeId, std::vector<RingId>> lastRings, lastWeight;
     static RingGraph rg;
     static bool haveLast = false;
-    if (!haveLast || lastExp != exp || lastEcho != echoSize || lastRings != perNodeRings) {
-        rg = buildRingGraph(perNodeRings, exp, echoSize);
-        lastExp = exp; lastEcho = echoSize; lastRings = perNodeRings; haveLast = true;
+    if (!haveLast || lastExp != exp || lastEcho != echoSize || lastRings != perNodeRings
+        || lastWeight != wr) {
+        rg = buildRingGraph(perNodeRings, exp, echoSize, wr);
+        lastExp = exp; lastEcho = echoSize; lastRings = perNodeRings; lastWeight = wr;
+        haveLast = true;
     }
 
     const int R = (int) rg.ringList.size();
@@ -163,8 +184,9 @@ shortestRingCostsFor(const std::map<NodeId, std::vector<RingId>>& perNodeRings, 
 
 void dumpOracle(const std::string& path, NodeId self,
                 const std::map<NodeId, std::vector<RingId>>& perNodeRings, long exp,
-                long echoSize, const std::string& tprefix, bool stats, long presentCount) {
-    auto row = shortestRingCostsFor(perNodeRings, exp, echoSize, self);
+                long echoSize, const std::string& tprefix, bool stats, long presentCount,
+                const std::map<NodeId, std::vector<RingId>>* weightRings) {
+    auto row = shortestRingCostsFor(perNodeRings, exp, echoSize, self, weightRings);
     if (row.empty()) return;
 
     std::ofstream f(path, std::ios::app);

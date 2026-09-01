@@ -161,7 +161,9 @@ def measure(name, ini, scenario, dyn, simt=None, rep=0, run=True):
         cmd = [BIN, "-u", "Cmdenv", ini,
                *overrides(sim_time_limit=simt or traffic_simtime()), *dyn,
                "--result-dir", resdir]
-        if scenario == "node":
+        # churn dumps stats too: same series, but sampled against a constant
+        # failure rate instead of escalating waves — steady-state stretch.
+        if scenario in ("node", "churn"):
             cmd += [f'--**.{dumppar}="{dump}"', '--**.snapshotFormat="stats"']
         else:
             cmd.append("--**.snapshotInterval=0s")
@@ -196,7 +198,7 @@ def measure(name, ini, scenario, dyn, simt=None, rep=0, run=True):
     # the origin count the cost sum ranges over (LS: live-reachable only; GP: ==
     # [0]) so stretch is scored only where both price the same set.
     series = defaultdict(dict)
-    if scenario == "node" and os.path.exists(dump):
+    if scenario in ("node", "churn") and os.path.exists(dump):
         for m in STATS_RE.finditer(open(dump).read()):
             n_live = int(m.group(3))
             present = int(m.group(6)) if m.group(6) else n_live
@@ -375,6 +377,20 @@ def stretch_at(series, ref_series, t):
     return (num / den if den else None), n_nodes
 
 
+def stretch_over_time(series, ref_series):
+    """(times, stretch) on the sample grid, same picture as network_reachability
+    but for path cost. stretch_at scores only routers whose route count matches
+    LS's at that instant, so mid-wave — when nobody matches — it yields None and
+    the line breaks: a gap here means "not comparable yet", not "stretch 1.0"."""
+    if not series or not ref_series:
+        return [], []
+    ts, out = sorted({t for s in series.values() for t in s}), []
+    for t in ts:
+        s, _ = stretch_at(series, ref_series, t)
+        out.append(s if s else float("nan"))
+    return ts, out
+
+
 def main(args=None):
     global DOWN_MIN, DOWN_JITTER, CHURN_NODES, CHURN_PERIOD
     if args is None:
@@ -417,11 +433,13 @@ def main(args=None):
     if not hasattr(args, "wave_spacing"):
         args.wave_spacing = None
     # A failure is only detected once neighbors miss enough hellos to declare the
-    # node dead (deadInterval). Downtime below that reboots before detection, so
-    # nothing fires — floor the default at deadInterval + one hello. --down-min
+    # node dead. Worst case that is a full deadInterval after the crash (the node
+    # may die right after a hello), so downtime must clear it or nothing fires;
+    # the half-hello on top is margin, not a second detection round. --down-min
     # overrides (e.g. to probe the sub-detection regime deliberately).
     if getattr(args, "down_min", None) is None:
-        DOWN_MIN = _sec(common("deadInterval", "40s")) + _sec(common("helloInterval", "10s"))
+        DOWN_MIN = (_sec(common("deadInterval", "40s"))
+                    + _sec(common("helloInterval", "10s")) / 2)
     else:
         DOWN_MIN = args.down_min
     DOWN_JITTER = getattr(args, "down_jitter", None) or DOWN_JITTER
@@ -481,6 +499,7 @@ def main(args=None):
                 **({"network": net} if net else {}))
 
     traffic, series0, bytes0, churn_bytes = {}, {}, {}, {}
+    churn_series = {}
     reconv = {name: {} for name in CONFIGS}
     # Waves must be spaced so that a failed node's downtime AND its refill both
     # finish before the next wave.
@@ -494,21 +513,29 @@ def main(args=None):
         announce(scenario, opts=dyn + overrides(sim_time_limit=traffic_simtime()),
                  dynamics=desc)
         net = "churn" if scenario == "churn" else "flat"
-        for name in [n for n in ("gp", "ls") if n in CONFIGS]:
+        # Under churn the stretch configs run too, so steady-state path quality
+        # is scored on the same runs as the byte rates; elsewhere only the two
+        # production protocols carry traffic totals.
+        want = ["gp", "ls"] + ([n for n in ("gp_nospof", "gp_noreplay")
+                                if n in CONFIGS] if scenario == "churn" else [])
+        for name in [n for n in want if n in CONFIGS]:
             print(f"  → {name.upper()} …", flush=True)
+            got = {}
             r = repeat_mean(lambda rep, n=name, s=scenario, d=dyn:
-                            measure(n, inis.get((CONFIGS[n][0], net)), s, d,
-                                    rep=rep, run=run_sims)[0])
+                            got.setdefault(rep, measure(
+                                n, inis.get((CONFIGS[n][0], net)), s, d,
+                                rep=rep, run=run_sims))[0])
+            if scenario == "churn" and 0 in got:
+                churn_series[name] = got[0][1]
             traffic[(name, scenario)] = r
-            if scenario == "churn":   # same byte-rate series the wave plot uses
-                churn_bytes[name] = bytes_over_time(
-                    os.path.join(OUT, f"res_{name}_churn"))
-                # The scalars are whole-run sums, so they carry the formation
-                # burst — which on RGG n=100 read 6.6x LS where the steady state
-                # is 1.4x. Only the .vec series has a time axis, so post-warmup
-                # bytes come from there; messages have no such series and stay
-                # run-total, hence reported separately below.
-                r["bytes_post"] = bytes_after(churn_bytes[name], churn_start())
+            # The scalars are whole-run sums, so they carry the formation burst
+            # — which on RGG n=100 read 6.6x LS where the steady state is 1.4x.
+            # Only the .vec series has a time axis, so post-warmup bytes come
+            # from there; messages have no such series and stay run-total.
+            ser = bytes_over_time(os.path.join(OUT, f"res_{name}_{scenario}"))
+            r["bytes_post"] = bytes_after(ser, churn_start())
+            if scenario == "churn":   # same byte-rate series the churn plots use
+                churn_bytes[name] = ser
             print(f"  ✓ {r['msgs']:.0f} msgs, {r['bytes']/1000:.0f} KB")
 
     # --- escalating node waves: ONE run per config, scored per wave ---
@@ -572,6 +599,10 @@ def main(args=None):
                           f"{at:.0f}% from the previous one — widen --wave-spacing")
         for name, r in agg.items():
             traffic[(name, "node")] = r["traffic"]
+            # Same cut as churn's: drop the formation burst so the bar chart
+            # shows what the failures cost, not what building the RIB cost.
+            traffic[(name, "node")]["bytes_post"] = bytes_after(
+                bytes0.get(name, ([], [])), waves[0][1])
             for frac, _ in waves:
                 reconv[name][frac] = r[frac]
                 warn = (f", {r[frac]['never']:.0f} still {r[frac]['short']:.0f}% "
@@ -589,7 +620,7 @@ def main(args=None):
               f"[same --topo/--only/--tag …]")
     else:
         plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0,
-              churn_bytes)
+              churn_bytes, churn_series)
 
 
 def report(traffic, reconv, fractions, scenarios, spacing, churn_bytes=None):
@@ -685,7 +716,7 @@ def report(traffic, reconv, fractions, scenarios, spacing, churn_bytes=None):
 
 
 def plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0=None,
-          churn_bytes=None):
+          churn_bytes=None, churn_series=None):
     try:
         import matplotlib
         matplotlib.use("Agg")
@@ -695,21 +726,34 @@ def plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0=None,
         return
 
     made = []
-    tscen = [s for s in scenarios if s != "node"]
-    if tscen:
-        protos = ["gp", "ls"]
+    # Bytes are post-warmup (bytes_post, from the .vec time series): the run
+    # totals carry the RIB formation burst, which on a short run dwarfs what the
+    # failures themselves cost. Messages have no such series, so they stay run
+    # totals and say so. Every config that ran gets a bar, not just gp/ls.
+    if scenarios:
+        protos = [n for n in CONFIGS if any((n, s) in traffic for s in scenarios)]
         x = range(len(protos))
-        w = 0.8 / len(tscen)
-        for key, ylabel, fname, scale in (("msgs", "sent messages", "traffic_messages.png", 1),
-                                          ("bytes", "bytes (KB)", "traffic_bytes.png", 1000)):
+        for key, ylabel, fname, scale, note in (
+                ("msgs", "sent messages", "traffic_messages.png", 1, "whole run"),
+                ("bytes_post", "bytes (KB)", "traffic_bytes.png", 1000,
+                 "after warmup")):
+            avail = [s for s in scenarios
+                     if any(traffic.get((n, s), {}).get(key) is not None
+                            for n in protos)]
+            if not avail:
+                continue
+            w = 0.8 / len(avail)
             fig, ax = plt.subplots()
-            for i, s in enumerate(tscen):
-                bars = ax.bar([p + i * w - 0.4 + w/2 for p in x],
-                              [traffic[(n, s)][key] / scale for n in protos], w,
+            for i, s in enumerate(avail):
+                vals = [(traffic.get((n, s), {}).get(key) or 0) / scale
+                        for n in protos]
+                bars = ax.bar([p + i * w - 0.4 + w/2 for p in x], vals, w,
                               label=s, color=f"C{i}")
                 ax.bar_label(bars, fmt="%.0f", fontsize=8)
-            ax.set_xticks(list(x)); ax.set_xticklabels([p.upper() for p in protos])
-            ax.set(ylabel=ylabel, title=title(f"Control plane ({traffic_simtime()})"))
+            ax.set_xticks(list(x))
+            ax.set_xticklabels([p.upper() for p in protos], fontsize=8)
+            ax.set(ylabel=ylabel,
+                   title=title(f"Control plane ({traffic_simtime()}, {note})"))
             ax.legend(fontsize=8); fig.tight_layout()
             fig.savefig(os.path.join(OUT, fname), dpi=120)
             made.append(fname)
@@ -779,22 +823,36 @@ def plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0=None,
         # percentage of its pre-wave value, so a 5% node wave shows as a ~5% dip.
         fig, ax = plt.subplots(figsize=(3 + 1.6 * len(waves), 4.5))
         drew = False
+        # gp_nospof only differs in path *cost* ranking, not in reachability —
+        # it traces gp here. It earns its line on stretch_vs_fraction.png.
+        pcolors = {n: c for n, c in COLORS.items() if n != "gp_nospof"}
         ls_base = reach_base(series0.get("ls", {}), waves[0][1])
-        for name, color in COLORS.items():
+        for name, color in pcolors.items():
             ts, pct = network_reachability(series0.get(name, {}), waves[0][1],
                                            base=ls_base)
             if not ts:
                 continue
-            ax.plot(ts, pct, color=color, lw=1.2, label=name)
+            ax.plot(ts, pct, color=color, lw=1.4, ls="--", label=name)
             drew = True
         if drew:
+            dead = _sec(common("deadInterval", "9s"))
             for frac, wt in waves:
                 ax.axvline(wt, color="gray", lw=0.8)
+                # Every node of the wave is down for DOWN_MIN, then reboots
+                # somewhere in the next DOWN_JITTER — two distinct regimes.
+                ax.axvspan(wt, wt + DOWN_MIN, color="gray", alpha=0.18, lw=0)
                 ax.axvspan(wt + DOWN_MIN, wt + DOWN_MIN + DOWN_JITTER,
-                           color="gray", alpha=0.12, lw=0)
+                           color="gray", alpha=0.09, lw=0)
+                # Worst case a neighbour still believes the last-rebooting node
+                # is alive: its reboot deadline plus a full dead-timer.
+                ax.axvline(wt + DOWN_MIN + DOWN_JITTER + dead, color="crimson",
+                           ls="-.", lw=0.7, alpha=0.5)
                 ax.text(wt, 101, f" {frac:.0%}", fontsize=9, color="gray")
+            ax.plot([], [], color="crimson", ls="-.", lw=0.7, alpha=0.5,
+                    label=f"worst-case detection (+deadInterval {dead:g}s)")
             ax.set(xlim=(0, max(ts)),
-                   xlabel="time (s) — solid: wave fails, shaded: reboot window",
+                   xlabel="time (s) — solid: wave fails, dark: all down, "
+                          "light: reboot window",
                    ylabel="network-wide routes present (%)",
                    title=title("Route table refill under growing node failures"))
             handles, labels = ax.get_legend_handles_labels()
@@ -805,11 +863,11 @@ def plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0=None,
             # actual instantaneous cost, not an artifact of message counting.
             if bytes0 and any(bytes0.get(n, ([], []))[0] for n in COLORS):
                 ax2 = ax.twinx()
-                for name, color in COLORS.items():
+                for name, color in pcolors.items():
                     bts, bps = bytes0.get(name, ([], []))
                     if not bts:
                         continue
-                    ax2.plot(bts, bps, color=color, lw=0.8, ls=":", alpha=0.6,
+                    ax2.plot(bts, bps, color=color, lw=1.0, ls=":", alpha=0.95,
                              label=f"{name} bytes/s")
                 ax2.set_yscale("log")
                 ax2.set_ylabel("control-plane bytes/s (log)")
@@ -820,6 +878,56 @@ def plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0=None,
             fig.tight_layout()
             fig.savefig(os.path.join(OUT, "recovery_node.png"), dpi=120)
             made.append("recovery_node.png")
+
+    # Path cost over time under CONSTANT churn, not escalating waves: a steady
+    # failure rate keeps the network intact enough that every sample is a real
+    # comparison, where the 80% wave shatters the grid and the mean stops meaning
+    # anything. gp_nospof (not gp) is the config comparable to LS — production
+    # spof-first ranking pays a redundancy premium that is not churn damage.
+    scolors = {n: c for n, c in COLORS.items()
+               if n != "ls" and (churn_series or {}).get(n)}
+    if scolors and (churn_series or {}).get("ls"):
+        fig, ax = plt.subplots(figsize=(8, 4.5))
+        drew, allst, curves = False, [], {}
+        for name, color in scolors.items():
+            ts, st = stretch_over_time(churn_series[name], churn_series["ls"])
+            if not ts:
+                continue
+            curves[name] = (ts, st)
+            ax.plot(ts, st, color=color, lw=1.4, ls="--", label=name)
+            allst += [v for v in st if v == v]
+            drew = True
+        if drew:
+            ax.axhline(1.0, ls=":", color="gray", label="ls optimum")
+            # One router replaying a wildly-priced chain drags the network mean
+            # into the thousands and flattens everything else. Scale to the 99th
+            # percentile and mark the clipped spikes.
+            if allst:
+                q = sorted(allst)[max(0, int(0.99 * len(allst)) - 1)]
+                lim = max(1.05 * q, 1.1)
+                if max(allst) > lim:
+                    ax.set_ylim(min(allst) - 0.02, lim)
+                    ax.plot([], [], marker="^", ls="", color="k", ms=5,
+                            label=f"clipped (peak {max(allst):.0f}x)")
+                    for name, (ts, st) in curves.items():
+                        hi = [t for t, v in zip(ts, st) if v == v and v > lim]
+                        ax.plot(hi, [lim] * len(hi), marker="^", ls="",
+                                color=scolors[name], ms=5, clip_on=False)
+            ax.axvline(churn_start(), color="gray", lw=0.8)
+            ax.text(churn_start(), ax.get_ylim()[1], " churn starts", fontsize=8,
+                    color="gray", va="top")
+            xmax = max(t for ts, _ in curves.values() for t in ts)
+            ax.set(xlim=(0, xmax),
+                   xlabel="time (s)  (gaps: no router comparable)",
+                   ylabel="mean path cost / LS optimum",
+                   title=title(f"Path-cost stretch under steady churn "
+                               f"({CHURN_NODES} node(s) every {CHURN_PERIOD:g}s)"))
+            ax.legend(fontsize=7, loc="upper left")
+            fig.tight_layout()
+            fig.savefig(os.path.join(OUT, "stretch_churn.png"), dpi=120)
+            made.append("stretch_churn.png")
+        else:
+            plt.close(fig)
 
     if made:
         print(f"\nplots -> {OUT}/{{{','.join(sorted(made))}}}")

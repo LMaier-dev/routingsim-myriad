@@ -552,7 +552,9 @@ void MyriadLS::dumpOracleTo(const std::string& path, const std::string& tprefix,
     //     route-refill axis compares like with like.
     //   - cost: prune to what is still reachable from here (Adjacency LSAs track
     //     liveness — a survivor re-originates without the dead peer), or the
-    //     oracle would price the pre-failure topology.
+    //     oracle would price the pre-failure topology. The full view is still
+    //     what ring WEIGHTS are counted over.
+    const auto allRings = perNodeRings;
     long presentCount =
         (long) ringspf::shortestRingCostsFor(perNodeRings,
             par("ringCostExponent"), par("echoRingSize"), (ringspf::NodeId)myId).size();
@@ -577,7 +579,7 @@ void MyriadLS::dumpOracleTo(const std::string& path, const std::string& tprefix,
         it = live.count((nodeid_t)it->first) ? std::next(it) : perNodeRings.erase(it);
     ringspf::dumpOracle(path, (ringspf::NodeId)myId, perNodeRings,
                         par("ringCostExponent"), par("echoRingSize"), tprefix, stats,
-                        presentCount);
+                        presentCount, &allRings);
 }
 
 void MyriadLS::startSnapshot() {
