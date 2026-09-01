@@ -2,6 +2,7 @@
 #include "routing/MYRIAD/RingSpfOracle.h"
 #include "routing/MYRIAD/MyriadPduSize.h"
 #include <algorithm>
+#include <set>
 
 namespace routingsim {
 
@@ -543,8 +544,40 @@ void MyriadLS::dumpOracleTo(const std::string& path, const std::string& tprefix,
         for (size_t i = 0; i < r->getRingsArraySize(); ++i)
             rs.push_back(r->getRings(i));
     }
+
+    // A RingsLsa is a membership declaration and nothing withdraws it, so a dead
+    // node stays in the LSDB. Two uses, two bases:
+    //   - present count: keep the full membership. A route lingers until
+    //     reconvergence, matching a path-vector RIB's stale entries, so the
+    //     route-refill axis compares like with like.
+    //   - cost: prune to what is still reachable from here (Adjacency LSAs track
+    //     liveness — a survivor re-originates without the dead peer), or the
+    //     oracle would price the pre-failure topology.
+    long presentCount =
+        (long) ringspf::shortestRingCostsFor(perNodeRings,
+            par("ringCostExponent"), par("echoRingSize"), (ringspf::NodeId)myId).size();
+
+    std::map<nodeid_t, std::vector<nodeid_t>> adj;
+    for (const auto& [key, lsa] : lsdb) {
+        if (key.type != LSA_ADJACENCIES) continue;
+        auto* a = check_and_cast<AdjacenciesLsa*>(lsa.get());
+        auto& v = adj[key.origin];
+        for (size_t i = 0; i < a->getAdjacenciesArraySize(); ++i)
+            v.push_back(a->getAdjacencies(i));
+    }
+    std::set<nodeid_t> live{myId};
+    for (std::vector<nodeid_t> q{myId}; !q.empty(); ) {
+        nodeid_t n = q.back(); q.pop_back();
+        auto it = adj.find(n);
+        if (it == adj.end()) continue;
+        for (nodeid_t p : it->second)
+            if (live.insert(p).second) q.push_back(p);
+    }
+    for (auto it = perNodeRings.begin(); it != perNodeRings.end(); )
+        it = live.count((nodeid_t)it->first) ? std::next(it) : perNodeRings.erase(it);
     ringspf::dumpOracle(path, (ringspf::NodeId)myId, perNodeRings,
-                        par("ringCostExponent"), tprefix, stats);
+                        par("ringCostExponent"), par("echoRingSize"), tprefix, stats,
+                        presentCount);
 }
 
 void MyriadLS::startSnapshot() {

@@ -18,7 +18,8 @@ constexpr uint64_t INF = std::numeric_limits<uint64_t>::max();
 
 // member_count^exp, saturating on overflow. Byte-for-byte the per-ring term of
 // MyriadGP::pathCost, so ties/costs compare exactly against GP's uint64 cost.
-uint64_t ringWeight(uint32_t members, long exp) {
+uint64_t ringWeight(uint32_t members, long exp, long echoSize) {
+    if (members == 2) members = (uint32_t) echoSize;
     uint64_t term = 1;
     for (long k = 0; k < exp; ++k) {
         uint64_t div = members ? members : 1;
@@ -43,7 +44,8 @@ struct RingGraph {
     std::map<int, std::pair<std::vector<uint64_t>, std::vector<uint32_t>>> srcMemo;
 };
 
-RingGraph buildRingGraph(const std::map<NodeId, std::vector<RingId>>& perNodeRings, long exp) {
+RingGraph buildRingGraph(const std::map<NodeId, std::vector<RingId>>& perNodeRings, long exp,
+                         long echoSize) {
     RingGraph rg;
 
     // member_count per ring = number of nodes listing it.
@@ -59,7 +61,7 @@ RingGraph buildRingGraph(const std::map<NodeId, std::vector<RingId>>& perNodeRin
     const int R = (int) rg.ringList.size();
 
     rg.w.resize(R);
-    for (int i = 0; i < R; ++i) rg.w[i] = ringWeight(members[rg.ringList[i]], exp);
+    for (int i = 0; i < R; ++i) rg.w[i] = ringWeight(members[rg.ringList[i]], exp, echoSize);
 
     // Adjacency: rings sharing a member node. Directed pairs so each edge is
     // weighted by its destination ring — node weights are asymmetric, which a
@@ -116,7 +118,7 @@ ringDijkstra(RingGraph& rg, int s) {
 
 std::map<RingId, RingRoute>
 shortestRingCostsFor(const std::map<NodeId, std::vector<RingId>>& perNodeRings, long exp,
-                     NodeId self) {
+                     long echoSize, NodeId self) {
     auto sit = perNodeRings.find(self);
     if (sit == perNodeRings.end()) return {};
 
@@ -129,13 +131,13 @@ shortestRingCostsFor(const std::map<NodeId, std::vector<RingId>>& perNodeRings, 
     // in a converged run every node passes an identical view, so all nodes share
     // one build and each ring is sourced at most once per snapshot. During churn
     // views differ per node, the memo misses, and correctness is unaffected.
-    static long lastExp = 0;
+    static long lastExp = 0, lastEcho = 0;
     static std::map<NodeId, std::vector<RingId>> lastRings;
     static RingGraph rg;
     static bool haveLast = false;
-    if (!haveLast || lastExp != exp || lastRings != perNodeRings) {
-        rg = buildRingGraph(perNodeRings, exp);
-        lastExp = exp; lastRings = perNodeRings; haveLast = true;
+    if (!haveLast || lastExp != exp || lastEcho != echoSize || lastRings != perNodeRings) {
+        rg = buildRingGraph(perNodeRings, exp, echoSize);
+        lastExp = exp; lastEcho = echoSize; lastRings = perNodeRings; haveLast = true;
     }
 
     const int R = (int) rg.ringList.size();
@@ -161,8 +163,8 @@ shortestRingCostsFor(const std::map<NodeId, std::vector<RingId>>& perNodeRings, 
 
 void dumpOracle(const std::string& path, NodeId self,
                 const std::map<NodeId, std::vector<RingId>>& perNodeRings, long exp,
-                const std::string& tprefix, bool stats) {
-    auto row = shortestRingCostsFor(perNodeRings, exp, self);
+                long echoSize, const std::string& tprefix, bool stats, long presentCount) {
+    auto row = shortestRingCostsFor(perNodeRings, exp, echoSize, self);
     if (row.empty()) return;
 
     std::ofstream f(path, std::ios::app);
@@ -171,8 +173,13 @@ void dumpOracle(const std::string& path, NodeId self,
         for (const auto& [origin, route] : row) {
             ++n; sum += route.cost; if (route.cost > mx) mx = route.cost;
         }
+        // n/cost over the live topology feeds the stretch axis; present is the
+        // route-refill count on the unfiltered (persistent-membership) basis,
+        // comparable to a path-vector RIB that holds stale entries until purged.
         f << tprefix << self << " n=" << n
-          << " cost_sum=" << sum << " cost_max=" << mx << "\n";
+          << " cost_sum=" << sum << " cost_max=" << mx;
+        if (presentCount >= 0) f << " present=" << presentCount;
+        f << "\n";
         return;
     }
     for (const auto& [origin, route] : row)

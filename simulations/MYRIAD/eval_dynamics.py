@@ -46,7 +46,9 @@ COLLECT_RETRY_LIMIT = 3            # mirrors MyriadGp.h
 
 SENT_RE = re.compile(r"^scalar\s+\S+\s+sent_(\S+)\s+([0-9.]+)", re.M)
 BYTES_RE = re.compile(r"^scalar\s+\S+\s+bytes_(\S+)\s+([0-9.]+)", re.M)
-STATS_RE = re.compile(r"^t=([0-9.]+)s?\s+(\d+)\s+n=(\d+)", re.M)
+STATS_RE = re.compile(r"^t=([0-9.]+)s?\s+(\d+)\s+n=(\d+)\s+cost_sum=(\d+)"
+                      r"\s+cost_max=(\d+)(?:\s+present=(\d+))?", re.M)
+UNKNOWN_RING_SIZE = 1 << 20   # mirrors MyriadGp.h
 # EscalatingFailure records when each node it failed came back: down_<node>_<wave>
 DOWN_RE = re.compile(r"^scalar\s+\S+\s+down_(\d+)_(\d+)\s+([0-9.]+)", re.M)
 
@@ -58,9 +60,15 @@ DOWN_RE = re.compile(r"^scalar\s+\S+\s+down_(\d+)_(\d+)\s+([0-9.]+)", re.M)
 # A blanket --set refreshFloodsUpdate=... would hit both and cripple gp_noreplay.
 CONFIGS = {"gp": ("gp", "ribDumpFile", "true", None),
            "gp_noreplay": ("gp", "ribDumpFile", "false", None),
+           # rankUseSpof=false: pure-cost ranking, so GP targets the same optimum
+           # LS computes and the stretch table isolates recovery damage from the
+           # redundancy premium production ranking pays on purpose.
+           "gp_nospof": ("gp", "ribDumpFile", "true", None),
            "ls": ("ls", "oracleDumpFile", None, None)}
 
-COLORS = {"gp": "C0", "gp_noreplay": "C3", "ls": "C2"}
+EXTRA_OPTS = {"gp_nospof": ["--**.rankUseSpof=false"]}
+
+COLORS = {"gp": "C0", "gp_noreplay": "C3", "gp_nospof": "C1", "ls": "C2"}
 
 
 def churn_start():
@@ -161,6 +169,7 @@ def measure(name, ini, scenario, dyn, simt=None, rep=0, run=True):
             cmd.append(f"--**.recoveryReplayEnabled={replay}")
         if refreshFlood is not None:
             cmd.append(f"--**.refreshFloodsUpdate={refreshFlood}")
+        cmd += EXTRA_OPTS.get(name, [])
         run_sim(cmd, allow_budget_expired=True, rep=rep)
 
     counts, byts, maxb, reboots = {}, {}, 0, defaultdict(dict)
@@ -181,10 +190,18 @@ def measure(name, ini, scenario, dyn, simt=None, rep=0, run=True):
         sys.exit(f"FAIL: no .sca in {resdir}" +
                  ("" if run else f" — run this config first (e.g. --protos {name.split('_')[0]}) before --post"))
 
+    # series[node][t] = (route count, summed chain cost, max chain cost,
+    # cost-basis count) — [0] drives reconvergence/presence (unfiltered, so LS
+    # and GP compare on the same table-refill basis), [1] drives stretch, [3] is
+    # the origin count the cost sum ranges over (LS: live-reachable only; GP: ==
+    # [0]) so stretch is scored only where both price the same set.
     series = defaultdict(dict)
     if scenario == "node" and os.path.exists(dump):
         for m in STATS_RE.finditer(open(dump).read()):
-            series[int(m.group(2))][float(m.group(1))] = int(m.group(3))
+            n_live = int(m.group(3))
+            present = int(m.group(6)) if m.group(6) else n_live
+            series[int(m.group(2))][float(m.group(1))] = (
+                present, int(m.group(4)), int(m.group(5)), n_live)
     return ({"counts": counts, "msgs": sum(counts.values()),
              "bytes": sum(byts.values()), "per_type_bytes": byts, "max_b": maxb},
             series, reboots)
@@ -245,18 +262,36 @@ def bytes_after(series, t0):
     return sum(b for t, b in zip(ts, bps) if t >= t0) if ts else None
 
 
-def network_reachability(series, wave0):
-    """(times, % of the pre-wave route total present network-wide). Samples are
-    ragged — a down node stops emitting — so each node's last value is held."""
+def _reach_total(series):
+    """(sorted times, network-wide route total at each time). Samples are ragged —
+    a down node stops emitting — so each node's last value is held."""
     if not series:
         return [], []
     last, ts, tot = {}, sorted({t for s in series.values() for t in s}), []
     for t in ts:
         for nid, s in series.items():
             if t in s:
-                last[nid] = s[t]
+                last[nid] = s[t][0]
         tot.append(sum(last.values()))
-    base = max((v for t, v in zip(ts, tot) if t < wave0), default=0)
+    return ts, tot
+
+
+def reach_base(series, wave0):
+    """Pre-wave peak of a series' network-wide total (its converged route count)."""
+    ts, tot = _reach_total(series)
+    return max((v for t, v in zip(ts, tot) if t < wave0), default=0)
+
+
+def network_reachability(series, wave0, base=None):
+    """(times, % of a reference route total present network-wide). base defaults to
+    this series' own pre-wave peak; pass LS's peak (reach_base of the ls series) to
+    normalise every config against the same converged optimum, so GP cannot read
+    >100% merely from a slower initial fill undercounting its own base."""
+    ts, tot = _reach_total(series)
+    if not ts:
+        return [], []
+    if base is None:
+        base = max((v for t, v in zip(ts, tot) if t < wave0), default=0)
     if not base:
         return [], []
     return ts, [100.0 * v / base for v in tot]
@@ -278,17 +313,66 @@ def reconverge_latencies(series, wave_t, reboots, end_t=float("inf")):
         pre = [t for t in ser if t < wave_t]
         if not pre:
             continue
-        tgt = ser[max(pre)]
+        tgt = ser[max(pre)][0]
         post = sorted(t for t in ser if wave_t <= t < end_t)
-        if not tgt or not any(ser[t] < tgt for t in post):
+        if not tgt or not any(ser[t][0] < tgt for t in post):
             continue
         rec = next((t for i, t in enumerate(post)
-                    if all(ser[t2] >= tgt for t2 in post[i:])), None)
+                    if all(ser[t2][0] >= tgt for t2 in post[i:])), None)
         if rec is None:
-            never[nid] = 100.0 * (tgt - ser[post[-1]]) / tgt
+            never[nid] = 100.0 * (tgt - ser[post[-1]][0]) / tgt
         else:
             out[nid] = max(0.0, rec - reboots.get(nid, wave_t))
     return out, never
+
+
+def sizeToCost(size):
+    """Ring size -> cost, mirroring MyriadGpRib::sizeToCost."""
+    return size ** int(common("ringCostExponent", "2"))
+
+
+def _at(ser, t):
+    """The node's last stats sample at or before t (samples are ragged — a down
+    node stops emitting), or None if it had none yet."""
+    pre = [u for u in ser if u <= t]
+    return ser[max(pre)] if pre else None
+
+
+def stretch_at(series, ref_series, t):
+    """Mean path-cost stretch over the whole network at time t: GP chain cost
+    divided by the LS (Dijkstra) optimum for the same routes.
+
+    Scored only on routers whose cost-basis count equals LS's live-reachable
+    count at t (tuple index 3). A router still short of those routes has a
+    smaller cost sum for the trivial reason that it is missing chains, which
+    would read as a stretch BELOW 1 and mask exactly the degradation this
+    measures — reconvergence time already reports those.
+
+    Cost-weighted (ratio of sums, not mean of per-chain ratios): the stats dump
+    carries one cost sum per router, not per chain. Long chains therefore count
+    more, which is the conservative direction — they are also where a replayed
+    detour costs most.
+
+    Routers holding a chain priced at UNKNOWN_RING_SIZE are dropped too: that
+    placeholder is ~10^12 per hop and drowns every real cost in the sum. It means
+    a ring whose size this router has not learned yet, i.e. missing information,
+    not a bad path."""
+    num = den = 0
+    n_nodes = 0
+    unknown = sizeToCost(UNKNOWN_RING_SIZE)
+    for nid, ser in series.items():
+        ref = ref_series.get(nid)
+        if not ref:
+            continue
+        a, b = _at(ser, t), _at(ref, t)
+        if not a or not b or a[3] != b[3] or not b[1]:
+            continue
+        if a[2] >= unknown or b[2] >= unknown:
+            continue
+        num += a[1]
+        den += b[1]
+        n_nodes += 1
+    return (num / den if den else None), n_nodes
 
 
 def main(args=None):
@@ -312,6 +396,9 @@ def main(args=None):
                             "of the node scenario (default 30)")
         p.add_argument("--noreplay", action="store_true",
                        help="also run GP with recoveryReplayEnabled=false")
+        p.add_argument("--nospof", action="store_true",
+                       help="also run GP with rankUseSpof=false, so its stretch "
+                            "against LS is pure path cost")
         p.add_argument("--no-refresh-flood", action="store_true",
                        help="GP's routine (already-king) refresh only re-verifies "
                             "ring state, no reflood — only the 'gp' config, since "
@@ -342,9 +429,16 @@ def main(args=None):
     CHURN_PERIOD = getattr(args, "churn_period", None) or CHURN_PERIOD
     if not getattr(args, "noreplay", False):
         CONFIGS.pop("gp_noreplay", None)
-    if getattr(args, "no_refresh_flood", False) and "gp" in CONFIGS:
-        proto, dumppar, replay, _ = CONFIGS["gp"]
-        CONFIGS["gp"] = (proto, dumppar, replay, "false")
+    if not getattr(args, "nospof", False):
+        CONFIGS.pop("gp_nospof", None)
+    if getattr(args, "no_refresh_flood", False):
+        # Every GP config but gp_noreplay, whose sole propagation path without
+        # replay is the periodic reflood. gp_nospof differs from gp in ranking
+        # alone, so it has to share gp's refresh regime or the two-series
+        # comparison carries two variables.
+        for name, (proto, dumppar, replay, _) in list(CONFIGS.items()):
+            if proto == "gp" and name != "gp_noreplay":
+                CONFIGS[name] = (proto, dumppar, replay, "false")
 
     # GP and LS can run in separate panes (--protos gp / --protos ls), then --post
     # recombines. Post mode simulates nothing — it re-parses whatever result dirs
@@ -428,7 +522,7 @@ def main(args=None):
         announce("node", opts=dyn + overrides(sim_time_limit=st), dynamics=desc)
 
         def one(rep):
-            out = {}
+            out, sers = {}, {}
             for name in CONFIGS:
                 if rep == 0:
                     print(f"  → {name} …", flush=True)
@@ -450,11 +544,27 @@ def main(args=None):
                                  "median": vals[len(vals) // 2] if vals else 0.0,
                                  "max": max(vals) if vals else 0.0}
                 out[name] = res
+                sers[name] = ser
+
+            # Stretch needs LS's optimum as the denominator, so it is scored
+            # after every config in this repeat has run. Sampled at the END of
+            # each wave window (just before the next wave), i.e. once recovery
+            # has settled: what is left is the residual damage, not the dip.
+            ref = sers.get("ls")
+            for name in CONFIGS:
+                for i, (frac, wt) in enumerate(waves):
+                    end = (waves[i + 1][1] if i + 1 < len(waves)
+                           else max(t for s in sers[name].values() for t in s))
+                    s, n = (stretch_at(sers[name], ref, end - 1e-9)
+                            if ref else (None, 0))
+                    out[name][frac]["stretch"] = s
+                    out[name][frac]["stretch_n"] = n
             return out
 
         agg = repeat_mean(one)
+        ls_base = reach_base(series0.get("ls", {}), waves[0][1])
         for name in series0:                 # stacking waves must not overlap
-            ts, pct = network_reachability(series0[name], waves[0][1])
+            ts, pct = network_reachability(series0[name], waves[0][1], base=ls_base)
             for frac, wt in waves:
                 at = max((p for t, p in zip(ts, pct) if t <= wt), default=100.0)
                 if at < 99.9:
@@ -541,13 +651,14 @@ def report(traffic, reconv, fractions, scenarios, spacing, churn_bytes=None):
           f"{DOWN_MIN + DOWN_JITTER:g}s, waves every {spacing:g}s, "
           f"refresh {r_s:g}s){repeats_note()} ===")
     print(f"{'fraction':>9}{'config':>13}{'affected':>10}{'late':>6}{'late -%':>9}"
-          f"{'mean':>15}{'median':>9}{'net(max)':>13}{'mean/refresh':>14}")
+          f"{'mean':>15}{'median':>9}{'net(max)':>13}{'mean/refresh':>14}"
+          f"{'stretch':>10}{'scored':>8}")
     for frac in fractions:
         for name in CONFIGS:
             r = reconv[name].get(frac)
             if r is None or not r["n"]:
                 print(f"{frac:>8.0%}{name:>13}{'-':>10}{'-':>6}{'-':>9}{'-':>15}"
-                      f"{'-':>9}{'-':>13}{'-':>14}")
+                      f"{'-':>9}{'-':>13}{'-':>14}{'-':>10}{'-':>8}")
                 continue
             recovered = r["n"] - r["never"]
             mean = (f"{r['mean']:.1f}" + pm(r["mean"]) + "s") if recovered else "-"
@@ -555,12 +666,22 @@ def report(traffic, reconv, fractions, scenarios, spacing, churn_bytes=None):
             med = f"{r['median']:.0f}s" if recovered else "-"
             ratio = f"{r['mean']/r_s:.2f}×" if recovered else "-"
             late = f"{r['short']:.0f}%" if r["never"] else "-"
+            st = r.get("stretch")
+            sts = f"{st:.4f}" if st else "-"
             print(f"{frac:>8.0%}{name:>13}{r['n']:>10.0f}{r['never']:>6.0f}{late:>9}"
-                  f"{mean:>15}{med:>9}{net:>13}{ratio:>14}")
+                  f"{mean:>15}{med:>9}{net:>13}{ratio:>14}{sts:>10}"
+                  f"{r.get('stretch_n', 0):>8.0f}")
     print("\naffected = routers whose route count dropped below its pre-wave value; "
           "late = still below it when the next wave hit, and by how much on average "
           "(mean/median/max cover the rest). Target is each router's OWN pre-wave "
           "count.")
+    print("stretch = cost(config)/cost(LS optimum) at the END of the wave window, "
+          "over the `scored` routers — those whose route count matches LS's there "
+          "and that price no chain at the unknown-ring-size placeholder (a short "
+          "router would read <1 purely from missing chains). Rising = replay "
+          "handing back worse chains than the crash took away. Compare gp_nospof "
+          "(pure-cost ranking) against gp, whose spof-first ranking pays a "
+          "redundancy premium on top.")
 
 
 def plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0=None,
@@ -633,12 +754,35 @@ def plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0=None,
         fig.savefig(os.path.join(OUT, "reconverge_vs_fraction.png"), dpi=120)
         made.append("reconverge_vs_fraction.png")
 
+        # Residual path quality after each wave settles: replay restores
+        # reachability, not the pre-crash optimum, so a rising curve is the
+        # cost of that tradeoff accumulating with failure size.
+        if any(reconv.get(n, {}).get(f, {}).get("stretch") for n in COLORS
+               for f in fractions):
+            fig, ax = plt.subplots()
+            for name, color in COLORS.items():
+                fr = [f for f in sorted(reconv.get(name, {}))
+                      if reconv[name][f].get("stretch")]
+                if not fr:
+                    continue
+                ax.plot([f * 100 for f in fr],
+                        [reconv[name][f]["stretch"] for f in fr],
+                        "o-", color=color, label=name)
+            ax.axhline(1.0, ls=":", color="gray", label="LS optimum")
+            ax.set(xlabel="nodes failed (%)", ylabel="mean path cost / LS optimum",
+                   title=title("Path-cost stretch after recovery"))
+            ax.legend(fontsize=8); fig.tight_layout()
+            fig.savefig(os.path.join(OUT, "stretch_vs_fraction.png"), dpi=120)
+            made.append("stretch_vs_fraction.png")
+
         # One run, waves growing over time: the whole network's route total as a
         # percentage of its pre-wave value, so a 5% node wave shows as a ~5% dip.
         fig, ax = plt.subplots(figsize=(3 + 1.6 * len(waves), 4.5))
         drew = False
+        ls_base = reach_base(series0.get("ls", {}), waves[0][1])
         for name, color in COLORS.items():
-            ts, pct = network_reachability(series0.get(name, {}), waves[0][1])
+            ts, pct = network_reachability(series0.get(name, {}), waves[0][1],
+                                           base=ls_base)
             if not ts:
                 continue
             ax.plot(ts, pct, color=color, lw=1.2, label=name)

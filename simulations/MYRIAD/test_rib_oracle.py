@@ -40,15 +40,16 @@ CONFIGS = {
     "PaperTopology": None,
 }
 
-# For self-contained inis (arbitrary topo), replicate the fast-refresh that the
-# named fixtures get via myriadgp.ini's [Config Grid10] section.
-_REFRESH = 15.0
+# One refresh cycle, well above convergence time so generations never overlap
+# (an overlapping flood would be sampled mid-propagation). The horizon leaves
+# 20s after the single refresh at t=_REFRESH for it to settle.
+_REFRESH = 60.0
 _REFRESH_LINES = [f"**.refreshInterval = {_REFRESH:g}s", "**.refreshJitter = 0s"]
 
-_CYCLES = 10
 # Final RIB only: snapshots off, or the t=-prefixed samples land in the dump.
-CONV = overrides(sim_time_limit=f"{warmup_s() + _CYCLES * _REFRESH:g}s",
-                 snapshotInterval="0s")
+CONV = overrides(sim_time_limit=f"{warmup_s() + _REFRESH + 20:g}s",
+                 snapshotInterval="0s", refreshInterval=f"{_REFRESH:g}s",
+                 refreshJitter="0s")
 
 
 def _parse_gp(dump):

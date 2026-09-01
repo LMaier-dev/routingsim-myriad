@@ -56,6 +56,9 @@ def main():
                                  "interval of the node scenario (default 30)")
             sp.add_argument("--noreplay", action="store_true",
                             help="also run GP with recoveryReplayEnabled=false")
+            sp.add_argument("--nospof", action="store_true",
+                            help="also run GP with rankUseSpof=false, for a "
+                                 "pure-cost stretch against LS")
             sp.add_argument("--no-refresh-flood", action="store_true",
                             help="GP's routine refresh only re-verifies ring "
                                  "state, no reflood (gp config only)")

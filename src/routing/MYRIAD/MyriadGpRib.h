@@ -2,6 +2,7 @@
 #define __ROUTINGSIM_MYRIADGPRIB_H_
 
 #include "routing/MYRIAD/MyriadGpPkt_m.h"
+#include <array>
 #include <cstdint>
 #include <iosfwd>
 #include <string>
@@ -20,17 +21,19 @@ namespace routingsim {
         uint32_t spof_count = 0;
     };
 
-    // Everything a router keeps per origin ring it knows a route to.
+    // Everything a router keeps per origin ring it knows a route to. Two-frame
+    // model: frames[cur] is curSeq's generation, frames[cur^1] the previous one
+    // kept for make-before-break; a flip on a newer seq clears the new current.
+    // soleFront holds the freshest chain per front ring — replay coverage, never
+    // forwarded, not counted against a frame's maxEcmpPaths.
     struct RibRing {
-        std::vector<MyriadGpRr> rr; // (subnet, owner) pairs; refreshed when curSeq advances
-        uint32_t curSeq = 0;        // highest seq_no seen for this origin ring
-        // Learned chains for this origin. Usually one generation (all co-best).
-        // Make-before-break may also keep PREVIOUS-generation chains (seq_no ==
-        // curSeq-1) that beat the current one, so the data plane keeps a good
-        // redundant route while reconverging.
-        // At most two adjacent generations coexist.
-        std::vector<RibEntry> ribIn;
-        size_t preferred = SIZE_MAX; // index into ribIn; SIZE_MAX = none
+        std::vector<MyriadGpRr> rr; // (subnet, owner) pairs; refreshed on a flip
+        uint32_t curSeq = 0;
+        std::array<std::vector<RibEntry>, 2> frames;
+        uint8_t cur = 0;
+        std::unordered_map<uint32_t /*front ring*/, RibEntry> soleFront;
+        RibEntry preferred;         // cached winner across both frames + soleFront
+        bool hasPreferred = false;
     };
 
     // dup = the exact chain was already held at >= seq. propagate = the chain
@@ -39,16 +42,17 @@ namespace routingsim {
     struct StoreResult {
         bool dup = false;
         bool propagate = false;
-        size_t cobest = 0;      // ribIn size at the decision point, for logging
+        size_t cobest = 0;      // current frame size at the decision point, for logging
     };
 
     // Origin-scoped route state and the whole rank/store/select cascade. No
     // protocol, timer or packet state — MyriadGP owns those.
     class MyriadGpRib {
         public:
-            void configure(long costExponent, bool useSpof, long maxEcmp,
+            void configure(long costExponent, long echoSize, bool useSpof, long maxEcmp,
                            double ecmpMargin = 0.0, bool diverseEvict = true) {
                 ringCostExponent = costExponent;
+                echoRingSize = echoSize;
                 rankUseSpof = useSpof;
                 maxEcmpPaths = maxEcmp;
                 ecmpCostMargin = ecmpMargin;
@@ -101,9 +105,9 @@ namespace routingsim {
             std::unordered_map<uint32_t /*culprit ring*/,
                                std::pair<uint32_t /*seq_no*/, uint32_t /*beacon_no*/>> degrades;
             // Path cost = sum of member_count^ringCostExponent over the chain.
-            // Integer exponent (a>=1) keeps costs in uint64 so co-best ties are
-            // exact (no float ULP mismatch), which ECMP needs.
             long ringCostExponent = 1;
+            // Substituted for a member_count of 2; see MyriadGp.ned.
+            long echoRingSize = 2;
             // false = rank purely by cost (oracle mode); see MyriadGp.ned.
             bool rankUseSpof = true;
             long maxEcmpPaths = 1;
@@ -111,27 +115,20 @@ namespace routingsim {
             double ecmpCostMargin = 0.0;
             bool ecmpDiverseEviction = true;
             bool withinMargin(uint64_t a, uint64_t b) const;
-            // Rank order: spof, then cost margin, then chain length. Used by the
-            // store cascade to decide new-best vs co-best — deliberately blind
-            // to cost differences inside the margin, so an in-band arrival
-            // widens the ECMP set instead of erasing it.
+            // spof, then out-of-margin cheaper; flat for in-band equal-spof pairs
+            // so an in-band arrival widens the ECMP set instead of replacing it.
             bool strictlyBetter(const RibEntry& a, const RibEntry& b) const;
-            // Exact rank: spof, then cost, then length, then chain order. Total
-            // and margin-blind, for choosing WITHIN a co-best set (preference,
-            // cost-ordered eviction) where strictlyBetter reports a flat tie.
+            // Total order: spof → cost → length → chain IDs, for choosing within
+            // a co-best set where strictlyBetter reports a tie.
             bool betterExact(const RibEntry& a, const RibEntry& b) const;
-            // Co-best: equal spof and mutually within the cost margin. Chain order
-            // is not in the key, so genuine ties are retained for ECMP.
+            // Acceptance: equal spof and mutually within the cost margin.
             bool coBest(const RibEntry& a, const RibEntry& b) const;
-            bool frontRepresented(const RibRing& rs, uint32_t front, size_t except) const;
-            // New-best erase that keeps each front-ring's sole current-gen.
-            void dropCurGenKeepingFronts(RibRing& rs, uint32_t candFront);
-            // Trim ribIn to maxEcmpPaths, keeping the most ring-diverse subset;
-            // operates on the current generation only. Returns whether candChain
-            // survived.
-            bool capEcmp(RibRing& rs, const std::vector<uint32_t>& candChain);
-            // Best across all of ribIn (betterExact, so the cheapest of a co-best
-            // set wins), ignoring seq — preferred may lag curSeq (see ribIn).
+            // Admit cand to frames[cur]; returns whether it entered.
+            bool admitToFrame(RibRing& rs, const RibEntry& cand);
+            // Record cand as its front ring's freshest chain. Never forwards.
+            void updateSoleFront(RibRing& rs, const RibEntry& cand);
+            // Winner across both frames + soleFront, cached into rs.preferred:
+            // not-degraded → spof → cost → fresh(seq==curSeq) → chain IDs.
             void selectPreferred(RibRing& rs);
             void reselectAll();
             // A chain is degraded iff any ring on it has an active degrade.

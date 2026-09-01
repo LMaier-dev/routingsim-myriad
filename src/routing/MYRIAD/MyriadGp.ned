@@ -32,6 +32,11 @@ simple myriadgp extends routingsim.foundation.Protocol
         // is a plain member sum.
         int ringCostExponent = default(2);
 
+        // Size a 2-member ring is priced at instead of its real one. Such a ring
+        // is a single link carrying both of its spofs, so it is a last resort
+        // however cheap its size looks; 2 disables the penalty.
+        int echoRingSize = default(64);
+
         // Rank on SPOF count first (default) or skip it and rank purely by cost.
         // false makes the RIB least-cost, matching the Dijkstra algo
         bool rankUseSpof = default(true);

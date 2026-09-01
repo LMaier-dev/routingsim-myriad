@@ -2,13 +2,13 @@
 #include "routing/MYRIAD/MyriadHelper.h"
 #include <algorithm>
 #include <limits>
-#include <map>
 #include <ostream>
 #include <set>
 
 namespace routingsim {
 
 uint64_t MyriadGpRib::sizeToCost(uint32_t s) const {
+    if (s == 2) s = (uint32_t) echoRingSize;   // see MyriadGp.ned
     // s^ringCostExponent with u64 saturation; UNKNOWN_RING_SIZE at e>=4 overflows,
     // saturating to max keeps it costly rather than wrapping to 0.
     uint64_t term = 1;
@@ -33,17 +33,24 @@ const std::vector<MyriadGpRr>& MyriadGpRib::rr(uint32_t ring) const {
 
 void MyriadGpRib::invalidate(uint32_t ring) {
     RibRing& rs = rings[ring];
-    rs.ribIn.clear();
-    rs.preferred = SIZE_MAX;
+    rs.frames[0].clear();
+    rs.frames[1].clear();
+    rs.soleFront.clear();
+    rs.hasPreferred = false;
 }
 
 void MyriadGpRib::installSelfChain(uint32_t ring, uint32_t originSeq, uint64_t cost) {
     RibRing& rs = rings[ring];
-    if (originSeq > rs.curSeq) { rs.curSeq = originSeq; rs.ribIn.clear(); }
+    if (originSeq > rs.curSeq) {            // flip: fresh generation of my own ring
+        rs.curSeq = originSeq;
+        rs.cur ^= 1;
+        rs.frames[rs.cur].clear();
+    }
     clearDegradeIfRecovered(ring);
     RibEntry self{{ring}, cost, originSeq, 0};
-    for (auto& e : rs.ribIn) if (e.chain == self.chain) return;
-    rs.ribIn.push_back(self);
+    auto& cf = rs.frames[rs.cur];
+    for (auto& e : cf) if (e.chain == self.chain) return;
+    cf.push_back(self);
     selectPreferred(rs);
 }
 
@@ -79,103 +86,94 @@ bool MyriadGpRib::coBest(const RibEntry& a, const RibEntry& b) const {
         && withinMargin(b.chain_cost, a.chain_cost);
 }
 
-// Sole front-ring guard: is `front` held by any CURRENT-GEN chain in rs.ribIn
-// other than index `except`? Used to keep the last chain entering an origin via
-// a given ring, so some member can still replay that (origin, front-ring) to a
-// recovered ring-mate under best-only storage. (except=SIZE_MAX excludes none.)
-bool MyriadGpRib::frontRepresented(const RibRing& rs, uint32_t front, size_t except) const {
-    for (size_t i = 0; i < rs.ribIn.size(); ++i) {
-        if (i == except) continue;
-        const RibEntry& e = rs.ribIn[i];
-        if (e.seq_no == rs.curSeq && !e.chain.empty() && e.chain.front() == front)
-            return true;
+// Admit cand to frames[cur]; returns whether to propagate. The margin is
+// pure acceptance: an in-band arrival widens the frame, an out-of-margin cheaper
+// one replaces everything it beats. On a fullframe the evicted entry is the least  
+// ring-diverse vs the best chain (ecmpDiverseEviction) OR the costliest.
+bool MyriadGpRib::admitToFrame(RibRing& rs, const RibEntry& cand) {
+    auto& cf = rs.frames[rs.cur];
+
+    // Index, not pointer: erase/push_back below invalidate references into cf.
+    size_t bestIdx = SIZE_MAX;
+    for (size_t i = 0; i < cf.size(); ++i)
+        if (bestIdx == SIZE_MAX || betterExact(cf[i], cf[bestIdx])) bestIdx = i;
+    if (bestIdx == SIZE_MAX) { cf.push_back(cand); return true; }
+
+    if (strictlyBetter(cand, cf[bestIdx])) {    // new best: drop everything worse
+        // The self chain [origin] survives: it is this node's own membership, not
+        // a learned route, and re-learning the ring via a neighbour costs a hop.
+        cf.erase(std::remove_if(cf.begin(), cf.end(),
+            [&](const RibEntry& e) {
+                return e.chain.size() > 1 && cand.chain_cost < e.chain_cost; }), cf.end());
+        cf.push_back(cand);
+        return true;
     }
-    return false;
+    if (!coBest(cand, cf[bestIdx])) return false;   // out of margin, inferior
+    if ((long)cf.size() < maxEcmpPaths) { cf.push_back(cand); return true; }
+
+    // Full frame: pick the eviction target over (frame \ best) ∪ {cand}.
+    const std::vector<uint32_t> bc = cf[bestIdx].chain;
+    auto intersect = [&](const std::vector<uint32_t>& c) {
+        std::set<uint32_t> s(bc.begin(), bc.end());
+        size_t n = 0; for (uint32_t r : c) n += s.count(r); return n;
+    };
+    // A cand cheaper than best is always admitted, so exempt it from being the
+    // target; else it competes on the eviction key.
+    bool candSafe = betterExact(cand, cf[bestIdx]);
+    size_t worst = SIZE_MAX, worstKey = 0; uint64_t worstCost = 0;
+    for (size_t i = 0; i < cf.size(); ++i) {
+        if (i == bestIdx) continue;
+        size_t key = ecmpDiverseEviction ? intersect(cf[i].chain) : 0;
+        bool wins = worst == SIZE_MAX;
+        if (!wins && ecmpDiverseEviction) wins = key > worstKey
+            || (key == worstKey && cf[i].chain_cost > worstCost);
+        else if (!wins) wins = betterExact(cf[worst], cf[i]);   // costlier => target
+        if (wins) { worst = i; worstKey = key; worstCost = cf[i].chain_cost; }
+    }
+    if (worst == SIZE_MAX) return false;        // frame is just {best}
+    if (!candSafe) {                             // cand only enters if it beats the worst
+        bool candWorse = ecmpDiverseEviction
+            ? (intersect(cand.chain) > worstKey
+               || (intersect(cand.chain) == worstKey && cand.chain_cost >= cf[worst].chain_cost))
+            : betterExact(cf[worst], cand);
+        if (candWorse) return false;
+    }
+    cf.erase(cf.begin() + worst);
+    cf.push_back(cand);
+    return true;
 }
 
-// New-best erase with the sole front-ring guard: drop the now-inferior
-// current-gen entries, but keep the single best current-gen chain of every
-// front-ring != candFront (candFront is covered by the incoming best). Older
-// holdovers (seq_no != curSeq) are untouched — make-before-break owns those.
-void MyriadGpRib::dropCurGenKeepingFronts(RibRing& rs, uint32_t candFront) {
-    std::map<uint32_t /*front*/, size_t /*best idx*/> bestPerFront;
-    for (size_t i = 0; i < rs.ribIn.size(); ++i) {
-        const RibEntry& e = rs.ribIn[i];
-        if (e.seq_no != rs.curSeq || e.chain.empty() || e.chain.front() == candFront)
-            continue;
-        auto it = bestPerFront.find(e.chain.front());
-        if (it == bestPerFront.end() || betterExact(e, rs.ribIn[it->second]))
-            bestPerFront[e.chain.front()] = i;   // cheapest survivor per front ring
-    }
-    std::set<size_t> keep;
-    for (auto& [f, idx] : bestPerFront) keep.insert(idx);
-    std::vector<RibEntry> out;
-    for (size_t i = 0; i < rs.ribIn.size(); ++i) {
-        if (rs.ribIn[i].seq_no == rs.curSeq && !keep.count(i)) continue;  // now-inferior
-        out.push_back(std::move(rs.ribIn[i]));
-    }
-    rs.ribIn.swap(out);
-}
-
-bool MyriadGpRib::capEcmp(RibRing& rs, const std::vector<uint32_t>& candChain) {
-    // Cap the current generation (seq_no==curSeq) to maxEcmpPaths; retained older
-    // holdovers aren't ECMP siblings, so skip them. Which one goes is
-    // ecmpDiverseEviction: the member leaving the largest ring-union behind
-    // (default — the set is a failover set), else simply the costliest. K is tiny.
-    auto isCur = [&](size_t i) { return rs.ribIn[i].seq_no == rs.curSeq; };
-    auto curCount = [&]() {
-        size_t n = 0;
-        for (size_t i = 0; i < rs.ribIn.size(); ++i) if (isCur(i)) ++n;
-        return n;
-    };
-    auto unionSansIndex = [&](size_t skip) {
-        std::set<uint32_t> u;
-        for (size_t i = 0; i < rs.ribIn.size(); ++i) {
-            if (i == skip || !isCur(i)) continue;
-            for (uint32_t r : rs.ribIn[i].chain) u.insert(r);
-        }
-        return u.size();
-    };
-    auto droppable = [&](size_t i) {
-        return isCur(i) && (rs.ribIn[i].chain.empty()
-                            || frontRepresented(rs, rs.ribIn[i].chain.front(), i));
-    };
-    while ((long)curCount() > maxEcmpPaths) {
-        size_t candIdx = SIZE_MAX;   // last current-gen entry (just appended)
-        for (size_t i = rs.ribIn.size(); i-- > 0; ) if (isCur(i)) { candIdx = i; break; }
-        // Seeded with the candidate so it loses every tie: an incumbent is only
-        // displaced by a strictly better score, not by arrival order.
-        size_t drop = SIZE_MAX, bestUnion = 0;
-        if (droppable(candIdx)) { drop = candIdx; bestUnion = unionSansIndex(candIdx); }
-        for (size_t i = 0; i < candIdx; ++i) {
-            if (!droppable(i)) continue;
-            bool wins = drop == SIZE_MAX;
-            if (!wins && ecmpDiverseEviction) wins = unionSansIndex(i) > bestUnion;
-            else if (!wins) wins = betterExact(rs.ribIn[drop], rs.ribIn[i]);
-            if (wins) { drop = i; bestUnion = unionSansIndex(i); }
-        }
-        if (drop == SIZE_MAX) break;   // every over-cap entry is a sole front rep
-        rs.ribIn.erase(rs.ribIn.begin() + drop);
-    }
-    for (auto& e : rs.ribIn) if (e.chain == candChain) return true;
-    return false;
+// Record cand as its front ring's freshest chain (replay coverage, never
+// forwarded): newer seq always wins, within a seq betterExact wins.
+void MyriadGpRib::updateSoleFront(RibRing& rs, const RibEntry& cand) {
+    if (cand.chain.empty()) return;
+    auto it = rs.soleFront.find(cand.chain.front());
+    // Same chain always replaces: a re-quote of this very path corrects its cost.
+    if (it == rs.soleFront.end() || cand.seq_no > it->second.seq_no
+        || it->second.chain == cand.chain
+        || (cand.seq_no == it->second.seq_no && betterExact(cand, it->second)))
+        rs.soleFront[cand.chain.front()] = cand;
 }
 
 void MyriadGpRib::selectPreferred(RibRing& rs) {
-    // Best across ALL of ribIn (may span two generations): a degraded chain (one
-    // transiting a ring under an active DEGRADE) loses to any non-degraded one,
-    // overriding spof/cost; within a class, betterExact. The margin governs which
-    // chains are KEPT, never which of them is used — preferring anything but the
-    // cheapest would pay the whole margin as stretch on the data plane.
-    rs.preferred = SIZE_MAX;
-    for (size_t i = 0; i < rs.ribIn.size(); ++i) {
-        if (rs.preferred == SIZE_MAX) { rs.preferred = i; continue; }
-        bool di = chainDegraded(rs.ribIn[i].chain);
-        bool dp = chainDegraded(rs.ribIn[rs.preferred].chain);
-        if (di != dp) { if (!di) rs.preferred = i; continue; }
-        if (betterExact(rs.ribIn[i], rs.ribIn[rs.preferred]))
-            rs.preferred = i;
-    }
+    // Rank BOTH frames together by cost (make-before-break): while the current
+    // generation is still converging, last generation's completed chains are
+    // valid and may be cheaper, so they must stay eligible until the new gen
+    // produces something as good. Non-degraded beats degraded first; then spof,
+    // cost, chain IDs.
+    const RibEntry* best = nullptr;
+    auto consider = [&](const RibEntry& e) {
+        if (!best) { best = &e; return; }
+        bool de = chainDegraded(e.chain), db = chainDegraded(best->chain);
+        if (de != db) { if (!de) best = &e; return; }
+        if (e.spof_count != best->spof_count) { if (e.spof_count < best->spof_count) best = &e; return; }
+        if (e.chain_cost != best->chain_cost) { if (e.chain_cost < best->chain_cost) best = &e; return; }
+        if (e.chain < best->chain) best = &e;
+    };
+    for (auto& e : rs.frames[rs.cur]) consider(e);
+    for (auto& e : rs.frames[rs.cur ^ 1]) consider(e);
+    rs.hasPreferred = best != nullptr;
+    if (best) rs.preferred = *best;
 }
 
 void MyriadGpRib::reselectAll() {
@@ -226,108 +224,71 @@ StoreResult MyriadGpRib::store(uint32_t origin, const std::vector<uint32_t>& ful
     StoreResult res;
     RibRing& originRs = rings[origin];
 
-    // Replay (seq==0) repopulates stateless nodes only: a node that already knows
-    // this origin ignores it (the caller still forwards the lap to the recovered
-    // node). Without this, live members treat it as a stale chain and re-store it.
-    if (seq == 0 && !originRs.ribIn.empty()) return res;
-
     RibEntry cand{fullChain, fullCost, seq, spof};
 
-    // Drop entries >=2 generations behind (see the ribIn comment in RibRing).
-    auto purgeStale = [&]() {
-        auto& v = originRs.ribIn;
-        v.erase(std::remove_if(v.begin(), v.end(),
-            [&](const RibEntry& e) { return originRs.curSeq - e.seq_no >= 2; }),
-            v.end());
-    };
+    // A real update (seq>0) from an older generation is stale. A replay (seq==0)
+    // carries a live member's current chain rather than a generation, so it is
+    // adopted purely on "I hold nothing myself".
+    if (seq == 0 ? !originRs.frames[originRs.cur].empty()
+                 : seq < originRs.curSeq) return res;
 
-    // Seq-advance: adopt the new generation, purge stale, but keep old-gen chains
-    // strictly better than this candidate (make-before-break); drop the rest.
-    // Same-chain entries are always replaced — cost can increase (echo-path gives
-    // a low transient count; full COLLECT corrects it upward), so a stale cheaper
-    // same-chain entry is wrong data, not a genuine backup path.
-    if (seq > originRs.curSeq) {
+    if (seq > originRs.curSeq) {              // flip
         originRs.curSeq = seq;
         clearDegradeIfRecovered(origin);
         if (originRrTrailer) originRs.rr = *originRrTrailer;
-        purgeStale();
-        auto& v = originRs.ribIn;
-        v.erase(std::remove_if(v.begin(), v.end(),
-            [&](const RibEntry& e) { return e.chain == cand.chain || !strictlyBetter(e, cand); }),
-            v.end());
+        originRs.cur ^= 1;
+        originRs.frames[originRs.cur].clear();   // previous current stays as old
+        // Bound soleFront to the same two generations the frames span.
+        for (auto it = originRs.soleFront.begin(); it != originRs.soleFront.end(); )
+            it = seq - it->second.seq_no >= 2 ? originRs.soleFront.erase(it) : std::next(it);
+    } else if (originRs.rr.empty() && originRrTrailer && !originRrTrailer->empty()) {
+        originRs.rr = *originRrTrailer;        // recovered node backfill at seq==curSeq
     }
 
-    // Older-than-current chain that isn't strictly better: stale, ignore it.
-    if (seq < originRs.curSeq) {
-        bool useful = originRs.ribIn.empty();
-        for (auto& e : originRs.ribIn)
-            if (strictlyBetter(cand, e)) { useful = true; break; }
-        if (!useful) return res;
-    }
-
-    // Recovered node: a seq=0 replay carries no seq advance, so adopt the
-    // origin's rr here to repopulate empty state.
-    if (originRs.rr.empty() && originRrTrailer && !originRrTrailer->empty())
-        originRs.rr = *originRrTrailer;
-
-    // Exact chain already held at >= seq: transition already happened.
-    for (auto& e : originRs.ribIn)
-        if (e.chain == fullChain && e.seq_no >= seq) { res.dup = true; return res; }
-
-    res.propagate = true;
-
-    // Rank against the current generation only, so retained holdovers can't
-    // make a valid new-gen chain look inferior (it still must propagate).
-    // betterExact, not strictlyBetter: the incumbents are mutually in-margin, so
-    // strictlyBetter is flat among them and would leave curBest at whichever
-    // entry happens to sit first — making the branch below depend on insertion
-    // order rather than cost.
-    RibEntry* curBest = nullptr;
-    for (auto& e : originRs.ribIn)
-        if (e.seq_no == originRs.curSeq
-            && (!curBest || betterExact(e, *curBest))) curBest = &e;
-
-    if (!curBest) {
-        originRs.ribIn.push_back(cand);                      // first of this gen
-    } else if (strictlyBetter(cand, *curBest)) {
-        // New best: drop now-inferior current-gen entries and keep holdovers,
-        // but still keep sole front-ring guard so the king can still replay
-        // every (origin, front-ring).
-        dropCurGenKeepingFronts(originRs, fullChain.front());
-        originRs.ribIn.push_back(cand);
-    } else if (coBest(cand, *curBest)) {
-        originRs.ribIn.push_back(cand);
-        if ((long)originRs.ribIn.size() > maxEcmpPaths)
-            res.propagate = capEcmp(originRs, fullChain);
-    } else {
-        // Inferior — not propagated. But if no other current-gen chain enters
-        // this origin via fullChain.front(), keep it (sole front-ring guard).
-        if (!frontRepresented(originRs, fullChain.front(), SIZE_MAX)) {
-            originRs.ribIn.push_back(cand);
+    // Same chain re-arriving: keep the cheaper quote. An early lap can price a
+    // ring at UNKNOWN_RING_SIZE, so only a not-cheaper repeat is a true dup.
+    for (auto& e : originRs.frames[originRs.cur])
+        if (e.chain == fullChain) {
+            if (e.chain_cost <= fullCost) { res.dup = true; return res; }
+            e = cand;
             selectPreferred(originRs);
+            res.propagate = true;
+            res.cobest = originRs.frames[originRs.cur].size();
+            return res;
         }
-        res.propagate = false;
-    }
 
-    if (res.propagate) selectPreferred(originRs);
-    res.cobest = originRs.ribIn.size();
+    // Same chain lingering in the old frame is a stale quote of this path, not a
+    // make-before-break backup; drop it so this generation's cost is the one used.
+    auto& of = originRs.frames[originRs.cur ^ 1];
+    of.erase(std::remove_if(of.begin(), of.end(),
+        [&](const RibEntry& e) { return e.chain == fullChain; }), of.end());
+
+    res.propagate = admitToFrame(originRs, cand);
+    updateSoleFront(originRs, cand);   // replay coverage only; not ranked for the data plane
+    selectPreferred(originRs);
+    res.cobest = originRs.frames[originRs.cur].size();
     return res;
 }
 
 size_t MyriadGpRib::knownOrigins() const {
     size_t n = 0;
-    for (auto& [origin, rs] : rings) if (rs.preferred != SIZE_MAX) ++n;
+    for (auto& [origin, rs] : rings) if (rs.hasPreferred) ++n;
     return n;
 }
 
 std::vector<MyriadGpRib::ReplayChain> MyriadGpRib::preferredChains() const {
     std::vector<ReplayChain> out;
-    out.reserve(rings.size());
+    // The per-origin preferred plus every soleFront slot: replay must reach every
+    // (origin, front ring), and front coverage lives in soleFront.
     for (auto& [origin, ors] : rings) {
-        if (ors.preferred == SIZE_MAX) continue;
-        const RibEntry& e = ors.ribIn[ors.preferred];
-        if (e.chain.empty()) continue;
-        out.push_back({&e.chain, e.chain_cost, e.spof_count, &rr(origin)});
+        if (!ors.hasPreferred) continue;
+        auto emit = [&](const RibEntry& e) {
+            if (!e.chain.empty())
+                out.push_back({&e.chain, e.chain_cost, e.spof_count, &rr(origin)});
+        };
+        emit(ors.preferred);
+        for (auto& [front, e] : ors.soleFront)
+            if (e.chain != ors.preferred.chain) emit(e);
     }
     return out;
 }
@@ -335,13 +296,13 @@ std::vector<MyriadGpRib::ReplayChain> MyriadGpRib::preferredChains() const {
 void MyriadGpRib::dumpTo(std::ostream& f, const std::string& tprefix, bool stats, int nodeId) const {
     std::vector<uint32_t> originIds;
     for (auto& [rid, rs] : rings)
-        if (rs.preferred != SIZE_MAX) originIds.push_back(rid);
+        if (rs.hasPreferred) originIds.push_back(rid);
     std::sort(originIds.begin(), originIds.end());
 
     if (stats) {
         uint64_t n = 0, sum = 0, mx = 0;
         for (uint32_t rid : originIds) {
-            uint64_t c = rings.at(rid).ribIn[rings.at(rid).preferred].chain_cost;
+            uint64_t c = rings.at(rid).preferred.chain_cost;
             ++n; sum += c; if (c > mx) mx = c;
         }
         f << tprefix << nodeId << " n=" << n
@@ -352,9 +313,8 @@ void MyriadGpRib::dumpTo(std::ostream& f, const std::string& tprefix, bool stats
     // One line per origin with the primary chain.
     for (uint32_t rid : originIds) {
         const RibRing& rs = rings.at(rid);
-        const RibEntry& e = rs.ribIn[rs.preferred];
-        size_t ecmp = 0;
-        for (auto& c : rs.ribIn) if (c.seq_no == rs.curSeq) ++ecmp;
+        const RibEntry& e = rs.preferred;
+        size_t ecmp = rs.frames[rs.cur].size();
         f << tprefix << nodeId << " origin=" << rid
           << " len=" << e.chain.size()
           << " spof=" << e.spof_count

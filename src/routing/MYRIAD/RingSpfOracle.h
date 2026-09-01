@@ -6,7 +6,8 @@
 // RingsLsa), builds the ring graph and runs node-weighted Dijkstra for the optimal
 // cost from each node to every origin ring. GP's converged cost must match.
 //
-// Ring graph: rings adjacent iff they share a node; ring weight = member_count^exp;
+// Ring graph: rings adjacent iff they share a node; ring weight = member_count^exp
+// (a count of 2 priced as echoSize, matching MyriadGpRib::sizeToCost);
 // path cost sums every ring on it, both endpoints — same as MyriadGP::pathCost.
 
 #include <cstdint>
@@ -30,11 +31,12 @@ struct RingRoute {
 // perNodeRings: node id -> rings it belongs to.
 std::map<RingId, RingRoute>
 shortestRingCostsFor(const std::map<NodeId, std::vector<RingId>>& perNodeRings, long exp,
-                     NodeId self);
+                     long echoSize, NodeId self);
 
 void dumpOracle(const std::string& path, NodeId self,
                 const std::map<NodeId, std::vector<RingId>>& perNodeRings, long exp,
-                const std::string& tprefix = "", bool stats = false);
+                long echoSize, const std::string& tprefix = "", bool stats = false,
+                long presentCount = -1);
 
 } // namespace ringspf
 } // namespace routingsim

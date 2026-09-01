@@ -28,6 +28,8 @@ simple myriadls extends routingsim.foundation.Protocol
         // Optimality-oracle hook (see RingSpfOracle): non-empty oracleDumpFile makes
         // finish() append this node's Dijkstra least-cost-per-origin. Exponent must match GP's.
         int ringCostExponent = default(2);
+        // Must match GP's; see MyriadGp.ned.
+        int echoRingSize = default(64);
         string oracleDumpFile = default("");
 
         // Observational oracle snapshot period (see startSnapshot). >0 appends the

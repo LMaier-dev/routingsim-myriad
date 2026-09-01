@@ -60,7 +60,8 @@ void MyriadGP::onInitialize() {
     refreshJitter = par("refreshJitter");
     watchdogMargin = par("watchdogMargin");
     updateJitter = par("updateJitter");
-    rib.configure(par("ringCostExponent"), par("rankUseSpof"), par("maxEcmpPaths"),
+    rib.configure(par("ringCostExponent"), par("echoRingSize"),
+                  par("rankUseSpof"), par("maxEcmpPaths"),
                   par("ecmpCostMargin"), par("ecmpDiverseEviction"));
     degradeEnabled = par("degradeEnabled");
     recoveryReplayEnabled = par("recoveryReplayEnabled");
@@ -72,17 +73,13 @@ void MyriadGP::onInitialize() {
     snapshotStats = par("snapshotFormat").stdstringValue() == "stats";
     collectWarmupDuration = par("collectWarmupDuration");
     collectWarmupInterval = par("collectWarmupInterval");
-    // 0s (default) means derive: ~3 COLLECTs per ring over the warmup window.
-    // Tying the cadence to the warmup length keeps ring-dense topologies from
-    // flooding COLLECTs faster than their laps can close (see the .ned).
     if (collectWarmupInterval <= SIMTIME_ZERO)
         collectWarmupInterval = 0.3 * collectWarmupDuration;
 
     MLOG_INFO() << "MyriadGP up\n";
 
     // Periodically send hellos to all neighbors. Cold start staggers the first
-    // hello over joinJitter so formation isn't a synchronized herd, mirroring the
-    // reboot spread; a reboot's stagger already comes from the failure scenario.
+    // hello over joinJitter so formation isn't a synchronized herd.
     scheduleHello(helloInterval + uniform(0, joinJitter));
 
     if (snapshotInterval > 0 && !par("ribDumpFile").stdstringValue().empty())
@@ -98,7 +95,7 @@ void MyriadGP::onTwoWayReached(GpNeighbor& nbr) {
 
     // For each ring we share with this neighbor: originate a collect iff this
     // TWOWAY brings the count of TWOWAY-or-better ring-neighbors on R to
-    // exactly 2. The just-transitioned nbr counts.
+    // exactly 2.
     for (uint32_t R : nbr.sharedRings) {
         size_t count = 0;
         for (auto& [nid, n] : neighbors) {
@@ -121,9 +118,7 @@ void MyriadGP::onTwoWayReached(GpNeighbor& nbr) {
             if (rebooted) {
                 originateCollect(R, nbr.id, COLLECT_PROBE);  // reboot: immediate, recovery latency matters
             } else if (collectWarmupInterval > 0) {
-                // with helloJitter/joinJitter at 0 every node's first hello fires
-                // together, so every ring would originate its election COLLECT at
-                // the same instant. Spread the first election over uniform(0, collectWarmupInterval)
+                // Spread the first election over uniform(0, collectWarmupInterval)
                 uint32_t r = R;
                 addOneShotTimer(uniform(0, collectWarmupInterval),
                                 [this, r](short) { reoriginateCollect(r); return false; });
@@ -139,13 +134,15 @@ void MyriadGP::onTwoWayReached(GpNeighbor& nbr) {
 
 void MyriadGP::originateCollect(uint32_t ring, nodeid_t to, MyriadGpCollectKind kind) {
     RingMembership& m = memberships[ring];
-    m.originSeq += 1;
-    m.collectInflight.seq_no = m.originSeq;
+    // Lap counter only — the routing generation opens in originateUpdate, so a
+    // PROBE or REPLAY lap never ages out chains still propagating.
+    m.collectSeq += 1;
+    m.collectInflight.seq_no = m.collectSeq;
 
     auto* pkt = new MyriadGpCollect("Myriad_GP_Collect");
     pkt->setType(MYRIADGP_COLLECT);
     pkt->setRouter_id_src(myId);     // king_id
-    pkt->setSeq_no(m.originSeq);
+    pkt->setSeq_no(m.collectSeq);    // lap identity, matched on own return
     pkt->setCurrent_ring(ring);
     pkt->setMember_count(1); // forwarders increment
 
@@ -339,9 +336,6 @@ void MyriadGP::replayIfBest(MyriadGpCollect* lap, uint32_t ring) {
 
 void MyriadGP::onCollectBudgetExpired(uint32_t ring) {
     RingMembership& m = memberships[ring];
-    // This runs from the budgetTimer's own callback; the harness frees that
-    // message after we return, so drop our handle before cancelRingReliable
-    // (which would otherwise cancelAndDelete the message we're executing).
     m.collectInflight.budgetTimer = nullptr;
     if (m.collectInflight.tx == nullptr) return; // already resolved
     cancelRingReliable(m.collectInflight);
@@ -364,7 +358,6 @@ void MyriadGP::onUpdateBudgetExpired(uint32_t ring, std::vector<uint32_t> chain)
     infl.erase(it);
     MLOG_WARN() << "UPDATE traversal budget expired ring='" << ring
                 << "' chain-len=" << chain.size() << " — ring broken\n";
-    // TODO: originate DEGRADE for this ring (beacon mode).
 }
 
 void MyriadGP::onBatchBudgetExpired(uint32_t ring, uint32_t batchLapSeq) {
@@ -378,16 +371,14 @@ void MyriadGP::onBatchBudgetExpired(uint32_t ring, uint32_t batchLapSeq) {
     infl.erase(it);
     MLOG_WARN() << "batch-lap budget expired ring='" << ring
                 << "' seq=" << batchLapSeq << " — ring broken\n";
-    // TODO: originate DEGRADE for this ring (beacon mode).
 }
 
 void MyriadGP::onNeighborDead(GpNeighbor& nbr, bool /*wasFull*/) {
     // For each ring shared with the dead neighbor: if no inflight for that
     // ring, probe the dead neighbor. Its retransmits act as the liveness grace
     // period — the probe closing means the ring is whole, the budget expiring
-    // fires DEGRADE. A probe never crowns a king or re-announces the ring, so a
-    // failure costs no UPDATE; that is the refresh's job.
-    // If an inflight already exists, do nothing and let its budget run.
+    // fires DEGRADE. A probe never crowns a king or re-announces the ring,
+    // that is the refresh's job.
     for (uint32_t R : nbr.sharedRings) {
         if (memberships[R].collectInflight.tx != nullptr) continue;
         MLOG_N_INFO(nbr.id) << "probe COLLECT ring='" << R
@@ -479,16 +470,12 @@ void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t sender) {
                 && collect->getLap_max_routes() > rib.knownOrigins())
                 originateCollect(R, sender, COLLECT_REPLAY);
 
-            // Only an election lap crowns a king and re-announces the ring. A
-            // probe or replay lap has already done its job above: it proved the
-            // ring whole and restored my member size / rr / transitions.
+            // Only an election lap crowns a king and re-announces the ring.
             if (collect->getKind() != COLLECT_ELECTION) {
                 MLOG_INFO() << (collect->getKind() == COLLECT_PROBE ? "probe" : "replay")
                             << " COLLECT complete ring='" << R << "' seq=" << seq << "\n";
                 // The lap doubles as a king probe: any king it passed cleared the
-                // flag. Still set means the king co-failed with me, so nothing
-                // re-announces this ring until a watchdog fires a whole refresh
-                // period from now. Coup now instead.
+                // flag. Still set means the king co-failed with me. Coup now instead.
                 if (collect->getOriginator_crashed()) {
                     MLOG_INFO() << "replay lap met no king on ring='" << R << "' — coup\n";
                     reoriginateCollect(R);
@@ -502,21 +489,20 @@ void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t sender) {
             if (!m.isKing) {
                 m.isKing = true;
                 MLOG_INFO() << "became king of ring='" << R << "'\n";
-                simtime_t wait = collectWarmupDuration > simTime()
-                                 ? collectWarmupDuration - simTime() : SIMTIME_ZERO;
-                wait += uniform(0, updateJitter);
-                if (wait > SIMTIME_ZERO)
-                    addOneShotTimer(wait,
-                                    [this, R](short) { originateUpdate(R); return false; });
-                else
-                    originateUpdate(R);
             } else {
                 bool routine = m.routineRefreshPending;
                 m.routineRefreshPending = false;
-                // During warmup the re-collects only settle member counts
-                if ((refreshFloodsUpdate || !routine) && simTime() >= collectWarmupDuration)
-                    originateUpdate(R);
+                if (!refreshFloodsUpdate && routine && simTime() >= collectWarmupDuration)
+                    { startRefresh(R); return; }
             }
+            // Origin UPDATEs run during warmup too: only the king learns the ring
+            // size from its own lap return, so members stay at memberCount==0
+            // until an origin-UPDATE trailer reaches them.
+            originateUpdate(R);
+            // Warmup laps never bridged: originate once more with counts known.
+            if (simTime() < collectWarmupDuration)
+                addOneShotTimer(collectWarmupDuration - simTime() + uniform(0, updateJitter),
+                                [this, R](short) { originateUpdate(R); return false; });
 
             startRefresh(R);
         } else {
@@ -592,6 +578,7 @@ std::vector<nodeid_t> MyriadGP::ringNeighbors(uint32_t ring) {
 
 void MyriadGP::originateUpdate(uint32_t ring) {
     RingMembership& m = memberships[ring];
+    m.originSeq += 1;
     rib.installSelfChain(ring, m.originSeq,
         rib.sizeToCost(m.memberCount ? m.memberCount : UNKNOWN_RING_SIZE));
     const std::vector<MyriadGpRr>& rr = rib.rr(ring);
@@ -629,9 +616,8 @@ void MyriadGP::originateUpdate(uint32_t ring) {
         pkt->setWidths(i, t);
     }
 
-    // I'm a member of my other rings too: transition my own origin into them
-    // (hold=0 sends now; hold>0 queues for the next batch). handled accrues the
-    // rings I fan into so sibling bridges on the origin lap don't duplicate.
+    // handled accrues the rings I fan into so sibling bridges on the origin 
+    // lap don't duplicate.
     std::vector<uint32_t> handled;
     std::vector<uint32_t> emptyChain;
     forwardChainInterRing(ring, m.originSeq, 0, emptyChain, 0, rr, handled);
@@ -641,6 +627,9 @@ void MyriadGP::originateUpdate(uint32_t ring) {
     // Origin-UPDATE lives in the empty-chain inflight slot.
     pkt->setByteLength(gpUpdateBytes(pkt));
     RingInflight& fl = m.updateInflights[emptyChain];
+    // A previous origin lap may still be retransmitting under a now-stale seq;
+    // sendRingReliable would overwrite the handle and orphan its timer.
+    cancelRingReliable(fl);
     fl.seq_no = m.originSeq;
     sendRingReliable(fl, primary, fallback, pkt, rxmtInterval, COLLECT_RETRY_LIMIT,
                      [this, ring, emptyChain]() { onUpdateBudgetExpired(ring, emptyChain); });
@@ -693,9 +682,7 @@ void MyriadGP::insertAndForwardCollect(MyriadGpCollect* pkt, uint32_t R, nodeid_
     // circular ACK (with 2 spofs).
     nodeid_t to = otherRingNeighbor(R, sender);
     if (to == undefined_node) {
-        // Genuine 2-node ring: echo back to the sender so the king still gets
-        // its circular ACK. A degraded larger ring (had >1 neighbor) instead
-        // drops, letting the budget expire → DEGRADE.
+        // A degraded larger ring (had >1 neighbor) instead drops expiring the budget
         if (isTwoNodeRing(R)) {
             to = sender;
             MLOG_N_DEBUG(sender) << "echo COLLECT ring='" << R << "' (2-node ring)\n";
@@ -815,10 +802,7 @@ void MyriadGP::processChain(uint32_t curRing, uint32_t seq, uint32_t spof,
                             const std::vector<MyriadGpRr>* originRrTrailer,
                             std::vector<uint32_t>& handled) {
     uint32_t origin = chain.empty() ? curRing : chain.back();
-
-    // The gates below and the loop guard stay here rather than in the RIB: they
-    // read membership and selfRings, which are protocol state.
-
+    
     // Don't store or bridge an inter-ring update arriving on a ring whose COLLECT
     // hasn't landed here yet (the dup guard blocks re-forwarding). Excludes seq==0
     // replay: it's adopted into the RIB and never re-forwarded, so the dup-guard
@@ -855,8 +839,8 @@ void MyriadGP::processChain(uint32_t curRing, uint32_t seq, uint32_t spof,
     for (uint32_t myRing : selfRings)
         for (uint32_t c : chain) if (c == myRing) return;
 
-    // Only the current generation propagates
-    if (seq >= rib.curSeq(origin))
+    // Only the current generation propagates. seq==0 replay never crosses rings.
+    if (seq != 0 && seq >= rib.curSeq(origin))
         forwardChainInterRing(curRing, seq, spof, chain, chainCost, rr, handled);
 }
 
@@ -907,6 +891,12 @@ void MyriadGP::forwardChainInterRing(uint32_t curRing, uint32_t seq, uint32_t sp
     // still being established
     if (collectWarmupDuration > 0 && simTime() < collectWarmupDuration)
         return;
+    // curRing prices the hop this bridge adds. Unknown, it would go out at UNKNOWN_RING_SIZE
+    if (memberCountOf(curRing) == 0) {
+        MLOG_DEBUG() << "transition out of ring='" << curRing
+                     << "' skipped: own COLLECT not yet complete\n";
+        return;
+    }
     for (uint32_t R2 : selfRings) {
         if (R2 == curRing) continue;
         // R2 in the chain would loop; already in `handled` means a sibling bridge
@@ -1064,10 +1054,6 @@ void MyriadGP::replayInto(uint32_t ring) {
     // send what lies BEYOND `ring`: as king I am a converged member of it, so
     // rebasing my whole RIB onto it hands the recovered node a route to every
     // origin I know, whichever of my rings I actually reach it through.
-    // ponytail: a chain transiting a ring the recovered node is itself in gives it
-    // a via-`ring` detour where a direct entry exists. Not special-cased — that
-    // ring's own replay lap delivers the direct chain, which is strictly cheaper
-    // and wins selectPreferred.
     struct RebasedChain { std::vector<uint32_t> chain; uint64_t cost; uint32_t spof;
                           const std::vector<MyriadGpRr>* rr; };
     std::vector<RebasedChain> replay;
@@ -1077,8 +1063,7 @@ void MyriadGP::replayInto(uint32_t ring) {
         auto rit = std::find(e.chain->rbegin(), e.chain->rend(), ring);
         if (rit != e.chain->rend()) {
             // Send what lies beyond the LAST occurrence of `ring`; anything
-            // before it is a detour out of the ring and back. [ring] itself
-            // reduces to an empty chain = origin==current_ring at the receiver.
+            // before it is a detour out of the ring and back.
             size_t cut = e.chain->size() - (size_t)(rit - e.chain->rbegin());
             // Exact only if the ring was the front; a mid-cut keeps the full
             // cost/spof, over-stating both, which is the safe direction.

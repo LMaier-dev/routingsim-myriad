@@ -47,7 +47,8 @@ namespace routingsim {
     // State a router keeps ONLY for rings it is itself a member of: king/collect
     // bookkeeping and the in-flight ring laps. Route state lives in MyriadGpRib.
     struct RingMembership {
-        uint32_t originSeq = 1;     // my sequence for this ring (COLLECT + origin-UPDATE)
+        uint32_t originSeq = 1;     // routing generation; advances only on a won ELECTION
+        uint32_t collectSeq = 1;    // per-lap counter, matches a COLLECT to its own return
         uint32_t memberCount = 0;   // ring size; set when a COLLECT lap closes
         RingInflight collectInflight;
         // Reliable UPDATE traversals I own here, keyed by chain (empty = my
