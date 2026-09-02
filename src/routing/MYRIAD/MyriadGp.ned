@@ -46,6 +46,10 @@ simple myriadgp extends routingsim.foundation.Protocol
         // rely on refresh/purge alone (broken paths linger until reconvergence).
         bool degradeEnabled = default(true);
 
+        // Don't transition chains into a ring with an open degrade: its laps
+        // aren't closing, so the send only burns the retransmit budget.
+        bool skipDegradedTransitions = default(true);
+
         // Eval only: Disable RR
         bool carryRr = default(true);
 

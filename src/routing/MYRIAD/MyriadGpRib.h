@@ -80,6 +80,8 @@ namespace routingsim {
             std::pair<uint32_t, uint32_t> markDegraded(uint32_t ring);
             // false = stale or duplicate, so the caller must not re-flood.
             bool applyDegrade(uint32_t ring, uint32_t seq, uint32_t beacon);
+            // Ring has an open degrade: its laps are not closing.
+            bool isDegraded(uint32_t ring) const { return degrades.count(ring) != 0; }
 
             // Pointers borrow from the RIB; invalid after any mutating call.
             struct ReplayChain {

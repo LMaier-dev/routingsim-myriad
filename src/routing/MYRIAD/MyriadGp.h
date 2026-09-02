@@ -196,6 +196,8 @@ namespace routingsim {
             simtime_t watchdogMargin; // coup this long after a refresh could last arrive
             simtime_t updateJitter;   // spread the initial per-ring UPDATE storm
             bool degradeEnabled = true;
+            // Skip inter-ring transitions into a degraded ring; see MyriadGp.ned
+            bool skipDegradedTransitions = true;
             // RibEntry never carries rr. (For eval)
             bool carryRr = true;
             bool recoveryReplayEnabled = true;

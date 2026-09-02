@@ -65,6 +65,7 @@ void MyriadGP::onInitialize() {
                   par("rankUseSpof"), par("maxEcmpPaths"),
                   par("ecmpCostMargin"), par("ecmpDiverseEviction"));
     degradeEnabled = par("degradeEnabled");
+    skipDegradedTransitions = par("skipDegradedTransitions");
     recoveryReplayEnabled = par("recoveryReplayEnabled");
     refreshFloodsUpdate = par("refreshFloodsUpdate");
     carryRr = par("carryRr");
@@ -970,6 +971,15 @@ void MyriadGP::forwardChainInterRing(uint32_t curRing, uint32_t seq, uint32_t sp
         if (memberCountOf(R2) == 0) {
             MLOG_DEBUG() << "transition into ring='" << R2
                          << "' skipped: its COLLECT not yet complete\n";
+            continue;
+        }
+
+        // A degraded ring's laps don't close, so this would only burn the
+        // retransmit budget. The degrade clears on the first lap that closes,
+        // and the king's refresh re-announces then.
+        if (skipDegradedTransitions && rib.isDegraded(R2)) {
+            MLOG_DEBUG() << "transition into ring='" << R2
+                         << "' skipped: degraded\n";
             continue;
         }
 
