@@ -14,7 +14,7 @@ namespace {
 using namespace msgsize;
 
 int64_t gpCollectBytes(const MyriadGpCollect* p) {
-    return MYRIADGP_HDR + U32 + U32 + 2 * BOOL             // member_count + lap max + crashed bit + kind
+    return MYRIADGP_HDR + U32 + U32 + U32 + U64 + 3 * BOOL // member_count + lap max triple + crashed + claimed + kind
          + (int64_t) p->getRrArraySize() * RR
          + (int64_t) p->getTransitionsArraySize() * TRANSITION;
 }
@@ -121,9 +121,12 @@ void MyriadGP::onTwoWayReached(GpNeighbor& nbr) {
                 // Spread the first election over uniform(0, collectWarmupInterval)
                 uint32_t r = R;
                 addOneShotTimer(uniform(0, collectWarmupInterval),
-                                [this, r](short) { reoriginateCollect(r); return false; });
+                                [this, r](short) {
+                                    reoriginateCollect(r, false, COLLECT_REFRESH);
+                                    return false;
+                                });
             } else {
-                originateCollect(R, nbr.id, COLLECT_ELECTION);
+                originateCollect(R, nbr.id, COLLECT_REFRESH);
             }
         } else if (count > 2) {
             MLOG_N_WARN(nbr.id) << "ring '" << R
@@ -132,7 +135,8 @@ void MyriadGP::onTwoWayReached(GpNeighbor& nbr) {
     }
 }
 
-void MyriadGP::originateCollect(uint32_t ring, nodeid_t to, MyriadGpCollectKind kind) {
+void MyriadGP::originateCollect(uint32_t ring, nodeid_t to, MyriadGpCollectKind kind,
+                                MyriadGpRib::ReplayQuality want) {
     RingMembership& m = memberships[ring];
     // Lap counter only — the routing generation opens in originateUpdate, so a
     // PROBE or REPLAY lap never ages out chains still propagating.
@@ -148,7 +152,12 @@ void MyriadGP::originateCollect(uint32_t ring, nodeid_t to, MyriadGpCollectKind 
 
     // Stateless (fresh) originator loses the king election to any live member.
     pkt->setOriginator_crashed(m.memberCount == 0);
-    pkt->setLap_max_routes(rib.knownOrigins());
+    // A REPLAY lap carries the winner's figures verbatim so that member
+    // recognises itself; any other lap starts from my own.
+    MyriadGpRib::ReplayQuality q = want.origins ? want : rib.replayQuality();
+    pkt->setLap_max_routes(q.origins);
+    pkt->setLap_max_spof(q.spofTotal);
+    pkt->setLap_max_cost(q.costTotal);
     pkt->setKind(kind);
 
     // Insert my (subnet, myId) pairs.
@@ -181,7 +190,7 @@ void MyriadGP::originateCollect(uint32_t ring, nodeid_t to, MyriadGpCollectKind 
         << "' seq=" << m.originSeq << "\n";
 }
 
-void MyriadGP::reoriginateCollect(uint32_t ring, bool routine) {
+void MyriadGP::reoriginateCollect(uint32_t ring, bool routine, MyriadGpCollectKind kind) {
     // Pick either ring-neighbor as the send target (alternation covers the
     // other direction on retransmit); skip if the ring isn't fully seen.
     std::vector<nodeid_t> nbrs = ringNeighbors(ring);
@@ -192,7 +201,7 @@ void MyriadGP::reoriginateCollect(uint32_t ring, bool routine) {
     }
     if (memberships[ring].collectInflight.tx != nullptr) return; // one at a time
     memberships[ring].routineRefreshPending = routine;
-    originateCollect(ring, nbrs[0]);
+    originateCollect(ring, nbrs[0], kind);
 }
 
 void MyriadGP::startRefresh(uint32_t ring) {
@@ -201,7 +210,7 @@ void MyriadGP::startRefresh(uint32_t ring) {
     if (rs.refreshTimer)  { cancelAndDelete(rs.refreshTimer);  rs.refreshTimer = nullptr; }
     rs.refreshTimer = addOneShotTimer(refreshInterval + uniform(0, refreshJitter), [this, ring](short) {
         memberships[ring].refreshTimer = nullptr;
-        reoriginateCollect(ring, /*routine=*/true);
+        reoriginateCollect(ring, /*routine=*/true, COLLECT_REFRESH);
         if (memberships[ring].isKing) startRefresh(ring); // reschedule
         return false;
     });
@@ -227,7 +236,10 @@ void MyriadGP::startWarmupCollects() {
             if (m.isKing) {
                 uint32_t r = ring;
                 addOneShotTimer(uniform(0, collectWarmupInterval),
-                                [this, r](short) { reoriginateCollect(r); return false; });
+                                [this, r](short) {
+                                    reoriginateCollect(r, false, COLLECT_REFRESH);
+                                    return false;
+                                });
             }
         if (simTime() < collectWarmupDuration)
             startWarmupCollects();
@@ -321,17 +333,42 @@ void MyriadGP::cancelCollect(uint32_t ring) {
     cancelRingReliable(it->second.collectInflight);
 }
 
+// More origins AND no worse chains takes the slot; equal RIBs leave it with the
+// first holder. Compared per-origin, not on the totals: both totals grow with
+// the origin count, so a totals-AND would let the broadest RIB — the one worth
+// replaying — lose to any narrower one.
+static bool betterReplaySource(const MyriadGpRib::ReplayQuality& q,
+                               const MyriadGpCollect* lap) {
+    uint32_t n = lap->getLap_max_routes();
+    if (q.origins <= n) return false;
+    if (n == 0) return true;
+    return (uint64_t) q.spofTotal * n <= (uint64_t) lap->getLap_max_spof() * q.origins
+        && q.costTotal / q.origins <= lap->getLap_max_cost() / n;
+}
+
 void MyriadGP::replayIfBest(MyriadGpCollect* lap, uint32_t ring) {
-    if (rib.knownOrigins() <= lap->getLap_max_routes()) return;
-    if (lap->getKind() != COLLECT_REPLAY || !recoveryReplayEnabled
-        || simTime() < collectWarmupDuration || memberCountOf(ring) == 0) {
-        lap->setLap_max_routes(rib.knownOrigins());
+    MyriadGpRib::ReplayQuality q = rib.replayQuality();
+    if (lap->getKind() != COLLECT_REPLAY) {
+        // Report the ring's best replay source; the REPLAY lap is seeded with
+        // the result, so this is what elects the replayer.
+        if (betterReplaySource(q, lap)) {
+            lap->setLap_max_routes(q.origins);
+            lap->setLap_max_spof(q.spofTotal);
+            lap->setLap_max_cost(q.costTotal);
+        }
         return;
     }
-    MLOG_INFO() << "replaying into ring='" << ring << "' (lap carries "
-                << lap->getLap_max_routes() << " < " << rib.knownOrigins() << ")\n";
+    // Only the member the lap named replays; matching all three identifies it.
+    if (lap->getReplay_claimed() || !recoveryReplayEnabled
+        || simTime() < collectWarmupDuration || memberCountOf(ring) == 0
+        || q.origins != lap->getLap_max_routes()
+        || q.spofTotal != lap->getLap_max_spof()
+        || q.costTotal != lap->getLap_max_cost())
+        return;
+    MLOG_INFO() << "replaying into ring='" << ring << "' ("
+                << q.origins << " origins, spof=" << q.spofTotal << ")\n";
     replayInto(ring);
-    lap->setLap_max_routes(rib.knownOrigins());
+    lap->setReplay_claimed(true);
 }
 
 void MyriadGP::onCollectBudgetExpired(uint32_t ring) {
@@ -420,6 +457,13 @@ void MyriadGP::onMessage(NodePkt_p pkt) {
     }
 }
 
+// REFRESH and ELECTION are the two electing kinds: both crown a king, reset
+// member watchdogs and run the contention rules. They differ only in whether the
+// closed lap re-announces the ring (REFRESH does, ELECTION does not).
+static bool electingKind(uint8_t k) {
+    return k == COLLECT_ELECTION || k == COLLECT_REFRESH;
+}
+
 bool MyriadGP::collectWins(bool incomingCrashed, nodeid_t incomingId, uint32_t ring) const {
     bool myCrashed = memberCountOf(ring) == 0;
     if (incomingCrashed != myCrashed) return myCrashed;   // live beats crashed
@@ -465,13 +509,18 @@ void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t sender) {
             EV << "]\n";
 
             // Lap closed, so the ring is whole and a replay reaches every
-            // member. Terminates: a lap reporting nothing new asks for nothing.
+            // member. Seeded with the max this lap saw, so exactly the member
+            // holding it replays.
             if (recoveryReplayEnabled && simTime() >= collectWarmupDuration
+                && collect->getKind() != COLLECT_REPLAY
                 && collect->getLap_max_routes() > rib.knownOrigins())
-                originateCollect(R, sender, COLLECT_REPLAY);
+                originateCollect(R, sender, COLLECT_REPLAY,
+                                 { collect->getLap_max_routes(),
+                                   collect->getLap_max_spof(),
+                                   collect->getLap_max_cost() });
 
-            // Only an election lap crowns a king and re-announces the ring.
-            if (collect->getKind() != COLLECT_ELECTION) {
+            // Only an electing lap crowns a king; of those only REFRESH announces.
+            if (!electingKind(collect->getKind())) {
                 MLOG_INFO() << (collect->getKind() == COLLECT_PROBE ? "probe" : "replay")
                             << " COLLECT complete ring='" << R << "' seq=" << seq << "\n";
                 // The lap doubles as a king probe: any king it passed cleared the
@@ -495,6 +544,15 @@ void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t sender) {
                 if (!refreshFloodsUpdate && routine && simTime() >= collectWarmupDuration)
                     { startRefresh(R); return; }
             }
+            // An ELECTION only takes the seat. Announcing is REFRESH's job, so a
+            // coup costs one COLLECT lap instead of a network-wide flood.
+            if (collect->getKind() == COLLECT_ELECTION
+                    && simTime() >= collectWarmupDuration) {
+                MLOG_INFO() << "election lap took ring='" << R
+                            << "' without announcing; refresh will\n";
+                startRefresh(R);
+                return;
+            }
             // Origin UPDATEs run during warmup too: only the king learns the ring
             // size from its own lap return, so members stay at memberCount==0
             // until an origin-UPDATE trailer reaches them.
@@ -515,13 +573,13 @@ void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t sender) {
     // Arm a watchdog the moment I'm a non-king member, however I learned
     // the ring. Only an ELECTION lap RESETS it.
     if (!m.isKing) {
-        if (collect->getKind() == COLLECT_ELECTION || !m.watchdogTimer)
+        if (electingKind(collect->getKind()) || !m.watchdogTimer)
             startWatchdog(R);
     }
 
     // Non-election laps are forwarded UNCONDITIONALLY (never suppressed by
     // contention) so they always reach the originator.
-    if (collect->getKind() != COLLECT_ELECTION) {
+    if (!electingKind(collect->getKind())) {
         if (m.isKing) collect->setOriginator_crashed(false);  // king alive: no coup
         insertAndForwardCollect(collect, R, sender);
         return;

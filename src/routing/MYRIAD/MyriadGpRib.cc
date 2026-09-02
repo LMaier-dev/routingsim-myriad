@@ -276,6 +276,20 @@ size_t MyriadGpRib::knownOrigins() const {
     return n;
 }
 
+MyriadGpRib::ReplayQuality MyriadGpRib::replayQuality() const {
+    ReplayQuality q;
+    for (auto& [origin, rs] : rings) {
+        if (!rs.hasPreferred) continue;
+        ++q.origins;
+        q.spofTotal += rs.preferred.spof_count;
+        // Saturating: a chain_cost can already be the max sentinel.
+        uint64_t c = rs.preferred.chain_cost;
+        q.costTotal = (c > std::numeric_limits<uint64_t>::max() - q.costTotal)
+                    ? std::numeric_limits<uint64_t>::max() : q.costTotal + c;
+    }
+    return q;
+}
+
 std::vector<MyriadGpRib::ReplayChain> MyriadGpRib::preferredChains() const {
     std::vector<ReplayChain> out;
     // The per-origin preferred plus every soleFront slot: replay must reach every

@@ -96,6 +96,16 @@ namespace routingsim {
             // knows the network.
             size_t knownOrigins() const;
 
+            // How good my RIB is as a replay source: breadth plus the totals
+            // over the per-origin preferred chains, so a lap can rank members
+            // that know equally much by how well they know it.
+            struct ReplayQuality {
+                uint32_t origins = 0;
+                uint32_t spofTotal = 0;
+                uint64_t costTotal = 0;
+            };
+            ReplayQuality replayQuality() const;
+
             void dumpTo(std::ostream& f, const std::string& tprefix, bool stats, int nodeId) const;
 
         private:

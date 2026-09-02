@@ -103,11 +103,10 @@ namespace routingsim {
             // Push my whole RIB into `ring` as seq==0 UPDATEs, each chain rebased
             // onto it, so a recovered member there gets its routes back.
             void replayInto(uint32_t ring);
-            // Every lap reports the most origins any member on it knows; only a
-            // COLLECT_REPLAY lap also carries the replay. Members improving on
-            // that running max send, so kingship plays no part: a king crowned
-            // mid-recovery can be missing entries itself. Self-limiting, since
-            // store() drops a seq==0 entry wherever the origin is known.
+            // Non-REPLAY laps raise lap_max_routes to the ring's best-informed
+            // member; the REPLAY lap is seeded with that figure, so only that
+            // one member replays and the rest defer. Kingship plays no part: a
+            // king crowned mid-recovery can be missing entries itself.
             void replayIfBest(MyriadGpCollect* lap, uint32_t ring);
             // COLLECT election key: live (memberCount>0) beats crashed, ties by id.
             // Deliberately NOT ranked by RIB richness: counts move during
@@ -120,10 +119,14 @@ namespace routingsim {
             void originateDegrade(uint32_t ring);
             void floodDegrade(uint32_t ring, uint32_t seq, uint32_t beacon, nodeid_t skip);
 
+            // `want` seeds the lap_max triple on a REPLAY lap: the figures
+            // designating the replayer. Default (origins==0) uses my own.
             void originateCollect(uint32_t ring, nodeid_t to,
-                                  MyriadGpCollectKind kind = COLLECT_ELECTION);
+                                  MyriadGpCollectKind kind = COLLECT_ELECTION,
+                                  MyriadGpRib::ReplayQuality want = {});
             // Fresh COLLECT for a ring I own (picks a ring-neighbor).
-            void reoriginateCollect(uint32_t ring, bool routine = false);
+            void reoriginateCollect(uint32_t ring, bool routine = false,
+                                    MyriadGpCollectKind kind = COLLECT_ELECTION);
             void startRefresh(uint32_t ring);   // king: periodic re-collect
             void startWatchdog(uint32_t ring);  // member: coup if the king goes silent
             // Observational periodic RIB snapshot (snapshotInterval)

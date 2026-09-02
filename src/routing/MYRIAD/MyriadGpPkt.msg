@@ -24,10 +24,13 @@ enum MyriadGpPDUType {
     MYRIADGP_UPDATE_BATCH = 4;
 }
 
-// What a COLLECT lap is for. Only ELECTION may crown a king and re-announce the
-// ring; the other two exist so churn never originates an UPDATE.
+// What a COLLECT lap is for. REFRESH and ELECTION both crown a king and run the
+// contention rules; only REFRESH re-announces the ring. The rest exist so churn
+// never originates an UPDATE.
 enum MyriadGpCollectKind {
-    // Formation, king refresh, watchdog coup. Contention rules apply.
+    // A dead king's seat being taken: watchdog coup, or a lap that closed
+    // finding no king. Elects, but does NOT announce — the new king's own
+    // refresh does that, which is what keeps origination refresh-paced.
     COLLECT_ELECTION = 0;
     // Liveness check after a ring-neighbor died, and the lap a rebooted node
     // sends to rejoin: forwarded unconditionally, carries no routing entries.
@@ -36,6 +39,9 @@ enum MyriadGpCollectKind {
     // Sent once a probe closed and reported a better-informed member: the only
     // kind that makes a member replay its RIB into the ring.
     COLLECT_REPLAY = 2;
+    // Formation and the king's periodic refresh: elects like ELECTION and is
+    // the only kind that re-announces the ring.
+    COLLECT_REFRESH = 3;
 }
 
 // directly from Kira (mirrors MyriadLsPkt.msg)
@@ -87,12 +93,17 @@ packet MyriadGpCollect extends MyriadGpNLRI {
     // Originator lacked state (memberCount==0): loses the king election to any
     // live member (formation tie-break by id).
     bool originator_crashed;
-    // Origins the originator knows, raised by any forwarder that knows more, so
-    // a closed lap reports the ring's best-informed member. On a REPLAY lap that
-    // member replays and saturates the field instead, which caps a lap at one
-    // replay and tells the originator on return that one was sent. Not part of
-    // the election.
+    // Best replay source seen on this lap: origin count first, then fewer total
+    // spofs, then lower total cost over the preferred chains. A forwarder must
+    // beat all three to take the slot, so it never trades breadth for quality. A
+    // REPLAY lap is seeded with the winning figures, so only that member
+    // replays. Not part of the election.
     uint32_t lap_max_routes;
+    uint32_t lap_max_spof;
+    uint64_t lap_max_cost;
+    // Set by the one member that replayed on this REPLAY lap; makes the rest
+    // defer, and tells the originator on return that a replay was sent.
+    bool replay_claimed;
     // See MyriadGpCollectKind.
     uint8_t kind = COLLECT_ELECTION;
 }
