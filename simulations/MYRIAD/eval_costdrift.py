@@ -21,8 +21,8 @@ from eval_harness import (BIN, SIM_ROOT, MYRIAD_DIR, announce, apply_repeat_args
 HERE = str(MYRIAD_DIR)
 OUT = os.path.join(HERE, "eval", "costdrift")
 
-# Two refresh cycles: the second heals the first round's size transients.
-SIMTIME = simtime(cycles=2)
+# One refresh cycle: GP converges to the ideal cost within the first flood.
+SIMTIME = simtime(cycles=1)
 
 
 def parse_snapshots(path):
@@ -105,12 +105,15 @@ def main(args=None):
             print(f"  ✓ GP done ({len(gp)} entries)")
             if want_nospof:
                 print("  → GP no-spof (rankUseSpof=false) …", flush=True)
-        # Pure-cost ranking: should land on the oracle cost, so its scatter cloud
-        # sits on y=x and isolates the spof premium from any real GP suboptimality.
+        # Pure-cost ranking at production margin 0.2: with the selectPreferred
+        # spof-first bug fixed, cost-only ranking lands on the oracle optimum, so
+        # its scatter cloud sits on y=x and isolates the spof premium from any real
+        # GP suboptimality.
         nospof = _run(gp_ini, "ribDumpFile",
                       os.path.join(OUT, "drift_gp_nospof.txt"),
                       os.path.join(OUT, "res_gp_nospof"), rep,
-                      extra=["--**.rankUseSpof=false"]) if want_nospof else {}
+                      extra=["--**.rankUseSpof=false",
+                             "--**.ecmpCostMargin=0.2"]) if want_nospof else {}
         if rep == 0 and want_nospof:
             print(f"  ✓ GP no-spof done ({len(nospof)} entries)")
 

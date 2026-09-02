@@ -76,14 +76,20 @@ for cmd in "${RUNS[@]}"; do
 
     run="$cmd"
     if [[ "$cmd" == SPLIT\ * ]]; then
-        # SPLIT <dynamics run>: run GP and LS as parallel processes into the same
-        # (topo-scoped) output dir, then --post re-reads both halves and draws the
-        # combined plots. Roughly halves wall-clock for a two-protocol dynamics
-        # run. The pre-run oracle gate above is already stamped, so both skip it.
-        # ponytail: `wait` returns the last job's status, so a mid-run GP failure
+        # SPLIT <dynamics run>: one parallel process per config the run's flags
+        # select (gp, gp_nospof, ls, …) into the same topo-scoped output dir,
+        # then --post re-reads them all and draws the combined plots. Asking the
+        # eval for the list keeps this in step with --nospof/--noreplay instead
+        # of hardcoding the families. The pre-run oracle gate above is already
+        # stamped, so every child skips it.
+        # ponytail: `wait` returns the last job's status, so a mid-run failure
         # still surfaces in the log and in --post's "run this config first" error.
         base="${cmd#SPLIT }"
-        run="( $base --protos gp & $base --protos ls & wait ) && $base --post"
+        mapfile -t cfgs < <(cd "$WORKDIR" && $base --list-configs 2>/dev/null)
+        (( ${#cfgs[@]} )) || cfgs=(gp ls)   # older eval, or the query failed
+        run=""
+        for c in "${cfgs[@]}"; do run+="$base --protos $c & "; done
+        run="( $run wait ) && $base --post"
     elif [[ "${PIN:-0}" == 1 ]]; then
         run="taskset -c $(( i % NCPU )) $cmd"
     fi

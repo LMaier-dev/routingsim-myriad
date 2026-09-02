@@ -421,9 +421,12 @@ def main(args=None):
                             "gp_noreplay needs its default (true) as its sole "
                             "propagation path without replay")
         p.add_argument("--protos", default=None,
-                       help="comma list of protocol families to run: gp, ls "
-                            "(default both). Split GP and LS across parallel panes, "
-                            "then --post to draw the combined plots")
+                       help="comma list of exact config names to run (see "
+                            "--list-configs); default all. Split across parallel "
+                            "panes, then --post to draw the combined plots")
+        p.add_argument("--list-configs", action="store_true",
+                       help="print the config names the other flags select, one "
+                            "per line, and exit (run_evals.sh SPLIT uses this)")
         p.add_argument("--post", action="store_true",
                        help="don't simulate; re-parse the result dirs prior runs "
                             "left and (re)draw the combined tables + plots")
@@ -463,11 +466,21 @@ def main(args=None):
     # the prior runs left under the (identical) topo-scoped OUT.
     run_sims = not getattr(args, "post", False)
     if getattr(args, "protos", None) and run_sims:
-        fam = {p.strip() for p in args.protos.split(",")}
-        for k in [k for k in CONFIGS if k.split("_")[0] not in fam]:
+        # Exact config names, so a split can put every variant in its own pane.
+        # NOT prefix/family matching: "gp" is itself a config name, so "gp" also
+        # selecting gp_nospof would make two panes write one result dir.
+        want = {p.strip() for p in args.protos.split(",")}
+        if not want <= set(CONFIGS):
+            sys.exit(f"--protos {args.protos}: unknown config "
+                     f"{sorted(want - set(CONFIGS))} — these flags select "
+                     f"{sorted(CONFIGS)} (see --list-configs)")
+        for k in [k for k in CONFIGS if k not in want]:
             CONFIGS.pop(k)
-        if not CONFIGS:
-            sys.exit(f"--protos {args.protos}: no matching config (gp, ls)")
+
+    # Names the flags above resolved to, for run_evals.sh's SPLIT fan-out.
+    if getattr(args, "list_configs", False):
+        print("\n".join(CONFIGS))
+        return
 
     fractions = ([float(x) for x in args.fractions.split(",")]
                  if getattr(args, "fractions", None) else DEFAULT_FRACTIONS)

@@ -70,8 +70,12 @@ def main():
                             help="GP's routine refresh only re-verifies ring "
                                  "state, no reflood (gp config only)")
             sp.add_argument("--protos", default=None,
-                            help="protocol families to run: gp, ls (default both); "
-                                 "split across panes, then --post to combine")
+                            help="exact config names to run (see --list-configs), "
+                                 "default all; split across panes, then --post "
+                                 "to combine")
+            sp.add_argument("--list-configs", action="store_true",
+                            help="print the config names the other flags select "
+                                 "and exit (run_evals.sh SPLIT uses this)")
             sp.add_argument("--post", action="store_true",
                             help="re-parse prior runs' result dirs and draw the "
                                  "combined plots without simulating")
@@ -100,9 +104,11 @@ def main():
         _oracle_gate(args)
         return
 
-    # Post mode re-parses on-disk results and never simulates, so the oracle gate
-    # (which runs a sim) would be pure waste.
-    if args.cmd != "scaling" and not (args.cmd == "dynamics" and getattr(args, "post", False)):
+    # Post mode re-parses on-disk results and --list-configs only prints names;
+    # neither simulates, so the oracle gate (which does) would be pure waste.
+    nosim = args.cmd == "dynamics" and (getattr(args, "post", False)
+                                        or getattr(args, "list_configs", False))
+    if args.cmd != "scaling" and not nosim:
         _oracle_gate(args)
 
     dispatch = {
