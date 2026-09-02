@@ -166,7 +166,7 @@ void MyriadGpRib::selectPreferred(RibRing& rs) {
         if (!best) { best = &e; return; }
         bool de = chainDegraded(e.chain), db = chainDegraded(best->chain);
         if (de != db) { if (!de) best = &e; return; }
-        if (e.spof_count != best->spof_count) { if (e.spof_count < best->spof_count) best = &e; return; }
+        if (rankUseSpof && e.spof_count != best->spof_count) { if (e.spof_count < best->spof_count) best = &e; return; }
         if (e.chain_cost != best->chain_cost) { if (e.chain_cost < best->chain_cost) best = &e; return; }
         if (e.chain < best->chain) best = &e;
     };
