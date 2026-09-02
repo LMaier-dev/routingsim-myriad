@@ -39,6 +39,13 @@ def main():
     for name in ("convergence", "costdrift", "dynamics"):
         sp = sub.add_parser(name)
         add_topo_args(sp)
+        if name == "costdrift":
+            sp.add_argument("--nospof", action="store_true",
+                            help="also run GP with rankUseSpof=false, whose "
+                                 "pure-cost chains should land on the oracle")
+            sp.add_argument("--no-refresh-flood", action="store_true",
+                            help="GP's routine refresh only re-verifies ring "
+                                 "state, no reflood")
         if name == "dynamics":
             sp.add_argument("--only", choices=["churn", "link", "node"])
             sp.add_argument("--fractions", default=None,
