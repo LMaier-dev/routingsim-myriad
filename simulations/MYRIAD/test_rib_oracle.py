@@ -28,16 +28,22 @@ from eval_harness import (BIN, SIM_ROOT, add_topo_args, apply_repeat_args,
                           write_proto_ini)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-GP_INI = os.path.join(HERE, "myriadgp.ini")
-LS_INI = os.path.join(HERE, "myriadls.ini")
-COMMON_INI = os.path.join(HERE, "eval_common.ini")
 OUT = os.path.join(HERE, "eval", "oracle")
 
-# name -> topology to regenerate ring labels from, or None if the ini carries
-# inline labels.
+# The 7-node fixture's labels, which have no generator: its rings are the
+# hand-drawn ones from the paper figure, not a basis of the cycle space.
+_PAPER_LABELS = [f"**.Node{n}.*.ringLabel = \"{r}\"" for n, r in enumerate(
+    ["1000000", "1000000,999999", "999999,999998", "1000000,999999",
+     "999999", "999998", "999999,999998"])]
+
+# Pinned regression fixtures: name -> (topology, ring labels). A label list is
+# used as-is; None means generate the min-basis labels from the topology.
+# Built into their own inis rather than run out of myriad{gp,ls}.ini -c NAME:
+# OMNeT++ resolves every `include` in the file, including ones under configs you
+# did not select, so an unrelated section's missing ringlabels ini aborts the run.
 CONFIGS = {
-    "Grid10": "grid_10,10.txt",
-    "PaperTopology": None,
+    "Grid10": (SIM_ROOT / "topologies" / "grid_10,10.txt", None),
+    "PaperTopology": (SIM_ROOT / "MYRIAD" / "myriad_paperexample.txt", _PAPER_LABELS),
 }
 
 # One refresh cycle, well above convergence time so generations never overlap
@@ -138,32 +144,15 @@ def _run_oracle_ini(ini, dump, label):
     return _parse_oracle(dump)
 
 
-def run_gp(config, dump):
-    """GP with pure-cost ranking; returns {(node, 'origin=r'): (cost, spof)}."""
-    if os.path.exists(dump):
-        os.remove(dump)
-    print(f"  -> GP {config} …", flush=True)
-    run_sim([BIN, "-u", "Cmdenv", GP_INI, COMMON_INI, "-c", config, *CONV,
-             "--**.rankUseSpof=false",
-             "--**.ecmpCostMargin=0",   # oracle is exact least-cost
-             f'--**.ribDumpFile="{dump}"',
-             "--result-dir", os.path.join(OUT, f"gp_{config}")])
-    if not os.path.exists(dump):
-        sys.exit(f"FAIL: GP {config} produced no RIB dump")
-    return _parse_gp(dump)
-
-
-def run_oracle(config, dump):
-    """MyriadLS Dijkstra oracle; returns {(node, 'origin=r'): cost}."""
-    if os.path.exists(dump):
-        os.remove(dump)
-    print(f"  -> LS oracle {config} …", flush=True)
-    run_sim([BIN, "-u", "Cmdenv", LS_INI, COMMON_INI, "-c", config, *CONV,
-             f'--**.oracleDumpFile="{dump}"',
-             "--result-dir", os.path.join(OUT, f"ls_{config}")])
-    if not os.path.exists(dump):
-        sys.exit(f"FAIL: LS {config} produced no oracle dump")
-    return _parse_oracle(dump)
+def _labels_for(label, topo, labels):
+    """Path to the ring labels for a fixture: generated from the topology, or
+    written out from an inline list."""
+    if labels is None:
+        return ensure_ring_labels(topo, "min")
+    out = os.path.join(OUT, f"{label}.ringlabels.ini")
+    with open(out, "w") as f:
+        f.write("\n".join(labels) + "\n")
+    return out
 
 
 def main(args=None):
@@ -179,22 +168,23 @@ def main(args=None):
     if not os.path.exists(BIN):
         sys.exit(f"RoutingSim binary not found at {BIN} — build it first.")
 
-    for topo in CONFIGS.values():
-        if topo is None:
-            continue
-        ensure_ring_labels(SIM_ROOT / "topologies" / topo, "min")
-
     all_ok = True
-    for config, _ in CONFIGS.items():
+    for config, (topo, labels) in CONFIGS.items():
         print(f"\n=== {config} ===")
-        gp = run_gp(config, os.path.join(OUT, f"gp_{config}.txt"))
-        oracle = run_oracle(config, os.path.join(OUT, f"oracle_{config}.txt"))
+        lbl = _labels_for(config, topo, labels)
+        gp_ini = write_proto_ini(os.path.join(OUT, f"gp_{config}.ini"), "gp",
+                                 topo, lbl, extra_lines=_REFRESH_LINES)
+        ls_ini = write_proto_ini(os.path.join(OUT, f"ls_{config}.ini"), "ls",
+                                 topo, lbl, extra_lines=_REFRESH_LINES)
+        gp = _run_gp_ini(gp_ini, os.path.join(OUT, f"gp_{config}.txt"), config)
+        oracle = _run_oracle_ini(ls_ini, os.path.join(OUT, f"oracle_{config}.txt"),
+                                 config)
         if not _compare(gp, oracle):
             all_ok = False
 
     # Also test the caller's topology on the SAME basis the eval will use, so the
-    # gate validates the exact ring labeling the eval runs on (the named fixtures
-    # above are pinned to the min-basis labels baked into myriadgp.ini).
+    # gate validates the exact ring labeling the eval runs on (the fixtures above
+    # are pinned to their own min-basis labels).
     topo = Path(args.topo)
     label = topo.stem
     print(f"\n=== {label} (custom, basis={args.basis}) ===")

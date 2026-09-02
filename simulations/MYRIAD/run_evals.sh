@@ -49,10 +49,15 @@ mapfile -t RUNS < <(grep -vE '^\s*(#|$)' "$RUNFILE")
 # it stamps the binary and each eval below then skips it. GATE=0 to skip entirely.
 if [[ "${GATE:-1}" == 1 ]]; then
     echo "running oracle gate once (serial) …"
-    ( cd "$WORKDIR" && python3 "$MYRIAD_DIR/eval_entrypoint.py" gate ) \
-        2>&1 | tee "$LOGDIR/gate.log" | tail -3
-    # tee hides the exit status; PIPESTATUS[0] is the gate's.
-    (( ${PIPESTATUS[0]} == 0 )) || { echo "oracle gate FAILED — see $LOGDIR/gate.log" >&2; exit 1; }
+    # Run in an if-condition, not bare: under pipefail, set -e would otherwise
+    # abort on a failing gate before the message below runs, leaving the log as
+    # the only clue. tee hides the gate's own status, so read PIPESTATUS[0] --
+    # and read it in the same command, since any later one overwrites it.
+    if ( cd "$WORKDIR" && python3 "$MYRIAD_DIR/eval_entrypoint.py" gate ) \
+        2>&1 | tee "$LOGDIR/gate.log" | tail -3; rc=${PIPESTATUS[0]}; (( rc != 0 )); then
+        echo "oracle gate FAILED (exit $rc) — see $LOGDIR/gate.log" >&2
+        exit 1
+    fi
 fi
 
 # A pane runs a generated script rather than an interpolated tmux command
