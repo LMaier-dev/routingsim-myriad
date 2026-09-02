@@ -14,7 +14,8 @@ namespace {
 using namespace msgsize;
 
 int64_t gpCollectBytes(const MyriadGpCollect* p) {
-    return MYRIADGP_HDR + U32 + U32 + U32 + U64 + 3 * BOOL // member_count + lap max triple + crashed + claimed + kind
+    return MYRIADGP_HDR + U32 + U32 + U32 + U64 + NODEID + 3 * BOOL
+                                                           // member_count + lap max quad + crashed + claimed + kind
          + (int64_t) p->getRrArraySize() * RR
          + (int64_t) p->getTransitionsArraySize() * TRANSITION;
 }
@@ -136,7 +137,7 @@ void MyriadGP::onTwoWayReached(GpNeighbor& nbr) {
 }
 
 void MyriadGP::originateCollect(uint32_t ring, nodeid_t to, MyriadGpCollectKind kind,
-                                MyriadGpRib::ReplayQuality want) {
+                                nodeid_t replayer) {
     RingMembership& m = memberships[ring];
     // Lap counter only — the routing generation opens in originateUpdate, so a
     // PROBE or REPLAY lap never ages out chains still propagating.
@@ -152,12 +153,13 @@ void MyriadGP::originateCollect(uint32_t ring, nodeid_t to, MyriadGpCollectKind 
 
     // Stateless (fresh) originator loses the king election to any live member.
     pkt->setOriginator_crashed(m.memberCount == 0);
-    // A REPLAY lap carries the winner's figures verbatim so that member
-    // recognises itself; any other lap starts from my own.
-    MyriadGpRib::ReplayQuality q = want.origins ? want : rib.replayQuality();
+    // A REPLAY lap only carries the addressee; the figures are the election's
+    // business and start from mine on every other kind.
+    MyriadGpRib::ReplayQuality q = rib.replayQuality();
     pkt->setLap_max_routes(q.origins);
     pkt->setLap_max_spof(q.spofTotal);
     pkt->setLap_max_cost(q.costTotal);
+    pkt->setLap_max_owner(replayer == undefined_node ? myId : replayer);
     pkt->setKind(kind);
 
     // Insert my (subnet, myId) pairs.
@@ -355,15 +357,14 @@ void MyriadGP::replayIfBest(MyriadGpCollect* lap, uint32_t ring) {
             lap->setLap_max_routes(q.origins);
             lap->setLap_max_spof(q.spofTotal);
             lap->setLap_max_cost(q.costTotal);
+            lap->setLap_max_owner(myId);
         }
         return;
     }
-    // Only the member the lap named replays; matching all three identifies it.
-    if (lap->getReplay_claimed() || !recoveryReplayEnabled
-        || simTime() < collectWarmupDuration || memberCountOf(ring) == 0
-        || q.origins != lap->getLap_max_routes()
-        || q.spofTotal != lap->getLap_max_spof()
-        || q.costTotal != lap->getLap_max_cost())
+    // Addressed by id, so my RIB changing since I was picked doesn't matter.
+    if (lap->getReplay_claimed() || lap->getLap_max_owner() != myId
+        || !recoveryReplayEnabled || simTime() < collectWarmupDuration
+        || memberCountOf(ring) == 0)
         return;
     MLOG_INFO() << "replaying into ring='" << ring << "' ("
                 << q.origins << " origins, spof=" << q.spofTotal << ")\n";
@@ -515,9 +516,7 @@ void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t sender) {
                 && collect->getKind() != COLLECT_REPLAY
                 && collect->getLap_max_routes() > rib.knownOrigins())
                 originateCollect(R, sender, COLLECT_REPLAY,
-                                 { collect->getLap_max_routes(),
-                                   collect->getLap_max_spof(),
-                                   collect->getLap_max_cost() });
+                                 collect->getLap_max_owner());
 
             // Only an electing lap crowns a king; of those only REFRESH announces.
             if (!electingKind(collect->getKind())) {

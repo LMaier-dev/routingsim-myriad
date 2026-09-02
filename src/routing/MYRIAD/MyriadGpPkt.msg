@@ -95,12 +95,13 @@ packet MyriadGpCollect extends MyriadGpNLRI {
     bool originator_crashed;
     // Best replay source seen on this lap: origin count first, then fewer total
     // spofs, then lower total cost over the preferred chains. A forwarder must
-    // beat all three to take the slot, so it never trades breadth for quality. A
-    // REPLAY lap is seeded with the winning figures, so only that member
-    // replays. Not part of the election.
+    // beat all three to take the slot, so it never trades breadth for quality.
+    // Not part of the election.
     uint32_t lap_max_routes;
     uint32_t lap_max_spof;
     uint64_t lap_max_cost;
+    // Who holds the figures above.
+    nodeid_t lap_max_owner;
     // Set by the one member that replayed on this REPLAY lap; makes the rest
     // defer, and tells the originator on return that a replay was sent.
     bool replay_claimed;

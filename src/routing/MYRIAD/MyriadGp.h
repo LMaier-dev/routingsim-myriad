@@ -119,11 +119,11 @@ namespace routingsim {
             void originateDegrade(uint32_t ring);
             void floodDegrade(uint32_t ring, uint32_t seq, uint32_t beacon, nodeid_t skip);
 
-            // `want` seeds the lap_max triple on a REPLAY lap: the figures
-            // designating the replayer. Default (origins==0) uses my own.
+            // `replayer` addresses a REPLAY lap at the member a prior lap
+            // elected; default addresses it at me.
             void originateCollect(uint32_t ring, nodeid_t to,
                                   MyriadGpCollectKind kind = COLLECT_ELECTION,
-                                  MyriadGpRib::ReplayQuality want = {});
+                                  nodeid_t replayer = undefined_node);
             // Fresh COLLECT for a ring I own (picks a ring-neighbor).
             void reoriginateCollect(uint32_t ring, bool routine = false,
                                     MyriadGpCollectKind kind = COLLECT_ELECTION);
