@@ -55,6 +55,20 @@ if [[ "${GATE:-1}" == 1 ]]; then
     (( ${PIPESTATUS[0]} == 0 )) || { echo "oracle gate FAILED — see $LOGDIR/gate.log" >&2; exit 1; }
 fi
 
+# A pane runs a generated script rather than an interpolated tmux command
+# string: quoting survives one fewer shell that way, so a run line with
+# quotes/globs reaches python exactly as written in the runfile. `exec bash`
+# keeps the pane alive after the run so its tail is readable.
+#   mkbody <script-path> <log> <banner> <command>
+mkbody() {
+    { printf '#!/usr/bin/env bash\nexport PATH=%q\ncd %q || exit 1\n' "$PATH" "$WORKDIR"
+      printf 'printf "$ %%s\\n" %q | tee %q\n' "$3" "$2"
+      printf '{ %s; } 2>&1 | tee -a %q\n' "$4" "$2"
+      printf 'echo; echo "[exit ${PIPESTATUS[0]}] log: %s"\nexec bash\n' "$2"
+    } > "$1"
+    chmod +x "$1"
+}
+
 i=0
 for cmd in "${RUNS[@]}"; do
     # Window name from the distinguishing options, so tabs are tellable apart:
@@ -74,42 +88,53 @@ for cmd in "${RUNS[@]}"; do
     name="$(printf '%02d' $i)_${slug}"
     log="$LOGDIR/$name.log"
 
-    run="$cmd"
+    # SPLIT <dynamics run>: one pane per config the run's flags select (gp,
+    # gp_nospof, ls, …), all writing the same topo-scoped output dir, plus a
+    # final pane that waits for them and runs --post to draw the combined
+    # plots. Asking the eval for the list keeps this in step with
+    # --nospof/--noreplay instead of hardcoding the families. The pre-run
+    # oracle gate above is already stamped, so every child skips it.
+    cfgs=()
     if [[ "$cmd" == SPLIT\ * ]]; then
-        # SPLIT <dynamics run>: one parallel process per config the run's flags
-        # select (gp, gp_nospof, ls, …) into the same topo-scoped output dir,
-        # then --post re-reads them all and draws the combined plots. Asking the
-        # eval for the list keeps this in step with --nospof/--noreplay instead
-        # of hardcoding the families. The pre-run oracle gate above is already
-        # stamped, so every child skips it.
-        # ponytail: `wait` returns the last job's status, so a mid-run failure
-        # still surfaces in the log and in --post's "run this config first" error.
         base="${cmd#SPLIT }"
         mapfile -t cfgs < <(cd "$WORKDIR" && $base --list-configs 2>/dev/null)
         (( ${#cfgs[@]} )) || cfgs=(gp ls)   # older eval, or the query failed
-        run=""
-        for c in "${cfgs[@]}"; do run+="$base --protos $c & "; done
-        run="( $run wait ) && $base --post"
-    elif [[ "${PIN:-0}" == 1 ]]; then
-        run="taskset -c $(( i % NCPU )) $cmd"
     fi
-    # The run goes into a temp script rather than being interpolated into the
-    # tmux command string: quoting survives one fewer shell that way, and a run
-    # line with quotes/globs reaches python exactly as written in the runfile.
-    # `exec bash` keeps the pane alive after the run so its tail is readable.
-    body_sh="$LOGDIR/.$name.sh"
-    { printf '#!/usr/bin/env bash\nexport PATH=%q\ncd %q || exit 1\n' "$PATH" "$WORKDIR"
-      printf 'printf "$ %%s\\n" %q | tee %q\n' "$cmd" "$log"
-      printf '{ %s; } 2>&1 | tee -a %q\n' "$run" "$log"
-      printf 'echo; echo "[exit ${PIPESTATUS[0]}] log: %s"\nexec bash\n' "$log"
-    } > "$body_sh"
-    chmod +x "$body_sh"
-    body="$body_sh"
+
+    if (( ${#cfgs[@]} )); then
+        # Panes are separate processes, so `wait` can't join them: each config
+        # pane drops a file on exit and the post pane counts them. Dropped
+        # regardless of exit status — --post reports a config's missing results
+        # far better than a hung pane does.
+        done_dir="$LOGDIR/.$name.done"
+        rm -rf "$done_dir"; mkdir -p "$done_dir"
+        for c in "${cfgs[@]}"; do
+            mkbody "$LOGDIR/.$name.$c.sh" "$LOGDIR/$name.$c.log" \
+                   "$base --protos $c" \
+                   "$base --protos $c; rc=\$?; : > $done_dir/$c; (exit \$rc)"
+        done
+        mkbody "$LOGDIR/.$name.post.sh" "$log" "$base --post" \
+               "while (( \$(ls $done_dir | wc -l) < ${#cfgs[@]} )); do sleep 5; done; $base --post"
+        body="$LOGDIR/.$name.${cfgs[0]}.sh"
+    else
+        run="$cmd"
+        [[ "${PIN:-0}" == 1 ]] && run="taskset -c $(( i % NCPU )) $cmd"
+        body="$LOGDIR/.$name.sh"
+        mkbody "$body" "$log" "$cmd" "$run"
+    fi
 
     if (( i == 0 )); then
         tmux new-session -d -s "$SESSION" -n "$name" "$body"
     else
         tmux new-window -t "$SESSION" -n "$name" "$body"
+    fi
+    if (( ${#cfgs[@]} )); then
+        for c in "${cfgs[@]:1}"; do
+            tmux split-window -t "$SESSION:$name" "$LOGDIR/.$name.$c.sh"
+            tmux select-layout -t "$SESSION:$name" tiled >/dev/null
+        done
+        tmux split-window -t "$SESSION:$name" "$LOGDIR/.$name.post.sh"
+        tmux select-layout -t "$SESSION:$name" tiled >/dev/null
     fi
     i=$((i + 1))   # not ((i++)): that returns 1 when i was 0, which set -e traps
 done
