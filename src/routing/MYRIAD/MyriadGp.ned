@@ -41,6 +41,12 @@ simple myriadgp extends routingsim.foundation.Protocol
         // false makes the RIB least-cost, matching the Dijkstra algo
         bool rankUseSpof = default(true);
 
+        // Held transitions that ADD a spof flush at holdInterval * this, so the
+        // spof-free wave settles the RIB first and the spof-incurring one — which
+        // rankUseSpof would outrank anyway — dies on arrival instead of
+        // propagating a full wave. 1 = off.
+        double spofHoldMultiplier = default(5.0);
+
         // On a broken ring, flood a DEGRADE so every node demotes chains that
         // transit it below any non-degraded alternative until it recovers. Off =
         // rely on refresh/purge alone (broken paths linger until reconvergence).

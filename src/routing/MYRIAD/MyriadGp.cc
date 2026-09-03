@@ -71,6 +71,7 @@ void MyriadGP::onInitialize() {
     carryRr = par("carryRr");
     maxBatchBytes = par("maxBatchBytes");
     holdInterval = par("holdInterval");
+    spofHoldMultiplier = par("spofHoldMultiplier");
     snapshotInterval = par("snapshotInterval");
     snapshotStats = par("snapshotFormat").stdstringValue() == "stats";
     collectWarmupDuration = par("collectWarmupDuration");
@@ -1008,14 +1009,19 @@ void MyriadGP::forwardChainInterRing(uint32_t curRing, uint32_t seq, uint32_t sp
 
         if (holdInterval > SIMTIME_ZERO) {
             // Queue for the next flush; RIB dedup + handled marks prevent double-queue.
-            pendingTransitions[{R2, primary}].push_back(
+            // Pot 1 (this hop adds a spof) waits longer, so the spof-free wave
+            // settles the RIB first and this one dies on arrival. See the header.
+            int pot = doubleTransition ? 0 : 1;
+            pendingTransitions[pot][{R2, primary}].push_back(
                 PendingTransition{R2, primary, fallback, seq, fwdSpof, fwdChain, fwdCost, rr});
-            if (!holdTimer)
-                holdTimer = addOneShotTimer(holdInterval, [this](short) {
-                    holdTimer = nullptr;
-                    flushPendingTransitions();
-                    return false;
-                });
+            if (!holdTimer[pot])
+                holdTimer[pot] = addOneShotTimer(
+                    pot ? holdInterval * spofHoldMultiplier : holdInterval,
+                    [this, pot](short) {
+                        holdTimer[pot] = nullptr;
+                        flushPendingTransitions(pot);
+                        return false;
+                    });
             MLOG_N_DEBUG(primary) << "transition HELD into ring='" << R2
                 << "' chain=" << formatChain(fwdChain) << " spof=" << fwdSpof << "\n";
         } else {
@@ -1039,9 +1045,9 @@ void MyriadGP::forwardChainInterRing(uint32_t curRing, uint32_t seq, uint32_t sp
     }
 }
 
-void MyriadGP::flushPendingTransitions() {
-    auto buckets = std::move(pendingTransitions);
-    pendingTransitions.clear();
+void MyriadGP::flushPendingTransitions(int pot) {
+    auto buckets = std::move(pendingTransitions[pot]);
+    pendingTransitions[pot].clear();
 
     for (auto& [key, chains] : buckets) {
         uint32_t R2 = key.first;
@@ -1299,8 +1305,10 @@ void MyriadGP::reset() {
     }
     memberships.clear();
     rib.clear();
-    pendingTransitions.clear();
-    if (holdTimer) { cancelAndDelete(holdTimer); holdTimer = nullptr; }
+    for (int p = 0; p < 2; ++p) {
+        pendingTransitions[p].clear();
+        if (holdTimer[p]) { cancelAndDelete(holdTimer[p]); holdTimer[p] = nullptr; }
+    }
     if (snapshotTimer) { cancelAndDelete(snapshotTimer); snapshotTimer = nullptr; }
     cancelHelloTimer();
 

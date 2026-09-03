@@ -172,7 +172,7 @@ namespace routingsim {
                                   const std::vector<MyriadGpRr>& rr);
             // Emit the held transitions as one batch per (R2, primary) bucket,
             // each lapping R2 under a single circular-ACK.
-            void flushPendingTransitions();
+            void flushPendingTransitions(int pot);
             void cancelCollect(uint32_t ring);
             void onCollectBudgetExpired(uint32_t ring);
             void onUpdateBudgetExpired(uint32_t ring, std::vector<uint32_t> chain);
@@ -212,9 +212,11 @@ namespace routingsim {
             simtime_t collectWarmupDuration; // delay UPDATE origination until COLLECTs settle
             simtime_t collectWarmupInterval; // how often to re-run COLLECTs during warmup
             bool rebooted = false;
-            // Held transitions bucketed by (target ring, next-hop primary).
-            std::map<std::pair<uint32_t, nodeid_t>, std::vector<PendingTransition>> pendingTransitions;
-            TimerMsg* holdTimer = nullptr;   // per-node; armed on the first held chain
+            // Held transitions bucketed by (target ring, next-hop primary). Two
+            // pots: [0] spof-free transitions, [1] spof-incurring ones
+            std::map<std::pair<uint32_t, nodeid_t>, std::vector<PendingTransition>> pendingTransitions[2];
+            TimerMsg* holdTimer[2] = {nullptr, nullptr};  // armed on the pot's first held chain
+            double spofHoldMultiplier = 2.0;  // 1 = both pots flush together (off)
             // Batch-size scalars for finish(); mean = entries / batchesCreated.
             unsigned long batchEntriesTotal = 0;
             unsigned long batchMaxEntries = 0;
