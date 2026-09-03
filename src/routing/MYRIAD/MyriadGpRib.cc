@@ -160,6 +160,22 @@ void MyriadGpRib::updateSoleFront(RibRing& rs, const RibEntry& cand) {
         rs.soleFront[cand.chain.front()] = cand;
 }
 
+bool MyriadGpRib::ringAlreadyHas(uint32_t origin, uint32_t frontRing,
+                                 const RibEntry& cand) const {
+    auto ri = rings.find(origin);
+    if (ri == rings.end()) return false;
+    // reuse sole front guard (property best current SN generation for the target ring so far) 
+    // to suppress a candidate that would teach nothing new.
+    auto si = ri->second.soleFront.find(frontRing);
+    if (si == ri->second.soleFront.end()) return false;   // ring never quoted it
+    const RibEntry& have = si->second;
+    // A newer generation must go through: the old quote may be about to expire,
+    // and seq is what drives make-before-break.
+    if (cand.seq_no > have.seq_no) return false;
+    // Suppress only what the ring would reject outright. ECMP is admitted.
+    return !strictlyBetter(cand, have) && !coBest(cand, have);
+}
+
 void MyriadGpRib::selectPreferred(RibRing& rs) {
     // Rank BOTH frames together by cost (make-before-break): while the current
     // generation is still converging, last generation's completed chains are

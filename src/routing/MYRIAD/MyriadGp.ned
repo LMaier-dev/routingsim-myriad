@@ -56,6 +56,10 @@ simple myriadgp extends routingsim.foundation.Protocol
         // aren't closing, so the send only burns the retransmit budget.
         bool skipDegradedTransitions = default(true);
 
+        // Don't transition a chain into a ring that already quoted an equal-or-
+        // better route to that origin.
+        bool suppressRedundantTransitions = default(true);
+
         // Eval only: Disable RR
         bool carryRr = default(true);
 

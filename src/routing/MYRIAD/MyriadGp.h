@@ -206,6 +206,8 @@ namespace routingsim {
             bool degradeEnabled = true;
             // Skip inter-ring transitions into a degraded ring; see MyriadGp.ned
             bool skipDegradedTransitions = true;
+            // Skip inter-ring transitions a ring would reject; see MyriadGp.ned
+            bool suppressRedundantTransitions = true;
             // RibEntry never carries rr. (For eval)
             bool carryRr = true;
             bool recoveryReplayEnabled = true;

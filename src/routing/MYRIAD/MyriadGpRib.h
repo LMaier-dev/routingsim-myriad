@@ -75,6 +75,10 @@ namespace routingsim {
                               uint64_t fullCost, uint32_t seq, uint32_t spof,
                               const std::vector<MyriadGpRr>* originRrTrailer);
 
+            // Cancel if injecting `cand` into `frontRing` would teach it nothing
+            bool ringAlreadyHas(uint32_t origin, uint32_t frontRing,
+                                const RibEntry& cand) const;
+
             // A ring's lap broke: open or re-beacon its degrade. Returns (seq, beacon)
             // to put on the wire.
             std::pair<uint32_t, uint32_t> markDegraded(uint32_t ring);

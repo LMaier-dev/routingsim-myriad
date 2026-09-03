@@ -66,6 +66,7 @@ void MyriadGP::onInitialize() {
                   par("ecmpCostMargin"), par("ecmpDiverseEviction"));
     degradeEnabled = par("degradeEnabled");
     skipDegradedTransitions = par("skipDegradedTransitions");
+    suppressRedundantTransitions = par("suppressRedundantTransitions");
     recoveryReplayEnabled = par("recoveryReplayEnabled");
     refreshFloodsUpdate = par("refreshFloodsUpdate");
     carryRr = par("carryRr");
@@ -1007,6 +1008,25 @@ void MyriadGP::forwardChainInterRing(uint32_t curRing, uint32_t seq, uint32_t sp
 
         uint32_t curSize = memberCountOf(curRing);
         uint64_t fwdCost = satAdd(rib.sizeToCost(curSize ? curSize : UNKNOWN_RING_SIZE), chainCost);
+
+        // Fan-out suppression: a node in k rings otherwise re-advertises into all k-1 other rings.
+        if (suppressRedundantTransitions) {
+            RibEntry cand;
+            cand.chain.reserve(fwdChain.size() + 1);
+            cand.chain.push_back(R2);            // identity as seen inside R2
+            for (uint32_t c : fwdChain) cand.chain.push_back(c);
+            uint32_t r2Size = memberCountOf(R2);
+            cand.chain_cost = satAdd(rib.sizeToCost(r2Size ? r2Size : UNKNOWN_RING_SIZE), fwdCost);
+            cand.seq_no = seq;
+            cand.spof_count = fwdSpof;
+            uint32_t origin = chain.empty() ? curRing : chain.back();
+            if (rib.ringAlreadyHas(origin, R2, cand)) {
+                MLOG_DEBUG() << "transition into ring='" << R2
+                             << "' suppressed: already has an equal-or-better route"
+                             << " to origin='" << origin << "'\n";
+                continue;   // not marked handled: siblings re-evaluate against their own RIB
+            }
+        }
 
         if (holdInterval > SIMTIME_ZERO) {
             // Queue for the next flush; RIB dedup + handled marks prevent double-queue.
