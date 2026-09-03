@@ -130,7 +130,12 @@ bool MyriadGpRib::admitToFrame(RibRing& rs, const RibEntry& cand) {
         else if (!wins) wins = betterExact(cf[worst], cf[i]);   // costlier => target
         if (wins) { worst = i; worstKey = key; worstCost = cf[i].chain_cost; }
     }
-    if (worst == SIZE_MAX) return false;        // frame is just {best}
+    if (worst == SIZE_MAX) {        // frame is just {best}: nothing to evict but it
+        // A strictly cheaper chain must still take the slot.
+        if (!candSafe || cf[bestIdx].chain.size() == 1) return false;
+        cf[bestIdx] = cand;
+        return true;
+    }
     if (!candSafe) {                             // cand only enters if it beats the worst
         bool candWorse = ecmpDiverseEviction
             ? (intersect(cand.chain) > worstKey
