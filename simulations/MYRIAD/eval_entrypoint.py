@@ -98,6 +98,10 @@ def main():
     add_topo_args(g)
 
     args = p.parse_args()
+    # costdrift reads only the final snapshot.
+    if args.cmd == "costdrift" and not getattr(args, "snapshot", None):
+        import eval_costdrift
+        args.snapshot = eval_costdrift.SNAPSHOT
     apply_repeat_args(args)
 
     if args.cmd == "gate":

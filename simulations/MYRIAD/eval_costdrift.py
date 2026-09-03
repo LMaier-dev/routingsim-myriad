@@ -23,6 +23,7 @@ OUT = os.path.join(HERE, "eval", "costdrift")
 
 # One refresh cycle: GP converges to the ideal cost within the first flood.
 SIMTIME = simtime(cycles=1)
+SNAPSHOT = "30s"
 
 
 def parse_snapshots(path):
@@ -66,7 +67,10 @@ def main(args=None):
         p = argparse.ArgumentParser()
         add_topo_args(p)
         args = p.parse_args()
-        apply_repeat_args(args)
+    # Coarse snapshots unless the caller asked for a rate (see SNAPSHOT).
+    if not getattr(args, "snapshot", None):
+        args.snapshot = SNAPSHOT
+    apply_repeat_args(args)
 
     os.makedirs(OUT, exist_ok=True)
     if not os.path.exists(BIN):
