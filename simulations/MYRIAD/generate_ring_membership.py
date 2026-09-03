@@ -1,21 +1,111 @@
 import argparse
 import json
+from collections import Counter, defaultdict
 from pathlib import Path
 import networkx as nx
 
-def get_ring_per_node(graph, basis="tree", max_ring_size=0, echo=True):
+# Bounded cycles examined per uncovered edge before picking the best. The DFS is
+# lazy, so this bounds the work; higher = less redundant cover, slower.
+CANDIDATES = 500
+
+def bounded_cycle_cover(graph, max_ring_size=0, min_ring_size=0):
+    """Greedy ring cover. For each still-uncovered edge, sample the first
+    CANDIDATES simple cycles through it with <= max_ring_size nodes (drop the
+    edge, DFS with cutoff, re-add) and keep the best by:
+        (new edges covered, fewest new SPOF transitions, more safe overlaps,
+         size in [min,max], smaller size)
+    Coverage is the primary objective (keeps memberships/fan-out down); the SPOF
+    term is the tiebreak UNDER it. A SPOF transition is a pair of rings sharing
+    exactly one node -- lose that node and the two rings disconnect. Among
+    equal-coverage candidates we prefer the cycle that touches existing rings on
+    >=2 nodes (a `safe` 2-connected transition) over one that grazes a ring at a
+    single vertex, so the cover trims single-node bridges without inflating ring
+    count. Measured on an RGG this cuts SPOF pairs ~53%->37% at ~0 fan-out cost;
+    making SPOF the PRIMARY objective cuts further (~11%) but explodes fan-out
+    6x (a swarm of small redundant rings), so it stays a tiebreak.
+    The size range is a preference layered under both; most rings land in
+    [min,max] while outliers are still allowed both ways:
+      - below min: only when no sampled cycle reaches min (e.g. a triangle is
+        the only local cycle) -- taken because coverage still wins;
+      - above max: only when NO cycle <= max exists at all, via the shortest-
+        cycle fallback (the flower's inner 10-ring under a cap of 5).
+    So [min,max] is a target band, not a hard bound. min=0 disables the floor
+    (identical to the plain <=max behaviour). Not a basis; cheaper than
+    minimum_cycle_basis and, unlike cycle_basis, only exceeds the band where the
+    graph forces it."""
+    cap = max_ring_size or graph.number_of_nodes()
+    lo = min_ring_size
+    ekey = lambda a, b: (a, b) if a <= b else (b, a)
+    cycles, covered = [], set()
+    member = defaultdict(set)   # node -> indices of cycles it's in (SPOF scoring)
+    for u, v in list(graph.edges()):
+        if ekey(u, v) in covered:
+            continue
+        graph.remove_edge(u, v)
+        # Best of the first CANDIDATES cycles through (u,v). shortest_simple_paths
+        # (Yen) yields in increasing length and is polynomial per path, so we can
+        # walk up to the cap without all_simple_paths' exponential backtracking
+        # (a cutoff of 9 on a degree-8 graph took minutes). Stop at the first
+        # path over the cap -- being length-ordered, none after it fits either.
+        best, best_key = None, None
+        if nx.has_path(graph, u, v):
+            for i, p in enumerate(nx.shortest_simple_paths(graph, u, v)):
+                if len(p) > cap:
+                    break
+                gain = sum(ekey(p[j], p[(j + 1) % len(p)]) not in covered
+                           for j in range(len(p)))
+                # SPOF score: count how many existing rings this cycle would
+                # share exactly one node with (a single-node bridge = SPOF) vs
+                # >=2 nodes (a redundant, safe transition). Prefer few SPOFs.
+                shared = Counter()
+                for nd in p:
+                    shared.update(member[nd])
+                spof = sum(1 for c in shared.values() if c == 1)
+                safe = sum(1 for c in shared.values() if c >= 2)
+                shortfall = max(0, lo - len(p))   # 0 once size >= lo (<= cap already)
+                key = (gain, -spof, safe, -shortfall, -len(p))
+                if best_key is None or key > best_key:
+                    best, best_key = p, key
+                if i + 1 >= CANDIDATES:
+                    break
+        path = best
+        # No cycle fits the cap: fall back to the shortest cycle (an above-max
+        # outlier) rather than surrendering the edge to a per-edge echo ring.
+        if not path and nx.has_path(graph, u, v):
+            path = nx.shortest_path(graph, u, v)
+        graph.add_edge(u, v)
+        if not path:
+            continue
+        ridx = len(cycles)
+        cycles.append(path)
+        for i in range(len(path)):
+            covered.add(ekey(path[i], path[(i + 1) % len(path)]))
+        for nd in path:
+            member[nd].add(ridx)
+    return cycles
+
+
+def get_ring_per_node(graph, basis="tree", max_ring_size=0, echo=True,
+                      min_ring_size=0):
     # basis: "min" = minimum_cycle_basis (shortest independent cycles, slow);
-    # "tree" = cycle_basis (spanning-tree fundamental basis, cheap). Same ring
-    # COUNT either way (the cyclomatic number); they differ only in ring shape.
-    # "all" accepted as a legacy alias for "tree".
-    cycles = (nx.minimum_cycle_basis(graph) if basis == "min"
-              else nx.cycle_basis(graph))
+    # "tree" = cycle_basis (spanning-tree fundamental basis, cheap, but yields
+    # mostly LARGE rings); "short" = greedy bounded-cycle cover targeting the
+    # [min_ring_size, max_ring_size] band (see bounded_cycle_cover), no
+    # minimum_cycle_basis cost. "all" is a legacy alias for "tree".
+    if basis == "short":
+        cycles = bounded_cycle_cover(graph, max_ring_size, min_ring_size)
+    else:
+        cycles = (nx.minimum_cycle_basis(graph) if basis == "min"
+                  else nx.cycle_basis(graph))
     # A long cycle costs every member a COLLECT lap over the whole ring and adds
     # itself to each member's inter-ring fan-out, so a handful of oversized rings
     # dominates control-plane cost. Dropping them keeps the short local rings and
     # leaves the discarded members covered by echo rings (below) instead.
+    # Not for "short": it already honoured the cap per edge and only exceeds it
+    # where the graph left no alternative, so dropping here would undo the
+    # fallback and hand those edges right back to echo rings.
     n_dropped = 0
-    if max_ring_size:
+    if max_ring_size and basis != "short":
         keep = [c for c in cycles if len(c) <= max_ring_size]
         n_dropped = len(cycles) - len(keep)
         cycles = keep

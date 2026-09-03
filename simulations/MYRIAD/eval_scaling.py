@@ -52,6 +52,8 @@ TOPO_DIR = os.path.join(EVAL_DIR, "topologies")
 INI_DIR = os.path.join(EVAL_DIR, "ini")
 PLOT_DIR = os.path.join(EVAL_DIR, "plots")
 BASIS = "min"   # ring basis for topo2rings; set from --basis in main()
+# Drop rings above this many members (0 = keep all); set from --max-ring-size.
+MAX_RING_SIZE = 0
 CONV_SNAP = "0.5s"      # stats snapshots are tiny; poll finely for convergence times
 CONV_SIMTIME = simtime(cycles=1)
 
@@ -188,14 +190,23 @@ def gen_flower(N):
     return path
 
 
+def labels_path(topo_path):
+    """Where this topology's ring labels live. The cap is part of the name so
+    runs at different --max-ring-size never reuse each other's labels."""
+    stem = os.path.splitext(os.path.basename(topo_path))[0]
+    tag = f"{BASIS}.m{MAX_RING_SIZE}" if MAX_RING_SIZE else BASIS
+    return os.path.join(TOPO_DIR, f"{stem}.{tag}.ringlabels.ini")
+
 def ring_label_lines(topo_path):
     """Run topo2rings (skipped if labels already exist), return the per-node
     ringLabel lines (inlined into the ini)."""
-    stem = os.path.splitext(os.path.basename(topo_path))[0]
-    ini = os.path.join(TOPO_DIR, f"{stem}.{BASIS}.ringlabels.ini")
+    ini = labels_path(topo_path)
     if not os.path.exists(ini):
-        r = run(["python3", TOPO2RINGS, topo_path, "--out-dir", TOPO_DIR,
-                 "--no-png", "--basis", BASIS])
+        # No --no-png: topo2rings paints <=250-node topologies into
+        # eval/topology_pngs/ and skips the rest, so a sweep leaves a gallery.
+        r = run(["python3", TOPO2RINGS, topo_path, "--out", ini,
+                 "--basis", BASIS,
+                 "--max-ring-size", str(MAX_RING_SIZE)])
         if not os.path.exists(ini):
             sys.exit(f"topo2rings failed for {topo_path}:\n{r.stdout}\n{r.stderr}")
     with open(ini) as f:
@@ -447,9 +458,11 @@ def draw_topologies(outfile):
     fig, axes = plt.subplots(1, len(reps), figsize=(4.8 * len(reps), 5.2))
     for ax, (label, topo, pos) in zip(axes, reps):
         n, edges = _read_edges(topo)
-        # full ring membership per node (all rings, for the pie wedges)
-        stem = os.path.splitext(os.path.basename(topo))[0]
-        ini = os.path.join(TOPO_DIR, f"{stem}.{BASIS}.ringlabels.ini")
+        # full ring membership per node (all rings, for the pie wedges).
+        # Generate if absent: --only topos runs no sims, so nothing else would.
+        ini = labels_path(topo)
+        if not os.path.exists(ini):
+            ring_label_lines(topo)
         ring_of = {}
         if os.path.exists(ini):
             for l in open(ini):
@@ -517,10 +530,17 @@ def main(args=None):
         ap.add_argument("--convergence", action="store_true",
                         help="also measure convergence time per topology (extends "
                              f"sim-time-limit to {CONV_SIMTIME}; adds a third plot panel).")
-        ap.add_argument("--basis", choices=["min", "tree", "all"], default="min",
+        ap.add_argument("--basis", choices=["min", "tree", "short", "all"], default="min",
                         help="ring basis: min=minimum_cycle_basis (default), "
                              "tree=cycle_basis (spanning-tree; 'all' is a legacy "
-                             "alias). Results nest under eval/<basis>_cycles/.")
+                             "alias), short=greedy shortest-cycle-per-edge (small "
+                             "rings bounded by --max-ring-size, no min-basis cost). "
+                             "Results nest under eval/<basis>_cycles/.")
+        ap.add_argument("--max-ring-size", dest="max_ring_size", type=int, default=0,
+                        help="drop rings larger than this; members fall back to "
+                             "echo rings (0 = keep all, the default). Long rings "
+                             "dominate GP's fan-out, and --basis tree produces "
+                             "very large ones. Results nest under a .mN label file.")
         ap.add_argument("--single", metavar="TOPO",
                         help="run GP+LS on ONE topology .txt and print counts (no "
                              "sweep, no plot). Path relative to simulations/topologies "
@@ -531,9 +551,11 @@ def main(args=None):
 
     # Nest all outputs under a per-basis subfolder so min_cycles and tree_cycles
     # keep separate cached labels, inis, and plots.
-    global BASIS, TOPO_DIR, INI_DIR, PLOT_DIR
+    global BASIS, MAX_RING_SIZE, TOPO_DIR, INI_DIR, PLOT_DIR
     BASIS = args.basis
-    basis_dir = os.path.join(EVAL_DIR, f"{BASIS}_cycles")
+    MAX_RING_SIZE = getattr(args, "max_ring_size", 0) or 0
+    basis_dir = os.path.join(EVAL_DIR, f"{BASIS}_cycles"
+                             + (f"_m{MAX_RING_SIZE}" if MAX_RING_SIZE else ""))
     TOPO_DIR = os.path.join(basis_dir, "topologies")
     INI_DIR = os.path.join(basis_dir, "ini")
     PLOT_DIR = os.path.join(basis_dir, "plots")

@@ -132,7 +132,8 @@ def main(args=None):
 
     labels = ensure_ring_labels(args.topo, args.basis,
                                 getattr(args, 'max_ring_size', 0),
-                                not getattr(args, 'no_echo_rings', False))
+                                not getattr(args, 'no_echo_rings', False),
+                                min_ring_size=getattr(args, 'min_ring_size', 0))
     gp_ini = write_proto_ini(os.path.join(OUT, "gp.ini"), "gp",
                              args.topo, labels, update_jitter=args.update_jitter)
     ls_ini = write_proto_ini(os.path.join(OUT, "ls.ini"), "ls", args.topo, labels)

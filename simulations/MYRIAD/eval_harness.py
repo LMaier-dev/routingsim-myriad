@@ -168,21 +168,25 @@ def mark_gate_passed():
     _GATE_STAMP.write_text(_bin_sig())
 
 
-def ensure_ring_labels(topo_path, basis="tree", max_ring_size=0, echo=True):
-    """Return path to <stem>.<basis>[.mN][.noecho].ringlabels.ini, generating it
-    if absent. The pruning options are part of the file name so a run never picks
-    up labels built under different ones."""
+def ensure_ring_labels(topo_path, basis="tree", max_ring_size=0, echo=True,
+                       min_ring_size=0):
+    """Return path to <stem>.<basis>[.mN][.loN][.noecho].ringlabels.ini,
+    generating it if absent. The pruning options are part of the file name so a
+    run never picks up labels built under different ones."""
     import time
     p = Path(topo_path)
-    tag = basis + (f".m{max_ring_size}" if max_ring_size else "") + ("" if echo else ".noecho")
+    tag = (basis + (f".m{max_ring_size}" if max_ring_size else "")
+           + (f".lo{min_ring_size}" if min_ring_size else "")
+           + ("" if echo else ".noecho"))
     out = MYRIAD_DIR / f"{p.stem}.{tag}.ringlabels.ini"
     if not out.exists():
         print(f"  [ring labels] {p.name} ({tag}) …", flush=True)
         t0 = time.time()
         proc = subprocess.Popen(
             [sys.executable, str(MYRIAD_DIR / "topo2rings.py"),
-             str(p), "--out", str(out), "--no-png",
+             str(p), "--out", str(out), "--basis", basis,
              *(["--max-ring-size", str(max_ring_size)] if max_ring_size else []),
+             *(["--min-ring-size", str(min_ring_size)] if min_ring_size else []),
              *([] if echo else ["--no-echo"])],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
         for line in proc.stdout:
@@ -406,13 +410,18 @@ def add_topo_args(parser):
         "--topo", default=str(DEFAULT_TOPO),
         help=f"topology file (default: {DEFAULT_TOPO.name})")
     parser.add_argument(
-        "--basis", choices=["min", "tree", "all"], default="tree",
+        "--basis", choices=["min", "tree", "short", "all"], default="tree",
         help="ring basis: tree=cycle_basis (spanning-tree, default), "
-             "min=minimum_cycle_basis; 'all' is a legacy alias for tree")
+             "min=minimum_cycle_basis, short=greedy bounded-cycle cover "
+             "(first cycle <= max-ring-size per edge); 'all' aliases tree")
     parser.add_argument(
         "--max-ring-size", dest="max_ring_size", type=int, default=0,
         help="drop rings larger than this; members fall back to echo rings "
              "(0 = keep all). Long rings dominate GP's fan-out and lap latency")
+    parser.add_argument(
+        "--min-ring-size", dest="min_ring_size", type=int, default=0,
+        help="basis=short only: target floor on ring size (the cover prefers "
+             "rings >= this, allowing smaller outliers where forced). 0 = no floor")
     parser.add_argument(
         "--no-echo-rings", dest="no_echo_rings", action="store_true",
         help="omit 2-node echo rings; combined with --max-ring-size this can "

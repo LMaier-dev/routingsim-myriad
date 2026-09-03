@@ -500,7 +500,8 @@ def main(args=None):
 
     labels = ensure_ring_labels(args.topo, args.basis,
                                 getattr(args, 'max_ring_size', 0),
-                                not getattr(args, 'no_echo_rings', False))
+                                not getattr(args, 'no_echo_rings', False),
+                                min_ring_size=getattr(args, 'min_ring_size', 0))
     inis = {}
     need_protos = {CONFIGS[n][0] for n in CONFIGS}  # "gp"/"ls" bases actually used
     for proto in [p for p in ("gp", "ls") if p in need_protos] if run_sims else []:

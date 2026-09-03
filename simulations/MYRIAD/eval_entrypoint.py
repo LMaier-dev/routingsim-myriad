@@ -85,7 +85,7 @@ def main():
     sc.add_argument("--only", choices=["square", "width", "ladder", "flower", "topos"])
     sc.add_argument("--no-batch", dest="nobatch", action="store_true")
     sc.add_argument("--convergence", action="store_true")
-    sc.add_argument("--basis", choices=["min", "tree", "all"], default="min")
+    sc.add_argument("--basis", choices=["min", "tree", "short", "all"], default="min")
     sc.add_argument("--single", metavar="TOPO")
     add_repeat_args(sc)
 
