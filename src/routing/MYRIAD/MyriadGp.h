@@ -62,6 +62,10 @@ namespace routingsim {
         bool isKing = false;
         TimerMsg* refreshTimer = nullptr;   // king: periodic re-collect
         TimerMsg* watchdogTimer = nullptr;  // member: coup if the king goes silent
+        // Batch windows for transitions INTO this ring: [0] spof-free, [1]
+        // spof-incurring. Per ring, so a ring's window starts when that ring
+        // first gets a chain and the two waves stay ordered relative to it.
+        TimerMsg* holdTimer[2] = {nullptr, nullptr};
         // Distinguishes "routine, nothing new" refresh from warmup
         bool routineRefreshPending = false;
         // High-water mark of ring-neighbors. 1 = genuine 2-node ring; a drop from
@@ -172,7 +176,11 @@ namespace routingsim {
                                   const std::vector<MyriadGpRr>& rr);
             // Emit the held transitions as one batch per (R2, primary) bucket,
             // each lapping R2 under a single circular-ACK.
-            void flushPendingTransitions(int pot);
+            // Batch window for transitions into `ring`: holdInterval plus the
+            // ring's own size^ringCostExponent in ms, times spofHoldMultiplier
+            // for the spof bucket.
+            simtime_t holdDelay(uint32_t ring, int bucket) const;
+            void flushPendingTransitions(uint32_t ring, int bucket);
             void cancelCollect(uint32_t ring);
             void onCollectBudgetExpired(uint32_t ring);
             void onUpdateBudgetExpired(uint32_t ring, std::vector<uint32_t> chain);
@@ -205,6 +213,7 @@ namespace routingsim {
             // NOT re-flood an UPDATE. Meant to pair with recoveryReplayEnabled
             bool refreshFloodsUpdate = true;
             long maxBatchBytes;  // flush splits the held set under this size
+            long ringCostExponent = 2;  // also in the RIB; here it prices holdDelay
             simtime_t holdInterval;  // batch window; 0 = send immediately
             simtime_t snapshotInterval;      // periodic RIB snapshot; 0 = off (finish() only)
             TimerMsg* snapshotTimer = nullptr;
@@ -213,10 +222,14 @@ namespace routingsim {
             simtime_t collectWarmupInterval; // how often to re-run COLLECTs during warmup
             bool rebooted = false;
             // Held transitions bucketed by (target ring, next-hop primary). Two
-            // pots: [0] spof-free transitions, [1] spof-incurring ones
+            // buckets: [0] spof-free transitions, [1] spof-incurring ones, which
+            // flush spofHoldMultiplier later. Since spof ranks above cost, a
+            // spof-incurring chain arriving after the spof-free one is already
+            // unpropagatable, so the delay makes it die a hop early instead of
+            // flooding a wave the later one outranks. Timers are per ring, in
+            // RingMembership::holdTimer.
             std::map<std::pair<uint32_t, nodeid_t>, std::vector<PendingTransition>> pendingTransitions[2];
-            TimerMsg* holdTimer[2] = {nullptr, nullptr};  // armed on the pot's first held chain
-            double spofHoldMultiplier = 2.0;  // 1 = both pots flush together (off)
+            double spofHoldMultiplier = 2.0;  // 1 = both buckets flush together (off)
             // Batch-size scalars for finish(); mean = entries / batchesCreated.
             unsigned long batchEntriesTotal = 0;
             unsigned long batchMaxEntries = 0;

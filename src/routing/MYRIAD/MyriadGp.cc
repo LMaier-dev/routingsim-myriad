@@ -72,6 +72,7 @@ void MyriadGP::onInitialize() {
     maxBatchBytes = par("maxBatchBytes");
     holdInterval = par("holdInterval");
     spofHoldMultiplier = par("spofHoldMultiplier");
+    ringCostExponent = par("ringCostExponent");
     snapshotInterval = par("snapshotInterval");
     snapshotStats = par("snapshotFormat").stdstringValue() == "stats";
     collectWarmupDuration = par("collectWarmupDuration");
@@ -1009,17 +1010,19 @@ void MyriadGP::forwardChainInterRing(uint32_t curRing, uint32_t seq, uint32_t sp
 
         if (holdInterval > SIMTIME_ZERO) {
             // Queue for the next flush; RIB dedup + handled marks prevent double-queue.
-            // Pot 1 (this hop adds a spof) waits longer, so the spof-free wave
+            // Bucket 1 (this hop adds a spof) waits longer, so the spof-free wave
             // settles the RIB first and this one dies on arrival. See the header.
-            int pot = doubleTransition ? 0 : 1;
-            pendingTransitions[pot][{R2, primary}].push_back(
+            // The window is per TARGET ring, armed by that ring's first chain.
+            int bucket = doubleTransition ? 0 : 1;
+            pendingTransitions[bucket][{R2, primary}].push_back(
                 PendingTransition{R2, primary, fallback, seq, fwdSpof, fwdChain, fwdCost, rr});
-            if (!holdTimer[pot])
-                holdTimer[pot] = addOneShotTimer(
-                    pot ? holdInterval * spofHoldMultiplier : holdInterval,
-                    [this, pot](short) {
-                        holdTimer[pot] = nullptr;
-                        flushPendingTransitions(pot);
+            TimerMsg*& ht = memberships[R2].holdTimer[bucket];
+            if (!ht)
+                ht = addOneShotTimer(
+                    holdDelay(R2, bucket),
+                    [this, R2, bucket](short) {
+                        memberships[R2].holdTimer[bucket] = nullptr;
+                        flushPendingTransitions(R2, bucket);
                         return false;
                     });
             MLOG_N_DEBUG(primary) << "transition HELD into ring='" << R2
@@ -1045,9 +1048,25 @@ void MyriadGP::forwardChainInterRing(uint32_t curRing, uint32_t seq, uint32_t sp
     }
 }
 
-void MyriadGP::flushPendingTransitions(int pot) {
-    auto buckets = std::move(pendingTransitions[pot]);
-    pendingTransitions[pot].clear();
+simtime_t MyriadGP::holdDelay(uint32_t ring, int bucket) const {
+    // holdInterval + size^ringCostExponent ms, so a wave crossing a big ring is
+    // held as long as that ring is expensive.
+    uint32_t sz = memberCountOf(ring);
+    double ms = 1.0;
+    for (long k = 0; k < ringCostExponent && sz; ++k) ms *= sz;
+    simtime_t d = holdInterval + SimTime(sz ? ms : 0, SIMTIME_MS);
+    return bucket ? d * spofHoldMultiplier : d;
+}
+
+void MyriadGP::flushPendingTransitions(uint32_t ring, int bucket) {
+    // Only this ring's keys; the map is keyed (ring, primary), so extract the
+    // [ring, ring+1) span and leave every other ring's window running.
+    auto& all = pendingTransitions[bucket];
+    std::map<std::pair<uint32_t, nodeid_t>, std::vector<PendingTransition>> buckets;
+    auto lo = all.lower_bound({ring, std::numeric_limits<nodeid_t>::min()});
+    auto hi = all.upper_bound({ring, std::numeric_limits<nodeid_t>::max()});
+    buckets.insert(std::make_move_iterator(lo), std::make_move_iterator(hi));
+    all.erase(lo, hi);
 
     for (auto& [key, chains] : buckets) {
         uint32_t R2 = key.first;
@@ -1302,13 +1321,12 @@ void MyriadGP::reset() {
             cancelAndDelete(m.watchdogTimer);
             m.watchdogTimer = nullptr;
         }
+        for (auto*& ht : m.holdTimer)
+            if (ht) { cancelAndDelete(ht); ht = nullptr; }
     }
     memberships.clear();
     rib.clear();
-    for (int p = 0; p < 2; ++p) {
-        pendingTransitions[p].clear();
-        if (holdTimer[p]) { cancelAndDelete(holdTimer[p]); holdTimer[p] = nullptr; }
-    }
+    for (auto& pt : pendingTransitions) pt.clear();
     if (snapshotTimer) { cancelAndDelete(snapshotTimer); snapshotTimer = nullptr; }
     cancelHelloTimer();
 
