@@ -12,6 +12,13 @@ traffic (messages/bytes per PDU type) and, where nodes fail, reconvergence time.
 
     python3 simulations/MYRIAD/eval_dynamics.py [--topo PATH] [--only churn|link|node]
 
+--overview is a second, traffic-only mode: the same churn and node runs with RIB
+snapshotting off, scored as messages and bytes per failure window (churn steady
+state, then one window per wave fraction), repeated over --repeat RNG seeds and
+drawn as boxplots — over a whole directory of topologies with --dir. Every
+(topology, scenario, config, seed) run is independent, so --jobs spreads the
+cross product over one pool.
+
 Replaces eval_overhead.py, eval_recovery.py and eval_reconverge.py: same runs,
 one set of conditions, and the two metric families now describe the same sim.
 Outputs tables + plots under simulations/MYRIAD/eval/dynamics/.
@@ -25,9 +32,11 @@ import shutil
 import subprocess
 import sys
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 csv.field_size_limit(sys.maxsize)  # a node's whole txBytes series is one CSV-R cell
 
+import eval_harness as H   # REPEATS/JOBS/PROGRESS are bound at parse time
 from eval_harness import (BIN, MYRIAD_DIR, _sec, add_topo_args, announce,
                           apply_repeat_args, common, dynamics_args,
                           ensure_ring_labels, overrides, pm, refresh_s, rep_path,
@@ -40,7 +49,7 @@ CHURN_NETWORK = "routingsim.simulations.MYRIAD.ChurnNetwork"
 
 DEFAULT_FRACTIONS = [0.05, 0.1, 0.2, 0.4, 0.8]
 CHURN_NODES, CHURN_PERIOD = 1, 1.0  # churn scenario: nodes down per period, seconds
-CHURN_SETTLE = 10.0                # extra seconds after warmup before churn starts
+FAILURE_START = 100.0              # churn / first node wave, and the measurement cut
 DOWN_MIN, DOWN_JITTER = 2.0, 8.0   # per-node downtime: DOWN_MIN + U(0, JITTER)
 COLLECT_RETRY_LIMIT = 3            # mirrors MyriadGp.h
 
@@ -72,23 +81,25 @@ COLORS = {"gp": "C0", "gp_noreplay": "C3", "gp_nospof": "C1", "ls": "C2"}
 
 
 def churn_start():
-    """When the first churn failure fires: warmup plus a settle window, so the
-    measured steady state is churn cost, not leftover initial convergence."""
-    return warmup_s() + CHURN_SETTLE
+    """When the first failure fires (churn and node alike) and where every
+    post-warmup measurement starts, so what is scored is failure cost, not
+    leftover initial convergence. --failure-start."""
+    return FAILURE_START
 
 
 def traffic_simtime():
-    return simtime(cycles=1.5)
+    """Long enough that the post-start window is a full 1.5 refresh cycles even
+    when --failure-start pushes churn past the default horizon."""
+    return f"{max(_sec(simtime(cycles=1.5)), churn_start() + 1.5 * refresh_s()):g}s"
 
 
 def node_simtime(nwaves, spacing):
-    return f"{(nwaves + 1) * spacing:g}s"
+    return f"{churn_start() + nwaves * spacing:g}s"
 
 
 def wave_times(fractions, spacing):
-    """Wave i at (i+1)*spacing: equally spaced from t=0, so the first window is
-    as long as the rest."""
-    return [(f, (i + 1) * spacing) for i, f in enumerate(fractions)]
+    """First wave at --failure-start (same as churn), then one every `spacing`."""
+    return [(f, churn_start() + i * spacing) for i, f in enumerate(fractions)]
 
 
 def grace_note():
@@ -115,11 +126,10 @@ def node_refresh(spacing):
 
 
 def node_conditions(spacing):
-    """Refresh phase half a period off the waves, so the cycle falls between the
-    reboot and the next wave (the king clock re-arms from the last warmup
-    collect)."""
-    return overrides(refreshInterval=f"{node_refresh(spacing):g}s",
-                     collectWarmupDuration=f"{spacing / 2:g}s")
+    """One refresh per wave. collectWarmupDuration is left at eval_common's value
+    so node and churn warm up identically — the first wave is delayed to
+    --failure-start instead, which is what keeps formation out of the window."""
+    return overrides(refreshInterval=f"{node_refresh(spacing):g}s")
 
 
 def scenario_dynamics(scenario, fractions=None, spacing=None):
@@ -141,9 +151,27 @@ def scenario_dynamics(scenario, fractions=None, spacing=None):
                              duration=f"{max(2, round(r / 15)):g}s",
                              oneFailure="false")
     return dynamics_args("node", fractions='"' + ",".join(f"{f:g}" for f in fractions) + '"',
-                         waveSpacing=f"{spacing:g}s", warmup=f"{spacing:g}s",
+                         waveSpacing=f"{spacing:g}s",
+                         warmup=f"{churn_start():g}s",
                          downMin=f"{DOWN_MIN:g}s", downJitter=f"{DOWN_JITTER:g}s",
                          minDegree=0)
+
+
+def sim_cmd(name, ini, dyn, simt, resdir, dump=None):
+    """Command line for one config's run. dump=None turns RIB snapshotting off —
+    overview mode reads traffic only, and the dump is the expensive part."""
+    _, dumppar, replay, refreshFlood = CONFIGS[name]
+    cmd = [BIN, "-u", "Cmdenv", ini, *overrides(sim_time_limit=simt), *dyn,
+           "--result-dir", resdir]
+    if dump:
+        cmd += [f'--**.{dumppar}="{dump}"', '--**.snapshotFormat="stats"']
+    else:
+        cmd.append("--**.snapshotInterval=0s")
+    if replay is not None:
+        cmd.append(f"--**.recoveryReplayEnabled={replay}")
+    if refreshFlood is not None:
+        cmd.append(f"--**.refreshFloodsUpdate={refreshFlood}")
+    return cmd + EXTRA_OPTS.get(name, [])
 
 
 def measure(name, ini, scenario, dyn, simt=None, rep=0, run=True):
@@ -156,23 +184,11 @@ def measure(name, ini, scenario, dyn, simt=None, rep=0, run=True):
         for stale in (dump, *glob.glob(resdir + "/*.sca")):
             if os.path.exists(stale):
                 os.remove(stale)
-
-        proto, dumppar, replay, refreshFlood = CONFIGS[name]
-        cmd = [BIN, "-u", "Cmdenv", ini,
-               *overrides(sim_time_limit=simt or traffic_simtime()), *dyn,
-               "--result-dir", resdir]
         # churn dumps stats too: same series, but sampled against a constant
         # failure rate instead of escalating waves — steady-state stretch.
-        if scenario in ("node", "churn"):
-            cmd += [f'--**.{dumppar}="{dump}"', '--**.snapshotFormat="stats"']
-        else:
-            cmd.append("--**.snapshotInterval=0s")
-        if replay is not None:
-            cmd.append(f"--**.recoveryReplayEnabled={replay}")
-        if refreshFlood is not None:
-            cmd.append(f"--**.refreshFloodsUpdate={refreshFlood}")
-        cmd += EXTRA_OPTS.get(name, [])
-        run_sim(cmd, allow_budget_expired=True, rep=rep)
+        run_sim(sim_cmd(name, ini, dyn, simt or traffic_simtime(), resdir,
+                        dump if scenario in ("node", "churn") else None),
+                allow_budget_expired=True, rep=rep)
 
     counts, byts, maxb, reboots = {}, {}, 0, defaultdict(dict)
     for sca in glob.glob(resdir + "/*.sca"):
@@ -227,34 +243,42 @@ def _scavetool():
                      if os.access(p, os.X_OK)), None))
 
 
-def bytes_over_time(resdir, bin_s=1.0):
-    """(bin start times, network-wide bytes/s in that bin), from the per-node
-    txBytes OMNeT++ vector (see MyriadHelper::countSend) rather than the
-    finish()-time byte scalars, which only give the run total. Every node
-    records one sample per PDU sent (time, byte length); summing all nodes'
-    samples into fixed windows gives the network-wide control-plane rate over
-    time, so a failure wave's traffic spike is visible directly."""
+def _tx_samples(resdir):
+    """Yield (time, byte length) for every control-plane PDU any node sent, from
+    the per-node txBytes OMNeT++ vector (see MyriadHelper::countSend) rather than
+    the finish()-time byte scalars, which only give the run total. One sample IS
+    one PDU, so callers get both volume and byte rate over time. A generator: big
+    runs hold tens of millions of samples."""
     vecs = glob.glob(os.path.join(resdir, "*.vec"))
     tool = _scavetool()
     if not vecs or not tool:
         if vecs:
             print("  ! opp_scavetool not found — skipping byte-rate plot "
                   "(source omnetpp/setenv or set OMNETPP_ROOT)", flush=True)
-        return [], []
+        return
     for stale in glob.glob(os.path.join(resdir, "*.vci")):
         os.remove(stale)  # reused result-dir: old index's byte offsets don't match this run's .vec
     csv_path = os.path.join(resdir, "txbytes_export.csv")
     subprocess.run([tool, "export", "-f", "name =~ txBytes",
                     "-F", "CSV-R", "-o", csv_path, vecs[0]],
                    check=True, capture_output=True, text=True)
+    try:
+        with open(csv_path, newline="") as f:
+            for row in csv.DictReader(f):
+                if row["type"] != "vector":
+                    continue
+                for t, v in zip(row["vectime"].split(), row["vecvalue"].split()):
+                    yield float(t), float(v)
+    finally:
+        os.remove(csv_path)
+
+
+def bytes_over_time(resdir, bin_s=1.0):
+    """(bin start times, network-wide bytes/s in that bin) — a failure wave's
+    traffic spike is then visible directly."""
     bins = defaultdict(float)
-    with open(csv_path, newline="") as f:
-        for row in csv.DictReader(f):
-            if row["type"] != "vector":
-                continue
-            for t, v in zip(row["vectime"].split(), row["vecvalue"].split()):
-                bins[int(float(t) // bin_s)] += float(v)
-    os.remove(csv_path)
+    for t, v in _tx_samples(resdir):
+        bins[int(t // bin_s)] += v
     if not bins:
         return [], []
     lo, hi = min(bins), max(bins)
@@ -268,6 +292,204 @@ def bytes_after(series, t0):
     so bytes/s summed over bins IS the byte total."""
     ts, bps = series
     return sum(b for t, b in zip(ts, bps) if t >= t0) if ts else None
+
+
+# --- overview mode: traffic per failure window, no snapshots -----------------
+
+def stem(path):
+    return os.path.splitext(os.path.basename(path))[0]
+
+
+def topo_set(args):
+    """The topologies this run covers: every *.txt in --dir, else --topo alone.
+
+    A sweep only makes sense where the result is a distribution — overview mode
+    — so --dir is rejected elsewhere rather than silently running the first file."""
+    d = getattr(args, "dir", None)
+    if not d:
+        return [args.topo]
+    if not getattr(args, "overview", False):
+        sys.exit("--dir sweeps a topology set, which only --overview scores; "
+                 "use --topo for the per-topology tables and plots")
+    found = sorted(glob.glob(os.path.join(d, "*.txt")))
+    if not found:
+        sys.exit(f"--dir {d}: no *.txt topologies here (the search is not recursive)")
+    H.TOPO_LABEL = os.path.basename(str(d).rstrip("/"))   # plot titles name the set
+    print(f"  [topologies] {len(found)} from {d}: "
+          + ", ".join(stem(f) for f in found[:4])
+          + (f", … (+{len(found) - 4})" if len(found) > 4 else ""))
+    return found
+
+
+def overview_windows(scenario, fractions, spacing):
+    """(label, t0, t1) measurement windows for one scenario. Churn's steady state
+    is one window from --failure-start to the end of the run; each node wave owns
+    the span from its own failures until the next wave. Warmup is outside every
+    window by construction, so no window carries the RIB formation burst."""
+    if scenario == "churn":
+        return [("churn", churn_start(), _sec(traffic_simtime()))]
+    waves = wave_times(fractions, spacing)
+    ends = [t for _, t in waves[1:]] + [_sec(node_simtime(len(fractions), spacing))]
+    return [(f"{f:.0%}", t, e) for (f, t), e in zip(waves, ends)]
+
+
+def tx_windows(resdir, windows):
+    """{label: (bytes, messages)} per window. One vector sample is one PDU, so
+    counting samples in a window IS that window's message volume."""
+    out = {lab: [0.0, 0] for lab, _, _ in windows}
+    for t, v in _tx_samples(resdir):
+        for lab, t0, t1 in windows:
+            if t0 <= t < t1:
+                out[lab][0] += v
+                out[lab][1] += 1
+                break
+    return {k: tuple(v) for k, v in out.items()}
+
+
+def overview(inis, topos, scenarios, fractions, spacing, run_sims):
+    """Message volume and bytes per failure window, over REPEATS RNG seeds and
+    every topology in `topos` (--dir).
+
+    Every (topology, scenario, config, seed) run is independent, so they all go
+    into one --jobs pool instead of the nested per-measurement pools the normal
+    mode uses. No RIB dump: this mode never scores routes, and snapshotting
+    dominates the runtime of the big runs."""
+    plan = {}
+    for scenario in [s for s in scenarios if s != "link"]:
+        dyn, desc = scenario_dynamics(scenario, fractions, spacing)
+        if scenario == "node":
+            dyn += node_conditions(spacing)
+            simt, desc = node_simtime(len(fractions), spacing), desc + "\n            " + grace_note()
+        else:
+            simt = traffic_simtime()
+        wins = overview_windows(scenario, fractions, spacing)
+        print(f"\n=== {scenario} ({simt}) ===")
+        announce(scenario, opts=dyn + overrides(sim_time_limit=simt), dynamics=desc)
+        print("  windows: " + ", ".join(f"{l} [{a:g},{b:g})s" for l, a, b in wins))
+        plan[scenario] = (dyn, simt, wins,
+                          "churn" if scenario == "churn" else "recovery")
+
+    if not plan:
+        sys.exit("--overview scores the churn and node scenarios; --only link "
+                 "leaves it nothing to measure")
+    tasks = [(t, s, n, r) for t in topos for s in plan
+             for n in CONFIGS for r in range(H.REPEATS)]
+    jobs = max(1, min(H.JOBS or os.cpu_count() or 1, len(tasks)))
+    H.PROGRESS = jobs == 1   # a shared \r status line is unreadable from N runs
+
+    def work(task):
+        topo, scenario, name, rep = task
+        dyn, simt, wins, net = plan[scenario]
+        resdir = rep_path(os.path.join(OUT, f"res_{stem(topo)}_{name}_{scenario}"), rep)
+        if run_sims:
+            run_sim(sim_cmd(name, inis[(topo, CONFIGS[name][0], net)],
+                            dyn, simt, resdir), allow_budget_expired=True, rep=rep)
+        return tx_windows(resdir, wins)
+
+    print(f"\n{len(tasks)} runs ({len(topos)} topologies × {len(plan)} scenarios "
+          f"× {len(CONFIGS)} configs × {H.REPEATS} seeds) on {jobs} job(s)"
+          + ("" if run_sims else " — post mode, re-parsing on disk"))
+    # (scenario, label, config) -> [(bytes, msgs, topology, seed)], one entry per
+    # run: topology and seed are both spread the boxplot draws, kept apart only
+    # in the CSV.
+    res = defaultdict(list)
+    with ThreadPoolExecutor(max_workers=jobs) as ex:
+        futs = {ex.submit(work, t): t for t in tasks}
+        for i, f in enumerate(as_completed(futs), 1):
+            topo, scenario, name, rep = futs[f]
+            for lab, (b, m) in f.result().items():
+                res[(scenario, lab, name)].append((b, m, stem(topo), rep))
+            print(f"  ✓ [{i}/{len(tasks)}] {stem(topo)} {name} {scenario} "
+                  f"seed {rep}", flush=True)
+    if not any(res.values()):
+        sys.exit("FAIL: no txBytes vectors parsed — opp_scavetool missing, or "
+                 "no runs on disk for --post")
+    overview_report(plan, res)
+    overview_plots(plan, res)
+
+
+def overview_report(plan, res):
+    """Median per window over the runs, plus the spread the boxplots draw."""
+    ntopo = len({v[2] for vals in res.values() for v in vals})
+    print(f"\n=== overview: control-plane volume per failure window "
+          f"({ntopo} topolog{'y' if ntopo == 1 else 'ies'} × {H.REPEATS} seed(s), "
+          f"warmup excluded) ===")
+    print(f"{'window':>10}{'config':>13}{'runs':>6}{'messages':>14}{'bytes':>16}"
+          f"{'B/msg':>9}{'KB/s':>12}{'×LS':>8}")
+    rows = []
+    with open(os.path.join(OUT, "overview.csv"), "w", newline="") as fh:
+        w = csv.writer(fh)
+        w.writerow(["scenario", "window", "t0", "t1", "config", "topology",
+                    "seed", "bytes", "messages"])
+        for scenario, (_, _, wins, _) in plan.items():
+            for lab, t0, t1 in wins:
+                ref = _median([v[0] for v in res.get((scenario, lab, "ls"), [])])
+                for name in CONFIGS:
+                    vals = res.get((scenario, lab, name), [])
+                    if not vals:
+                        continue
+                    for b, m, topo, seed in sorted(vals, key=lambda v: (v[2], v[3])):
+                        w.writerow([scenario, lab, f"{t0:g}", f"{t1:g}", name,
+                                    topo, seed, f"{b:.0f}", m])
+                    b, m = _median([v[0] for v in vals]), _median([v[1] for v in vals])
+                    win = lab if lab == scenario else f"{scenario}/{lab}"
+                    rows.append((win, name, len(vals), m, b,
+                                 b / m if m else 0, b / (t1 - t0) / 1000,
+                                 b / ref if ref else 0))
+    for win, name, n, m, b, per, kbs, rel in rows:
+        print(f"{win:>10}{name:>13}{n:>6}{m:>14,.0f}{b:>16,.0f}"
+              f"{per:>9.0f}{kbs:>12,.1f}{(f'{rel:.2f}×' if rel else '-'):>8}")
+    print("\nmedian over every run; per-run values (topology, seed) in "
+          "overview.csv, spread in the boxplots. Node windows run from one "
+          "wave's failures to the next, churn's from --failure-start to the end "
+          "of the run." + (" With --dir the boxes pool topologies and seeds — "
+                           "slice overview.csv by topology to separate them."
+                           if ntopo > 1 else ""))
+
+
+def _median(v):
+    return sorted(v)[len(v) // 2] if v else 0.0
+
+
+def overview_plots(plan, res):
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+    except ImportError:
+        print("\n(matplotlib not available — skipping plots)")
+        return
+    labels = [(s, lab) for s, (_, _, wins, _) in plan.items() for lab, _, _ in wins]
+    names = [n for n in CONFIGS if any((s, l, n) in res for s, l in labels)]
+    for idx, (ylabel, fname, scale) in enumerate(
+            (("bytes per window (log)", "overview_bytes.png", 1),
+             ("messages per window (log)", "overview_messages.png", 1))):
+        fig, ax = plt.subplots(figsize=(1.6 * len(labels) + 3, 4.5))
+        w = 0.8 / len(names)
+        for i, name in enumerate(names):
+            data = [[v[idx] / scale for v in res.get((s, l, name), [])] or [0]
+                    for s, l in labels]
+            bp = ax.boxplot(data, positions=[x + i * w - 0.4 + w / 2
+                                             for x in range(len(labels))],
+                            widths=w * 0.9, patch_artist=True, manage_ticks=False)
+            for part in ("boxes", "medians", "whiskers", "caps", "fliers"):
+                for art in bp[part]:
+                    art.set(color=COLORS[name])
+            for box in bp["boxes"]:
+                box.set(facecolor=COLORS[name], alpha=0.35)
+            ax.plot([], [], color=COLORS[name], label=name)
+        ax.set_xticks(range(len(labels)))
+        ax.set_xticklabels([l if l == s else f"{s}\n{l}" for s, l in labels],
+                           fontsize=8)
+        ax.set_yscale("log")
+        ntopo = len({v[2] for vals in res.values() for v in vals})
+        ax.set(ylabel=ylabel, xlabel="failure window",
+               title=title(f"Control-plane volume per failure window "
+                           + (f"({ntopo} topologies × {H.REPEATS} seeds)"
+                              if ntopo > 1 else f"({H.REPEATS} seeds)")))
+        ax.legend(fontsize=8); ax.grid(axis="y", alpha=0.3); fig.tight_layout()
+        fig.savefig(os.path.join(OUT, fname), dpi=120)
+        print(f"  wrote {fname}")
 
 
 def _reach_total(series):
@@ -398,7 +620,7 @@ def stretch_over_time(series, ref_series):
 
 
 def main(args=None):
-    global DOWN_MIN, DOWN_JITTER, CHURN_NODES, CHURN_PERIOD
+    global DOWN_MIN, DOWN_JITTER, CHURN_NODES, CHURN_PERIOD, FAILURE_START
     if args is None:
         p = argparse.ArgumentParser()
         add_topo_args(p)
@@ -414,8 +636,14 @@ def main(args=None):
         p.add_argument("--down-jitter", type=float, default=None,
                        help="downtime jitter in seconds (default 8)")
         p.add_argument("--wave-spacing", type=float, default=None,
-                       help="seconds between waves; also the refresh interval "
-                            "of the node scenario (default 30)")
+                       help="settle time between node waves, i.e. seconds from "
+                            "one failure fraction to the next; also the refresh "
+                            "interval of the node scenario "
+                            "(default 2*(down-min+down-jitter))")
+        p.add_argument("--failure-start", type=float, default=None,
+                       help="seconds of warmup before failures begin — churn "
+                            "start and first node wave alike, and the cut every "
+                            f"post-warmup measurement uses (default {FAILURE_START:g})")
         p.add_argument("--noreplay", action="store_true",
                        help="also run GP with recoveryReplayEnabled=false")
         p.add_argument("--nospof", action="store_true",
@@ -436,6 +664,15 @@ def main(args=None):
         p.add_argument("--post", action="store_true",
                        help="don't simulate; re-parse the result dirs prior runs "
                             "left and (re)draw the combined tables + plots")
+        p.add_argument("--dir", default=None, metavar="PATH",
+                       help="overview mode only: run every *.txt topology in "
+                            "this directory instead of --topo, so the boxes "
+                            "span topologies as well as RNG seeds")
+        p.add_argument("--overview", action="store_true",
+                       help="traffic-only mode: messages and bytes per failure "
+                            "window (churn, and each node-wave fraction), "
+                            "boxplotted over --repeat RNG seeds. No RIB "
+                            "snapshots, so no reconvergence/stretch output")
         args = p.parse_args()
         apply_repeat_args(args)
 
@@ -454,6 +691,7 @@ def main(args=None):
     DOWN_JITTER = getattr(args, "down_jitter", None) or DOWN_JITTER
     CHURN_NODES = getattr(args, "churn_nodes", None) or CHURN_NODES
     CHURN_PERIOD = getattr(args, "churn_period", None) or CHURN_PERIOD
+    FAILURE_START = getattr(args, "failure_start", None) or FAILURE_START
     if not getattr(args, "noreplay", False):
         CONFIGS.pop("gp_noreplay", None)
     if not getattr(args, "nospof", False):
@@ -497,25 +735,34 @@ def main(args=None):
     # each other's inis and .vec/.sca mid-write — opp_scavetool then dies on a
     # truncated vector file.
     global OUT
-    OUT = os.path.join(OUT, os.path.splitext(os.path.basename(args.topo))[0]
+    # A --dir sweep is one measurement over many topologies, so it lands in one
+    # dir named after the topology set; result dirs inside carry the topo stem.
+    topos = topo_set(args)
+    # …and to the mode: overview runs write the same res_* dirs but WITHOUT the
+    # RIB snapshots the normal mode's tables read, so the two must not share a dir.
+    OUT = os.path.join(OUT, (os.path.basename(str(args.dir).rstrip("/"))
+                             if getattr(args, "dir", None) else stem(args.topo))
                        + (f"_{args.only}" if getattr(args, "only", None) else "")
+                       + ("_overview" if getattr(args, "overview", False) else "")
                        + (f"_{args.tag}" if getattr(args, "tag", None) else ""))
     os.makedirs(OUT, exist_ok=True)
     if not os.path.exists(BIN):
         sys.exit(f"RoutingSim binary not found at {BIN} — build it first.")
 
-    labels = ensure_ring_labels(args.topo, args.basis,
-                                getattr(args, 'max_ring_size', 0),
-                                not getattr(args, 'no_echo_rings', False))
     inis = {}
     need_protos = {CONFIGS[n][0] for n in CONFIGS}  # "gp"/"ls" bases actually used
-    for proto in [p for p in ("gp", "ls") if p in need_protos] if run_sims else []:
-        for net, key in ((None, "flat"), (RECOVERY_NETWORK, "recovery"),
-                         (CHURN_NETWORK, "churn")):
-            inis[(proto, key)] = write_proto_ini(
-                os.path.join(OUT, f"{proto}_{key}.ini"), proto, args.topo, labels,
-                update_jitter=args.update_jitter if proto == "gp" else None,
-                **({"network": net} if net else {}))
+    for topo in topos if run_sims else []:
+        labels = ensure_ring_labels(topo, args.basis,
+                                    getattr(args, 'max_ring_size', 0),
+                                    not getattr(args, 'no_echo_rings', False))
+        for proto in [p for p in ("gp", "ls") if p in need_protos]:
+            for net, key in ((None, "flat"), (RECOVERY_NETWORK, "recovery"),
+                             (CHURN_NETWORK, "churn")):
+                inis[(topo, proto, key)] = write_proto_ini(
+                    os.path.join(OUT, f"{stem(topo)}_{proto}_{key}.ini"),
+                    proto, topo, labels,
+                    update_jitter=args.update_jitter if proto == "gp" else None,
+                    **({"network": net} if net else {}))
 
     traffic, series0, bytes0, churn_bytes = {}, {}, {}, {}
     churn_series = {}
@@ -524,6 +771,9 @@ def main(args=None):
     # finish before the next wave.
     spacing = args.wave_spacing or round(2 * (DOWN_MIN + DOWN_JITTER))
     waves = []
+
+    if getattr(args, "overview", False):
+        return overview(inis, topos, scenarios, fractions, spacing, run_sims)
 
     # --- traffic scenarios ---
     for scenario in [s for s in scenarios if s != "node"]:
@@ -542,7 +792,7 @@ def main(args=None):
             got = {}
             r = repeat_mean(lambda rep, n=name, s=scenario, d=dyn:
                             got.setdefault(rep, measure(
-                                n, inis.get((CONFIGS[n][0], net)), s, d,
+                                n, inis.get((args.topo, CONFIGS[n][0], net)), s, d,
                                 rep=rep, run=run_sims))[0])
             if scenario == "churn" and 0 in got:
                 churn_series[name] = got[0][1]
@@ -572,8 +822,9 @@ def main(args=None):
             for name in CONFIGS:
                 if rep == 0:
                     print(f"  → {name} …", flush=True)
-                tr, ser, reboots = measure(name, inis.get((CONFIGS[name][0], "recovery")),
-                                           "node", dyn, st, rep, run=run_sims)
+                tr, ser, reboots = measure(
+                    name, inis.get((args.topo, CONFIGS[name][0], "recovery")),
+                    "node", dyn, st, rep, run=run_sims)
                 if rep == 0:
                     series0.setdefault(name, ser)
                     resdir = rep_path(os.path.join(OUT, f"res_{name}_node"), rep)
@@ -698,7 +949,8 @@ def report(traffic, reconv, fractions, scenarios, spacing, churn_bytes=None):
         return
     r_s = node_refresh(spacing)
     print(f"\n=== reconvergence after a node wave (down {DOWN_MIN:g}-"
-          f"{DOWN_MIN + DOWN_JITTER:g}s, waves every {spacing:g}s, "
+          f"{DOWN_MIN + DOWN_JITTER:g}s, first wave t={churn_start():g}s, "
+          f"then every {spacing:g}s, "
           f"refresh {r_s:g}s){repeats_note()} ===")
     print(f"{'fraction':>9}{'config':>13}{'affected':>10}{'late':>6}{'late -%':>9}"
           f"{'mean':>15}{'median':>9}{'net(max)':>13}{'mean/refresh':>14}"

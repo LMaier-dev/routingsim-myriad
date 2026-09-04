@@ -59,8 +59,13 @@ def main():
             sp.add_argument("--down-jitter", type=float, default=None,
                             help="node downtime jitter in seconds (default 8)")
             sp.add_argument("--wave-spacing", type=float, default=None,
-                            help="seconds between waves; also the refresh "
-                                 "interval of the node scenario (default 30)")
+                            help="settle time between node waves (one failure "
+                                 "fraction to the next); also the refresh "
+                                 "interval of the node scenario")
+            sp.add_argument("--failure-start", type=float, default=None,
+                            help="warmup seconds before failures begin (churn "
+                                 "start and first node wave) and the cut every "
+                                 "post-warmup measurement uses (default 100)")
             sp.add_argument("--noreplay", action="store_true",
                             help="also run GP with recoveryReplayEnabled=false")
             sp.add_argument("--nospof", action="store_true",
@@ -79,6 +84,15 @@ def main():
             sp.add_argument("--post", action="store_true",
                             help="re-parse prior runs' result dirs and draw the "
                                  "combined plots without simulating")
+            sp.add_argument("--dir", default=None, metavar="PATH",
+                            help="overview mode only: run every *.txt topology "
+                                 "in this directory instead of --topo, so the "
+                                 "boxes span topologies as well as RNG seeds")
+            sp.add_argument("--overview", action="store_true",
+                            help="traffic-only mode: messages and bytes per "
+                                 "failure window (churn, each node-wave "
+                                 "fraction), boxplotted over --repeat RNG seeds; "
+                                 "no RIB snapshots, so no reconvergence output")
 
     sc = sub.add_parser("scaling")
     sc.add_argument("--quick", action="store_true")
