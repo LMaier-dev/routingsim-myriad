@@ -1,4 +1,6 @@
 *.png
-*.ringlabels.ini
+*.ring.ini
 eval
 eval_before*
+
+*.native.ring.txt

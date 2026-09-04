@@ -40,7 +40,7 @@ _PAPER_LABELS = [f"**.Node{n}.*.ringLabel = \"{r}\"" for n, r in enumerate(
 # used as-is; None means generate the min-basis labels from the topology.
 # Built into their own inis rather than run out of myriad{gp,ls}.ini -c NAME:
 # OMNeT++ resolves every `include` in the file, including ones under configs you
-# did not select, so an unrelated section's missing ringlabels ini aborts the run.
+# did not select, so an unrelated section's missing ring .ini aborts the run.
 CONFIGS = {
     "Grid10": (SIM_ROOT / "topologies" / "grid_10,10.txt", None),
     "PaperTopology": (SIM_ROOT / "MYRIAD" / "myriad_paperexample.txt", _PAPER_LABELS),
@@ -149,7 +149,7 @@ def _labels_for(label, topo, labels):
     written out from an inline list."""
     if labels is None:
         return ensure_ring_labels(topo, "min")
-    out = os.path.join(OUT, f"{label}.ringlabels.ini")
+    out = os.path.join(OUT, f"{label}.ring.ini")
     with open(out, "w") as f:
         f.write("\n".join(labels) + "\n")
     return out

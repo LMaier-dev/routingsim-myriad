@@ -15,6 +15,8 @@ REPO        = SIM_ROOT.parent
 SRC         = REPO / "src"
 BIN         = str(SRC / "RoutingSim")
 TOPO_DIR    = SIM_ROOT / "topologies"
+TOPO_SCRIPTS = MYRIAD_DIR / "myriad_topologies"   # topo/ring generators live here
+RINGLABELS_DIR = TOPO_SCRIPTS / "ringlabels"      # generated + native ring-label inis
 DEFAULT_TOPO = TOPO_DIR / "grid_10,10.txt"
 COMMON_INI  = str(MYRIAD_DIR / "eval_common.ini")
 
@@ -168,25 +170,38 @@ def mark_gate_passed():
     _GATE_STAMP.write_text(_bin_sig())
 
 
-def ensure_ring_labels(topo_path, basis="tree", max_ring_size=0, echo=True,
-                       min_ring_size=0):
-    """Return path to <stem>.<basis>[.mN][.loN][.noecho].ringlabels.ini,
+def ensure_ring_labels(topo_path, basis="tree", max_ring_size=0, echo=True):
+    """Return path to <stem>.<basis>[.mN][.noecho].ring.ini,
     generating it if absent. The pruning options are part of the file name so a
     run never picks up labels built under different ones."""
     import time
     p = Path(topo_path)
+    # native: the ring plan is not mined here at all -- it ships beside the topo
+    # as <stem>.native.ring.ini (topologies built FROM rings). Use it
+    # verbatim; regenerating would discard the very plan being evaluated.
+    if basis == "native":
+        # ringpipe/export ship the pair <stem>.[…].{txt,ini}: the ini is just the
+        # topo's stem with a .ini extension, sitting in the ringlabels dir. Older
+        # hand-authored plans use <stem>.native.ring.ini beside eval_common.
+        out = RINGLABELS_DIR / f"{p.stem}.ini"
+        if not out.exists():
+            out = MYRIAD_DIR / f"{p.stem}.native.ring.ini"
+        if not out.exists():
+            sys.exit(f"--basis native but no ring labels for {p.name} "
+                     f"(expected {RINGLABELS_DIR / (p.stem + '.ini')}; "
+                     f"run myriad_topologies/ringpipe.py or export.py)")
+        return out
     tag = (basis + (f".m{max_ring_size}" if max_ring_size else "")
-           + (f".lo{min_ring_size}" if min_ring_size else "")
            + ("" if echo else ".noecho"))
-    out = MYRIAD_DIR / f"{p.stem}.{tag}.ringlabels.ini"
+    out = RINGLABELS_DIR / f"{p.stem}.{tag}.ring.ini"
     if not out.exists():
+        out.parent.mkdir(parents=True, exist_ok=True)
         print(f"  [ring labels] {p.name} ({tag}) …", flush=True)
         t0 = time.time()
         proc = subprocess.Popen(
-            [sys.executable, str(MYRIAD_DIR / "topo2rings.py"),
+            [sys.executable, str(TOPO_SCRIPTS / "topo2rings.py"),
              str(p), "--out", str(out), "--basis", basis,
              *(["--max-ring-size", str(max_ring_size)] if max_ring_size else []),
-             *(["--min-ring-size", str(min_ring_size)] if min_ring_size else []),
              *([] if echo else ["--no-echo"])],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
         for line in proc.stdout:
@@ -202,7 +217,7 @@ def ensure_ring_labels(topo_path, basis="tree", max_ring_size=0, echo=True,
 
 
 def ring_label_lines(labels_path):
-    """Read a .ringlabels.ini and return non-comment content lines."""
+    """Read a .ring.ini and return non-comment content lines."""
     with open(labels_path) as f:
         return [ln.rstrip("\n") for ln in f if ln.strip() and not ln.startswith("#")]
 
@@ -410,18 +425,15 @@ def add_topo_args(parser):
         "--topo", default=str(DEFAULT_TOPO),
         help=f"topology file (default: {DEFAULT_TOPO.name})")
     parser.add_argument(
-        "--basis", choices=["min", "tree", "short", "all"], default="tree",
+        "--basis", choices=["min", "tree", "all", "native"], default="tree",
         help="ring basis: tree=cycle_basis (spanning-tree, default), "
-             "min=minimum_cycle_basis, short=greedy bounded-cycle cover "
-             "(first cycle <= max-ring-size per edge); 'all' aliases tree")
+             "min=minimum_cycle_basis; 'all' aliases tree; "
+             "native=use a hand-provided <stem>.native.ring.ini as-is "
+             "(for topologies built FROM a ring plan, e.g. myriad_topologies/ringpipe.py)")
     parser.add_argument(
         "--max-ring-size", dest="max_ring_size", type=int, default=0,
         help="drop rings larger than this; members fall back to echo rings "
              "(0 = keep all). Long rings dominate GP's fan-out and lap latency")
-    parser.add_argument(
-        "--min-ring-size", dest="min_ring_size", type=int, default=0,
-        help="basis=short only: target floor on ring size (the cover prefers "
-             "rings >= this, allowing smaller outliers where forced). 0 = no floor")
     parser.add_argument(
         "--no-echo-rings", dest="no_echo_rings", action="store_true",
         help="omit 2-node echo rings; combined with --max-ring-size this can "

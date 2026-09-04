@@ -78,8 +78,7 @@ def main(args=None):
 
     labels = ensure_ring_labels(args.topo, args.basis,
                                 getattr(args, 'max_ring_size', 0),
-                                not getattr(args, 'no_echo_rings', False),
-                                min_ring_size=getattr(args, 'min_ring_size', 0))
+                                not getattr(args, 'no_echo_rings', False))
     want_nospof = getattr(args, "nospof", False)
     gp_extra = (["**.refreshFloodsUpdate = false"]
                 if getattr(args, "no_refresh_flood", False) else None)

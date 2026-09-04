@@ -195,7 +195,7 @@ def labels_path(topo_path):
     runs at different --max-ring-size never reuse each other's labels."""
     stem = os.path.splitext(os.path.basename(topo_path))[0]
     tag = f"{BASIS}.m{MAX_RING_SIZE}" if MAX_RING_SIZE else BASIS
-    return os.path.join(TOPO_DIR, f"{stem}.{tag}.ringlabels.ini")
+    return os.path.join(TOPO_DIR, f"{stem}.{tag}.ring.ini")
 
 def ring_label_lines(topo_path):
     """Run topo2rings (skipped if labels already exist), return the per-node
