@@ -429,10 +429,12 @@ def build(family="gabriel", rings=100, seed=0, ring_size=8,
     filler nodes spliced out (0=keep all, the default, so node counts stay
     comparable with older runs).
 
-    ring_size_max: if set, ring sizes vary in [ring_size, ring_size_max], with
-    the biggest rings going to the busiest sites -- more glue slots there, so a
-    high --share fits instead of running out. Assigned by DEGREE, not random: a
-    random draw would waste big rings on leaf sites while the hubs starve."""
+    ring_size_max: if set, each site's ring is sized to its DEGREE (2 slots per
+    link) within [ring_size, ring_size_max] -- busy sites get the big rings,
+    leaf sites stay small, and nobody carries slots no link will use.
+    ring_size_max also caps site degree (ring_size_max//2), so it is really a
+    knob on how many links a site may host: raise it for more share
+    opportunities, not for bigger rings."""
     s = _check_ring_size(ring_size)
     s_max = _check_ring_size(ring_size_max) if ring_size_max else s
     if s_max < s:
@@ -446,13 +448,12 @@ def build(family="gabriel", rings=100, seed=0, ring_size=8,
     # and the big rings are handed to the high-degree sites below.
     sg = _hard_cap(_cap_degree(sg, s_max // 2), s_max // 2)
     if s_max > s:
-        # Enough slots for this site's own links, rounded up to even, plus a
-        # random bump within the range for variety.
-        size = {}
-        for v in sg.nodes():
-            need = max(s, 2 * sg.degree(v) + (2 * sg.degree(v)) % 2)
-            lo = min(max(s, need), s_max)
-            size[v] = int(rng.integers(lo // 2, s_max // 2 + 1)) * 2
+        # Exactly the slots this site's links need (2 per link), clamped to
+        # [s, s_max]. Slack beyond that is pure filler: measured against a
+        # random bump toward s_max, and against uniform +1/+2 spare slots, on
+        # all four families -- fan-out reach was identical within seed noise
+        # while the bump generated ~25-35% more single-ring nodes.
+        size = {v: min(max(s, 2 * sg.degree(v)), s_max) for v in sg.nodes()}
     else:
         size = {v: s for v in sg.nodes()}
     g, plan, rpos = _glue_widths(sg, pts, size, rng, spof, share, width_max,
@@ -481,7 +482,7 @@ def export_and_plot(family, rings, seed=0, ring_size=8,
            + (f"_pn{prune_node:g}" if prune_node else "")
            + (f"_ps{prune_solo:g}" if prune_solo else ""))
     stem = (f"ringpipe_{family}_A{rings}_spof{spof:g}_share{share:g}{tag}"
-            f"_seed{seed}_n{s['n']}_fan{s['fan']}")
+            f"_seed{seed}_fan{s['fan']}_n{s['n']}")
     # Group a run's three files under one subfolder keyed by family/A/spof, so a
     # sweep's outputs don't fan out flat across csv/ringlabels/gallery.
     sub = f"{family}_A{rings}_spof{spof:g}"
@@ -546,10 +547,76 @@ def _fit_solo(target, tol, **kw):
     return best[1], best[0]
 
 
-def sweep_share(shares, target_n=0, tol=25, **kw):
+AUTO_RING_SIZES = (6, 8, 10, 12, 14, 16, 20, 24, 32, 48)
+
+
+def _fit_ring_size(target, tol, sizes=AUTO_RING_SIZES, **kw):
+    """Pick the ring size (with its prune_solo) giving the MOST fan-out at
+    ~target nodes.
+
+    Ring size trades floor against fan-out, and the balance flips across a share
+    sweep, so no single --ring-size is right for the whole thing. At share=0 it
+    sets the reachable floor (~3.4*A nodes at 6, ~7.5*A at 16), which is what
+    decides whether `target` is even reachable. At share=1 it sets how far hub
+    reuse can concentrate ring memberships onto few nodes -- and fan is
+    quadratic in k, so concentration, not membership count, is what pays."""
+    best = None
+    for rs in sizes:
+        try:
+            ps, err = _fit_solo(target, tol, ring_size=rs, **kw)
+        except ValueError:
+            continue                      # target outside this size's n range
+        if err > tol:
+            continue
+        s = score(*build(ring_size=rs, prune_solo=ps, **kw)[:2])
+        if abs(s["n"] - target) <= tol and (best is None or s["fan"] > best[0]):
+            best = (s["fan"], rs, ps)
+    if best is None:
+        # At share=0 a small ring has almost no filler to trim, so each size
+        # only spans a few percent of n -- and sizes step 6, 8, 10..., so the
+        # bands have gaps a target can fall straight through. n scales with the
+        # site count though, so report the --rings that would land on it.
+        a = kw.get("rings") or 1
+        bands = []
+        for rs in sizes:
+            lo = build(ring_size=rs, prune_solo=1.0, **kw)[0].number_of_nodes()
+            hi = build(ring_size=rs, prune_solo=0.0, **kw)[0].number_of_nodes()
+            if hi > lo:
+                bands.append(f"--ring-size {rs} wants --rings "
+                             f"{round(target * a / hi)}-{round(target * a / lo)}")
+        raise ValueError(
+            f"no ring size reaches n~{target} (+/-{tol}) at --rings {a}, "
+            f"share={kw.get('share')}. n is pinned to the site count -- use one "
+            f"of:\n    " + "\n    ".join(bands[:4])
+            + f"\n  (or raise --target-tol, currently {tol})")
+    return best[1], best[2]
+
+
+def sweep_share(shares, target_n=0, tol=25, auto_ring_size=False, **kw):
     """Export one topology per share value, all at ~target_n nodes. Default
     target = the smallest unpruned n in the sweep (high share fuses nodes, so
-    that's the ceiling); every other share is pruned DOWN to it."""
+    that's the ceiling); every other share is pruned DOWN to it.
+
+    auto_ring_size: choose --ring-size per point for maximum fan-out spread
+    instead of holding one size across the sweep (see _fit_ring_size). Default
+    target then becomes the share=0 floor at the smallest size, which is the
+    anchor that makes the span widest -- so only --rings and --target-n are left
+    to pick."""
+    if auto_ring_size:
+        kw.pop("ring_size", None)
+        kw.pop("ring_size_max", None)     # size is chosen per point now
+        if not target_n:
+            target_n = build(share=0.0, ring_size=AUTO_RING_SIZES[0],
+                             prune_solo=1.0, **kw)[0].number_of_nodes()
+            print(f"  target-n not given, using the share=0 floor: {target_n}")
+        for sh in shares:
+            rs, ps = _fit_ring_size(target_n, tol, share=sh, **kw)
+            s, *_ = export_and_plot(ring_size=rs, share=sh, prune_solo=ps,
+                                    quiet=True, **kw)
+            print(f"share={sh:4g} ring_size={rs:3} prune_solo={ps:.3f} "
+                  f"n={s['n']:5} fan={s['fan']:7} fan/n={s['fan_n']:6.2f} "
+                  f"maxk={s['maxk']:3} spof={s['spofpct']:5.1f}%")
+        return
     if not target_n:
         target_n = min(build(share=sh, prune_solo=0.0, **kw)[0].number_of_nodes()
                        for sh in shares)
@@ -644,6 +711,11 @@ def main():
                     help="node count to hit in --sweep-share (0 = smallest n the "
                          "sweep can all reach)")
     ap.add_argument("--target-tol", type=int, default=25, help="allowed node-count error")
+    ap.add_argument("--auto-ring-size", action="store_true",
+                    help="in --sweep-share: pick --ring-size per point for the "
+                         "widest fan-out span (small rings at low share keep n "
+                         "reachable, big ones at high share concentrate rings "
+                         "onto hubs). Leaves only --rings and --target-n to pick")
     ap.add_argument("--selfcheck", action="store_true")
     a = ap.parse_args()
     if a.selfcheck:
@@ -653,7 +725,8 @@ def main():
                   ring_size=a.ring_size, spof=a.spof, width_max=a.width_max,
                   hub_cap=a.hub_cap, prune_ring=a.prune_ring,
                   prune_node=a.prune_node, ring_size_max=a.ring_size_max)
-        return sweep_share(a.sweep_share, a.target_n, a.target_tol, **kw)
+        return sweep_share(a.sweep_share, a.target_n, a.target_tol,
+                           auto_ring_size=a.auto_ring_size, **kw)
     export_and_plot(a.family, a.rings, a.seed, a.ring_size, a.spof, a.share,
                     a.width_max, a.hub_cap, a.prune_ring, a.prune_node,
                     a.ring_size_max, a.prune_solo)

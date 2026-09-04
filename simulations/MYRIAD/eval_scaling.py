@@ -35,15 +35,17 @@ import os
 import re
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor
 
+import eval_harness as harness
 from eval_harness import (BIN, SIM_ROOT, SRC, REPO, MYRIAD_DIR, add_repeat_args,
-                          announce, apply_repeat_args, common, overrides, pm,
+                          announce, apply_repeat_args, common, ensure_ring_labels,
+                          overrides, pm,
                           rep_path, repeat_mean, repeats_note, run_sim, simtime,
                           warmup_s)
 
 HERE = str(MYRIAD_DIR)
 GRAPHGEN = str(REPO / "scripts" / "graphgen.py")
-TOPO2RINGS = str(MYRIAD_DIR / "topo2rings.py")
 
 EVAL_DIR = os.path.join(HERE, "eval")
 # TOPO_DIR/INI_DIR/PLOT_DIR are rebound under a per-basis subfolder in main()
@@ -63,6 +65,7 @@ CONV_SIMTIME = simtime(cycles=1)
 COMMON_INI = os.path.join(HERE, "eval_common.ini")
 
 SENT_TOTAL_RE = re.compile(r"^scalar\s+\S+\s+sent_total\s+([0-9.]+)", re.M)
+BYTES_RE = re.compile(r"^scalar\s+\S+\s+bytes_(\S+)\s+([0-9.]+)", re.M)
 
 
 def _sum_scalar(scas, name):
@@ -190,27 +193,12 @@ def gen_flower(N):
     return path
 
 
-def labels_path(topo_path):
-    """Where this topology's ring labels live. The cap is part of the name so
-    runs at different --max-ring-size never reuse each other's labels."""
-    stem = os.path.splitext(os.path.basename(topo_path))[0]
-    tag = f"{BASIS}.m{MAX_RING_SIZE}" if MAX_RING_SIZE else BASIS
-    return os.path.join(TOPO_DIR, f"{stem}.{tag}.ring.ini")
-
 def ring_label_lines(topo_path):
-    """Run topo2rings (skipped if labels already exist), return the per-node
-    ringLabel lines (inlined into the ini)."""
-    ini = labels_path(topo_path)
-    if not os.path.exists(ini):
-        # No --no-png: topo2rings paints <=250-node topologies into
-        # eval/topology_pngs/ and skips the rest, so a sweep leaves a gallery.
-        r = run(["python3", TOPO2RINGS, topo_path, "--out", ini,
-                 "--basis", BASIS,
-                 "--max-ring-size", str(MAX_RING_SIZE)])
-        if not os.path.exists(ini):
-            sys.exit(f"topo2rings failed for {topo_path}:\n{r.stdout}\n{r.stderr}")
-    with open(ini) as f:
-        return [ln for ln in f if ln.strip() and not ln.startswith("#")]
+    """The per-node ringLabel lines (inlined into the ini), generating them if
+    needed. ensure_ring_labels is the shared chokepoint: it prefers a shipped
+    native plan, generates via topo2rings otherwise, and validates either."""
+    return harness.ring_label_lines(
+        ensure_ring_labels(topo_path, BASIS, MAX_RING_SIZE))
 
 
 def write_ini(proto, topo_path, ring_lines):
@@ -218,6 +206,7 @@ def write_ini(proto, topo_path, ring_lines):
     fair-timing knobs, then only the per-run bits (protocol, topology, inlined
     ring labels). Absolute paths so it runs from SIM_ROOT."""
     stem = os.path.splitext(os.path.basename(topo_path))[0]
+    topo_path = os.path.abspath(topo_path)   # the sim runs from SIM_ROOT
     ini_path = os.path.join(INI_DIR, f"{proto}_{stem}.ini")
     proto_ned = f"routingsim.routing.MYRIAD.myriad{proto}"
     lines = [
@@ -260,6 +249,16 @@ def message_count(proto, ini_path, tag="", extra_args=None, rep=0):
     return total
 
 
+def byte_count(proto, ini_path, tag="", rep=0):
+    """Total routing bytes on the wire, from the per-type `bytes_*` scalars.
+    Reads the .sca message_count already produced — no second run."""
+    res = rep_path(
+        os.path.join(INI_DIR, f"res_{proto}{tag}_{os.path.basename(ini_path)}"), rep)
+    return sum(int(float(m.group(2)))
+               for sca in glob.glob(os.path.join(res, "*.sca"))
+               for m in BYTES_RE.finditer(open(sca).read()))
+
+
 def batch_stats(ini_path, tag="", rep=0):
     """Read the GP run's already-written .sca (message_count ran first) and
     return (n_batches, avg_entries, max_entries) for the inter-ring UPDATE
@@ -276,53 +275,72 @@ def batch_stats(ini_path, tag="", rep=0):
     return n_batches, avg, mx
 
 
+def measure(topo, nobatch=False, conv=False):
+    """LS + GP on one topology -> the result dict for one sweep point."""
+    rings = ring_label_lines(topo)
+    ls_ini = write_ini("ls", topo, rings)
+    gp_ini = write_ini("gp", topo, rings)
+
+    # One repeat = this topology's LS+GP pair (plus its batch/convergence
+    # readouts) on one seed; repeat_mean averages the numbers across repeats.
+    def one(rep):
+        ls_extra = []
+        gp_extra = overrides(holdInterval="0s") if nobatch else []
+        if conv:
+            stem = os.path.splitext(os.path.basename(topo))[0]
+            ls_dump = rep_path(os.path.join(INI_DIR, f"dump_ls_{stem}.txt"), rep)
+            gp_dump = rep_path(os.path.join(INI_DIR, f"dump_gp_{stem}.txt"), rep)
+            for d in (ls_dump, gp_dump):   # C++ appends; clear stale prior runs
+                if os.path.exists(d):
+                    os.remove(d)
+            conv_opts = overrides(snapshotInterval=CONV_SNAP,
+                                  snapshotFormat='"stats"',
+                                  sim_time_limit=CONV_SIMTIME)
+            ls_extra += [f'--**.oracleDumpFile="{ls_dump}"', *conv_opts]
+            gp_extra += [f'--**.ribDumpFile="{gp_dump}"', *conv_opts]
+        r = {"ls": message_count("ls", ls_ini, extra_args=ls_extra or None, rep=rep),
+             "gp": message_count("gp", gp_ini, extra_args=gp_extra or None, rep=rep)}
+        r["ls_b"] = byte_count("ls", ls_ini, rep=rep)
+        r["gp_b"] = byte_count("gp", gp_ini, rep=rep)
+        r["nb"], r["avg_sz"], r["max_sz"] = batch_stats(gp_ini, rep=rep)
+        if conv:
+            r["ls_ct"] = (convergence_time(parse_stats(ls_dump))
+                          if os.path.exists(ls_dump) else None)
+            raw = (convergence_time(parse_stats(gp_dump))
+                   if os.path.exists(gp_dump) else None)
+            r["gp_ct"] = (raw - warmup_s()) if raw is not None else None
+        return r
+
+    return repeat_mean(one)
+
+
 def sweep(items, nobatch=False, conv=False):
     """items: list of (label, topo_path). Runs LS and ONE GP per topology. GP
     uses the holdInterval pinned in eval_common.ini (batching on); pass
     nobatch=True to override it to 0s — the pre-batching baseline, which is far
     slower (no coalescing) so it's opt-in, not run every sweep. Returns a dict of
-    parallel series: labels, ls, gp, avg_sz, max_sz, and (if conv) ls_ct, gp_ct."""
-    out = {k: [] for k in ("labels", "ls", "gp", "avg_sz", "max_sz")}
+    parallel series: labels, ls, gp, avg_sz, max_sz, and (if conv) ls_ct, gp_ct.
+
+    With --jobs>1 the topologies run concurrently (each writes its own ini and
+    result dir, so they don't collide); results still print in sweep order."""
+    out = {k: [] for k in ("labels", "ls", "gp", "ls_b", "gp_b", "avg_sz", "max_sz")}
     if conv:
         out["ls_ct"] = []
         out["gp_ct"] = []
-    for (label, topo) in items:
-        rings = ring_label_lines(topo)
-        ls_ini = write_ini("ls", topo, rings)
-        gp_ini = write_ini("gp", topo, rings)
+    run_one = lambda it: measure(it[1], nobatch, conv)
+    if (harness.JOBS or 1) > 1 and len(items) > 1:
+        harness.PROGRESS = False    # N concurrent sims would fight over the \r line
+        with ThreadPoolExecutor(max_workers=harness.JOBS) as ex:
+            results = list(ex.map(run_one, items))
+    else:
+        results = [run_one(it) for it in items]
 
-        # One repeat = this topology's LS+GP pair (plus its batch/convergence
-        # readouts) on one seed; repeat_mean averages the numbers across repeats.
-        def one(rep, ls_ini=ls_ini, gp_ini=gp_ini, topo=topo):
-            ls_extra = []
-            gp_extra = overrides(holdInterval="0s") if nobatch else []
-            if conv:
-                stem = os.path.splitext(os.path.basename(topo))[0]
-                ls_dump = rep_path(os.path.join(INI_DIR, f"dump_ls_{stem}.txt"), rep)
-                gp_dump = rep_path(os.path.join(INI_DIR, f"dump_gp_{stem}.txt"), rep)
-                for d in (ls_dump, gp_dump):   # C++ appends; clear stale prior runs
-                    if os.path.exists(d):
-                        os.remove(d)
-                conv_opts = overrides(snapshotInterval=CONV_SNAP,
-                                      snapshotFormat='"stats"',
-                                      sim_time_limit=CONV_SIMTIME)
-                ls_extra += [f'--**.oracleDumpFile="{ls_dump}"', *conv_opts]
-                gp_extra += [f'--**.ribDumpFile="{gp_dump}"', *conv_opts]
-            r = {"ls": message_count("ls", ls_ini, extra_args=ls_extra or None, rep=rep),
-                 "gp": message_count("gp", gp_ini, extra_args=gp_extra or None, rep=rep)}
-            r["nb"], r["avg_sz"], r["max_sz"] = batch_stats(gp_ini, rep=rep)
-            if conv:
-                r["ls_ct"] = (convergence_time(parse_stats(ls_dump))
-                              if os.path.exists(ls_dump) else None)
-                raw = (convergence_time(parse_stats(gp_dump))
-                       if os.path.exists(gp_dump) else None)
-                r["gp_ct"] = (raw - warmup_s()) if raw is not None else None
-            return r
-
-        r = repeat_mean(one)
+    for (label, _), r in zip(items, results):
         out["labels"].append(label)
         out["ls"].append(r["ls"])
         out["gp"].append(r["gp"])
+        out["ls_b"].append(r["ls_b"])
+        out["gp_b"].append(r["gp_b"])
         out["avg_sz"].append(r["avg_sz"])
         out["max_sz"].append(r["max_sz"])
         mode = "no-batch" if nobatch else "batched"
@@ -336,7 +354,8 @@ def sweep(items, nobatch=False, conv=False):
         # message_count returns None when a run produced no .sca
         def _n(v):
             return "None" if v is None else f"{v:.0f}{pm(v, '.0f')}"
-        print(f"  {label:<6} LS={_n(r['ls'])}  GP({mode})={_n(r['gp'])}  "
+        print(f"  {label:<6} LS={_n(r['ls'])}/{r['ls_b']/1000:.0f}KB  "
+              f"GP({mode})={_n(r['gp'])}/{r['gp_b']/1000:.0f}KB  "
               f"batches={r['nb']:.0f} avg_sz={r['avg_sz']:.1f} "
               f"max_sz={r['max_sz']:.0f}{ct_str}")
     return out
@@ -361,7 +380,18 @@ def plot(res, title, xlabel, outfile, nobatch=False):
     axL.plot(xs, res["gp"], "s-", label=gp_label, color="tab:red")
     axL.set_xticks(xs); axL.set_xticklabels(labels, rotation=45, ha="right")
     axL.set_xlabel(xlabel); axL.set_ylabel("routing messages sent")
-    axL.set_title(title); axL.legend(); axL.grid(True, alpha=0.3)
+    axL.set_title(title); axL.grid(True, alpha=0.3)
+    # Bytes share the panel on a twin axis: message count alone hides the fact
+    # that GP's PDUs are far fatter, so the two curves can rank opposite ways.
+    axB = axL.twinx()
+    axB.plot(xs, [b / 1000 for b in res["ls_b"]], "o--", color="tab:blue",
+             alpha=0.45, label="LS bytes")
+    axB.plot(xs, [b / 1000 for b in res["gp_b"]], "s--", color="tab:red",
+             alpha=0.45, label="GP bytes")
+    axB.set_ylabel("routing bytes sent (KB, dashed)")
+    h1, l1 = axL.get_legend_handles_labels()
+    h2, l2 = axB.get_legend_handles_labels()
+    axL.legend(h1 + h2, l1 + l2, fontsize=8)
 
     axR.plot(xs, res["avg_sz"], "s-", label="mean entries / batch",
              color="tab:green")
@@ -392,6 +422,8 @@ def _read_edges(topo_path):
     """Return (n_nodes, [edges]) from a routingsim .txt (skip #/blank; first
     remaining line is the N M header)."""
     lines = [l for l in open(topo_path) if l.strip() and not l.startswith("#")]
+    if not lines:            # header-only file, e.g. an interrupted ringpipe
+        return 0, []
     n = int(lines[0].split()[0])
     edges = [tuple(map(int, l.split()[:2])) for l in lines[1:]]
     return n, edges
@@ -460,9 +492,7 @@ def draw_topologies(outfile):
         n, edges = _read_edges(topo)
         # full ring membership per node (all rings, for the pie wedges).
         # Generate if absent: --only topos runs no sims, so nothing else would.
-        ini = labels_path(topo)
-        if not os.path.exists(ini):
-            ring_label_lines(topo)
+        ini = str(ensure_ring_labels(topo, BASIS, MAX_RING_SIZE))
         ring_of = {}
         if os.path.exists(ini):
             for l in open(ini):
@@ -541,6 +571,15 @@ def main(args=None):
                              "echo rings (0 = keep all, the default). Long rings "
                              "dominate GP's fan-out, and --basis tree produces "
                              "very large ones. Results nest under a .mN label file.")
+        ap.add_argument("--dir", metavar="DIR",
+                        help="sweep every .txt in DIR instead of the built-in "
+                             "grid sweeps (e.g. a ringpipe family folder under "
+                             "myriad_topologies/csv/). ringpipe's own ring labels "
+                             "are used when present.")
+        ap.add_argument("--x-key", dest="x_key", default="fan", metavar="WORD",
+                        help="with --dir: the word in the file names whose "
+                             "trailing number is the x-axis (default fan; e.g. "
+                             "n, share, spof)")
         ap.add_argument("--single", metavar="TOPO",
                         help="run GP+LS on ONE topology .txt and print counts (no "
                              "sweep, no plot). Path relative to simulations/topologies "
@@ -573,6 +612,33 @@ def main(args=None):
         return
     if not os.path.exists(BIN):
         sys.exit(f"RoutingSim binary not found at {BIN} — build it first.")
+
+    if getattr(args, "dir", None):
+        topos = sorted(glob.glob(os.path.join(os.path.abspath(args.dir), "*.txt")))
+        if not topos:
+            sys.exit(f"no .txt topologies in {args.dir}")
+        # An interrupted ringpipe leaves a header-only .txt behind. Drop those
+        # here rather than letting topo2rings die on the null graph an hour into
+        # the sweep.
+        empty = [p for p in topos if not _read_edges(p)[1]]
+        for p in empty:
+            print(f"  ! skipping {os.path.basename(p)}: no edges "
+                  "(truncated topology — rerun ringpipe or delete it)")
+        topos = [p for p in topos if p not in empty]
+        # ringpipe names encode the sweep variable, so order by share (then n)
+        # rather than lexically -- "share0.1" sorts before "share0" as a string.
+        # Sort and label by the --x-key number in the file name (ringpipe encodes
+        # fan, n, share, ... there). Lexical order is wrong: "fan1000" < "fan296".
+        def num(p):
+            mo = re.search(rf"_{args.x_key}([0-9]+\.?[0-9]*)", os.path.basename(p))
+            return float(mo.group(1)) if mo else 0.0
+        items = [(f"{args.x_key}{num(p):g}", p) for p in sorted(topos, key=num)]
+        name = os.path.basename(os.path.normpath(args.dir))
+        print(f"== dir sweep: {name} ({len(items)} topologies) ==")
+        plot(sweep(items, args.nobatch, args.convergence),
+             f"GP vs LS: {name}", args.x_key,
+             os.path.join(PLOT_DIR, f"dir_{name}_{args.x_key}.png"), args.nobatch)
+        return
 
     if args.single:
         # One topology, counts only (no sweep/plot). Resolve relative to the

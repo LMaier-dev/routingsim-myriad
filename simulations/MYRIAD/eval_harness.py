@@ -28,6 +28,7 @@ _PROGRESS_RE = re.compile(r"Elapsed:|% done|% complete|\bETA\b|\d+%")
 # and are announced, so a printed run always matches the conditions used.
 EXTRA_OPTS = []          # from --set, applied to every run
 RNG_ISOLATE = True       # dynamics RNG isolated from the protocols'
+PROGRESS = True          # live \r status line; off when runs go in parallel
 _announced = set()
 
 
@@ -170,27 +171,44 @@ def mark_gate_passed():
     _GATE_STAMP.write_text(_bin_sig())
 
 
+def native_labels(topo_path):
+    """The ring plan shipped WITH a generated topology, or None.
+
+    ringpipe/export write the pair as csv/<sub>/<stem>.txt and
+    ringlabels/<sub>/<stem>.ini, so mirror the path across the two trees. Older
+    plans sit flat in ringlabels/ or beside eval_common as <stem>.native.ring.ini."""
+    p = Path(topo_path).resolve()
+    cand = []
+    if "csv" in p.parts:
+        i = len(p.parts) - 1 - p.parts[::-1].index("csv")
+        cand.append(Path(*p.parts[:i], "ringlabels",
+                         *p.parts[i + 1:]).with_suffix(".ini"))
+    cand += [RINGLABELS_DIR / f"{p.stem}.ini",
+             MYRIAD_DIR / f"{p.stem}.native.ring.ini"]
+    return next((c for c in cand if c.exists()), None)
+
+
 def ensure_ring_labels(topo_path, basis="tree", max_ring_size=0, echo=True):
     """Return path to <stem>.<basis>[.mN][.noecho].ring.ini,
     generating it if absent. The pruning options are part of the file name so a
-    run never picks up labels built under different ones."""
+    run never picks up labels built under different ones.
+
+    A shipped native plan always wins, whatever --basis says: those topologies
+    were built FROM their rings, so mining a fresh basis would measure a
+    different plan than the one being evaluated."""
     import time
     p = Path(topo_path)
-    # native: the ring plan is not mined here at all -- it ships beside the topo
-    # as <stem>.native.ring.ini (topologies built FROM rings). Use it
-    # verbatim; regenerating would discard the very plan being evaluated.
-    if basis == "native":
-        # ringpipe/export ship the pair <stem>.[…].{txt,ini}: the ini is just the
-        # topo's stem with a .ini extension, sitting in the ringlabels dir. Older
-        # hand-authored plans use <stem>.native.ring.ini beside eval_common.
-        out = RINGLABELS_DIR / f"{p.stem}.ini"
-        if not out.exists():
-            out = MYRIAD_DIR / f"{p.stem}.native.ring.ini"
-        if not out.exists():
-            sys.exit(f"--basis native but no ring labels for {p.name} "
-                     f"(expected {RINGLABELS_DIR / (p.stem + '.ini')}; "
-                     f"run myriad_topologies/ringpipe.py or export.py)")
-        return out
+    native = native_labels(topo_path)
+    if basis == "native" and native is None:
+        sys.exit(f"--basis native but no ring labels for {p.name} "
+                 f"(expected {RINGLABELS_DIR / (p.stem + '.ini')}; "
+                 f"run myriad_topologies/ringpipe.py or export.py)")
+    if native is not None:
+        if basis != "native":
+            print(f"  [ring labels] {p.name}: using shipped plan "
+                  f"{native.name} (ignoring --basis {basis})", flush=True)
+        check_ring_plan(topo_path, native)
+        return native
     tag = (basis + (f".m{max_ring_size}" if max_ring_size else "")
            + ("" if echo else ".noecho"))
     out = RINGLABELS_DIR / f"{p.stem}.{tag}.ring.ini"
@@ -213,7 +231,40 @@ def ensure_ring_labels(topo_path, basis="tree", max_ring_size=0, echo=True):
         if proc.returncode != 0 or not out.exists():
             sys.exit(f"topo2rings.py failed for {p.name}")
         print(f"  [ring labels] generated {out.name} ({time.time()-t0:.0f}s)", flush=True)
+    check_ring_plan(topo_path, out)
     return out
+
+
+_RING_CHECKED = set()
+
+
+def check_ring_plan(topo_path, labels_path):
+    """Warn if the plan isn't walkable by GP; see myriad_topologies/ringcheck.py.
+
+    Every eval routes through ensure_ring_labels, so checking here covers native
+    and generated plans alike. A warning, not an exit: an unwalkable ring makes
+    that ring's laps circle until the hop cap kills them, which skews overhead
+    and reconvergence but still produces a run worth looking at."""
+    key = (str(topo_path), str(labels_path))
+    if key in _RING_CHECKED:
+        return {}
+    _RING_CHECKED.add(key)
+    sys.path.insert(0, str(TOPO_SCRIPTS))
+    import ringcheck
+    bad = ringcheck.check(topo_path, labels_path)
+    if bad:
+        worst = sorted(bad.items())[:3]
+        print(f"  ! {Path(topo_path).name}: {len(bad)} of "
+              f"{len(ringcheck.load(topo_path, labels_path)[0])} rings are not "
+              f"walkable (a member has !=2 ring-neighbours, so GP's lap can fork "
+              f"off the cycle):", flush=True)
+        for r, off in worst:
+            print(f"      ring {r}: {off}", flush=True)
+        if len(bad) > len(worst):
+            print(f"      … and {len(bad) - len(worst)} more; list them with "
+                  f"myriad_topologies/ringcheck.py {topo_path} {labels_path}",
+                  flush=True)
+    return bad
 
 
 def ring_label_lines(labels_path):
@@ -238,10 +289,10 @@ def run_sim(cmd, cwd=None, allow_budget_expired=False, rep=0):
     lines = []
     for line in proc.stdout:
         lines.append(line)
-        if rep == 0 and _PROGRESS_RE.search(line):
+        if PROGRESS and rep == 0 and _PROGRESS_RE.search(line):
             sys.stderr.write(f"\r    {line.rstrip()[:100]:<100}")
             sys.stderr.flush()
-    if rep == 0:
+    if PROGRESS and rep == 0:
         sys.stderr.write("\r" + " " * 104 + "\r")
         sys.stderr.flush()
     proc.wait()

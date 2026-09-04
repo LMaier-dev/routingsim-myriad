@@ -43,7 +43,8 @@ _PAPER_LABELS = [f"**.Node{n}.*.ringLabel = \"{r}\"" for n, r in enumerate(
 # did not select, so an unrelated section's missing ring .ini aborts the run.
 CONFIGS = {
     "Grid10": (SIM_ROOT / "topologies" / "grid_10,10.txt", None),
-    "PaperTopology": (SIM_ROOT / "MYRIAD" / "myriad_paperexample.txt", _PAPER_LABELS),
+    "PaperTopology": (SIM_ROOT / "MYRIAD" / "myriad_topologies" / "csv"
+                      / "myriad_paperexample.txt", _PAPER_LABELS),
 }
 
 # One refresh cycle, well above convergence time so generations never overlap

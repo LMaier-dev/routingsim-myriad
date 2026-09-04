@@ -204,6 +204,12 @@ def measure(name, ini, scenario, dyn, simt=None, rep=0, run=True):
             present = int(m.group(6)) if m.group(6) else n_live
             series[int(m.group(2))][float(m.group(1))] = (
                 present, int(m.group(4)), int(m.group(5)), n_live)
+    # Every latency in the node/churn scenarios is read off these snapshots, so
+    # an interval longer than the run silently yields nothing to score.
+    if scenario in ("node", "churn") and not series:
+        sys.exit(f"FAIL: {name} produced no RIB snapshots over the "
+                 f"{simt or traffic_simtime()} run — snapshotInterval is "
+                 f"{common('snapshotInterval')}. Lower it (e.g. --snapshot 200ms).")
     return ({"counts": counts, "msgs": sum(counts.values()),
              "bytes": sum(byts.values()), "per_type_bytes": byts, "max_b": maxb},
             series, reboots)
