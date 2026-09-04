@@ -70,6 +70,7 @@ void MyriadGP::onInitialize() {
     recoveryReplayEnabled = par("recoveryReplayEnabled");
     refreshFloodsUpdate = par("refreshFloodsUpdate");
     carryRr = par("carryRr");
+    maxCollectHops = par("maxCollectHops");
     maxBatchBytes = par("maxBatchBytes");
     holdInterval = par("holdInterval");
     spofHoldMultiplier = par("spofHoldMultiplier");
@@ -611,6 +612,21 @@ void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t sender) {
     insertAndForwardCollect(collect, R, sender);
 }
 
+bool MyriadGP::lapExpired(MyriadGpHeader* pkt, uint32_t ring, nodeid_t sender,
+                          const char* what) {
+    // Every in-ring forward passes here. A lap longer than the ring is no longer
+    // walking the cycle
+    uint32_t cap = (uint32_t) maxCollectHops;
+    uint32_t hops = pkt->getHops() + 1u;
+    if (hops > cap) {
+        MLOG_N_WARN(sender) << what << " ring='" << ring << "' seq=" << pkt->getSeq_no()
+                            << " past " << cap << " hops (chorded ring?); dropping\n";
+        return true;
+    }
+    pkt->setHops((uint8_t) hops);
+    return false;
+}
+
 nodeid_t MyriadGP::otherRingNeighbor(uint32_t ring, nodeid_t sender) {
     for (auto& [nid, n] : neighbors) {
         if (nid == sender) continue;
@@ -701,6 +717,7 @@ void MyriadGP::originateUpdate(uint32_t ring) {
 
 void MyriadGP::insertAndForwardCollect(MyriadGpCollect* pkt, uint32_t R, nodeid_t sender) {
     RingMembership& m = memberships[R];
+    if (lapExpired(pkt, R, sender, "COLLECT")) return;
     replayIfBest(pkt, R);
     // Count myself as a ring member
     pkt->setMember_count(pkt->getMember_count() + 1);
@@ -906,6 +923,7 @@ void MyriadGP::processChain(uint32_t curRing, uint32_t seq, uint32_t spof,
 }
 
 void MyriadGP::forwardUpdateInRing(MyriadGpUpdate* pkt, uint32_t ring, nodeid_t sender) {
+    if (lapExpired(pkt, ring, sender, "UPDATE")) return;
     nodeid_t to = otherRingNeighbor(ring, sender);
     if (to == undefined_node) {
         // Genuine 2-node ring: echo to the sender to close the lap. A degraded
@@ -1245,6 +1263,7 @@ void MyriadGP::replayInto(uint32_t ring) {
 }
 
 void MyriadGP::forwardBatchInRing(MyriadGpUpdateBatch* pkt, uint32_t ring, nodeid_t sender) {
+    if (lapExpired(pkt, ring, sender, "batch")) return;
     nodeid_t to = otherRingNeighbor(ring, sender);
     if (to == undefined_node) {
         // Genuine 2-node ring: echo to the sender to close the batch lap (see

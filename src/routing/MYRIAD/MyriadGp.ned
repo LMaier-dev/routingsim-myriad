@@ -63,6 +63,10 @@ simple myriadgp extends routingsim.foundation.Protocol
         // Eval only: Disable RR
         bool carryRr = default(true);
 
+        // In-ring lap kill-switch: a lap past this many hops is dropped. Nothing
+        // else ends one that stops meeting its originator.
+        int maxCollectHops = default(128);
+
         // On COLLECT own-return, if a recovered (stateless) member is on the
         // ring, the king replays its current front-of-ring chains as seq=0
         // UPDATEs so the recovered node repopulates without waiting for refresh.

@@ -26,7 +26,7 @@ constexpr int64_t SIMTIME      = 8;   // simtime_t on the wire
 constexpr int64_t TYPE_TAG     = 1;   // PDU / LSA type enum
 
 constexpr int64_t MYRIADLS_HDR = TYPE_TAG + NODEID;             // 3:  type + router_id_src
-constexpr int64_t MYRIADGP_HDR = TYPE_TAG + NODEID + U32 + U32; // 11: + seq_no + current_ring
+constexpr int64_t MYRIADGP_HDR = TYPE_TAG + NODEID + U32 + U32 + 1; // 12: + seq_no + current_ring + hops
 constexpr int64_t LSA_HDR      = TYPE_TAG + U16 + U32 + NODEID; // 9:  type + seq + age + origin
 constexpr int64_t RR           = U32 + NODEID;                  // 6:  subnet + owner
 constexpr int64_t TRANSITION   = U32 + 1;                       // 5:  ring + isRedundant

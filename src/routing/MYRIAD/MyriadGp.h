@@ -101,6 +101,9 @@ namespace routingsim {
             void onNeighborDead(GpNeighbor& nbr, bool wasFull) override;
 
             void handleCollect(MyriadGpCollect* collect, nodeid_t from);
+            // In-ring lap kill-switch; see MyriadGp.ned maxCollectHops.
+            bool lapExpired(MyriadGpHeader* pkt, uint32_t ring, nodeid_t sender,
+                            const char* what);
             void handleUpdate(MyriadGpUpdate* update, nodeid_t from);
             void handleUpdateBatch(MyriadGpUpdateBatch* batch, nodeid_t from);
             void handleDegrade(MyriadGpDegrade* degrade, nodeid_t from);
@@ -210,6 +213,7 @@ namespace routingsim {
             bool suppressRedundantTransitions = true;
             // RibEntry never carries rr. (For eval)
             bool carryRr = true;
+            long maxCollectHops = 128;  // lap kill-switch; see MyriadGp.ned
             bool recoveryReplayEnabled = true;
             // Only re-verifies ring state and resets members' watchdogs; it does
             // NOT re-flood an UPDATE. Meant to pair with recoveryReplayEnabled

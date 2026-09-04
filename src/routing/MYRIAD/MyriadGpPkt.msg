@@ -64,6 +64,7 @@ packet MyriadGpHeader {
     nodeid_t router_id_src;
     uint32_t seq_no;
     uint32_t current_ring; // forwarded unconditionally within this ring
+    uint8_t hops = 0;
 }
 
 // isRedundant: false = a single-router (SPOF) transition to `ring`, true = two+.
