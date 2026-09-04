@@ -482,12 +482,15 @@ def export_and_plot(family, rings, seed=0, ring_size=8,
            + (f"_ps{prune_solo:g}" if prune_solo else ""))
     stem = (f"ringpipe_{family}_A{rings}_spof{spof:g}_share{share:g}{tag}"
             f"_seed{seed}_n{s['n']}_fan{s['fan']}")
+    # Group a run's three files under one subfolder keyed by family/A/spof, so a
+    # sweep's outputs don't fan out flat across csv/ringlabels/gallery.
+    sub = f"{family}_A{rings}_spof{spof:g}"
     # .native.ring marks a topology that SHIPS its ring plan (use --basis
     # native); the suffix makes that visible in a directory listing.
-    os.makedirs(CSV_DIR, exist_ok=True)
-    os.makedirs(RINGLABELS_DIR, exist_ok=True)
-    topo = os.path.join(CSV_DIR, f"{stem}.native.ring.txt")
-    ini = os.path.join(RINGLABELS_DIR, f"{stem}.native.ring.ini")
+    os.makedirs(os.path.join(CSV_DIR, sub), exist_ok=True)
+    os.makedirs(os.path.join(RINGLABELS_DIR, sub), exist_ok=True)
+    topo = os.path.join(CSV_DIR, sub, f"{stem}.native.ring.txt")
+    ini = os.path.join(RINGLABELS_DIR, sub, f"{stem}.native.ring.ini")
     exp.write_topology(g, topo,
         f"myriad_topologies/ringpipe.py family={family} rings(A)={rings} "
         f"spof_target={spof} share_target={share} width_max={width_max} seed={seed}")
@@ -505,8 +508,8 @@ def export_and_plot(family, rings, seed=0, ring_size=8,
     ring_ids = [t2r.RING_ID_BASE - i for i in range(n_rings)]
     stats = t2r.topology_stats(g, ring_of, n_rings, n_echo, 0,
         f"{stem}  fam={family} A={rings} spof_target={spof:g} share_target={share:g}")
-    os.makedirs(GALLERY, exist_ok=True)
-    png = os.path.join(GALLERY, f"{stem}.png")
+    os.makedirs(os.path.join(GALLERY, sub), exist_ok=True)
+    png = os.path.join(GALLERY, sub, f"{stem}.png")
     # Echo rings have no site, so they get no fixed position -- draw() falls
     # back to a spring layout for the whole panel if any ring is missing one.
     ring_pos = {t2r.RING_ID_BASE - i: p for i, p in enumerate(rpos)}
