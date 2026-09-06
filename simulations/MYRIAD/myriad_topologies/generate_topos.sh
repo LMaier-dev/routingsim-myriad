@@ -80,7 +80,7 @@ rm -rf "${TOPO_DIR}"/{csv,ringlabels,gallery}/delaunay_lenfan*_spof${SPOF}
 
 gen "full: share sweep at FIXED ring length, n=${TARGET_N}" \
     --family delaunay --rings $RINGS_BIG --width-max 6 --max-meet 12 \
-    --sweep-share 0 0.45 0.65 0.74 0.84 0.85 0.875 0.915 1 0.952 --hold-len 16 \
+    --sweep-share 0 0.49 0.65 0.74 0.84 0.915 0.875 0.952 1 --hold-len 16 \
     --spof $SPOF --ring-size 8 --target-n $TARGET_N
 
 gen "full: ring-length sweep at FIXED fan-out, n=${TARGET_N_LEN}" \
