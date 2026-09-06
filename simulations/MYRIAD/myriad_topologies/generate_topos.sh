@@ -21,7 +21,7 @@
 # _seed<N>), so a plotted curve is a mean rather than one lucky draw.
 set -euo pipefail
 
-TOPO_DIR=/root/routingsim/simulations/MYRIAD/myriad_topologies
+TOPO_DIR=~/routingsim/simulations/MYRIAD/myriad_topologies
 SPOF=0.25
 SEEDS="0 1 2 3 4"
 
