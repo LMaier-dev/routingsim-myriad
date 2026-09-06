@@ -5,6 +5,7 @@ from pathlib import Path
 import numbers
 import os
 import re
+import shutil
 import statistics
 import subprocess
 import sys
@@ -273,6 +274,61 @@ def ring_label_lines(labels_path):
         return [ln.rstrip("\n") for ln in f if ln.strip() and not ln.startswith("#")]
 
 
+# Crash lines too: a SIGABRT prints its reason through libstdc++/glibc, not
+# through OMNeT++'s error channel, so none of the words below appear in it.
+_ERR_RE = re.compile(r"<!>|Error|error|Fatal|Exception|ASSERT|budget expired"
+                     r"|ring broken|terminate called|bad_alloc|what\(\)"
+                     r"|Assertion|double free|corruption|Segmentation")
+
+
+def _fail(msg, cmd, log):
+    """Exit naming the run and quoting the error, not the log tail.
+
+    Under --jobs several sims share the terminal, so a bare FAIL says nothing
+    about which one died; and OMNeT++ dumps its undisposed objects AFTER the
+    error, so the last lines are reliably the least useful ones. The whole log
+    and the exact command go to a file either way: a sim that dies without
+    printing anything (an abort takes the unflushed stdout with it) leaves
+    nothing to quote, and then the only way on is to rerun it by hand."""
+    import shlex
+    args = [str(a) for a in cmd]
+    ini = next((a for a in reversed(args) if a.endswith(".ini")), "?")
+    cfg = next((b for a, b in zip(args, args[1:]) if a == "-c"), "")
+    errs = [ln.rstrip() for ln in log.splitlines() if _ERR_RE.search(ln)]
+    line = f"cd {SIM_ROOT} && " + shlex.join(args)
+    dump = MYRIAD_DIR / "eval" / "logs" / f"fail_{Path(ini).stem}_{os.getpid()}.log"
+    try:
+        dump.parent.mkdir(parents=True, exist_ok=True)
+        dump.write_text(f"# {msg}\n# {line}\n\n{log}")
+        where = f"\n  full log: {dump}"
+    except OSError as e:
+        where = f"\n  (could not write the log: {e})"
+    sys.exit(f"FAIL: {msg}\n  ini: {os.path.basename(ini)}"
+             f"{' -c ' + cfg if cfg else ''}\n  "
+             + "\n  ".join(errs[-12:] or log.splitlines()[-12:] or
+                           ["(the sim printed nothing)"])
+             + f"{where}\n  rerun: {line}")
+
+
+def _exit_reason(rc):
+    """What a nonzero return code means, in words. A negative one is a signal:
+    the sim was killed rather than exiting, and which signal narrows it a lot."""
+    if rc >= 0:
+        return f"sim exited {rc}"
+    import signal
+    try:
+        sig = signal.Signals(-rc)
+    except ValueError:
+        return f"sim killed by signal {-rc}"
+    hint = {"SIGABRT": "uncaught C++ exception or failed assert — commonly "
+                       "std::bad_alloc, i.e. out of memory: lower --jobs",
+            "SIGKILL": "killed from outside — usually the OOM killer: "
+                       "lower --jobs",
+            "SIGSEGV": "segfault in the model",
+            "SIGINT": "interrupted"}.get(sig.name, "")
+    return f"sim killed by {sig.name}" + (f" ({hint})" if hint else "")
+
+
 def run_sim(cmd, cwd=None, allow_budget_expired=False, rep=0):
     """Run simulator with live progress; exit on nonzero return or fatal patterns.
 
@@ -283,7 +339,11 @@ def run_sim(cmd, cwd=None, allow_budget_expired=False, rep=0):
     full_cmd += EXTRA_OPTS + [f"--seed-set={rep + 1}", "--cmdenv-status-frequency=2s"]
     if RNG_ISOLATE:
         full_cmd += ["--num-rngs=2", "--**.dynamics.rng-0=1"]
-    proc = subprocess.Popen(full_cmd, cwd=str(cwd or SIM_ROOT),
+    # Line-buffer the child: writing to a pipe, its stdout is block-buffered, so
+    # a crash (an abort, a signal) discards whatever error message is still in
+    # that buffer and the run looks like it died silently.
+    launch = (["stdbuf", "-oL", "-eL"] if shutil.which("stdbuf") else []) + full_cmd
+    proc = subprocess.Popen(launch, cwd=str(cwd or SIM_ROOT),
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                             text=True, bufsize=1)
     lines = []
@@ -298,14 +358,14 @@ def run_sim(cmd, cwd=None, allow_budget_expired=False, rep=0):
     proc.wait()
     log = "".join(lines)
     if proc.returncode != 0:
-        sys.exit(f"FAIL: sim exited {proc.returncode}\n{log[-1500:]}")
+        _fail(_exit_reason(proc.returncode), full_cmd, log)
     if not allow_budget_expired and ("budget expired" in log or "ring broken" in log):
         grace = (warmup_s() + _sec(common("deadInterval", "40s"))
                  + _sec(common("helloInterval", "10s")))
         stamps = [float(m.group(1)) for m in
                   re.finditer(r"\[t=([0-9.]+)[^\]]*\][^\n]*(?:budget expired|ring broken)", log)]
         if not stamps or any(t > grace for t in stamps):
-            sys.exit(f"FAIL: budget expired or ring broken\n{log[-1500:]}")
+            _fail("budget expired or ring broken", full_cmd, log)
     return proc
 
 

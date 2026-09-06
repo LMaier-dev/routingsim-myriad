@@ -841,6 +841,7 @@ def _sweep_share_holding_len(shares, target_n, hold_len, **kw):
         raise ValueError("--hold-len needs --target-n: with the length pinned "
                          "too, n is the only anchor left to solve --rings against")
     rings0 = kw.pop("rings", None)
+    shares = sorted(shares)
     if not hold_len:
         # Anchor on the SHORTEST length the highest share can manage. That point
         # is the hard one: its surplus is the biggest, and max_meet grows with
@@ -859,6 +860,10 @@ def _sweep_share_holding_len(shares, target_n, hold_len, **kw):
     sub = f"{kw['family']}_shr{target_n}_rl{hold_len:g}_spof{kw.get('spof', 0):g}"
 
     def solve_all(k):
+        # Ascending: _fit_rings bisects in a band around the previous point's
+        # answer, so a point's ring count depends on its predecessor. Neighbours
+        # in share are neighbours in ring count; an out-of-order list hands a
+        # point a hint from a share nowhere near it.
         out, hint = [], rings0 or 0
         for sh in shares:
             hint = _fit_rings(hold_len, target_n, hint=hint, share=sh, **_design(k))

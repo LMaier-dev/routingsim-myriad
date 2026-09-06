@@ -64,6 +64,11 @@ CONV_SIMTIME = simtime(cycles=1)
 # only per-run knobs (topology, ring labels, holdInterval) are written here.
 COMMON_INI = os.path.join(HERE, "eval_common.ini")
 
+# File-name keys -> what to call them on a chart axis. ringpipe's names are terse
+# so they glob well; a reader of the plot wants words.
+XNAME = {"rl": "length", "len": "length", "A": "#rings", "fan": "fan",
+         "share": "share", "n": "nodes", "spof": "spof"}
+
 SENT_TOTAL_RE = re.compile(r"^scalar\s+\S+\s+sent_total\s+([0-9.]+)", re.M)
 BYTES_RE = re.compile(r"^scalar\s+\S+\s+bytes_(\S+)\s+([0-9.]+)", re.M)
 
@@ -217,6 +222,11 @@ def write_ini(proto, topo_path, ring_lines):
         "network = routingsim.simulations.DefaultNetwork",
         f'*.manager.topologyFile = "{topo_path}"',
         "*.mainStatistics.samplingInterval = 0.01s",
+        # This script reads scalars only (sent_total / bytes_*). The vectors are
+        # a per-node time series that nobody here opens and that ran the eval
+        # tree to 17GB on an n=1000 sweep -- enough to fill the disk and fail
+        # runs. eval_dynamics does need them, and writes its own ini.
+        "**.vector-recording = false",
     ]
     lines += [ln.rstrip("\n") for ln in ring_lines]
     with open(ini_path, "w") as f:
@@ -317,13 +327,22 @@ def measure(topo, nobatch=False, conv=False):
 def _mean_over_seeds(rs):
     """Average the per-topology result dicts of one sweep point (its seeds).
 
-    Some fields are None when a run produced no .sca or no convergence dump;
-    they average over whatever IS there, and stay None if nothing is."""
+    harness._agg returns a Stat -- a float carrying .sd -- so the spread across
+    seeds survives into the plot as error bars. Fields are None when a run
+    produced no .sca or no convergence dump; those average over whatever IS
+    there, and stay None if nothing is."""
     out = {}
     for k in rs[0]:
         vals = [r[k] for r in rs if r.get(k) is not None]
-        out[k] = (sum(vals) / len(vals)) if vals else None
+        out[k] = harness._agg(vals) if vals else None
     return out
+
+
+def _sd(series):
+    """The .sd of each Stat in a series, or None if none of them carry one --
+    matplotlib takes None for `yerr` and draws no bars."""
+    sds = [getattr(v, "sd", 0.0) or 0.0 for v in series]
+    return sds if any(sds) else None
 
 
 def sweep(items, nobatch=False, conv=False):
@@ -339,6 +358,10 @@ def sweep(items, nobatch=False, conv=False):
     if conv:
         out["ls_ct"] = []
         out["gp_ct"] = []
+    # A point is a LIST of topologies (its seeds); the grid sweeps and --single
+    # have only one each and pass it bare, which would otherwise iterate as
+    # characters.
+    items = [(lab, [p] if isinstance(p, str) else p) for lab, p in items]
     # One job per (point, seed) rather than per point: with 5 seeds and 6 points
     # that is 30 independent runs, which fills --jobs far better than 6 would.
     jobs = [(i, t) for i, (_, paths) in enumerate(items) for t in paths]
@@ -383,54 +406,149 @@ def sweep(items, nobatch=False, conv=False):
     return out
 
 
-def plot(res, title, xlabel, outfile, nobatch=False):
-    """Two panels sharing the sweep's x-axis (message count + batch stats), plus
-    an optional third panel (convergence time) when res contains ls_ct/gp_ct.
-    `res` is the dict from sweep()."""
+def _regress(ax, xs, ys, color, ls="-"):
+    """Least-squares line through every measurement of one series, drawn across
+    the sampled range. Returns the slope and R2 for the legend, or '' when there
+    is nothing to fit."""
+    import numpy as np
+    pts = [(x, float(y)) for x, y in zip(xs, ys) if y is not None]
+    if len(pts) < 2:
+        return ""
+    x, y = np.array([p[0] for p in pts]), np.array([p[1] for p in pts])
+    m, b = np.polyfit(x, y, 1)
+    ss_res = float(((y - (m * x + b)) ** 2).sum())
+    ss_tot = float(((y - y.mean()) ** 2).sum())
+    lo, hi = x.min(), x.max()
+    ax.plot([lo, hi], [m * lo + b, m * hi + b], ls, color=color, lw=1.2, alpha=0.8)
+    r2 = 1 - ss_res / ss_tot if ss_tot else 1.0
+    return f" (fit: {m:,.3g}/unit, R²={r2:.3f})"
+
+
+def plot(res, title, xlabel, outfile, nobatch=False, batch_panel=True,
+         xs=None, invert=False, regress=False, rings=None):
+    """Message counts, optionally the batch-size panel, and a convergence panel
+    when res carries ls_ct/gp_ct. `res` is the dict from sweep().
+
+    Points measured over several seeds carry their spread in Stat.sd, drawn as
+    error bars: a sweep's curve means little without a sense of how much of it is
+    the draw rather than the knob.
+
+    xs places the points at the value of the swept knob instead of at even
+    intervals, so the curve's shape is the real one: sweep points are rarely
+    evenly spaced (fan 3100 vs 17248, length 8 vs 32), and even spacing
+    straightens curvature that is actually there. invert flips the axis for
+    knobs that run backwards against what scales (ring length vs ring count).
+
+    regress: one marker per measurement and a least-squares line instead of a
+    connected curve — for a --dir sweep, where each topology is its own point and
+    per-point tick labels would be dozens of overlapping strings. The axis then
+    keeps its own evenly spaced numeric ticks from 0, with `rings` (the ring
+    count of each measurement) read off the same positions on a top axis."""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     labels = res["labels"]
-    xs = list(range(len(labels)))
+    if xs is None:
+        xs = list(range(len(labels)))
     has_conv = "ls_ct" in res and any(v is not None for v in res["ls_ct"])
-    ncols = 3 if has_conv else 2
-    fig, axes = plt.subplots(1, ncols, figsize=(7.5 * ncols, 6))
-    axL, axR = axes[0], axes[1]
+    ncols = 1 + bool(batch_panel) + bool(has_conv)
+    fig, axes = plt.subplots(1, ncols, figsize=(7.5 * ncols, 6), squeeze=False)
+    axes = list(axes[0])
+    axL = axes.pop(0)
+    axR = axes.pop(0) if batch_panel else None
+
+    def ticks(ax):
+        if regress:
+            # Evenly spaced numeric ticks from 0 (matplotlib's own locator), not
+            # one tick per measurement: with a point per topology the old
+            # per-point labels would be dozens of overlapping strings.
+            ax.set_xlim(0, max(xs) * 1.05)
+            if invert:
+                ax.invert_xaxis()
+            if rings:
+                _rings_axis(ax)
+            return
+        ax.set_xticks(xs)
+        # Proportional spacing can put two points close together; small type is
+        # what keeps their two-line ticks from overlapping.
+        ax.set_xticklabels(labels, rotation=45, ha="right", fontsize=8)
+        if invert:
+            ax.invert_xaxis()
+
+    def _rings_axis(ax):
+        """Ring count on a top axis, at the same tick positions as the swept
+        knob. Interpolated from the measurements, so it is only labelled where
+        they actually cover — extrapolated ring counts would be invented."""
+        import numpy as np
+        order = sorted(zip(xs, rings))
+        kx = [p[0] for p in order]
+        ky = [p[1] for p in order]
+        top = ax.twiny()
+        top.set_xlim(ax.get_xlim())
+        locs = [t for t in ax.get_xticks()]
+        top.set_xticks(locs)
+        top.set_xticklabels([f"{np.interp(t, kx, ky):.0f}"
+                             if kx[0] <= t <= kx[-1] else "" for t in locs],
+                            fontsize=8)
+        top.set_xlabel("#rings", fontsize=9)
 
     gp_label = "Path-Vector, no batching" if nobatch else "Path-Vector, batched"
-    axL.plot(xs, res["ls"], "o-", label="Link-State (LS)", color="tab:blue")
-    axL.plot(xs, res["gp"], "s-", label=gp_label, color="tab:red")
-    axL.set_xticks(xs); axL.set_xticklabels(labels, rotation=45, ha="right")
+    # In regress mode the trend is the fitted line, so the markers stay
+    # unconnected — a line through 50 scattered topologies is noise, not shape.
+    fmt = (lambda m: m if regress else m + "-")
+    ms = 4 if regress else 6
+    fit = ((lambda ax, ser, c, ls="-": _regress(ax, xs, ser, c, ls)) if regress
+           else (lambda ax, ser, c, ls="-": ""))
+    axL.errorbar(xs, res["ls"], yerr=_sd(res["ls"]), fmt=fmt("o"), capsize=3, ms=ms,
+                 label="Link-State (LS)" + fit(axL, res["ls"], "tab:blue"),
+                 color="tab:blue")
+    axL.errorbar(xs, res["gp"], yerr=_sd(res["gp"]), fmt=fmt("s"), capsize=3, ms=ms,
+                 label=gp_label + fit(axL, res["gp"], "tab:red"), color="tab:red")
+    ticks(axL)
     axL.set_xlabel(xlabel); axL.set_ylabel("routing messages sent")
     axL.set_title(title); axL.grid(True, alpha=0.3)
     # Bytes share the panel on a twin axis: message count alone hides the fact
     # that GP's PDUs are far fatter, so the two curves can rank opposite ways.
     axB = axL.twinx()
-    axB.plot(xs, [b / 1000 for b in res["ls_b"]], "o--", color="tab:blue",
-             alpha=0.45, label="LS bytes")
-    axB.plot(xs, [b / 1000 for b in res["gp_b"]], "s--", color="tab:red",
-             alpha=0.45, label="GP bytes")
+    kb = lambda ser: [b / 1000 for b in ser]
+    kb_sd = lambda ser: (None if _sd(ser) is None else [v / 1000 for v in _sd(ser)])
+    axB.errorbar(xs, kb(res["ls_b"]), yerr=kb_sd(res["ls_b"]), fmt=fmt("o"),
+                 ls="" if regress else "--", capsize=3, ms=ms, color="tab:blue",
+                 alpha=0.45, label="LS bytes" + fit(axB, kb(res["ls_b"]), "tab:blue", "--"))
+    axB.errorbar(xs, kb(res["gp_b"]), yerr=kb_sd(res["gp_b"]), fmt=fmt("s"),
+                 ls="" if regress else "--", capsize=3, ms=ms, color="tab:red",
+                 alpha=0.45, label="GP bytes" + fit(axB, kb(res["gp_b"]), "tab:red", "--"))
     axB.set_ylabel("routing bytes sent (KB, dashed)")
     h1, l1 = axL.get_legend_handles_labels()
     h2, l2 = axB.get_legend_handles_labels()
     axL.legend(h1 + h2, l1 + l2, fontsize=8)
 
-    axR.plot(xs, res["avg_sz"], "s-", label="mean entries / batch",
-             color="tab:green")
-    axR.plot(xs, res["max_sz"], "^--", label="max entries / batch",
-             color="tab:olive", alpha=0.7)
-    axR.set_xticks(xs); axR.set_xticklabels(labels, rotation=45, ha="right")
-    axR.set_xlabel(xlabel); axR.set_ylabel("chains coalesced per batch packet")
-    axR.set_title("Inter-ring UPDATE batch size"); axR.legend()
-    axR.grid(True, alpha=0.3)
+    if axR is not None:
+        axR.errorbar(xs, res["avg_sz"], yerr=_sd(res["avg_sz"]), fmt=fmt("s"),
+                     capsize=3, ms=ms, color="tab:green",
+                     label="mean entries / batch"
+                           + fit(axR, res["avg_sz"], "tab:green"))
+        axR.errorbar(xs, res["max_sz"], yerr=_sd(res["max_sz"]), fmt=fmt("^"),
+                     ls="" if regress else "--", capsize=3, ms=ms,
+                     color="tab:olive", alpha=0.7,
+                     label="max entries / batch"
+                           + fit(axR, res["max_sz"], "tab:olive", "--"))
+        ticks(axR)
+        axR.set_xlabel(xlabel); axR.set_ylabel("chains coalesced per batch packet")
+        axR.set_title("Inter-ring UPDATE batch size"); axR.legend()
+        axR.grid(True, alpha=0.3)
 
     if has_conv:
-        axC = axes[2]
+        axC = axes.pop(0)
         ls_cts = [v for v in res["ls_ct"]]
         gp_cts = [v for v in res["gp_ct"]]
-        axC.plot(xs, ls_cts, "o-", label="LS convergence time", color="tab:blue")
-        axC.plot(xs, gp_cts, "s-", label="GP convergence time", color="tab:red")
-        axC.set_xticks(xs); axC.set_xticklabels(labels, rotation=45, ha="right")
+        axC.errorbar(xs, ls_cts, yerr=_sd(ls_cts), fmt=fmt("o"), capsize=3, ms=ms,
+                     label="LS convergence time" + fit(axC, ls_cts, "tab:blue"),
+                     color="tab:blue")
+        axC.errorbar(xs, gp_cts, yerr=_sd(gp_cts), fmt=fmt("s"), capsize=3, ms=ms,
+                     label="GP convergence time" + fit(axC, gp_cts, "tab:red"),
+                     color="tab:red")
+        ticks(axC)
         axC.set_xlabel(xlabel); axC.set_ylabel("convergence time (s)")
         axC.set_title("Convergence time vs network size")
         axC.legend(); axC.grid(True, alpha=0.3)
@@ -601,7 +719,13 @@ def main(args=None):
         ap.add_argument("--x-key", dest="x_key", default="fan", metavar="WORD",
                         help="with --dir: the word in the file names whose "
                              "trailing number is the x-axis (default fan; e.g. "
-                             "n, share, spof)")
+                             "rl, len, share, n). rl/len sweeps plot DESCENDING, "
+                             "so the ring count -- which is inverse to length at "
+                             "fixed n -- grows left to right")
+        ap.add_argument("--no-batch-panel", action="store_true",
+                        help="drop the inter-ring batch-size panel, leaving just "
+                             "the message/byte counts (and convergence, with -c). "
+                             "Not --nobatch, which turns GP's batching OFF")
         ap.add_argument("--single", metavar="TOPO",
                         help="run GP+LS on ONE topology .txt and print counts (no "
                              "sweep, no plot). Path relative to simulations/topologies "
@@ -654,40 +778,31 @@ def main(args=None):
             mo = re.search(rf"_{key}([0-9]+\.?[0-9]*)", os.path.basename(p))
             return float(mo.group(1)) if mo else 0.0
 
-        # Files differing only in _seed<N> are the same sweep point measured on
-        # different draws, so they are averaged rather than plotted separately.
-        # Everything a seed can shift is stripped from the key: the seed itself,
-        # the achieved ring length, and the fan/n/A the solver landed on. What
-        # remains -- family, spof, and the sweep point (share<v> or len<v>) -- is
-        # the point's identity.
-        vary = re.compile(r"_(seed|rl|fan|n|A)\d+(?:\.\d+)?")
-        groups = {}
-        for p in topos:
-            groups.setdefault(vary.sub("", os.path.basename(p)), []).append(p)
-        # The label carries the achieved ring length (_rl) and ring count (_A) as
-        # well as the sweep variable: length is what GP's lap cost keys off, and
-        # the count is what a held sweep spends to pin the other two, so both
-        # belong on the axis whatever is being swept. Averaged over the seeds,
-        # like the measurements themselves.
-        def mean(paths, key):
-            vals = [num(q, key) for q in paths]
-            return sum(vals) / len(vals)
-
-        items = []
-        for key, paths in groups.items():
-            x = mean(paths, args.x_key)
-            rl, rings = mean(paths, "rl"), mean(paths, "A")
-            sub = " ".join(t for t in (f"rl{rl:.0f}" if rl else "",
-                                       f"A{rings:.0f}" if rings else "") if t)
-            label = f"{args.x_key}{x:g}" + (f"\n{sub}" if sub else "")
-            items.append((x, label, sorted(paths)))
-        items = [(lab, ps) for _, lab, ps in sorted(items)]
-        nseed = max(len(ps) for _, ps in items)
+        # Every topology is its own measurement: seeds of the same sweep point
+        # differ in the fan/ring count they actually landed on, so averaging them
+        # into one point throws away both the spread and the x-resolution the
+        # scatter+regression reads the trend off.
+        items, xs, rings = [], [], []
+        for p in sorted(topos, key=lambda q: num(q, args.x_key)):
+            rl, A = num(p, "rl"), num(p, "A")
+            xs.append(num(p, args.x_key))
+            rings.append(A)
+            # share too: two sweep points can land on the same fan/length/ring
+            # count, and without it their console lines read as duplicates.
+            share = "" if args.x_key == "share" else f" share {num(p, 'share'):g}"
+            items.append((f"{XNAME.get(args.x_key, args.x_key)} {xs[-1]:g} "
+                          f"len {rl:.0f} #rings {A:.0f}{share} "
+                          f"seed {num(p, 'seed'):.0f}", [p]))
         name = os.path.basename(os.path.normpath(args.dir))
-        print(f"== dir sweep: {name} ({len(items)} points x up to {nseed} seeds) ==")
+        print(f"== dir sweep: {name} ({len(items)} topologies) ==")
+        # Length sweeps read right-to-left: at a fixed n the ring COUNT is what
+        # scales, and it is inverse to length (n = rings x length - surplus), so
+        # the axis is inverted to put the growing quantity on the growing side.
         plot(sweep(items, args.nobatch, args.convergence),
-             f"GP vs LS: {name}", args.x_key,
-             os.path.join(PLOT_DIR, f"dir_{name}_{args.x_key}.png"), args.nobatch)
+             f"GP vs LS: {name}", XNAME.get(args.x_key, args.x_key),
+             os.path.join(PLOT_DIR, f"dir_{name}_{args.x_key}.png"), args.nobatch,
+             batch_panel=not args.no_batch_panel,
+             xs=xs, invert=args.x_key in ("rl", "len"), regress=True, rings=rings)
         return
 
     if args.single:

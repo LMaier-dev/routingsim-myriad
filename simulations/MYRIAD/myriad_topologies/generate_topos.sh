@@ -68,22 +68,22 @@ wipe "delaunay_len${TARGET_N_LEN_QUICK}_spof${SPOF}"
 rm -rf "${TOPO_DIR}"/{csv,ringlabels,gallery}/delaunay_shr*_spof${SPOF}
 rm -rf "${TOPO_DIR}"/{csv,ringlabels,gallery}/delaunay_lenfan*_spof${SPOF}
 
-gen "quick: share sweep, n=${TARGET_N_QUICK}" \
-    --family delaunay --rings $RINGS_QUICK --width-max 6 \
-    --sweep-share 0.0 0.25 0.5 0.75 1.0 \
-    --spof $SPOF --ring-size 8 --target-n $TARGET_N_QUICK
+# gen "quick: share sweep, n=${TARGET_N_QUICK}" \
+#     --family delaunay --rings $RINGS_QUICK --width-max 6 \
+#     --sweep-share 0.0 0.25 0.5 0.75 1.0 \
+#     --spof $SPOF --ring-size 8 --target-n $TARGET_N_QUICK
 
-gen "quick: ring-length sweep, n=${TARGET_N_LEN_QUICK}" \
-    --family delaunay --width-max $LEN_WIDTH --share 0 \
-    --sweep-ring-len 8 12 16 \
-    --spof $SPOF --target-n $TARGET_N_LEN_QUICK
+# gen "quick: ring-length sweep, n=${TARGET_N_LEN_QUICK}" \
+#     --family delaunay --width-max $LEN_WIDTH --share 0 \
+#     --sweep-ring-len 8 12 16 \
+#     --spof $SPOF --target-n $TARGET_N_LEN_QUICK
 
 gen "full: share sweep at FIXED ring length, n=${TARGET_N}" \
-    --family delaunay --rings $RINGS_BIG --width-max 6 \
-    --sweep-share 0.0 0.2 0.4 0.6 0.8 1.0 --hold-len \
+    --family delaunay --rings $RINGS_BIG --width-max 6 --max-meet 12 \
+    --sweep-share 0 0.45 0.65 0.74 0.84 0.85 0.875 0.915 1 0.952 --hold-len 16 \
     --spof $SPOF --ring-size 8 --target-n $TARGET_N
 
 gen "full: ring-length sweep at FIXED fan-out, n=${TARGET_N_LEN}" \
-    --family delaunay --width-max $LEN_WIDTH \
-    --sweep-ring-len 4 8 12 16 24 32 --hold-fan \
+    --family delaunay --width-max $LEN_WIDTH --max-meet 13 \
+    --sweep-ring-len 8 9 10 12 16 24 32 --hold-fan \
     --spof $SPOF --target-n $TARGET_N_LEN
