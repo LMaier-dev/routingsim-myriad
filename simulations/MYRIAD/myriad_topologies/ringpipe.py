@@ -1,20 +1,57 @@
 #!/usr/bin/env python3
-"""Build a ring plan from a chosen SITE GRAPH, then emit it as a topology.
-Generalizes ringmesh (Gabriel sites, single-edge glue) with a few knobs:
+"""Generate ring topologies for the MYRIAD evals: a ring plan plus the graph
+that realises it.
 
-  --family     which site-graph rule to start from
-  --rings (A)  number of sites = number of base rings
-  --spof       fraction of ring-to-ring links guarded by a SINGLE shared node
-               (a SPOF). Spent on non-backbone links first, so the important
-               backbone links keep their redundancy longest.
-  --share      fraction of links that reuse a site's already-shared node instead
-               of a fresh one, so ONE node lands in 3+ rings. This is the real
-               fan-out lever: a node's cost jumps k=2->3 (+6) or 3->4 (+8), so
-               piling links onto repeat hubs matters more than adding links.
+WHAT A PLAN IS
+--------------
+A site graph (Delaunay/Gabriel/RGG/BA over random points) gives A sites; each
+site becomes one ring. Rings meet at INTERFACES -- a run of nodes carried by
+every ring in that interface:
 
-    python3 ringpipe.py --family gabriel --rings 100 --spof 0.1 --share 0.1
-    python3 ringpipe.py --family rgg --rings 200
+      ring P:  p0 - p1 - [ X - Y ] - p2 - p3 -+        interface {X,Y}
+               |                              |        is IN both rings,
+               +------------------------------+        contiguous in each
+
+      ring Q:  q0 - [ X - Y ] - q1 - q2 - q3 -+
+               |                              |
+               +------------------------------+
+
+Interfaces are edge-disjoint CLIQUES of sites, so any two rings meet exactly
+once. That is not cosmetic: MyriadGP infers ring adjacency from shared
+ringLabels, so if P and Q met in two separate places, the edge bounding one
+place would join two P-members that are not adjacent in P -- a CHORD, and GP's
+lap forks onto a sub-cycle that never closes (see ringcheck.py). Chord-freedom
+here is by construction, not by repair.
+
+WHAT ENDS UP ON THE EVAL'S X AXIS
+---------------------------------
+fan-out   sum over nodes of k(k-1), k = rings the node is in. An interface of m
+          rings and width w contributes w * m(m-1). --share raises m
+          (quadratic), --width-max raises w (linear).
+n         node count. Held exactly by padding rings with FILLER -- nodes in one
+          ring only, which carry no ring pairs and so cost no fan-out.
+length    median ring length -- MyriadGP's lap length, so it drives message
+          counts directly.
+
+These three are tied by an identity, and only TWO can be pinned at once:
+
+      sum(ring lengths) = n + sharing surplus
+                              ^^^^^^^^^^^^^^^ a node in k rings is counted k
+                                              times on the left, once on the right
+
+Raising --share IS raising that surplus, so at fixed n and fixed ring count the
+rings must grow (13 -> 21 over a 0..1 sweep). --hold-len spends the ring count
+to stop that; --hold-fan does the mirror on a length sweep.
+
+    python3 ringpipe.py --family gabriel --rings 100 --spof 0.1 --share 0.5
+    python3 ringpipe.py --sweep-share 0 0.5 1 --rings 150 --target-n 1000
+    python3 ringpipe.py --sweep-share 0 0.5 1 --rings 150 --target-n 1000 --hold-len
+    python3 ringpipe.py --sweep-ring-len 8 16 24 --target-n 1000 --hold-fan
     python3 ringpipe.py --selfcheck
+
+Each run writes three files under csv/, ringlabels/ and gallery/, named with the
+knobs AND the achieved figures (_rl<median length>, _fan<fan-out>, _n<nodes>) so
+eval_scaling.py can read the axis straight off the file names.
 """
 import argparse
 import math
@@ -29,14 +66,14 @@ MYRIAD = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 sys.path.insert(0, MYRIAD)
 
-from topo_lib import _check_ring_size, _cap_degree, _delaunay_edges, _DSU
+from topo_lib import _check_ring_size, _cap_degree, _delaunay_edges
 from metrics import score, rings_to_membership
 import export as exp
+import ringcheck
 import topo2rings as t2r
 
 SITE_FAMILIES = ("gabriel", "delaunay", "powerlaw", "rgg")
-WIDTH_MAX = 3          # default max transition width (shared nodes = width+1)
-HUB_CAP = 3            # share edges one hub anchor absorbs before a fresh one opens
+WIDTH_MAX = 2          # nodes per interface; 1 makes every transition a SPOF
 GALLERY = os.path.join(HERE, "gallery")
 CSV_DIR = os.path.join(HERE, "csv")            # topology .txt files
 RINGLABELS_DIR = os.path.join(HERE, "ringlabels")   # ring-label .ini files
@@ -70,10 +107,9 @@ def _raw_site_edges(family, pts, seed):
 
 def _hard_cap(sg, max_deg):
     """_cap_degree's connectivity repair can push a node above max_deg
-    ("connectivity beats the slot budget"). Harmless for Gabriel/Delaunay, but
-    powerlaw's hubs trigger it, and _glue_widths forces tree edges to width 1 --
-    dropping one silently splits the graph. Trim the longest excess edges,
-    skipping any whose removal would disconnect."""
+    ("connectivity beats the degree cap"). Harmless for Gabriel/Delaunay, but
+    powerlaw's hubs trigger it. Trim the longest excess edges, skipping any whose
+    removal would disconnect."""
     for v in sorted(sg.nodes(), key=lambda v: -sg.degree(v)):
         for u, w, d in sorted(sg.edges(v, data=True), key=lambda e: -e[2]["w"]):
             if sg.degree(v) <= max_deg:
@@ -84,187 +120,134 @@ def _hard_cap(sg, max_deg):
     return sg
 
 
-def _share_pairs(i, j, a, b, shares, si, sj):
-    """Union-find pairs for one glue: `shares` nodes shared between ring i (from
-    slot a) and ring j (from slot b). shares=1 -> SPOF, 2 -> normal glue, >=3 ->
-    a wide corridor -- all three are this one formula at different `shares`.
-    Each side wraps around its OWN ring size (si/sj), which differ once ring
-    sizes are randomized."""
-    return [((i, (a + da) % si), (j, (b + (shares - 1) - da) % sj)) for da in range(shares)]
+def _clique_cover_geo(sg, pts, rng, m_max):
+    """Edge-disjoint cliques of sites, each of which becomes one interface.
 
+    Cliques are grown from geometric neighbourhoods and are NOT limited to site
+    edges. That matters for fan-out: merely folding together sites the site graph
+    already joined is fan-neutral -- a triangle's three 2-ring corridors (3 x 2
+    nodes at k=2) and one 3-ring interface (2 nodes at k=3) are both fan 12 --
+    which would pin fan at 2*width*|E| whatever --share said. Letting an
+    interface CREATE ring adjacency is what lifts it: m rings meeting at one
+    interface put every one of its nodes in m rings, so fan grows as m(m-1) per
+    node while the node count grows only with the width.
 
-def _glue_widths(sg, pts, size, rng, spof=0.0, share=0.0, width_max=WIDTH_MAX,
-                 hub_cap=HUB_CAP, prune_ring=0.0):
-    """Glue the site graph into rings. Like the old fixed single-edge glue, but
-    with knobs:
+        m=2 (a corridor)        m=4 (a hub)
+        P --- Q                 P   Q       one interface serves all
+                                  +-+       C(4,2) = 6 ring pairs, and
+                                  +-+       every node in it is in 4
+                                R   S       rings -> fan 4*3 per node
 
-    spof: target fraction of links sharing exactly 1 node -- NOT decided here
-    (the total link count isn't known until `share` has invented its extra
-    links); _spof_final does it afterwards on the finished plan.
-    share: target fraction of links that reuse a site's hub slot instead of a
-    fresh one, building 3+-ring hubs.
-
-    Each glue costs 1 slot per side (a hub reuse costs 0 on the reusing side),
-    except a wide corridor (shares>=3) which reserves shares-1 slots -- paid only
-    where a site has spare room. Backbone (tree) links always take the minimal
-    shares=2, so connectivity never depends on spare capacity.
-
-    `size` = each site's slot count. A site's glue capacity is size//2, so
-    bigger rings are what let a high --share actually fit.
+    `met` is the whole invariant: a pair already sharing an interface is never
+    put in another, so no two rings can meet twice. The site MST is covered
+    first, so the ring graph comes out connected whatever the greedy does after.
     """
-    free = {i: list(range(0, size[i], 2)) for i in sg.nodes()}
-    for i in free:
-        rng.shuffle(free[i])
-    hub = {}            # site -> slot reused to build it into a 3+-ring hub
-    hub_use = {}        # site -> share edges the current anchor has absorbed
-    dsu = _DSU()
-    tree = {tuple(sorted(e)) for e in nx.minimum_spanning_tree(sg, weight="w").edges()}
-    edges = list(sg.edges())
-    non_tree = [tuple(sorted(e)) for e in edges if tuple(sorted(e)) not in tree]
-    rng.shuffle(non_tree)
+    met = set()
+    cliques = []
 
-    # spof isn't chosen here (see _spof_final): the denominator -- total ring
-    # pairs -- isn't known yet, because share adds extra links later.
-    spof_set = set()
-    share_pool = [tuple(sorted(e)) for e in edges]
-    rng.shuffle(share_pool)
-
-    # share: build hubs (>=2 links at the SAME site) by ROUND-ROBIN over sites,
-    # not by draining the busiest first -- draining piles every hub into one
-    # cluster (in a geometric family the busy sites sit together, so their
-    # mutual edges get picked by both ends and tangle up). Draw from ALL edges
-    # (minus spof's picks); holding back tree edges capped share far too low
-    # (66% on delaunay), since a hub reuse is never costlier than the plain glue
-    # it replaces.
-    touch = {}
-    for key in share_pool:
-        touch.setdefault(key[0], []).append(key)
-        touch.setdefault(key[1], []).append(key)
-    sites = sorted(touch, key=lambda v: -len(touch[v]))
-    ptr = {v: 0 for v in sites}
-    n_share = int(round(share * len(edges)))
-    share_set = set()
-    hub_m = {}          # site -> count of share edges it drives (its hub reuse count)
-    progress = True
-    while len(share_set) < n_share and progress:
-        progress = False
-        for v in sites:
-            if len(share_set) >= n_share:
+    def grow(seed):
+        c = list(seed)
+        if any(frozenset((x, y)) in met for i, x in enumerate(c) for y in c[i + 1:]):
+            return None
+        # Nearest sites first: an interface is a physical location (a street
+        # cabinet, an exchange), so the rings meeting there should be
+        # neighbours rather than scattered across the plane.
+        near = sorted(sg.nodes(), key=lambda w: min(
+            float(np.linalg.norm(pts[w] - pts[x])) for x in c))
+        for w in near:
+            if len(c) >= m_max:
                 break
-            lst = touch[v]
-            while ptr[v] < len(lst) and lst[ptr[v]] in share_set:
-                ptr[v] += 1
-            if ptr[v] < len(lst):
-                share_set.add(lst[ptr[v]])
-                hub_m[v] = hub_m.get(v, 0) + 1
-                ptr[v] += 1
-                progress = True
+            if w in c or any(frozenset((w, x)) in met for x in c):
+                continue
+            c.append(w)
+        met.update(frozenset((x, y)) for i, x in enumerate(c) for y in c[i + 1:])
+        return c
 
-    # prune-ring: drop a fraction of links entirely (the two rings just don't
-    # meet there). Only from non-tree links -- pruning the backbone would split
-    # the graph. Fewer links = sparser ring graph, the opposite of share.
-    n_prune = int(round(prune_ring * len(edges)))
-    prunable = [k for k in non_tree if k not in spof_set and k not in share_set]
-    prune_set = set(prunable[:max(0, min(n_prune, len(prunable)))])
+    for u, v in nx.minimum_spanning_tree(sg, weight="w").edges():
+        c = grow((u, v))
+        if c:
+            cliques.append(c)
+    rest = [tuple(sorted(e)) for e in sg.edges()]
+    rng.shuffle(rest)
+    for u, v in rest:
+        c = grow((u, v))
+        if c:
+            cliques.append(c)
+    return cliques
 
-    # Tree edges processed first and always minimal, so a backbone glue is
-    # never starved of its one required slot by an optional edge widening.
-    order = sorted(edges, key=lambda e: tuple(sorted(e)) not in tree)
 
-    def slot(i, reuse):
-        # Returns (slot, kind). "reuse" = an existing hub anchor (no capacity
-        # spent), "fresh" = a new even slot from free, "degrade" = fell back to
-        # the hub anchor with no free slot left. Hub bookkeeping happens in the
-        # loop, after it decides whether to accept a reuse.
-        if (reuse and i in hub and (not hub_cap or hub_use.get(i, 0) < hub_cap)
-                and hub[i] not in free[i]):
-            return hub[i], "reuse"
-        if free[i]:
-            return free[i][-1], "fresh"
-        return (hub[i], "degrade") if i in hub else (None, None)
+def _plan_cliques(sg, pts, rng, spof, share, ring_size, width_max, max_meet=0):
+    """Lay the clique cover out as rings: the plan, and the graph realising it.
 
-    def even_span(i, base, shares):
-        """The OTHER even slots a corridor at `base` covers on site i. shares<=2
-        covers none (which is why a plain 1-edge glue never collides); every
-        even slot is a glue anchor another link could still be handed."""
-        return [(base + d) % size[i] for d in range(2, shares) if d % 2 == 0]
+    Each ring is its interfaces written one after another around the loop, then
+    padded with filler to --ring-size:
 
-    for i, j in order:
-        key = tuple(sorted((i, j)))
-        if key in prune_set:            # dropped transition: never glued
-            continue
-        want_share = key in share_set
-        a, ka = slot(i, want_share)
-        b, kb = slot(j, want_share)
-        if a is None or b is None:
-            continue
-        # A share link reusing a hub on BOTH ends would fuse the two hubs into
-        # one node (collapsing both sites' rings onto it, chaining hub-to-hub).
-        # Keep hubs as stars: at most one end reuses, the other opens a fresh slot.
-        if ka == "reuse" and kb == "reuse" and free[j]:
-            b, kb = free[j][-1], "fresh"
-        elif ka == "reuse" and kb == "reuse" and free[i]:
-            a, ka = free[i][-1], "fresh"
-        for site, k in ((i, ka), (j, kb)):
-            if k == "reuse":
-                hub_use[site] = hub_use.get(site, 0) + 1
-        if ka == "fresh":
-            free[i].pop()
-        if kb == "fresh":
-            free[j].pop()
-        # Only a share link creates a hub anchor. Recording one for EVERY glue
-        # let a later share link reuse a slot a plain glue had already consumed,
-        # fusing unrelated rings into a runaway mega-hub (k=45, degree 84).
-        if want_share:
-            for site, anchor, k in ((i, a, ka), (j, b, kb)):
-                if k == "fresh" and hub.get(site) != anchor:  # fresh anchor: new hub
-                    hub[site] = anchor
-                    hub_use[site] = 1
+        ring = [ iface A ][ iface B ][ filler ... ]
+                 each run unbroken          the loop wraps back to the start
 
-        if key in spof_set:
-            shares = 1
-        elif want_share:
-            # Hub reuse. shares=2 alone ISN'T safe: the OTHER rings already at
-            # this hub would meet the new one only at the anchor node -- C(m,2)
-            # single-node (SPOF) pairs. So also share the anchor's odd neighbour
-            # slot across partners: every ring at the hub shares the whole EDGE
-            # (a, a+1) pairwise, not just node a. Odd slots are corridor interior,
-            # so this costs no capacity.
-            shares = 2
-        elif key in tree:
-            shares = 2
-        else:
-            # Widen only while the even slots the corridor would cover are still
-            # free on both sides. free[] holds even slots only, so a blind pop()
-            # let a corridor overrun a neighbour's anchor and fuse two rings
-            # (showed up as spurious spof even at share=0).
-            shares = 2
-            while shares < width_max + 1:
-                want_i, want_j = even_span(i, a, shares + 1), even_span(j, b, shares + 1)
-                if not (all(x in free[i] for x in want_i)
-                        and all(y in free[j] for y in want_j)):
-                    break
-                shares += 1
-            for x in even_span(i, a, shares):
-                free[i].remove(x)
-            for y in even_span(j, b, shares):
-                free[j].remove(y)
-        for x, y in _share_pairs(i, j, a, b, shares, size[i], size[j]):
-            dsu.union(x, y)
+    Contiguity is what keeps the plan chord-free: a pair of rings shares exactly
+    one interface, and that run is unbroken in both, so no edge of one ring joins
+    two members of the other non-adjacently.
 
-    g = nx.Graph(); rings = []; coord = {}; site = []
+    --share sets how many rings meet at an interface (2 .. max_meet), which is
+    the fan-out lever; --width-max sets how many nodes each interface spans,
+    which is the second one.
+    """
+    if not max_meet:
+        max_meet = max(4, round(math.sqrt(sg.number_of_nodes())))
+    m_max = 2 + int(round(share * (max_meet - 2)))
+    cliques = _clique_cover_geo(sg, pts, rng, m_max)
+    # Width is the second fan lever, linear where share is quadratic: a wider
+    # interface adds more nodes at the same k, a bigger clique raises k itself.
+    # Drawn per interface from [2, width_max] rather than fixed, so a topology
+    # carries a MIX of transition widths like a real one does -- which means fan
+    # tracks the MEAN width, ~(2+width_max)/2, not the cap.
+    wide = max(1, width_max)
+    n_spof = int(round(spof * len(cliques)))
+    # Width 1 = a SPOF: the two rings meet at a single node, so losing it severs
+    # the transition. Spent on the SMALLEST cliques first -- narrowing a big
+    # interface would strand all C(m,2) of its pairs at once, which is not what
+    # one failed link means.
+    idx = sorted(range(len(cliques)), key=lambda k: (len(cliques[k]), k))
+    width = {k: 1 if r < n_spof else (2 if wide < 2 else int(rng.integers(2, wide + 1)))
+             for r, k in enumerate(idx)}
+    if wide < 2:                          # --width-max 1: every transition a SPOF
+        width = {k: 1 for k in width}
+
+    at = {}                              # site -> its interfaces, in ring order
+    for k, c in enumerate(cliques):
+        for i in c:
+            at.setdefault(i, []).append(k)
+    nxt = 0
+    nodes_of = {}                        # clique -> its shared nodes
+    for k, c in enumerate(cliques):
+        nodes_of[k] = list(range(nxt, nxt + width[k]))
+        nxt += width[k]
+
+    g = nx.Graph()
+    rings, coord, site = [], {}, []
     n_sites = len(pts)
     for i in sg.nodes():
-        seen, cyc = set(), []
-        for v in (dsu.find((i, j)) for j in range(size[i])):
-            if v not in seen:
-                seen.add(v); cyc.append(v)
+        mine = at.get(i, [])
+        cyc = []
+        for k in mine:
+            cyc += nodes_of[k]           # the interface, contiguous by placement
+        # A ring built from ONE interface closes that run into a loop, and the
+        # wrap edge then joins the run's two ends:
+        #     [ X - Y - Z ]  ->  X - Y - Z - X    <- the X-Z edge exists here
+        # The other rings carrying {X,Y,Z} hold it as a straight run, so for them
+        # X and Z are adjacent in the graph but not in their cycle: a chord. One
+        # filler node breaks the wrap. With two or more interfaces the wrap joins
+        # nodes of DIFFERENT cliques, which share only this ring, so it is safe.
+        if len(mine) < 2:
+            cyc.append(nxt)
+            nxt += 1
+        while len(cyc) < ring_size:      # filler: single-ring nodes pad the loop
+            cyc.append(nxt)
+            nxt += 1
         if len(cyc) < 3:
             continue
         rings.append(cyc)
-        # Remember which site each ring came from: its coordinate is fixed by
-        # (rings, seed), so the ring-graph panel can be drawn at the real site
-        # positions instead of a spring layout that reshuffles on every change.
         site.append(i)
         for j in range(len(cyc)):
             g.add_edge(cyc[j], cyc[(j + 1) % len(cyc)])
@@ -272,7 +255,6 @@ def _glue_widths(sg, pts, size, rng, spof=0.0, share=0.0, width_max=WIDTH_MAX,
             coord.setdefault(cyc[j],
                              (pts[i][0] + 0.35 * math.cos(ang) / math.sqrt(n_sites),
                               pts[i][1] + 0.35 * math.sin(ang) / math.sqrt(n_sites)))
-
     idx = {v: k for k, v in enumerate(sorted(g.nodes()))}
     h = nx.Graph()
     h.add_edges_from((idx[u], idx[v]) for u, v in g.edges())
@@ -281,17 +263,76 @@ def _glue_widths(sg, pts, size, rng, spof=0.0, share=0.0, width_max=WIDTH_MAX,
     return h, [[idx[v] for v in r] for r in rings], [tuple(pts[i]) for i in site]
 
 
+def _pad_uniform(g, rings, target, rng):
+    """Grow the rings with filler until the graph has exactly `target` nodes,
+    spread evenly so ring lengths stay comparable.
+
+    This is what makes n an independent knob: filler sits in ONE ring, so it
+    carries no ring pairs and costs no fan-out. A --share sweep can therefore
+    hold n fixed while fan-out moves, which is the whole point of the sweep.
+
+    Where a node may be inserted is not free. Splitting an edge two rings share
+    would leave its endpoints non-adjacent here but still adjacent there -- a
+    chord. Safe edges are the ones only this ring has: the junction between two
+    interfaces, or an existing filler edge.
+
+        [ iface A ][ iface B ]        splitting inside A: NO  (A is shared)
+                  ^                   splitting at the junction: OK
+                  safe                (A and B share only this ring)
+    """
+    extra = target - g.number_of_nodes()
+    if extra <= 0:
+        return g, rings
+    memb = {}
+    for k, r in enumerate(rings):
+        for v in r:
+            memb.setdefault(v, set()).add(k)
+
+    def safe_at(r, k):
+        """Index j in ring k such that the edge after j belongs to ring k alone."""
+        return next((j for j in range(len(r))
+                     if len(memb[r[j]] & memb[r[(j + 1) % len(r)]]) == 1), None)
+
+    spots = [(k, safe_at(r, k)) for k, r in enumerate(rings)]
+    spots = [(k, j) for k, j in spots if j is not None]
+    if not spots:
+        return g, rings
+    rng.shuffle(spots)
+    # Even split, remainder handed to the first few of a shuffled order so no
+    # ring is systematically favoured.
+    per, rem = divmod(extra, len(spots))
+    nxt = max(g.nodes()) + 1
+    for i, (k, j) in enumerate(spots):
+        add = per + (1 if i < rem else 0)
+        if not add:
+            continue
+        new = list(range(nxt, nxt + add))
+        nxt += add
+        rings[k] = rings[k][:j + 1] + new + rings[k][j + 1:]
+    h = nx.Graph()
+    h.add_nodes_from((v, dict(g.nodes[v])) for v in g.nodes())
+    for r in rings:
+        for j in range(len(r)):
+            h.add_edge(r[j], r[(j + 1) % len(r)])
+    return h, rings
+
+
 def _spof_final(g, rings, frac, rng):
-    """Turn a fraction of the FINAL plan's ring pairs into SPOFs.
+    """Narrow a fraction of the plan's ring pairs to a single shared node (SPOF).
 
-    Can't be done at glue time: the denominator (total ring pairs) isn't known
-    until share has added its links. Here every pair exists, so the fraction is
-    exact.
+    Runs on the FINISHED plan because the denominator -- how many ring pairs
+    exist at all -- is not known until the cover has been laid out, and --spof is
+    a fraction of that.
 
-    A pair sharing m>=2 nodes is narrowed to 1 by SPLITTING m-1 of them -- the
-    shared node becomes two, one left in each ring, each keeping that ring's
-    neighbours. The guard below never splits the last shared node, so no link is
-    destroyed, only narrowed -- the ring graph keeps its connectivity.
+    A pair sharing m>=2 nodes is narrowed by SPLITTING m-1 of them: the shared
+    node becomes two, one left in each ring, each keeping that ring's neighbours.
+
+        P: - X - Y -            P: - X - Y -      pair now meets only at Y,
+        Q: - X - Y -    ==>     Q: - X'- Y -      so losing Y severs it
+
+    The last shared node is never split, so a transition is only narrowed, never
+    destroyed -- the ring graph keeps its connectivity, which the self-check
+    pins. Splitting only ever REMOVES adjacency, so it cannot create a chord.
     """
     rsets = [set(r) for r in rings]
     memb = {}
@@ -355,57 +396,45 @@ def _spof_final(g, rings, frac, rng):
             [[idx[v] for v in r] for r in rings])
 
 
-def _prune_nodes(g, rings, rpos, frac, rng):
-    """Remove ~frac of nodes at random (keeping the graph connected) and DROP
-    every ring that lost a member -- a loop minus a node isn't walkable, so it
-    can't be a ring label. Survivors keep their other rings; any left in no ring
-    are reachable only via the echo rings score() adds (or reported unroutable).
-    Rings that lost nobody keep every edge. Node ids are re-indexed to 0..n-1
-    afterwards so the topology writer sees a dense range."""
-    n_target = int(round(frac * g.number_of_nodes()))
-    removed = set()
-    cand = list(g.nodes()); rng.shuffle(cand)
-    for v in cand:
-        if len(removed) >= n_target:
-            break
-        nbrs, attr = list(g[v]), dict(g.nodes[v])
-        g.remove_node(v)
-        if g.number_of_nodes() and nx.is_connected(g):
-            removed.add(v)
-        else:                                   # cut vertex: removal partitions
-            g.add_node(v, **attr)
-            g.add_edges_from((v, u) for u in nbrs)
-    keep = [k for k, r in enumerate(rings) if not (set(r) & removed)]
-    idx = {v: k for k, v in enumerate(sorted(g.nodes()))}
-    h = nx.relabel_nodes(g, idx, copy=True)
-    return (h, [[idx[v] for v in rings[k]] for k in keep], [rpos[k] for k in keep])
-
-
 def _prune_solo(g, rings, frac, rng):
-    """Splice out nodes that are in exactly ONE ring: they carry no ring-to-ring
-    link and add nothing to fan-out, just make the loop longer. Removing one
-    outright would break the loop, so its two ring neighbours are joined instead
-    -- the ring stays a walkable loop, just shorter.
+    """Splice out filler -- nodes in exactly ONE ring. They carry no ring pairs,
+    so they add nothing to fan-out and only lengthen the lap.
 
-    Never taken below 3 members, and only degree-2 nodes are spliced (after
-    --prune-node a node can lose its ring but keep edges; rewiring that isn't a
-    splice).
+        - a - f - b -   ==>   - a --- b -     f gone, ring still a loop
+
+    Removing one outright would break the loop, so its two neighbours are joined
+    instead. Used to reach a plan's FLOOR (prune_solo=1.0), which is where the
+    sweeps build every point before padding back up to --target-n.
+
+    Never below 3 members, and only degree-2 nodes. A splice is also skipped when
+    the new a-b edge would join two members of some OTHER ring that are not
+    adjacent there -- that edge would be a chord (see _plan_cliques).
     """
     memb = {}
-    for r in rings:
+    in_rings = {}
+    for k, r in enumerate(rings):
         for v in r:
             memb[v] = memb.get(v, 0) + 1
+            in_rings.setdefault(v, set()).add(k)
+    adj_in = [{frozenset((r[j], r[(j + 1) % len(r)])) for j in range(len(r))}
+              for r in rings]
+
+    def chords(a, b, this):
+        """Would joining a-b leave them non-adjacent in a ring they both carry?
+        `this` is the ring being spliced, where the join makes them adjacent."""
+        return any(k != this and frozenset((a, b)) not in adj_in[k]
+                   for k in in_rings.get(a, ()) & in_rings.get(b, ()))
     solo = [v for v in g.nodes() if memb.get(v, 0) == 1 and g.degree(v) == 2]
     rng.shuffle(solo)
     solo = set(solo[:int(round(frac * len(solo)))])
 
     out = []
-    for r in rings:
+    for this, r in enumerate(rings):
         keep, i = list(r), 0
         while i < len(keep) and len(keep) > 3:
             v = keep[i]
             nbrs = list(g[v]) if v in solo and v in g else []
-            if len(nbrs) == 2:
+            if len(nbrs) == 2 and not chords(*nbrs, this):
                 g.remove_node(v)
                 g.add_edge(*nbrs)      # splice: the ring closes over the gap
                 keep.pop(i)
@@ -419,22 +448,26 @@ def _prune_solo(g, rings, frac, rng):
 
 
 def build(family="gabriel", rings=100, seed=0, ring_size=8,
-          spof=0.0, share=0.0, width_max=WIDTH_MAX, hub_cap=HUB_CAP,
-          prune_ring=0.0, prune_node=0.0, ring_size_max=0, prune_solo=0.0, **kw):
-    """A=rings (site/ring count). spof=fraction of links sharing 1 node.
-    share=fraction reusing a hub slot to build 3+-ring nodes (the fan-out lever).
-    hub_cap=links one anchor absorbs before a fresh node opens (lower = more,
-    smaller hubs -> lower peak k). prune_ring=links dropped entirely (sparser).
-    prune_node=nodes removed (may leave some ringless). prune_solo=single-ring
-    filler nodes spliced out (0=keep all, the default, so node counts stay
-    comparable with older runs).
+          spof=0.0, share=0.0, width_max=WIDTH_MAX,
+          ring_size_max=0, prune_solo=0.0, target_n=0, max_meet=0, **kw):
+    """The whole pipeline: site graph -> clique cover -> rings -> post-passes.
 
-    ring_size_max: if set, each site's ring is sized to its DEGREE (2 slots per
-    link) within [ring_size, ring_size_max] -- busy sites get the big rings,
-    leaf sites stay small, and nobody carries slots no link will use.
-    ring_size_max also caps site degree (ring_size_max//2), so it is really a
-    knob on how many links a site may host: raise it for more share
-    opportunities, not for bigger rings."""
+        sites          _plan_cliques      _prune_solo   _spof_final  _pad_uniform
+        (A points) --> rings + plan  -->  down to    -> narrow some -> up to
+                                          the floor    transitions    target_n
+
+    rings   A, the site/ring count.
+    share   how many rings meet at one interface (2 .. max_meet): the fan lever.
+    spof    fraction of transitions narrowed to a single shared node.
+    prune_solo  fraction of filler spliced out; 1.0 gives the plan's floor.
+    target_n    pad back up to exactly this many nodes. Filler costs no fan-out,
+                so this is how n is held fixed across a sweep.
+
+    ring_size sets the minimum ring length AND, via ring_size//2, the cap on site
+    degree -- which is what limits interfaces per site, and so fan-out. Once
+    target_n is padding, that degree cap is the only thing ring_size still
+    decides. ring_size_max, if set, sizes each ring to its site's degree within
+    [ring_size, ring_size_max] so busy sites get the big rings."""
     s = _check_ring_size(ring_size)
     s_max = _check_ring_size(ring_size_max) if ring_size_max else s
     if s_max < s:
@@ -448,44 +481,64 @@ def build(family="gabriel", rings=100, seed=0, ring_size=8,
     # and the big rings are handed to the high-degree sites below.
     sg = _hard_cap(_cap_degree(sg, s_max // 2), s_max // 2)
     if s_max > s:
-        # Exactly the slots this site's links need (2 per link), clamped to
+        # Exactly the nodes this site's interfaces need (2 each), clamped to
         # [s, s_max]. Slack beyond that is pure filler: measured against a
-        # random bump toward s_max, and against uniform +1/+2 spare slots, on
+        # random bump toward s_max, and against uniform +1/+2 spare nodes, on
         # all four families -- fan-out reach was identical within seed noise
         # while the bump generated ~25-35% more single-ring nodes.
         size = {v: min(max(s, 2 * sg.degree(v)), s_max) for v in sg.nodes()}
     else:
         size = {v: s for v in sg.nodes()}
-    g, plan, rpos = _glue_widths(sg, pts, size, rng, spof, share, width_max,
-                                 hub_cap, prune_ring)
-    if prune_node > 0:
-        g, plan, rpos = _prune_nodes(g, plan, rpos, prune_node, rng)
+    g, plan, rpos = _plan_cliques(sg, pts, rng, spof, share, s, width_max, max_meet)
     if prune_solo > 0:
         g, plan = _prune_solo(g, plan, prune_solo, rng)
     if spof > 0:
         # Last, so the fraction is measured against the pairs that actually
-        # exist after share, pruning and splicing.
+        # exist after share, pruning and splicing. Its own splits only ever
+        # remove adjacency, so they cannot reintroduce a chord.
         g, plan = _spof_final(g, plan, spof, rng)
+    if target_n:
+        # Last: --spof splits nodes, so padding before it would overshoot.
+        g, plan = _pad_uniform(g, plan, target_n, rng)
     return g, plan, rpos
 
 
 def export_and_plot(family, rings, seed=0, ring_size=8,
-                    spof=0.0, share=0.0, width_max=WIDTH_MAX, hub_cap=HUB_CAP,
-                    prune_ring=0.0, prune_node=0.0, ring_size_max=0,
-                    prune_solo=0.0, quiet=False):
+                    spof=0.0, share=0.0, width_max=WIDTH_MAX,
+                    ring_size_max=0, prune_solo=0.0, quiet=False, target_n=0,
+                    sub=None, max_meet=0, len_tag=0):
+    """Build one topology and write its three files: the graph (csv/), the ring
+    labels MyriadGP reads (ringlabels/) and a picture (gallery/)."""
     g, plan, rpos = build(family, rings, seed, ring_size, spof, share, width_max,
-                          hub_cap, prune_ring, prune_node, ring_size_max, prune_solo)
+                          ring_size_max, prune_solo, target_n, max_meet)
     s = score(g, plan)          # raises if any ring isn't hop-walkable
+    # Walkable is not enough: GP also needs every member to have exactly TWO
+    # ring-neighbours, or its lap has a fork it cannot resolve. The planner
+    # cannot break that, but the post-passes reshape the graph afterwards, so it
+    # is checked on the way out -- shipping a chorded plan would silently ruin
+    # every eval run built on it.
+    bad = ringcheck.offenders({i: set(r) for i, r in enumerate(plan)},
+                              {v: set(g[v]) for v in g})
+    if bad:
+        raise AssertionError(f"chorded rings in the shipped plan: {sorted(bad)}")
 
-    tag = ((f"_rs{ring_size}-{ring_size_max}" if ring_size_max else "")
-           + (f"_pr{prune_ring:g}" if prune_ring else "")
-           + (f"_pn{prune_node:g}" if prune_node else "")
+    # The name carries what the run ACHIEVED, not just what was asked for, since
+    # eval_scaling reads its axis off these names:
+    #   _len<L>  the sweep point's target -- identical across seeds, so it is
+    #            what the eval groups seeds by before averaging them
+    #   _rl<N>   the median ring length this seed actually got
+    #   _fan/_n  fan-out and node count achieved
+    tag = ((f"_len{len_tag:g}" if len_tag else "")
+           + f"_rl{_median_len(plan)}"
+           + (f"_rs{ring_size}-{ring_size_max}" if ring_size_max else "")
            + (f"_ps{prune_solo:g}" if prune_solo else ""))
     stem = (f"ringpipe_{family}_A{rings}_spof{spof:g}_share{share:g}{tag}"
             f"_seed{seed}_fan{s['fan']}_n{s['n']}")
-    # Group a run's three files under one subfolder keyed by family/A/spof, so a
-    # sweep's outputs don't fan out flat across csv/ringlabels/gallery.
-    sub = f"{family}_A{rings}_spof{spof:g}"
+    # One subfolder per family so a sweep's outputs stay together and
+    # `eval_scaling --dir` can take the folder as the sweep. Keyed by A normally;
+    # sweeps that SOLVE for --rings pass their own `sub`, since their points have
+    # different ring counts and would otherwise scatter one folder each.
+    sub = sub or f"{family}_A{rings}_spof{spof:g}"
     # .native.ring marks a topology that SHIPS its ring plan (use --basis
     # native); the suffix makes that visible in a directory listing.
     os.makedirs(os.path.join(CSV_DIR, sub), exist_ok=True)
@@ -524,108 +577,309 @@ def export_and_plot(family, rings, seed=0, ring_size=8,
     return s, topo, ini, png
 
 
-def _fit_solo(target, tol, **kw):
-    """Find the prune_solo that lands within `tol` of `target` nodes, by
-    bisection. Sweeping --share alone changes n (sharing fuses nodes), so runs
-    aren't comparable. Splicing solo filler changes n WITHOUT touching fan-out
-    (see _prune_solo), so trade it against share to hold n fixed. n falls as
-    prune_solo rises, hence plain bisection."""
-    lo, hi = 0.0, 1.0
-    n_hi = build(prune_solo=hi, **kw)[0].number_of_nodes()   # smallest reachable
-    n_lo = build(prune_solo=lo, **kw)[0].number_of_nodes()   # largest reachable
-    if not n_hi - tol <= target <= n_lo + tol:
-        raise ValueError(f"target {target} outside reachable n [{n_hi}, {n_lo}]")
-    best = (abs(n_lo - target), lo) if abs(n_lo - target) < abs(n_hi - target) \
-        else (abs(n_hi - target), hi)
-    for _ in range(20):
-        if best[0] <= tol:
-            break
-        mid = (lo + hi) / 2
-        n = build(prune_solo=mid, **kw)[0].number_of_nodes()
-        best = min(best, (abs(n - target), mid))
-        lo, hi = (mid, hi) if n > target else (lo, mid)
-    return best[1], best[0]
-
-
 AUTO_RING_SIZES = (6, 8, 10, 12, 14, 16, 20, 24, 32, 48)
 
 
-def _fit_ring_size(target, tol, sizes=AUTO_RING_SIZES, **kw):
-    """Pick the ring size (with its prune_solo) giving the MOST fan-out at
-    ~target nodes.
+def _floor_n(**kw):
+    """Nodes left once every spliceable filler node is gone -- the smallest plan
+    these settings can make, and so the lowest n a run can be padded from."""
+    return build(prune_solo=1.0, **kw)[0].number_of_nodes()
 
-    Ring size trades floor against fan-out, and the balance flips across a share
-    sweep, so no single --ring-size is right for the whole thing. At share=0 it
-    sets the reachable floor (~3.4*A nodes at 6, ~7.5*A at 16), which is what
-    decides whether `target` is even reachable. At share=1 it sets how far hub
-    reuse can concentrate ring memberships onto few nodes -- and fan is
-    quadratic in k, so concentration, not membership count, is what pays."""
+
+def _fit_ring_size(target, tol, sizes=AUTO_RING_SIZES, **kw):
+    """Pick the ring size giving the MOST fan-out at `target` nodes.
+
+    Ring size does not decide n any more -- _pad_uniform does, exactly -- but it
+    still decides fan, because it caps site degree at ring_size//2 and that cap
+    limits how many interfaces a site can carry. More interfaces per site means
+    more ring memberships per node, and fan is quadratic in those."""
     best = None
     for rs in sizes:
-        try:
-            ps, err = _fit_solo(target, tol, ring_size=rs, **kw)
-        except ValueError:
-            continue                      # target outside this size's n range
-        if err > tol:
-            continue
-        s = score(*build(ring_size=rs, prune_solo=ps, **kw)[:2])
-        if abs(s["n"] - target) <= tol and (best is None or s["fan"] > best[0]):
-            best = (s["fan"], rs, ps)
+        floor = _floor_n(ring_size=rs, **kw)
+        if floor > target + tol:
+            continue                      # can only pad UP from the floor
+        s = score(*build(ring_size=rs, prune_solo=1.0,
+                         target_n=max(target, floor), **kw)[:2])
+        if best is None or s["fan"] > best[0]:
+            best = (s["fan"], rs)
     if best is None:
-        # At share=0 a small ring has almost no filler to trim, so each size
-        # only spans a few percent of n -- and sizes step 6, 8, 10..., so the
-        # bands have gaps a target can fall straight through. n scales with the
-        # site count though, so report the --rings that would land on it.
-        a = kw.get("rings") or 1
-        bands = []
-        for rs in sizes:
-            lo = build(ring_size=rs, prune_solo=1.0, **kw)[0].number_of_nodes()
-            hi = build(ring_size=rs, prune_solo=0.0, **kw)[0].number_of_nodes()
-            if hi > lo:
-                bands.append(f"--ring-size {rs} wants --rings "
-                             f"{round(target * a / hi)}-{round(target * a / lo)}")
+        lows = ", ".join(f"rs{rs}:{_floor_n(ring_size=rs, **kw)}" for rs in sizes[:4])
         raise ValueError(
-            f"no ring size reaches n~{target} (+/-{tol}) at --rings {a}, "
-            f"share={kw.get('share')}. n is pinned to the site count -- use one "
-            f"of:\n    " + "\n    ".join(bands[:4])
-            + f"\n  (or raise --target-tol, currently {tol})")
+            f"every ring size floors above n={target} (+{tol}) at "
+            f"--rings {kw.get('rings')}, share={kw.get('share')} ({lows}). "
+            f"The floor scales with the site count -- lower --rings, or raise "
+            f"--target-n.")
+    return best[1]
+
+
+def _design(kw):
+    """The same kw with seed 0 forced.
+
+    Anything a sweep SOLVES for -- --rings for a target length, --share for a
+    target fan -- is part of the experiment's design, not of the draw, so it is
+    solved once on seed 0 and reused by every seed. Solving per seed instead lets
+    the solver's own jitter dominate: --hold-len landed on 102..161 rings for the
+    same share=1 point, and fan (which grows with the ring count, and with
+    max_meet ~ sqrt(rings)) came out 10926..27934 across seeds."""
+    return {**kw, "seed": 0}
+
+
+def _sweep_max_meet(counts):
+    """One rings-per-interface ceiling for a whole sweep.
+
+    max_meet defaults to sqrt(--rings) per BUILD, which is fine when --rings is
+    fixed. But a sweep that SOLVES for --rings (--hold-len, --sweep-ring-len)
+    then moves the ceiling underneath itself: --hold-len landed on
+
+        share     0    0.2   0.4   0.6   0.8   1.0
+        rings    72     74    78    78    89   139
+        max_meet  8      9     9     9     9    12   <- the swept knob's own cap
+
+    and --share means "scale from 2 up to max_meet", so the last point got a
+    bigger cap AND more rings at once -- a 3.2x step in fan that the x axis
+    attributes to share alone. Pinning one ceiling removes that and reaches more
+    fan besides (41206 vs 20700 at share=1 here).
+
+    Sized from the LARGEST solved ring count, not the median or the mean: the
+    ceiling only binds where the sweep actually spends it -- the high-share, or
+    short-ring, end -- and sizing it to a middling point throttles exactly the
+    point the sweep is built to reach (median gave 12744 against 41206)."""
+    return max(4, round(math.sqrt(max(counts))))
+
+
+def _median_len(plan):
+    L = sorted(len(r) for r in plan)
+    return L[len(L) // 2]
+
+
+def _fit_rings(target_len, target_n, hint=0, **kw):
+    """The --rings count whose rings run ~target_len nodes long at n=target_n.
+
+    From the identity in the module docstring, sum(ring lengths) = n + surplus:
+    with n pinned, the more rings there are the SHORTER each must be. Monotone,
+    hence bisection. This is the ONLY way to move ring length once n is fixed --
+    --ring-size cannot, because _pad_uniform equalises the rings anyway."""
+    # A hint (the count that fitted at a nearby point) narrows the search to a
+    # band around it, which is what keeps the joint solves affordable. An answer
+    # AT the band edge means the real one is outside it, so that case re-solves
+    # over the full range -- share can move the surplus far enough in one step
+    # that a band around the last answer misses badly.
+    full = (3, max(8, target_n // 3))
+    lo, hi = ((max(3, int(hint * 0.6)), max(8, int(hint * 1.7))) if hint else full)
+    banded = bool(hint)
+    while hi > lo and _floor_n(rings=hi, **kw) > target_n:
+        hi = hi * 3 // 4          # that many rings already floors above target_n
+    if hi <= lo:                  # hint band collapsed: nothing to bisect over
+        return max(3, hi)
+    best = None
+    while lo < hi:
+        mid = (lo + hi) // 2
+        m = _median_len(build(rings=mid, prune_solo=1.0, target_n=target_n, **kw)[1])
+        best = min(best or (10 ** 9, mid), (abs(m - target_len), mid))
+        if m > target_len:
+            lo = mid + 1          # rings too long -> cut them by making more
+        else:
+            hi = mid
+    got = best[1] if best else max(3, lo)
+    if banded and not (max(3, int(hint * 0.6)) < got < int(hint * 1.7) - 1):
+        return _fit_rings(target_len, target_n, hint=0, **kw)   # answer was outside
+    return got
+
+
+def _fit_share(target_fan, target_len, target_n, hint=0, **kw):
+    """(share, rings) reaching ~target_fan at ring length `target_len`.
+
+    fan rises with share -- bigger interfaces put each node in more rings -- so
+    bisect on it. --rings has to be re-solved at every step because share moves
+    ring length too (it moves the surplus), so the two are coupled: this is the
+    joint solve behind --hold-fan."""
+    def at(sh, h):
+        a = _fit_rings(target_len, target_n, hint=h, share=sh, **kw)
+        f = score(*build(rings=a, share=sh, prune_solo=1.0,
+                         target_n=target_n, **kw)[:2])["fan"]
+        return f, a
+
+    # Bracket first: bisection alone never evaluates the endpoints, so a target
+    # outside [fan(0), fan(1)] would be answered with an interior share that is
+    # further off than share=0 or share=1 is.
+    f0, a0 = at(0.0, hint)
+    f1, a1 = at(1.0, a0)
+    if target_fan <= f0:
+        return 0.0, a0
+    if target_fan >= f1:
+        return 1.0, a1
+    lo, hi, best = 0.0, 1.0, None
+    hint = a0
+    for _ in range(7):
+        mid = (lo + hi) / 2
+        f, a = at(mid, hint)
+        hint = a
+        best = min(best or (10 ** 18, mid, a), (abs(f - target_fan), mid, a))
+        if f < target_fan:
+            lo = mid
+        else:
+            hi = mid
     return best[1], best[2]
 
 
-def sweep_share(shares, target_n=0, tol=25, auto_ring_size=False, **kw):
-    """Export one topology per share value, all at ~target_n nodes. Default
-    target = the smallest unpruned n in the sweep (high share fuses nodes, so
-    that's the ceiling); every other share is pruned DOWN to it.
+def sweep_ring_len(lengths, target_n=0, hold_fan=None, **kw):
+    """One topology per RING LENGTH, all at exactly target_n nodes.
 
-    auto_ring_size: choose --ring-size per point for maximum fan-out spread
-    instead of holding one size across the sweep (see _fit_ring_size). Default
-    target then becomes the share=0 floor at the smallest size, which is the
-    anchor that makes the span widest -- so only --rings and --target-n are left
-    to pick."""
+    The counterpart of sweep_share: there fan-out moves and n is held, here ring
+    length moves and n is held. --rings is solved per point (_fit_rings), because
+    length and ring count are the same knob once n is fixed. Files land in one
+    folder tagged _len<L>, so `eval_scaling --dir ... --x-key len` sweeps them.
+
+    hold_fan pins fan-out too, by raising --share per point, so length is the
+    only thing moving. Without it fan-out FALLS as rings get longer (fewer, longer
+    rings means fewer interfaces), and the eval cannot tell which of the two moved
+    the curve. 0 anchors on the most fan every point can still reach."""
+    kw.pop("rings", None)
+    if not target_n:
+        raise ValueError("--sweep-ring-len needs --target-n: ring length and ring "
+                         "count are one knob at fixed n, so there is nothing to "
+                         "solve against without it")
+    # n is in the folder name (two length sweeps at different node counts are
+    # different families), and so is whether fan was held -- a held and a plain
+    # sweep are different experiments and an eval --dir run must not mix them.
+    kind = "lenfan" if hold_fan is not None else "len"
+    sub = f"{kw['family']}_{kind}{target_n}_spof{kw.get('spof', 0):g}"
+    bare = {k: v for k, v in kw.items() if k != "share"}
+    if hold_fan == 0:
+        # Longer rings mean fewer interfaces, so the longest point has the lowest
+        # fan ceiling: anchor on what IT reaches at share=1, the most fan-out
+        # every point in the sweep can still deliver.
+        # Seed 0 whatever --seed this run uses; see _sweep_share_holding_len.
+        L, anch = max(lengths), _design(bare)
+        a = _fit_rings(L, target_n, share=1.0, **anch)
+        hold_fan = score(*build(rings=a, share=1.0, prune_solo=1.0,
+                                target_n=target_n, **anch)[:2])["fan"]
+        print(f"  --hold-fan given no value, anchoring on the longest ring's "
+              f"share=1 fan: {hold_fan}")
+    if not kw.get("max_meet"):
+        # --rings is solved per LENGTH here, so the per-build sqrt(--rings)
+        # default would give each point a different rings-per-interface ceiling
+        # -- see _sweep_max_meet. One pass to see the counts, then pin it.
+        hint, counts = 0, []
+        for L in lengths:
+            hint = _fit_rings(L, target_n, hint=hint, **_design(kw))
+            counts.append(hint)
+        mm = _sweep_max_meet(counts)
+        kw, bare = {**kw, "max_meet": mm}, {**bare, "max_meet": mm}
+        print(f"  --max-meet not given, pinning the sweep to {mm} rings per interface")
+    hint = 0
+    for L in lengths:
+        if hold_fan:
+            sh, a = _fit_share(hold_fan, L, target_n, hint=hint, **_design(bare))
+            kw = {**kw, "share": sh}
+        else:
+            a = _fit_rings(L, target_n, hint=hint, **_design(kw))
+        hint = a
+        s, *_ = export_and_plot(rings=a, prune_solo=1.0, target_n=target_n,
+                                quiet=True, sub=sub, len_tag=L, **kw)
+        got = _median_len(build(rings=a, prune_solo=1.0, target_n=target_n, **kw)[1])
+        flag = "" if abs(got - L) <= 1 else f"  (got {got}, wanted {L})"
+        print(f"len={L:4g} rings={a:5} share={kw['share']:5.3f} ringlen={got:3} "
+              f"n={s['n']:5} fan={s['fan']:7} fan/n={s['fan_n']:6.2f} "
+              f"maxk={s['maxk']:3} spof={s['spofpct']:5.1f}%{flag}")
+
+
+def sweep_share(shares, target_n=0, tol=25, auto_ring_size=False, hold_len=None,
+                **kw):
+    """One topology per --share value, all at exactly target_n nodes.
+
+    Every point is built at its FLOOR (prune_solo=1.0, all spliceable filler
+    gone) and padded back up to the target. Filler costs no fan-out, so n is held
+    without touching the thing being swept.
+
+    Default target = the LARGEST floor in the sweep, since padding can only add:
+    that is the lowest n every point can reach.
+
+    hold_len pins the mean RING LENGTH too, by solving --rings per point. Without
+    it the rings grow along with fan-out -- 13 -> 21 over a 0..1 sweep -- because
+    sum(ring lengths) = n + surplus and --share IS the surplus, so with n and the
+    ring count both fixed the length is the only thing left to absorb it. A curve
+    from such a sweep mixes two causes; with --hold-len it is fan-out alone.
+    0 = anchor on the shortest length the highest share can manage."""
+    if auto_ring_size and hold_len is not None:
+        raise ValueError("--auto-ring-size picks --ring-size for maximum fan and "
+                         "--hold-len picks --rings for a fixed length; they fight "
+                         "over the same trade. Use one.")
     if auto_ring_size:
         kw.pop("ring_size", None)
         kw.pop("ring_size_max", None)     # size is chosen per point now
-        if not target_n:
-            target_n = build(share=0.0, ring_size=AUTO_RING_SIZES[0],
-                             prune_solo=1.0, **kw)[0].number_of_nodes()
-            print(f"  target-n not given, using the share=0 floor: {target_n}")
-        for sh in shares:
-            rs, ps = _fit_ring_size(target_n, tol, share=sh, **kw)
-            s, *_ = export_and_plot(ring_size=rs, share=sh, prune_solo=ps,
-                                    quiet=True, **kw)
-            print(f"share={sh:4g} ring_size={rs:3} prune_solo={ps:.3f} "
-                  f"n={s['n']:5} fan={s['fan']:7} fan/n={s['fan_n']:6.2f} "
-                  f"maxk={s['maxk']:3} spof={s['spofpct']:5.1f}%")
-        return
+    if hold_len is not None:
+        return _sweep_share_holding_len(shares, target_n, hold_len, **kw)
+    floors = {sh: (min(_floor_n(share=sh, ring_size=rs, **kw)
+                       for rs in AUTO_RING_SIZES) if auto_ring_size
+                   else _floor_n(share=sh, **kw))
+              for sh in shares}
     if not target_n:
-        target_n = min(build(share=sh, prune_solo=0.0, **kw)[0].number_of_nodes()
-                       for sh in shares)
+        target_n = max(floors.values())
+        print(f"  target-n not given, using the largest floor in the sweep: {target_n}")
     for sh in shares:
-        ps, err = _fit_solo(target_n, tol, share=sh, **kw)
-        s, *_ = export_and_plot(share=sh, prune_solo=ps, quiet=True, **kw)
-        flag = "" if err <= tol else f"  (off by {err}, tol {tol})"
-        print(f"share={sh:4g} prune_solo={ps:.3f} n={s['n']:5} "
-              f"fan={s['fan']:6} fan/n={s['fan_n']:5.2f} "
+        if floors[sh] > target_n + tol:
+            raise ValueError(
+                f"share={sh:g} floors at n={floors[sh]}, above --target-n "
+                f"{target_n} (+{tol}); padding can only add. Raise --target-n to "
+                f"{max(floors.values())} or lower --rings.")
+        n = max(target_n, floors[sh])
+        rs = _fit_ring_size(n, tol, share=sh, **kw) if auto_ring_size else None
+        s, *_ = export_and_plot(share=sh, prune_solo=1.0, target_n=n, quiet=True,
+                                **({"ring_size": rs} if rs else {}), **kw)
+        size = f"ring_size={rs:3} " if rs else ""
+        print(f"share={sh:4g} {size}n={s['n']:5} fan={s['fan']:7} "
+              f"fan/n={s['fan_n']:6.2f} maxk={s['maxk']:3} "
+              f"spof={s['spofpct']:5.1f}%")
+
+
+def _sweep_share_holding_len(shares, target_n, hold_len, **kw):
+    """--sweep-share with the ring length pinned too: --rings solved per point
+    (see sweep_share's hold_len, and _fit_rings). The ring count varies across
+    points, so the files go to ONE folder rather than a per-ring-count one."""
+    if not target_n:
+        raise ValueError("--hold-len needs --target-n: with the length pinned "
+                         "too, n is the only anchor left to solve --rings against")
+    rings0 = kw.pop("rings", None)
+    if not hold_len:
+        # Anchor on the SHORTEST length the highest share can manage. That point
+        # is the hard one: its surplus is the biggest, and max_meet grows with
+        # sqrt(--rings), so adding rings adds surplus about as fast as it adds
+        # room -- its floor length is what every lower share can still meet.
+        # Anchored on seed 0 whatever --seed this run uses: the anchor defines the
+        # experiment, so every seed of a sweep must solve for the SAME length, or
+        # they are not measuring one thing (and their files, which carry the
+        # anchor in the folder name, would not even land together).
+        hard, anch = max(shares), _design(kw)
+        a = _fit_rings(2, target_n, share=hard, **anch)    # 2 = "as short as it goes"
+        hold_len = _median_len(build(rings=a, share=hard, prune_solo=1.0,
+                                     target_n=target_n, **anch)[1])
+        print(f"  --hold-len given no value, anchoring on the shortest rings "
+              f"share={hard:g} can reach: {hold_len}")
+    sub = f"{kw['family']}_shr{target_n}_rl{hold_len:g}_spof{kw.get('spof', 0):g}"
+
+    def solve_all(k):
+        out, hint = [], rings0 or 0
+        for sh in shares:
+            hint = _fit_rings(hold_len, target_n, hint=hint, share=sh, **_design(k))
+            out.append(hint)
+        return out
+
+    if not kw.get("max_meet"):
+        # First pass only to see the ring counts, so the ceiling can be fixed for
+        # the sweep; the counts are then re-solved under it, since pinning the
+        # ceiling changes the surplus and so the count a length needs.
+        kw = {**kw, "max_meet": _sweep_max_meet(solve_all(kw))}
+        print(f"  --max-meet not given, pinning the sweep to "
+              f"{kw['max_meet']} rings per interface")
+    for sh, a in zip(shares, solve_all(kw)):
+        s, *_ = export_and_plot(rings=a, share=sh, prune_solo=1.0,
+                                target_n=target_n, quiet=True, sub=sub, **kw)
+        got = _median_len(build(rings=a, share=sh, prune_solo=1.0,
+                                target_n=target_n, **kw)[1])
+        flag = "" if abs(got - hold_len) <= 1 else f"  (len {got}, wanted {hold_len})"
+        print(f"share={sh:4g} rings={a:5} ringlen={got:3} n={s['n']:5} "
+              f"fan={s['fan']:7} fan/n={s['fan_n']:6.2f} maxk={s['maxk']:3} "
               f"spof={s['spofpct']:5.1f}%{flag}")
 
 
@@ -637,22 +891,23 @@ def _selfcheck():
                 assert nx.is_connected(g), (fam, spof, share)
                 s = score(g, plan)         # validates ring walkability
                 assert s["n"] > 0
-    # prune: connectivity must hold and every surviving ring stays valid
-    # (score raises otherwise). prune-node also must actually shrink the graph.
-    for pr, pn in ((0.3, 0.0), (0.0, 0.3), (0.2, 0.2)):
-        g0 = build("delaunay", rings=40, seed=1)[0]
-        g, plan, _ = build("delaunay", rings=40, seed=1, prune_ring=pr, prune_node=pn)
-        assert nx.is_connected(g), (pr, pn)
-        score(g, plan)
-        assert g.number_of_nodes() < g0.number_of_nodes() if pn else True
     # varied ring sizes: rings must stay walkable (score checks) and actually
-    # vary, and the extra slots must let a high share beat the fixed-size run.
+    # vary.
     for fam in SITE_FAMILIES:
         g, plan, _ = build(fam, rings=40, seed=1, share=0.5, ring_size=8, ring_size_max=14)
         assert nx.is_connected(g), fam
         score(g, plan)
     g, plan, _ = build("delaunay", rings=40, seed=1, share=0.5, ring_size=8, ring_size_max=14)
     assert len({len(r) for r in plan}) > 1, "ring sizes did not vary"
+    # ring-length sweep: --rings is solved per length, n stays pinned, and the
+    # rings really do come out the requested length (see _fit_rings).
+    for L in (8, 16):
+        a = _fit_rings(L, 600, family="delaunay", seed=1, ring_size=8,
+                       spof=0.1, share=0.3)
+        g, plan, _ = build("delaunay", rings=a, seed=1, ring_size=8, spof=0.1,
+                           share=0.3, prune_solo=1.0, target_n=600)
+        assert g.number_of_nodes() == 600, (L, a, g.number_of_nodes())
+        assert abs(_median_len(plan) - L) <= 2, (L, a, _median_len(plan))
     # spof lands on target regardless of share, and never partitions the ring
     # graph (a narrowed transition is still a transition).
     for sp in (0.1, 0.33):
@@ -680,56 +935,94 @@ def main():
     ap.add_argument("--spof", type=float, default=0.0,
                     help="target fraction of transitions that are single-node (SPOF)")
     ap.add_argument("--share", type=float, default=0.0,
-                    help="target fraction of transitions reusing a hub slot -> 3+-ring nodes (fan-out lever)")
+                    help="how many rings meet at one interface: 0 -> 2 (a plain "
+                         "corridor), 1 -> --max-meet. THE fan-out lever, since "
+                         "every node of an m-ring interface sits in m rings and "
+                         "fan per node is m(m-1)")
+    ap.add_argument("--max-meet", type=int, default=0, metavar="M",
+                    help="ceiling on how many rings meet at one interface; "
+                         "--share scales from 2 up to this. The strongest fan-out "
+                         "lever: every node of an m-ring interface sits in m rings "
+                         "and fan per node is m(m-1), quadratic, where --width-max "
+                         "is linear. Default 0 picks ~sqrt(--rings), near the peak "
+                         "-- higher backfires, since a clique of m eats C(m,2) ring "
+                         "pairs and the cover runs out of candidates")
     ap.add_argument("--width-max", type=int, default=WIDTH_MAX,
-                    help="cap on shared nodes for a non-spof, non-hub, non-backbone transition")
-    ap.add_argument("--hub-cap", type=int, default=HUB_CAP,
-                    help="share links one hub anchor absorbs before a fresh node "
-                         "opens (lower = hubs spread over more nodes, lower peak k; "
-                         "0 = unlimited)")
-    ap.add_argument("--prune-ring", type=float, default=0.0,
-                    help="fraction of links to drop entirely (non-backbone only, "
-                         "so the graph stays connected)")
-    ap.add_argument("--prune-node", type=float, default=0.0,
-                    help="fraction of nodes to remove (staying connected); every "
-                         "ring a removed node was in is dropped -- may leave nodes ringless")
+                    help="cap on nodes per interface; each one gets a width drawn "
+                         "from [2, this], so a topology carries a MIX of transition "
+                         "widths. A second fan-out lever alongside --share: fan "
+                         "tracks the mean width (~(2+N)/2) and is linear in it, "
+                         "where --share is quadratic. 1 makes every transition a SPOF")
     ap.add_argument("--prune-solo", type=float, default=0.0, metavar="FRAC",
-                    help="fraction of single-ring nodes to splice out of their ring "
-                         "(they add no fan-out, only lap length). 0 = off, 1 = strip all")
+                    help="fraction of filler (single-ring) nodes to splice out; "
+                         "they add no fan-out, only lap length. 1 = the plan's "
+                         "floor, which is what the sweeps build from before "
+                         "padding up to --target-n")
     ap.add_argument("--ring-size", type=int, default=8,
                     help="ring size (even, >=6); the minimum when --ring-size-max is set")
     ap.add_argument("--ring-size-max", type=int, default=0,
-                    help="if set, ring sizes vary in [--ring-size, this], biggest "
-                         "rings to the busiest sites (more slots -> higher --share "
-                         "fits; 0 = all rings equal)")
+                    help="if set, ring sizes vary in [--ring-size, this], the "
+                         "biggest rings going to the busiest sites; 0 = all rings "
+                         "start equal")
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--sweep-ring-len", type=float, nargs="+", metavar="L",
+                    help="export one topology per RING LENGTH, all at --target-n "
+                         "nodes; --rings is solved per point (length and ring "
+                         "count are one knob at fixed n). The counterpart of "
+                         "--sweep-share, which moves fan-out instead")
+    ap.add_argument("--hold-len", type=float, nargs="?", const=0, default=None,
+                    metavar="L",
+                    help="with --sweep-share: solve --rings per point so the mean "
+                         "RING LENGTH stays put, leaving fan-out the only variable. "
+                         "sum(ring lengths) = n + sharing surplus and --share IS "
+                         "that surplus, so at a fixed n and ring count the rings "
+                         "grow instead (13->21 over 0..1). Give a length, or pass "
+                         "it bare to anchor on the shortest the top share can reach")
+    ap.add_argument("--hold-fan", type=float, nargs="?", const=0, default=None,
+                    metavar="FAN",
+                    help="with --sweep-ring-len: raise --share per point so "
+                         "fan-out stays put and ring length is the only variable "
+                         "(fan-out otherwise falls as rings get longer). Give a "
+                         "figure, or pass it bare to anchor on the most fan-out "
+                         "every point in the sweep can reach")
     ap.add_argument("--sweep-share", nargs="+", type=float, metavar="F",
-                    help="export one topology per share value, each fitted to "
-                         "--target-n nodes via --prune-solo (which moves n without "
-                         "moving fan-out), so runs differ in fan-out only")
+                    help="one topology per share value, each padded to --target-n "
+                         "nodes with filler (which costs no fan-out), so the points "
+                         "differ in fan-out at a fixed node count. Add --hold-len "
+                         "to stop ring length drifting up along with it")
     ap.add_argument("--target-n", type=int, default=0,
-                    help="node count to hit in --sweep-share (0 = smallest n the "
-                         "sweep can all reach)")
-    ap.add_argument("--target-tol", type=int, default=25, help="allowed node-count error")
+                    help="exact node count for every point of a sweep (0 = the "
+                         "smallest n every point can reach). Required by "
+                         "--sweep-ring-len and --hold-len, which solve against it")
+    ap.add_argument("--target-tol", type=int, default=25,
+                    help="how far a point's FLOOR may sit above --target-n before "
+                         "the sweep gives up (padding can only add nodes). The "
+                         "count itself is exact, so this is not an error bar")
     ap.add_argument("--auto-ring-size", action="store_true",
-                    help="in --sweep-share: pick --ring-size per point for the "
-                         "widest fan-out span (small rings at low share keep n "
-                         "reachable, big ones at high share concentrate rings "
-                         "onto hubs). Leaves only --rings and --target-n to pick")
+                    help="in --sweep-share: pick --ring-size per point for the most "
+                         "fan-out. Ring size no longer moves n (padding does), but "
+                         "it caps site degree at ring_size//2, which limits "
+                         "interfaces per site and so fan-out")
     ap.add_argument("--selfcheck", action="store_true")
     a = ap.parse_args()
     if a.selfcheck:
         return _selfcheck()
+    if a.sweep_ring_len:
+        kw = dict(family=a.family, seed=a.seed, ring_size=a.ring_size,
+                  spof=a.spof, share=a.share, width_max=a.width_max,
+                  ring_size_max=a.ring_size_max, max_meet=a.max_meet)
+        return sweep_ring_len(a.sweep_ring_len, a.target_n,
+                              hold_fan=a.hold_fan, **kw)
     if a.sweep_share:
         kw = dict(family=a.family, rings=a.rings, seed=a.seed,
                   ring_size=a.ring_size, spof=a.spof, width_max=a.width_max,
-                  hub_cap=a.hub_cap, prune_ring=a.prune_ring,
-                  prune_node=a.prune_node, ring_size_max=a.ring_size_max)
+                  ring_size_max=a.ring_size_max, max_meet=a.max_meet)
         return sweep_share(a.sweep_share, a.target_n, a.target_tol,
-                           auto_ring_size=a.auto_ring_size, **kw)
+                           auto_ring_size=a.auto_ring_size, hold_len=a.hold_len,
+                           **kw)
     export_and_plot(a.family, a.rings, a.seed, a.ring_size, a.spof, a.share,
-                    a.width_max, a.hub_cap, a.prune_ring, a.prune_node,
-                    a.ring_size_max, a.prune_solo)
+                    a.width_max, a.ring_size_max, a.prune_solo,
+                    max_meet=a.max_meet)
 
 
 if __name__ == "__main__":

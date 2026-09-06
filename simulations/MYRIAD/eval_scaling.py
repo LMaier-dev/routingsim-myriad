@@ -314,8 +314,20 @@ def measure(topo, nobatch=False, conv=False):
     return repeat_mean(one)
 
 
+def _mean_over_seeds(rs):
+    """Average the per-topology result dicts of one sweep point (its seeds).
+
+    Some fields are None when a run produced no .sca or no convergence dump;
+    they average over whatever IS there, and stay None if nothing is."""
+    out = {}
+    for k in rs[0]:
+        vals = [r[k] for r in rs if r.get(k) is not None]
+        out[k] = (sum(vals) / len(vals)) if vals else None
+    return out
+
+
 def sweep(items, nobatch=False, conv=False):
-    """items: list of (label, topo_path). Runs LS and ONE GP per topology. GP
+    """items: list of (label, [topo_path, ...]) -- one path per seed, averaged. Runs LS and ONE GP per topology. GP
     uses the holdInterval pinned in eval_common.ini (batching on); pass
     nobatch=True to override it to 0s — the pre-batching baseline, which is far
     slower (no coalescing) so it's opt-in, not run every sweep. Returns a dict of
@@ -327,15 +339,22 @@ def sweep(items, nobatch=False, conv=False):
     if conv:
         out["ls_ct"] = []
         out["gp_ct"] = []
-    run_one = lambda it: measure(it[1], nobatch, conv)
-    if (harness.JOBS or 1) > 1 and len(items) > 1:
+    # One job per (point, seed) rather than per point: with 5 seeds and 6 points
+    # that is 30 independent runs, which fills --jobs far better than 6 would.
+    jobs = [(i, t) for i, (_, paths) in enumerate(items) for t in paths]
+    run_one = lambda j: measure(j[1], nobatch, conv)
+    if (harness.JOBS or 1) > 1 and len(jobs) > 1:
         harness.PROGRESS = False    # N concurrent sims would fight over the \r line
         with ThreadPoolExecutor(max_workers=harness.JOBS) as ex:
-            results = list(ex.map(run_one, items))
+            done = list(ex.map(run_one, jobs))
     else:
-        results = [run_one(it) for it in items]
+        done = [run_one(j) for j in jobs]
+    per_point = [[] for _ in items]
+    for (i, _), r in zip(jobs, done):
+        per_point[i].append(r)
+    results = [_mean_over_seeds(rs) for rs in per_point]
 
-    for (label, _), r in zip(items, results):
+    for (label, paths), r in zip(items, results):
         out["labels"].append(label)
         out["ls"].append(r["ls"])
         out["gp"].append(r["gp"])
@@ -354,7 +373,10 @@ def sweep(items, nobatch=False, conv=False):
         # message_count returns None when a run produced no .sca
         def _n(v):
             return "None" if v is None else f"{v:.0f}{pm(v, '.0f')}"
-        print(f"  {label:<6} LS={_n(r['ls'])}/{r['ls_b']/1000:.0f}KB  "
+        seeds = f" (mean of {len(paths)} seeds)" if len(paths) > 1 else ""
+        # The label is two lines for the plot's tick; flatten it for the console.
+        flat = label.replace("\n", " ")
+        print(f"  {flat:<14}{seeds} LS={_n(r['ls'])}/{r['ls_b']/1000:.0f}KB  "
               f"GP({mode})={_n(r['gp'])}/{r['gp_b']/1000:.0f}KB  "
               f"batches={r['nb']:.0f} avg_sz={r['avg_sz']:.1f} "
               f"max_sz={r['max_sz']:.0f}{ct_str}")
@@ -625,16 +647,44 @@ def main(args=None):
             print(f"  ! skipping {os.path.basename(p)}: no edges "
                   "(truncated topology — rerun ringpipe or delete it)")
         topos = [p for p in topos if p not in empty]
-        # ringpipe names encode the sweep variable, so order by share (then n)
-        # rather than lexically -- "share0.1" sorts before "share0" as a string.
         # Sort and label by the --x-key number in the file name (ringpipe encodes
-        # fan, n, share, ... there). Lexical order is wrong: "fan1000" < "fan296".
-        def num(p):
-            mo = re.search(rf"_{args.x_key}([0-9]+\.?[0-9]*)", os.path.basename(p))
+        # share, rl, fan, n, ... there). Lexical order is wrong: "fan1000" <
+        # "fan296", and "share0.1" < "share0".
+        def num(p, key):
+            mo = re.search(rf"_{key}([0-9]+\.?[0-9]*)", os.path.basename(p))
             return float(mo.group(1)) if mo else 0.0
-        items = [(f"{args.x_key}{num(p):g}", p) for p in sorted(topos, key=num)]
+
+        # Files differing only in _seed<N> are the same sweep point measured on
+        # different draws, so they are averaged rather than plotted separately.
+        # Everything a seed can shift is stripped from the key: the seed itself,
+        # the achieved ring length, and the fan/n/A the solver landed on. What
+        # remains -- family, spof, and the sweep point (share<v> or len<v>) -- is
+        # the point's identity.
+        vary = re.compile(r"_(seed|rl|fan|n|A)\d+(?:\.\d+)?")
+        groups = {}
+        for p in topos:
+            groups.setdefault(vary.sub("", os.path.basename(p)), []).append(p)
+        # The label carries the achieved ring length (_rl) and ring count (_A) as
+        # well as the sweep variable: length is what GP's lap cost keys off, and
+        # the count is what a held sweep spends to pin the other two, so both
+        # belong on the axis whatever is being swept. Averaged over the seeds,
+        # like the measurements themselves.
+        def mean(paths, key):
+            vals = [num(q, key) for q in paths]
+            return sum(vals) / len(vals)
+
+        items = []
+        for key, paths in groups.items():
+            x = mean(paths, args.x_key)
+            rl, rings = mean(paths, "rl"), mean(paths, "A")
+            sub = " ".join(t for t in (f"rl{rl:.0f}" if rl else "",
+                                       f"A{rings:.0f}" if rings else "") if t)
+            label = f"{args.x_key}{x:g}" + (f"\n{sub}" if sub else "")
+            items.append((x, label, sorted(paths)))
+        items = [(lab, ps) for _, lab, ps in sorted(items)]
+        nseed = max(len(ps) for _, ps in items)
         name = os.path.basename(os.path.normpath(args.dir))
-        print(f"== dir sweep: {name} ({len(items)} topologies) ==")
+        print(f"== dir sweep: {name} ({len(items)} points x up to {nseed} seeds) ==")
         plot(sweep(items, args.nobatch, args.convergence),
              f"GP vs LS: {name}", args.x_key,
              os.path.join(PLOT_DIR, f"dir_{name}_{args.x_key}.png"), args.nobatch)
