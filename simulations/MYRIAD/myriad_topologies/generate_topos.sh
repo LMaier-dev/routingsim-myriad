@@ -2,27 +2,35 @@
 # Generate the MYRIAD topology families, 5 seeds each.
 #
 # Two axes, each holding n fixed:
-#   --sweep-share     fan-out (rings meeting at one interface); ring length ~flat
-#   --sweep-ring-len  ring length (lap length); --rings is solved per point
+#   ringpipe --sweep-share  fan-out (rings meeting at one interface), with
+#                           --hold-len pinning ring length so only fan moves
+#   ringgrow --sweep-tr     transitions (ring pairs that meet), at a fixed ring
+#                           AND node count; every interface is a plain two-node
+#                           corridor, so nothing has to be solved for
 #
-# Both axes come in a plain and a HELD variant. Plain lets the other quantity
-# drift; held pins it, so exactly one thing moves:
-#   --hold-len  on a share sweep  -> ring length pinned, --rings solved per point
-#   --hold-fan  on a length sweep -> fan-out pinned, --share solved per point
 # sum(ring lengths) = n + sharing surplus, so only two of {n, ring count, ring
-# length} can be pinned at once -- the held variants spend the third.
+# length} can be pinned at once. ringpipe spends the ring count on it (--hold-len
+# solves --rings per point); ringgrow keeps the ring count and lets the length
+# follow the identity mean length = (n + 2*tr - spof)/A, which is exact and so
+# needs no solver.
 #
-# Each axis gets a QUICK family (n~100-200, seconds) for smoke tests and a FULL
-# family for real runs. Every name carries the achieved median ring length as
-# _rl<N>, so sweep with:
+# Every name carries the achieved figures, so sweep with:
 #   eval_scaling.py --dir ./csv/<family>/ --x-key share
-#   eval_scaling.py --dir ./csv/<family>/ --x-key rl
-# eval_scaling averages the seeds of each point automatically (same name bar
-# _seed<N>), so a plotted curve is a mean rather than one lucky draw.
+#   eval_scaling.py --dir ./csv/<family>/ --x-key tr
+# Every topology is its own point on those plots, seeds included, so a curve is
+# a regression over the spread rather than one lucky draw.
+#   generate_topos.sh [grow|pipe|all]     default all; each family is wiped and
+#                                         regenerated only if it is selected
 set -euo pipefail
 
+WHICH=${1:-all}
+case $WHICH in
+    grow|pipe|all) ;;
+    *) echo "usage: $0 [grow|pipe|all]" >&2; exit 2 ;;
+esac
+
 TOPO_DIR=~/routingsim/simulations/MYRIAD/myriad_topologies
-SPOF=0.25
+SPOF=0.5
 SEEDS="0 1 2 3 4"
 
 RINGS_BIG=150            # share sweep: --rings is fixed, n held by padding
@@ -30,12 +38,15 @@ TARGET_N=1000
 RINGS_QUICK=16           # floors at 98 nodes, so n=100 is reachable at every share
 TARGET_N_QUICK=100
 
-# The length axis needs NARROW interfaces: a ring carrying several interfaces of
-# width w can never be shorter than their total, so wide ones pin the short end.
-# width-max 2 with share 0 is what makes 8..32 actually reachable.
-LEN_WIDTH=2
-TARGET_N_LEN=1000
-TARGET_N_LEN_QUICK=200
+# Transition sweep. Ring length is not a knob here: mean length = (n + 2*tr -
+# spof)/A, so A alone sets it, and A also squeezes the sweep from both ends --
+# tr >= A-1 keeps the ring graph connected, tr <= (n - 2*A)/2.5 is the node
+# budget at SPOF=0.5. Short rings and a wide tr span are therefore opposed
+# (L ~ n/A + 1.5, span ~ (n/A - 2)/2.5). A=1250 is about as short as the rings
+# go while the axis still spans anything: length 9.5..11.6 over a 2.4x tr range.
+RINGS_TR=1250
+TARGET_N_TR=10000
+SWEEP_TR="1250 1600 1950 2300 2650 3000"
 
 LOG_DIR=$(mktemp -d)
 trap 'rm -rf "$LOG_DIR"' EXIT
@@ -47,48 +58,48 @@ wipe() {   # a family is (csv, ringlabels, gallery); regenerate all three togeth
 # Seed 0 runs in the foreground so there is live progress; the other seeds run
 # beside it on their own cores, logging to files. Nothing starts the next family
 # until all of them are done, since they would otherwise fight for the machine.
+PY=ringpipe.py           # generator gen() drives; switched per family below
 gen() {
     local label=$1; shift
     echo "=== $label (seeds: $SEEDS) ==="
     for s in ${SEEDS#* }; do
-        python3 "$TOPO_DIR/ringpipe.py" "$@" --seed "$s" > "$LOG_DIR/seed$s.log" 2>&1 &
+        python3 "$TOPO_DIR/$PY" "$@" --seed "$s" > "$LOG_DIR/seed$s.log" 2>&1 &
     done
-    python3 "$TOPO_DIR/ringpipe.py" "$@" --seed "${SEEDS%% *}"
+    python3 "$TOPO_DIR/$PY" "$@" --seed "${SEEDS%% *}"
     wait
     echo "  (other seeds done: $(ls "$LOG_DIR" | wc -l) logs)"
     rm -f "$LOG_DIR"/seed*.log
 }
 
-wipe "delaunay_A${RINGS_BIG}_spof${SPOF}"
-wipe "delaunay_A${RINGS_QUICK}_spof${SPOF}"
-wipe "delaunay_len${TARGET_N_LEN}_spof${SPOF}"
-wipe "delaunay_len${TARGET_N_LEN_QUICK}_spof${SPOF}"
-# the held variants name their folder from the anchor they solved for, so they
-# are wiped by glob rather than by an exact name
-rm -rf "${TOPO_DIR}"/{csv,ringlabels,gallery}/delaunay_shr*_spof${SPOF}
-rm -rf "${TOPO_DIR}"/{csv,ringlabels,gallery}/delaunay_lenfan*_spof${SPOF}
+if [[ $WHICH != pipe ]]; then
+    wipe "delaunay_grow${TARGET_N_TR}_A${RINGS_TR}_spof0"
+    wipe "delaunay_grow${TARGET_N_TR}_A${RINGS_TR}_spof${SPOF}"
+    PY=ringgrow.py
 
-# gen "quick: share sweep, n=${TARGET_N_QUICK}" \
-#     --family delaunay --rings $RINGS_QUICK --width-max 6 \
-#     --sweep-share 0.0 0.25 0.5 0.75 1.0 \
-#     --spof $SPOF --ring-size 8 --target-n $TARGET_N_QUICK
+    gen "full: transition sweep, A=${RINGS_TR} n=${TARGET_N_TR}" \
+        --family delaunay --rings $RINGS_TR --sweep-tr $SWEEP_TR \
+        --spof 0 --target-n $TARGET_N_TR &
 
-# gen "quick: ring-length sweep, n=${TARGET_N_LEN_QUICK}" \
-#     --family delaunay --width-max $LEN_WIDTH --share 0 \
-#     --sweep-ring-len 8 12 16 \
-#     --spof $SPOF --target-n $TARGET_N_LEN_QUICK
+    gen "full: transition sweep, A=${RINGS_TR} n=${TARGET_N_TR}" \
+        --family delaunay --rings $RINGS_TR --sweep-tr $SWEEP_TR \
+        --spof $SPOF --target-n $TARGET_N_TR
+fi
 
-gen "full: share sweep at FIXED ring length, n=${TARGET_N}" \
-    --family delaunay --rings $RINGS_BIG --width-max 6 --max-meet 12 \
-    --sweep-share 0 0.49 0.65 0.74 0.84 0.915 0.875 0.952 --hold-len 16 \
-    --spof 0 --ring-size 8 --target-n $TARGET_N &
+if [[ $WHICH != grow ]]; then
+    wipe "delaunay_A${RINGS_BIG}_spof${SPOF}"
+    wipe "delaunay_A${RINGS_QUICK}_spof${SPOF}"
+    # the held variants name their folder from the anchor they solved for, so
+    # they are wiped by glob rather than by an exact name
+    rm -rf "${TOPO_DIR}"/{csv,ringlabels,gallery}/delaunay_shr*_spof${SPOF}
+    PY=ringpipe.py
 
-gen "full: share sweep at FIXED ring length, n=${TARGET_N}" \
-    --family delaunay --rings $RINGS_BIG --width-max 6 --max-meet 12 \
-    --sweep-share 0 0.49 0.65 0.74 0.84 0.915 0.875 0.952 --hold-len 16 \
-    --spof $SPOF --ring-size 8 --target-n $TARGET_N
+    gen "full: share sweep at FIXED ring length, n=${TARGET_N}" \
+        --family delaunay --rings $RINGS_BIG --width-max 6 --max-meet 12 \
+        --sweep-share 0 0.49 0.65 0.74 0.84 0.915 0.875 0.952 --hold-len 16 \
+        --spof 0 --ring-size 8 --target-n $TARGET_N &
 
-gen "full: ring-length sweep at FIXED fan-out, n=${TARGET_N_LEN}" \
-    --family delaunay --width-max $LEN_WIDTH --max-meet 13 \
-    --sweep-ring-len 8 9 10 12 16 24 32 --hold-fan \
-    --spof $SPOF --target-n $TARGET_N_LEN
+    gen "full: share sweep at FIXED ring length, n=${TARGET_N}" \
+        --family delaunay --rings $RINGS_BIG --width-max 6 --max-meet 12 \
+        --sweep-share 0 0.49 0.65 0.74 0.84 0.915 0.875 0.952 --hold-len 16 \
+        --spof $SPOF --ring-size 8 --target-n $TARGET_N
+fi

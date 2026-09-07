@@ -12,14 +12,20 @@
 # the flags stay written once. Example:
 #   SPLIT python3 ../simulations/MYRIAD/eval_entrypoint.py dynamics --topo ../simulations/topologies/grid_10,10.txt --only churn --basis tree
 
-python3 ../simulations/MYRIAD/eval_scaling.py --basis min
-python3 ../simulations/MYRIAD/eval_scaling.py --basis tree
-
+# GRUD "Correctness"
 python3 ../simulations/MYRIAD/eval_entrypoint.py costdrift --topo ../simulations/topologies/grid_10,10.txt --no-refresh-flood --nospof
 
+# GRID scaling behavior vs linkstate TODO add bandwith
+python3 ../simulations/MYRIAD/eval_scaling.py --basis min
+
+# Dont need this maybe (convergence time vs holdtimer)
 python3 ../simulations/MYRIAD/eval_entrypoint.py convergence --topo ../simulations/topologies/rgg_n100_d4.5_seed0.txt
 
-python3 ../simulations/MYRIAD/eval_entrypoint.py dynamics --topo ../simulations/topologies/grid_10,10.txt --only node --noreplay --basis min --set carryRr=false
+
+# FIRST GENERATE topos
+
+# 
+python3 ../simulations/MYRIAD/eval_entrypoint.py dynamics --topo ../simulations/topologies/grid_10,10.txt --only node --noreplay --basis min
 
 SPLIT python3 ../simulations/MYRIAD/eval_entrypoint.py dynamics --topo ../simulations/topologies/rgg_n100_d4.5_seed0.txt --only churn --basis min --no-refresh-flood --nospof --noreplay --tag min
 SPLIT python3 ../simulations/MYRIAD/eval_entrypoint.py dynamics --topo ../simulations/topologies/rgg_n250_d4.5_seed0.txt --only churn --basis tree --no-refresh-flood --nospof --set maxEcmpPaths=0

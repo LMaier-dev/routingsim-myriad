@@ -791,7 +791,10 @@ def main(args=None):
             rings.append(A)
             # share too: two sweep points can land on the same fan/length/ring
             # count, and without it their console lines read as duplicates.
-            share = "" if args.x_key == "share" else f" share {num(p, 'share'):g}"
+            # ringgrow files carry no _share; a bare " share 0" there reads as a
+            # setting rather than as absence.
+            share = ("" if args.x_key == "share" or "_share" not in p
+                     else f" share {num(p, 'share'):g}")
             items.append((f"{XNAME.get(args.x_key, args.x_key)} {xs[-1]:g} "
                           f"len {rl:.0f} #rings {A:.0f}{share} "
                           f"seed {num(p, 'seed'):.0f}", [p]))
