@@ -44,11 +44,11 @@ SPLIT python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --topo
 # Windows: conv [0,--failure-start) is the initial RIB formation, then churn
 # steady state / one window per node-wave fraction. churn/conv and node/conv
 # measure the same phase in two different runs: they should agree.
-python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --overview --dir ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow10000_A1200_spof0 --tr-extremes --basis native --repeat 10 --jobs 64 --no-refresh-flood --nospof --noreplay
+python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --overview --dir ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow10000_A1200_spof0 --tr-extremes --basis native --repeat 10 --jobs 32 --no-refresh-flood --noreplay
 
 # same, on the SPOF-free corpus: every transition two nodes wide, so a failure
 # never severs a ring pair outright
-python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --overview --dir ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow10000_A1200_spof0 --tr-extremes --basis native --repeat 10 --jobs 64 --no-refresh-flood --nospof --noreplay
+#python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --overview --dir ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow10000_A1200_spof0 --tr-extremes --basis native --repeat 10 --jobs 64 --no-refresh-flood --noreplay
 
 # DETAILED failure sequence on the same corpus: RIB snapshots on, so these give
 # reconvergence latency per wave, route counts over time and stretch vs LS —
