@@ -36,9 +36,6 @@ SPLIT python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --topo
 # schedules with the spread drawn as boxplots.
 python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --overview --dir ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow10000_A1200_spof0.5 --tr-extremes --basis native --repeat 4 --jobs 8 --no-refresh-flood --noreplay
 
-# same, on the SPOF-free corpus: every transition two nodes wide, so a failure
-# never severs a ring pair outright
-python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --overview --dir ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow10000_A1200_spof0 --tr-extremes --basis native --repeat 4 --jobs 8 --no-refresh-flood --noreplay
 
 
 
