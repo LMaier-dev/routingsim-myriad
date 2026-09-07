@@ -46,11 +46,16 @@ TARGET_N_QUICK=100
 # spof)/A, so A alone sets it, and A also squeezes the sweep from both ends --
 # tr >= A-1 keeps the ring graph connected, tr <= (n - 2*A)/2.5 is the node
 # budget at SPOF=0.5. Short rings and a wide tr span are therefore opposed
-# (L ~ n/A + 1.5, span ~ (n/A - 2)/2.5). A=1250 is about as short as the rings
-# go while the axis still spans anything: length 9.5..11.6 over a 2.4x tr range.
-RINGS_TR=1250
+# (L ~ n/A + 1.5, span ~ (n/A - 2)/2.5). A=1200 is about as short as the rings
+# go while the axis still spans anything: length 9.8..12.1 over a 2.5x tr range.
+# --ring-size 4 is what makes the floor MEET that identity: the default 8 pads
+# every ring carrying one or two transitions, which at this A costs ~100 nodes
+# and pushes the top point over the target. It cannot change the achieved
+# length -- padding to --target-n equalises the rings afterwards either way.
+RINGS_TR=1200
 TARGET_N_TR=10000
-SWEEP_TR="1250 1600 1950 2300 2650 3000"
+RING_SIZE_TR=4
+SWEEP_TR="1200 1560 1920 2280 2640 3000"
 
 LOG_DIR=$(mktemp -d)
 trap 'rm -rf "$LOG_DIR"' EXIT
@@ -83,11 +88,11 @@ if [[ $WHICH != pipe ]]; then
 
     gen "full: transition sweep, A=${RINGS_TR} n=${TARGET_N_TR}" \
         --family delaunay --rings $RINGS_TR --sweep-tr $SWEEP_TR \
-        --spof 0 --target-n $TARGET_N_TR &
+        --ring-size $RING_SIZE_TR --spof 0 --target-n $TARGET_N_TR &
 
     gen "full: transition sweep, A=${RINGS_TR} n=${TARGET_N_TR}" \
         --family delaunay --rings $RINGS_TR --sweep-tr $SWEEP_TR \
-        --spof $SPOF --target-n $TARGET_N_TR
+        --ring-size $RING_SIZE_TR --spof $SPOF --target-n $TARGET_N_TR
 fi
 
 if [[ $WHICH != grow ]]; then

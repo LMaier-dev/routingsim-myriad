@@ -88,6 +88,11 @@ def main():
                             help="overview mode only: run every *.txt topology "
                                  "in this directory instead of --topo, so the "
                                  "boxes span topologies as well as RNG seeds")
+            sp.add_argument("--tr-extremes", action="store_true",
+                            help="with --dir: run only the lowest-_tr and "
+                                 "highest-_tr topologies in it, every seed of each — "
+                                 "the two ends of a transition sweep at a fraction of "
+                                 "the sim cost")
             sp.add_argument("--overview", action="store_true",
                             help="traffic-only mode: messages and bytes per "
                                  "failure window (churn, each node-wave "

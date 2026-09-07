@@ -211,8 +211,13 @@ def sweep(trs, rings, target_n=0, jobs=1, **kw):
            f"_spof{kw.get('spof', 0.0):g}")
     for t in trs:
         if floors[t] > target_n:
-            raise ValueError(f"tr={t} floors at n={floors[t]}, above --target-n "
-                             f"{target_n}; raise it to {max(floors.values())}")
+            ident = 2 * t + 2 * rings + round(kw.get("spof", 0.0) * t)
+            raise ValueError(
+                f"tr={t} floors at n={floors[t]}, above --target-n {target_n}; "
+                f"raise it to {max(floors.values())}, drop the top tr, or lower "
+                f"--ring-size: the identity floor here is 2*tr + 2*A + spof = "
+                f"{ident}, and the remaining {floors[t] - ident} is --ring-size "
+                f"padding rings that carry too few transitions to need it")
     for t, (s, rl, *_) in zip(trs, rp._pmap(
             _point, jobs, [(rings, t, target_n, sub, kw) for t in trs])):
         print(f"A={rings:4} tr={s['pairs']:6} n={s['n']:6} ringlen={rl:3} "

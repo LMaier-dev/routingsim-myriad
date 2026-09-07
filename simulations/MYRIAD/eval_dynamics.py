@@ -314,6 +314,18 @@ def topo_set(args):
     found = sorted(glob.glob(os.path.join(d, "*.txt")))
     if not found:
         sys.exit(f"--dir {d}: no *.txt topologies here (the search is not recursive)")
+    if getattr(args, "tr_extremes", False):
+        # The ends of a transition sweep, every seed of each: two points far
+        # apart on the axis, with the seed spread intact at both, instead of the
+        # whole sweep at N times the sim cost.
+        tr = {f: float(m.group(1)) for f in found
+              for m in [re.search(r"_tr([0-9]+)", os.path.basename(f))] if m}
+        if len(set(tr.values())) < 2:
+            sys.exit(f"--tr-extremes: {d} has no two different _tr<N> values "
+                     f"({sorted(set(tr.values())) or 'none found'})")
+        lo, hi = min(tr.values()), max(tr.values())
+        found = [f for f in found if tr.get(f) in (lo, hi)]
+        print(f"  [tr-extremes] keeping tr={lo:g} and tr={hi:g}: {len(found)} files")
     H.TOPO_LABEL = os.path.basename(str(d).rstrip("/"))   # plot titles name the set
     print(f"  [topologies] {len(found)} from {d}: "
           + ", ".join(stem(f) for f in found[:4])
@@ -322,15 +334,24 @@ def topo_set(args):
 
 
 def overview_windows(scenario, fractions, spacing):
-    """(label, t0, t1) measurement windows for one scenario. Churn's steady state
-    is one window from --failure-start to the end of the run; each node wave owns
-    the span from its own failures until the next wave. Warmup is outside every
-    window by construction, so no window carries the RIB formation burst."""
+    """(label, t0, t1) measurement windows for one scenario.
+
+    Every scenario opens with `conv`, [0, --failure-start): the network forming
+    its RIB from nothing, before any failure. That is the initial-convergence
+    cost in the same units as the failure windows, which is the only way to read
+    "a wave costs X" against "coming up costs Y". It is measured per scenario
+    rather than once because the node runs override refreshInterval, so their
+    formation is not the churn runs' formation.
+
+    After it, churn's steady state is one window to the end of the run, and each
+    node wave owns the span from its own failures to the next wave. No failure
+    window carries any of the formation burst."""
+    conv = [("conv", 0.0, churn_start())]
     if scenario == "churn":
-        return [("churn", churn_start(), _sec(traffic_simtime()))]
+        return conv + [("churn", churn_start(), _sec(traffic_simtime()))]
     waves = wave_times(fractions, spacing)
     ends = [t for _, t in waves[1:]] + [_sec(node_simtime(len(fractions), spacing))]
-    return [(f"{f:.0%}", t, e) for (f, t), e in zip(waves, ends)]
+    return conv + [(f"{f:.0%}", t, e) for (f, t), e in zip(waves, ends)]
 
 
 def tx_windows(resdir, windows):
@@ -415,7 +436,7 @@ def overview_report(plan, res):
           f"({ntopo} topolog{'y' if ntopo == 1 else 'ies'} × {H.REPEATS} seed(s), "
           f"warmup excluded) ===")
     print(f"{'window':>10}{'config':>13}{'runs':>6}{'messages':>14}{'bytes':>16}"
-          f"{'B/msg':>9}{'KB/s':>12}{'×LS':>8}")
+          f"{'mean bytes ± sd':>26}{'B/msg':>9}{'KB/s':>12}{'×LS':>8}")
     rows = []
     with open(os.path.join(OUT, "overview.csv"), "w", newline="") as fh:
         w = csv.writer(fh)
@@ -432,12 +453,14 @@ def overview_report(plan, res):
                         w.writerow([scenario, lab, f"{t0:g}", f"{t1:g}", name,
                                     topo, seed, f"{b:.0f}", m])
                     b, m = _median([v[0] for v in vals]), _median([v[1] for v in vals])
+                    mu, sd = _mean_sd([v[0] for v in vals])
                     win = lab if lab == scenario else f"{scenario}/{lab}"
-                    rows.append((win, name, len(vals), m, b,
+                    rows.append((win, name, len(vals), m, b, mu, sd,
                                  b / m if m else 0, b / (t1 - t0) / 1000,
                                  b / ref if ref else 0))
-    for win, name, n, m, b, per, kbs, rel in rows:
+    for win, name, n, m, b, mu, sd, per, kbs, rel in rows:
         print(f"{win:>10}{name:>13}{n:>6}{m:>14,.0f}{b:>16,.0f}"
+              f"{f'{mu:,.0f} ± {sd:,.0f}':>26}"
               f"{per:>9.0f}{kbs:>12,.1f}{(f'{rel:.2f}×' if rel else '-'):>8}")
     print("\nmedian over every run; per-run values (topology, seed) in "
           "overview.csv, spread in the boxplots. Node windows run from one "
@@ -449,6 +472,15 @@ def overview_report(plan, res):
 
 def _median(v):
     return sorted(v)[len(v) // 2] if v else 0.0
+
+
+def _mean_sd(v):
+    """Mean and population sd, the spread the boxes draw. Runs differ in both
+    topology and failure schedule, so this is one number over both."""
+    if not v:
+        return 0.0, 0.0
+    mu = sum(v) / len(v)
+    return mu, (sum((x - mu) ** 2 for x in v) / len(v)) ** 0.5
 
 
 def overview_plots(plan, res):
@@ -668,6 +700,11 @@ def main(args=None):
                        help="overview mode only: run every *.txt topology in "
                             "this directory instead of --topo, so the boxes "
                             "span topologies as well as RNG seeds")
+        p.add_argument("--tr-extremes", action="store_true",
+                       help="with --dir: run only the lowest-_tr and "
+                            "highest-_tr topologies in it, every seed of each — "
+                            "the two ends of a transition sweep at a fraction of "
+                            "the sim cost")
         p.add_argument("--overview", action="store_true",
                        help="traffic-only mode: messages and bytes per failure "
                             "window (churn, and each node-wave fraction), "
@@ -1052,23 +1089,6 @@ def plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0=None,
         made.append("churn_bytes.png")
 
     if "node" in scenarios and any(reconv[n] for n in reconv):
-        fig, ax = plt.subplots()
-        for name, color in COLORS.items():
-            fr = sorted(f for f in reconv.get(name, {}) if reconv[name][f]["n"])
-            if not fr:
-                continue
-            ax.plot([f * 100 for f in fr], [reconv[name][f]["max"] for f in fr],
-                    "o-", color=color, label=f"{name} network-wide (max)")
-            ax.plot([f * 100 for f in fr], [reconv[name][f]["mean"] for f in fr],
-                    "s--", color=color, alpha=0.6, label=f"{name} mean")
-        ax.axhline(refresh_s(), ls=":", color="gray",
-                   label=f"refreshInterval ({common('refreshInterval')})")
-        ax.set(xlabel="nodes failed (%)", ylabel="reconvergence time (s)",
-               title=title("Reconvergence vs failure size"))
-        ax.legend(fontsize=7); fig.tight_layout()
-        fig.savefig(os.path.join(OUT, "reconverge_vs_fraction.png"), dpi=120)
-        made.append("reconverge_vs_fraction.png")
-
         # Residual path quality after each wave settles: replay restores
         # reachability, not the pre-crash optimum, so a rising curve is the
         # cost of that tradeoff accumulating with failure size.

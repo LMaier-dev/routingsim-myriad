@@ -9,12 +9,12 @@ observational RIB snapshots (snapshotInterval), which are provably non-intrusive
 doesn't perturb convergence.
 
 Per run we parse the timestamped snapshots into {t: {(node,origin): cost}} and
-derive: convergence time (last t at which the RIB changed), the %-optimal-vs-time
-curve (vs the LS final costs = the proven optimum), and total sent messages.
+derive: convergence time (last t at which the RIB changed), the final %-optimal
+(vs the LS final costs = the proven optimum), and total sent messages.
 
     python3 simulations/MYRIAD/eval_convergence.py [--topo PATH] [--basis {min,tree}]
 
-Outputs two plots + a summary table under simulations/MYRIAD/eval/convergence/.
+Outputs a plot + a summary table under simulations/MYRIAD/eval/convergence/.
 Convergence is diffed on COST (refresh-invariant once ring sizes are known), so
 king re-origination bumps seq/chain without falsely resetting convergence.
 """
@@ -103,15 +103,12 @@ def run_proto(ini, dump_param, dumpfile, resdir, extra, rep=0):
 
 def derive(snaps, msgs, truth, shift=0.0):
     """Per-run numbers that are safe to average across repeats: convergence time,
-    messages, final %optimal, and the %optimal-vs-time curve on the (fixed)
-    snapshot grid. Raw snapshots are NOT averaged — mean costs would be
+    messages, final %optimal. Raw snapshots are NOT averaged — mean costs would be
     fractional and break the equality diffing in convergence_time()."""
     ct = convergence_time(snaps)
     return {"ct": (ct - shift) if ct is not None else None,
             "msgs": msgs,
-            "fo": frac_optimal(snaps[max(snaps)], truth) * 100,
-            "curve": {t - shift: frac_optimal(s, truth) * 100
-                      for t, s in snaps.items()}}
+            "fo": frac_optimal(snaps[max(snaps)], truth) * 100}
 
 
 def main(args=None):
@@ -138,9 +135,9 @@ def main(args=None):
     ls_ini = write_proto_ini(os.path.join(OUT, "ls.ini"), "ls", args.topo, labels)
     announce("convergence", opts=overrides(sim_time_limit=SIMTIME))
 
-    # LS reference; its final costs are the proven optimum (truth for the curves).
+    # LS reference; its final costs are the proven optimum (truth for %optimal).
     # The optimum is seed-independent, so rep 0 alone defines truth; the other
-    # repeats only contribute LS's own conv time / messages / curve.
+    # repeats only contribute LS's own conv time / messages.
     print("  → LS reference …", flush=True)
     ls0 = run_proto(ls_ini, "oracleDumpFile", os.path.join(OUT, "ls.txt"),
                     os.path.join(OUT, "res_ls"), [], 0)
@@ -153,9 +150,9 @@ def main(args=None):
 
     # GP over the holdInterval sweep. rankUseSpof=false ranks purely by cost, so
     # GP's converged RIB targets the same optimum LS computes (see the oracle test)
-    # — required for the %-optimal curve to be meaningful (else spof-first ranking
+    # — required for the %-optimal numbers to be meaningful (else spof-first ranking
     # picks costlier redundant paths and never matches the pure-cost truth).
-    gp = {}  # hold -> {"ct", "msgs", "fo", "curve"}
+    gp = {}  # hold -> {"ct", "msgs", "fo"}
     for h in HOLDS:
         print(f"  → GP hold={h} …", flush=True)
         dump = os.path.join(OUT, f"gp_{h}.txt")
@@ -219,19 +216,7 @@ def main(args=None):
     fig.tight_layout()
     fig.savefig(os.path.join(OUT, "tradeoff.png"), dpi=120)
 
-    fig, ax = plt.subplots()
-    for h in HOLDS:
-        curve = gp[h]["curve"]
-        ts = sorted(curve)
-        ax.plot(ts, [curve[t] for t in ts], "-", label=f"GP hold={h}")
-    ts = sorted(ls["curve"])
-    ax.plot(ts, [ls["curve"][t] for t in ts], "k--", label="LS")
-    ax.set(xlabel="sim time (s)", ylabel="% of optimal RIB reached",
-           title=title("Convergence curve"))
-    ax.legend(fontsize=8)
-    fig.savefig(os.path.join(OUT, "optimal_vs_time.png"), dpi=120)
-
-    print(f"\nplots -> {OUT}/{{tradeoff,optimal_vs_time}}.png")
+    print(f"\nplots -> {OUT}/tradeoff.png")
 
 
 if __name__ == "__main__":
