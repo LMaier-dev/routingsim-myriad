@@ -50,8 +50,9 @@ to stop that; --hold-fan does the mirror on a length sweep.
     python3 ringpipe.py --selfcheck
 
 Each run writes three files under csv/, ringlabels/ and gallery/, named with the
-knobs AND the achieved figures (_rl<median length>, _fan<fan-out>, _n<nodes>) so
-eval_scaling.py can read the axis straight off the file names.
+knobs AND the achieved figures (_rl<median length>, _tr<transitions>,
+_fan<fan-out>, _n<nodes>) so eval_scaling.py can read the axis straight off the
+file names.
 """
 import argparse
 import math
@@ -527,13 +528,16 @@ def export_and_plot(family, rings, seed=0, ring_size=8,
     #   _len<L>  the sweep point's target -- identical across seeds, so it is
     #            what the eval groups seeds by before averaging them
     #   _rl<N>   the median ring length this seed actually got
+    #   _tr<N>   transitions: ring pairs sharing at least one node -- the count
+    #            of inter-ring hand-offs the control plane has to maintain,
+    #            which fan-out weights but does not itself report
     #   _fan/_n  fan-out and node count achieved
     tag = ((f"_len{len_tag:g}" if len_tag else "")
            + f"_rl{_median_len(plan)}"
            + (f"_rs{ring_size}-{ring_size_max}" if ring_size_max else "")
            + (f"_ps{prune_solo:g}" if prune_solo else ""))
     stem = (f"ringpipe_{family}_A{rings}_spof{spof:g}_share{share:g}{tag}"
-            f"_seed{seed}_fan{s['fan']}_n{s['n']}")
+            f"_seed{seed}_tr{s['pairs']}_fan{s['fan']}_n{s['n']}")
     # One subfolder per family so a sweep's outputs stay together and
     # `eval_scaling --dir` can take the folder as the sweep. Keyed by A normally;
     # sweeps that SOLVE for --rings pass their own `sub`, since their points have

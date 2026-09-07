@@ -67,7 +67,8 @@ COMMON_INI = os.path.join(HERE, "eval_common.ini")
 # File-name keys -> what to call them on a chart axis. ringpipe's names are terse
 # so they glob well; a reader of the plot wants words.
 XNAME = {"rl": "length", "len": "length", "A": "#rings", "fan": "fan",
-         "share": "share", "n": "nodes", "spof": "spof"}
+         "share": "share", "n": "nodes", "spof": "spof",
+         "tr": "transitions (ring pairs)"}
 
 SENT_TOTAL_RE = re.compile(r"^scalar\s+\S+\s+sent_total\s+([0-9.]+)", re.M)
 BYTES_RE = re.compile(r"^scalar\s+\S+\s+bytes_(\S+)\s+([0-9.]+)", re.M)
@@ -719,7 +720,8 @@ def main(args=None):
         ap.add_argument("--x-key", dest="x_key", default="fan", metavar="WORD",
                         help="with --dir: the word in the file names whose "
                              "trailing number is the x-axis (default fan; e.g. "
-                             "rl, len, share, n). rl/len sweeps plot DESCENDING, "
+                             "tr = transitions, rl, len, share, n). rl/len "
+                             "sweeps plot DESCENDING, "
                              "so the ring count -- which is inverse to length at "
                              "fixed n -- grows left to right")
         ap.add_argument("--no-batch-panel", action="store_true",
@@ -793,6 +795,14 @@ def main(args=None):
             items.append((f"{XNAME.get(args.x_key, args.x_key)} {xs[-1]:g} "
                           f"len {rl:.0f} #rings {A:.0f}{share} "
                           f"seed {num(p, 'seed'):.0f}", [p]))
+        # A key no file carries reads as 0 everywhere and would silently plot a
+        # column of points on the y axis. _tr is the usual case: it was added to
+        # ringpipe's names later than the rest.
+        if not any(xs):
+            sys.exit(f"--x-key {args.x_key}: no _{args.x_key}<number> in these "
+                     f"file names (e.g. {os.path.basename(topos[0])}) — "
+                     f"regenerate the sweep with ringpipe.py, or pick a key "
+                     f"they do carry")
         name = os.path.basename(os.path.normpath(args.dir))
         print(f"== dir sweep: {name} ({len(items)} topologies) ==")
         # Length sweeps read right-to-left: at a fixed n the ring COUNT is what
