@@ -27,28 +27,23 @@ python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py convergence --topo ~/
 # FIRST GENERATE topos
 # /home/s_maier/routingsim/simulations/MYRIAD/myriad_topologies/generate_topos.sh all
 
-# TODO FIX LS
+SPLIT python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --topo ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow10000_A1200_spof0.5@median --only churn --basis native --no-refresh-flood --nospof --noreplay
 
-
-SPLIT python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --topo ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow10000_A1200_spof0.5@median --only churn --basis native --no-refresh-flood --nospof --noreplay --protos gp,gp_noreplay,gp_nospof
-
-SPLIT python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --topo ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow10000_A1200_spof0.5@median --only node --basis native --no-refresh-flood --noreplay --protos gp,gp_noreplay
+SPLIT python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --topo ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow10000_A1200_spof0.5@median --only node --basis native --no-refresh-flood --noreplay
 
 # OVERVIEW: control-plane volume per phase (convergence, churn, each failure
 # fraction) for every protocol variant, averaged over topologies AND failure
 # schedules with the spread drawn as boxplots.
-#
-# LS is excluded for now (TODO FIX LS), and every GP config runs in this one
-# process, so there is nothing to recombine and no --post is needed here.
-python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --overview --dir ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow10000_A1200_spof0.5 --tr-extremes --basis native --repeat 4 --jobs 8 --no-refresh-flood --noreplay --nospof --protos gp,gp_noreplay,gp_nospof
+python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --overview --dir ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow10000_A1200_spof0.5 --tr-extremes --basis native --repeat 4 --jobs 8 --no-refresh-flood --noreplay
 
 
 
-SPLIT python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --topo ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow10000_A1200_spof0.5@median --only churn --basis native --no-refresh-flood --noreplay --nospof --protos gp,gp_noreplay,gp_nospof
 
-SPLIT python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --topo ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow10000_A1200_spof0.5@median --only node --basis native --no-refresh-flood --noreplay --nospof --protos gp,gp_noreplay,gp_nospof
+SPLIT python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --topo ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow10000_A1200_spof0.5@median --only churn --basis native --no-refresh-flood --noreplay
+
+SPLIT python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --topo ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow10000_A1200_spof0.5@median --only node --basis native --no-refresh-flood --noreplay
 
 # the SPOF-free twin of the two above
-SPLIT python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --topo ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow10000_A1200_spof0@median --only churn --basis native --no-refresh-flood --noreplay --nospof --protos gp,gp_noreplay,gp_nospof
+SPLIT python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --topo ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow10000_A1200_spof0@median --only churn --basis native --no-refresh-flood
 
-SPLIT python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --topo ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow10000_A1200_spof0@median --only node --basis native --no-refresh-flood --noreplay --nospof --protos gp,gp_noreplay,gp_nospof
+SPLIT python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --topo ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow10000_A1200_spof0@median --only node --basis native --no-refresh-flood
