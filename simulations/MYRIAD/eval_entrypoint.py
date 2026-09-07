@@ -24,9 +24,14 @@ def _oracle_gate(args):
     if gate_up_to_date():
         print("=== oracle regression gate: skipped (binary unchanged) ===\n")
         return
-    import test_rib_oracle
+    import test_rib_oracle, eval_harness
     print("=== oracle regression gate ===")
-    test_rib_oracle.main(args)   # sys.exit on failure, so reaching here == pass
+    saved = eval_harness.EXTRA_OPTS
+    eval_harness.EXTRA_OPTS = [o for o in saved if "snapshotInterval" not in o]
+    try:
+        test_rib_oracle.main(args)   # sys.exit on failure, so reaching here == pass
+    finally:
+        eval_harness.EXTRA_OPTS = saved
     mark_gate_passed()
     print()
 

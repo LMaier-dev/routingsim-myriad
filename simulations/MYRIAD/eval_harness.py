@@ -219,7 +219,7 @@ def ensure_ring_labels(topo_path, basis="tree", max_ring_size=0, echo=True):
         t0 = time.time()
         proc = subprocess.Popen(
             [sys.executable, str(TOPO_SCRIPTS / "topo2rings.py"),
-             str(p), "--out", str(out), "--basis", basis,
+             str(p.resolve()), "--out", str(out), "--basis", basis,
              *(["--max-ring-size", str(max_ring_size)] if max_ring_size else []),
              *([] if echo else ["--no-echo"])],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
@@ -483,10 +483,32 @@ def add_repeat_args(parser):
                              "see different failure schedules (default: isolated)")
 
 
+_PICK = {"first": 0, "lo": 0, "min": 0, "last": -1, "hi": -1, "max": -1,
+         "median": None, "mid": None, "med": None}   # None = middle by length
+
+
+def resolve_topo_pick(spec):
+    """'<dir>@first|median|last' -> one *.txt from that dir's transition sweep,
+    sorted by _tr<N> (then name) and picked by position. Lets eval_runs.txt name
+    a representative of a swept family without pinning a brittle tr/fan/seed
+    filename that regeneration renames. A plain path (no '@<pick>' suffix) is
+    returned unchanged."""
+    d, sep, sel = spec.rpartition("@")
+    if not sep or sel not in _PICK:
+        return spec
+    tr = lambda f: (int(m.group(1)) if (m := re.search(r"_tr(\d+)", f.name)) else 0)
+    files = sorted(Path(d).glob("*.txt"), key=lambda f: (tr(f), f.name))
+    if not files:
+        sys.exit(f"--topo {spec}: no *.txt in {d}")
+    i = _PICK[sel]
+    return str(files[len(files) // 2 if i is None else i])
+
+
 def apply_repeat_args(args):
     """Bind the shared CLI flags into the module state run_sim reads."""
     global REPEATS, JOBS, EXTRA_OPTS, RNG_ISOLATE, TOPO_LABEL
     if getattr(args, "topo", None):
+        args.topo = resolve_topo_pick(args.topo)
         TOPO_LABEL = topo_label(args.topo)
     REPEATS = max(1, getattr(args, "repeat", 1) or 1)
     JOBS = getattr(args, "jobs", None)
