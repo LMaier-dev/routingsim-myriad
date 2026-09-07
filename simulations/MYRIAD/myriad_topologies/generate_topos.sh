@@ -45,17 +45,22 @@ TARGET_N_QUICK=100
 # Transition sweep. Ring length is not a knob here: mean length = (n + 2*tr -
 # spof)/A, so A alone sets it, and A also squeezes the sweep from both ends --
 # tr >= A-1 keeps the ring graph connected, tr <= (n - 2*A)/2.5 is the node
-# budget at SPOF=0.5. Short rings and a wide tr span are therefore opposed
-# (L ~ n/A + 1.5, span ~ (n/A - 2)/2.5). A=1200 is about as short as the rings
-# go while the axis still spans anything: length 9.8..12.1 over a 2.5x tr range.
-# --ring-size 4 is what makes the floor MEET that identity: the default 8 pads
-# every ring carrying one or two transitions, which at this A costs ~100 nodes
-# and pushes the top point over the target. It cannot change the achieved
-# length -- padding to --target-n equalises the rings afterwards either way.
-RINGS_TR=1200
-TARGET_N_TR=10000
+# budget at SPOF=0.5. n=2500 at A=300 keeps rings 9.8..11.8 long, the same band
+# the n=10000 family had, so it is that experiment at a quarter of the scale --
+# and a quarter-scale run fits in memory many times over, which is what lets the
+# eval lines all run at once instead of in hand-uncommented phases.
+# --ring-size 4 makes the floor MEET the identity: the default 8 pads every ring
+# carrying one or two transitions, and that slack pushes the top point over the
+# target. It cannot change the achieved length -- padding to --target-n
+# equalises the rings afterwards either way.
+RINGS_TR=300
+TARGET_N_TR=2500
 RING_SIZE_TR=4
-SWEEP_TR="1200 1560 1920 2280 2640 3000"
+SWEEP_TR="300 400 500 600 700"
+
+#RINGS_TR=1200
+#TARGET_N_TR=10000
+#SWEEP_TR="1200 1560 1920 2280 2640 3000"
 
 LOG_DIR=$(mktemp -d)
 trap 'rm -rf "$LOG_DIR"' EXIT

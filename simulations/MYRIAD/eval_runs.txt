@@ -27,23 +27,28 @@ python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py convergence --topo ~/
 # FIRST GENERATE topos
 # /home/s_maier/routingsim/simulations/MYRIAD/myriad_topologies/generate_topos.sh all
 
-SPLIT python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --topo ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow10000_A1200_spof0.5@median --only churn --basis native --no-refresh-flood --nospof --noreplay
+# ---------------------------------------------------------------------------
+# n=2500 corpus (generate_topos.sh grow). Same experiment as the n=10000 family
+# -- rings 9.8..11.8 long, tr swept 300..700 -- at a quarter of the scale.
+#
+# Why quarter scale: memory is per-node RIB (every node holds a route to each
+# origin ring), so it scales with n*A. One n=10000 GP run plateaued at 9.8GB;
+# n=2500 lands around 1GB, well under 3GB even for LS. That is what lets all
+# three lines below run at once: run_evals.sh has no concurrency gate, it opens
+# every line's window together, and a SPLIT line starts one process PER CONFIG.
+#   churn 4 configs (gp, gp_noreplay, gp_nospof, ls) + node 3 + overview 16
+#   = 23 concurrent sims. At 10000 nodes that was 225GB; here it is ~25-70GB.
+# If a per-run peak turns out higher than 3GB, --jobs on the overview line is
+# the dial: it is 16 of those 23.
+# ---------------------------------------------------------------------------
 
-SPLIT python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --topo ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow10000_A1200_spof0.5@median --only node --basis native --no-refresh-flood --noreplay
+# detailed failure sequence, RIB snapshots ON: reconvergence latency per wave,
+# route counts over time, stretch vs LS
+SPLIT python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --topo ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow2500_A300_spof0.5@median --only churn --basis native --no-refresh-flood --nospof --noreplay
 
-# OVERVIEW: control-plane volume per phase (convergence, churn, each failure
-# fraction) for every protocol variant, averaged over topologies AND failure
-# schedules with the spread drawn as boxplots.
-python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --overview --dir ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow10000_A1200_spof0.5 --tr-extremes --basis native --repeat 4 --jobs 8 --no-refresh-flood --noreplay
+SPLIT python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --topo ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow2500_A300_spof0.5@median --only node --basis native --no-refresh-flood --noreplay
 
-
-
-
-SPLIT python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --topo ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow10000_A1200_spof0.5@median --only churn --basis native --no-refresh-flood --noreplay
-
-SPLIT python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --topo ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow10000_A1200_spof0.5@median --only node --basis native --no-refresh-flood --noreplay
-
-# the SPOF-free twin of the two above
-SPLIT python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --topo ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow10000_A1200_spof0@median --only churn --basis native --no-refresh-flood
-
-SPLIT python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --topo ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow10000_A1200_spof0@median --only node --basis native --no-refresh-flood
+# overview: bytes and messages per phase (conv, churn, each wave fraction),
+# boxplotted over the tr extremes x --repeat failure schedules. No snapshots.
+# Every config runs in this one process, so no --post is needed.
+python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --overview --dir ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow2500_A300_spof0.5 --tr-extremes --basis native --repeat 4 --jobs 16 --no-refresh-flood --noreplay
