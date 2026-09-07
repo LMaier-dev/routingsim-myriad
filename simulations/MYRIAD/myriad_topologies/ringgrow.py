@@ -174,12 +174,13 @@ def export(rings, tr, seed=0, ring_size=8, target_n=0, family="gabriel",
     prov = (f"myriad_topologies/ringgrow.py family={family} rings(A)={rings} "
             f"tr_target={tr} spof_target={spof:g} target_n={target_n} seed={seed}")
     s, topo, ini, png = rp.write_out(g, plan, rpos, stem, sub, prov)
+    rl = rp._median_len(plan)
     if not quiet:
-        print(f"A={rings:4} tr={s['pairs']:6} n={s['n']:6} "
-              f"ringlen={rp._median_len(plan):3} fan={s['fan']:7} "
-              f"deg={s['avgdeg']:5.2f} spof={s['spofpct']:5.1f}% diam={s['diam']:4}")
+        print(f"A={rings:4} tr={s['pairs']:6} n={s['n']:6} ringlen={rl:3} "
+              f"fan={s['fan']:7} deg={s['avgdeg']:5.2f} "
+              f"spof={s['spofpct']:5.1f}% diam={s['diam']:4}")
         print(f"  {topo}\n  {ini}\n  {png}")
-    return s, topo, ini, png
+    return s, rl, topo, ini, png
 
 
 def floor_n(rings, tr, **kw):
@@ -187,19 +188,36 @@ def floor_n(rings, tr, **kw):
     return build(rings=rings, tr=tr, **kw)[0].number_of_nodes()
 
 
-def sweep(trs, rings, target_n=0, **kw):
-    """One topology per transition count, all at the same A and the same n."""
-    floors = {t: floor_n(rings, t, **kw) for t in trs}
+def _floor_point(rings, t, kw):
+    return floor_n(rings, t, **kw)
+
+
+def _point(rings, t, target_n, sub, kw):
+    return export(rings, t, target_n=target_n, sub=sub, quiet=True, **kw)
+
+
+def sweep(trs, rings, target_n=0, jobs=1, **kw):
+    """One topology per transition count, all at the same A and the same n.
+
+    Points share nothing but the folder they write into, so --jobs runs them on
+    separate processes; the parent prints in sweep order once they land."""
+    trs = sorted(trs)
+    floors = dict(zip(trs, rp._pmap(_floor_point, jobs,
+                                    [(rings, t, kw) for t in trs])))
     if not target_n:
         target_n = max(floors.values())
         print(f"  --target-n not given, using the largest floor: {target_n}")
     sub = (f"{kw.get('family', 'gabriel')}_grow{target_n}_A{rings}"
            f"_spof{kw.get('spof', 0.0):g}")
-    for t in sorted(trs):
+    for t in trs:
         if floors[t] > target_n:
             raise ValueError(f"tr={t} floors at n={floors[t]}, above --target-n "
                              f"{target_n}; raise it to {max(floors.values())}")
-        export(rings, t, target_n=target_n, sub=sub, **kw)
+    for t, (s, rl, *_) in zip(trs, rp._pmap(
+            _point, jobs, [(rings, t, target_n, sub, kw) for t in trs])):
+        print(f"A={rings:4} tr={s['pairs']:6} n={s['n']:6} ringlen={rl:3} "
+              f"fan={s['fan']:7} deg={s['avgdeg']:5.2f} "
+              f"spof={s['spofpct']:5.1f}% diam={s['diam']:4}")
 
 
 def _selfcheck():
@@ -249,13 +267,15 @@ def main():
     ap.add_argument("--sweep-tr", type=int, nargs="+", metavar="TR",
                     help="one topology per transition count, all at the same A "
                          "and --target-n")
+    ap.add_argument("--jobs", type=int, default=1, metavar="N",
+                    help="build a sweep's points on N processes (default 1)")
     ap.add_argument("--selfcheck", action="store_true")
     a = ap.parse_args()
     if a.selfcheck:
         return _selfcheck()
     kw = dict(family=a.family, seed=a.seed, ring_size=a.ring_size, spof=a.spof)
     if a.sweep_tr:
-        return sweep(a.sweep_tr, a.rings, a.target_n, **kw)
+        return sweep(a.sweep_tr, a.rings, a.target_n, a.jobs, **kw)
     if not a.tr:
         ap.error("--tr or --sweep-tr")
     export(a.rings, a.tr, target_n=a.target_n, **kw)

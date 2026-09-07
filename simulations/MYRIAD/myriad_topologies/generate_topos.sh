@@ -32,6 +32,10 @@ esac
 TOPO_DIR=~/routingsim/simulations/MYRIAD/myriad_topologies
 SPOF=0.5
 SEEDS="0 1 2 3 4"
+# Two levels of parallelism multiply: the seeds of a family run side by side,
+# and each of those spreads its own sweep points over --jobs processes. Sized so
+# seeds*JOBS lands near the core count.
+JOBS=${JOBS:-$(( ( $(nproc) + $(set -- $SEEDS; echo $#) - 1 ) / $(set -- $SEEDS; echo $#) ))}
 
 RINGS_BIG=150            # share sweep: --rings is fixed, n held by padding
 TARGET_N=1000
@@ -61,11 +65,12 @@ wipe() {   # a family is (csv, ringlabels, gallery); regenerate all three togeth
 PY=ringpipe.py           # generator gen() drives; switched per family below
 gen() {
     local label=$1; shift
-    echo "=== $label (seeds: $SEEDS) ==="
+    echo "=== $label (seeds: $SEEDS, --jobs $JOBS each) ==="
     for s in ${SEEDS#* }; do
-        python3 "$TOPO_DIR/$PY" "$@" --seed "$s" > "$LOG_DIR/seed$s.log" 2>&1 &
+        python3 "$TOPO_DIR/$PY" "$@" --jobs "$JOBS" --seed "$s" \
+            > "$LOG_DIR/seed$s.log" 2>&1 &
     done
-    python3 "$TOPO_DIR/$PY" "$@" --seed "${SEEDS%% *}"
+    python3 "$TOPO_DIR/$PY" "$@" --jobs "$JOBS" --seed "${SEEDS%% *}"
     wait
     echo "  (other seeds done: $(ls "$LOG_DIR" | wc -l) logs)"
     rm -f "$LOG_DIR"/seed*.log

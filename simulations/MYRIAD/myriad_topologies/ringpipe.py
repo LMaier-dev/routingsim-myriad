@@ -57,6 +57,7 @@ _fan<fan-out>, _n<nodes>) so eval_scaling.py can read the axis straight off the
 file names.
 """
 import argparse
+import concurrent.futures as cf
 import math
 import os
 import sys
@@ -697,8 +698,41 @@ def _fit_rings(target_len, target_n, hint=0, **kw):
     return got
 
 
+def _pmap(fn, jobs, args):
+    """[fn(*a) for a in args], spread over `jobs` PROCESSES.
+
+    Points of a sweep are independent -- each writes its own three files -- so
+    the only shared state is the console, and the parent prints once they all
+    land, in order. Processes rather than threads: the work is numpy/networkx
+    graph building, which would just queue behind the GIL."""
+    if jobs <= 1 or len(args) < 2:
+        return [fn(*a) for a in args]
+    with cf.ProcessPoolExecutor(max_workers=jobs) as ex:
+        return [f.result() for f in [ex.submit(fn, *a) for a in args]]
+
+
+def _floor_point(sh, auto, kw):
+    return (min(_floor_n(share=sh, ring_size=rs, **kw) for rs in AUTO_RING_SIZES)
+            if auto else _floor_n(share=sh, **kw))
+
+
+def _share_point(sh, n, tol, auto, kw):
+    rs = _fit_ring_size(n, tol, share=sh, **kw) if auto else None
+    s, *_ = export_and_plot(share=sh, prune_solo=1.0, target_n=n, quiet=True,
+                            **({"ring_size": rs} if rs else {}), **kw)
+    return s, rs
+
+
+def _held_point(sh, a, target_n, sub, kw):
+    s, *_ = export_and_plot(rings=a, share=sh, prune_solo=1.0, target_n=target_n,
+                            quiet=True, sub=sub, **kw)
+    got = _median_len(build(rings=a, share=sh, prune_solo=1.0,
+                            target_n=target_n, **kw)[1])
+    return s, got
+
+
 def sweep_share(shares, target_n=0, tol=25, auto_ring_size=False, hold_len=None,
-                **kw):
+                jobs=1, **kw):
     """One topology per --share value, all at exactly target_n nodes.
 
     Every point is built at its FLOOR (prune_solo=1.0, all spliceable filler
@@ -722,11 +756,9 @@ def sweep_share(shares, target_n=0, tol=25, auto_ring_size=False, hold_len=None,
         kw.pop("ring_size", None)
         kw.pop("ring_size_max", None)     # size is chosen per point now
     if hold_len is not None:
-        return _sweep_share_holding_len(shares, target_n, hold_len, **kw)
-    floors = {sh: (min(_floor_n(share=sh, ring_size=rs, **kw)
-                       for rs in AUTO_RING_SIZES) if auto_ring_size
-                   else _floor_n(share=sh, **kw))
-              for sh in shares}
+        return _sweep_share_holding_len(shares, target_n, hold_len, jobs, **kw)
+    floors = dict(zip(shares, _pmap(_floor_point, jobs,
+                                    [(sh, auto_ring_size, kw) for sh in shares])))
     if not target_n:
         target_n = max(floors.values())
         print(f"  target-n not given, using the largest floor in the sweep: {target_n}")
@@ -736,20 +768,24 @@ def sweep_share(shares, target_n=0, tol=25, auto_ring_size=False, hold_len=None,
                 f"share={sh:g} floors at n={floors[sh]}, above --target-n "
                 f"{target_n} (+{tol}); padding can only add. Raise --target-n to "
                 f"{max(floors.values())} or lower --rings.")
-        n = max(target_n, floors[sh])
-        rs = _fit_ring_size(n, tol, share=sh, **kw) if auto_ring_size else None
-        s, *_ = export_and_plot(share=sh, prune_solo=1.0, target_n=n, quiet=True,
-                                **({"ring_size": rs} if rs else {}), **kw)
+    for sh, (s, rs) in zip(shares, _pmap(
+            _share_point, jobs,
+            [(sh, max(target_n, floors[sh]), tol, auto_ring_size, kw)
+             for sh in shares])):
         size = f"ring_size={rs:3} " if rs else ""
         print(f"share={sh:4g} {size}n={s['n']:5} fan={s['fan']:7} "
               f"fan/n={s['fan_n']:6.2f} maxk={s['maxk']:3} "
               f"spof={s['spofpct']:5.1f}%")
 
 
-def _sweep_share_holding_len(shares, target_n, hold_len, **kw):
+def _sweep_share_holding_len(shares, target_n, hold_len, jobs=1, **kw):
     """--sweep-share with the ring length pinned too: --rings solved per point
     (see sweep_share's hold_len, and _fit_rings). The ring count varies across
-    points, so the files go to ONE folder rather than a per-ring-count one."""
+    points, so the files go to ONE folder rather than a per-ring-count one.
+
+    --jobs only parallelises the export: the solver is a chain, each point
+    bisecting in a band around its predecessor's answer, and cutting that chain
+    to parallelise it would change which ring counts the sweep lands on."""
     if not target_n:
         raise ValueError("--hold-len needs --target-n: with the length pinned "
                          "too, n is the only anchor left to solve --rings against")
@@ -790,11 +826,10 @@ def _sweep_share_holding_len(shares, target_n, hold_len, **kw):
         kw = {**kw, "max_meet": _sweep_max_meet(solve_all(kw))}
         print(f"  --max-meet not given, pinning the sweep to "
               f"{kw['max_meet']} rings per interface")
-    for sh, a in zip(shares, solve_all(kw)):
-        s, *_ = export_and_plot(rings=a, share=sh, prune_solo=1.0,
-                                target_n=target_n, quiet=True, sub=sub, **kw)
-        got = _median_len(build(rings=a, share=sh, prune_solo=1.0,
-                                target_n=target_n, **kw)[1])
+    counts = solve_all(kw)
+    for (sh, a), (s, got) in zip(zip(shares, counts), _pmap(
+            _held_point, jobs,
+            [(sh, a, target_n, sub, kw) for sh, a in zip(shares, counts)])):
         flag = "" if abs(got - hold_len) <= 1 else f"  (len {got}, wanted {hold_len})"
         print(f"share={sh:4g} rings={a:5} ringlen={got:3} n={s['n']:5} "
               f"fan={s['fan']:7} fan/n={s['fan_n']:6.2f} maxk={s['maxk']:3} "
@@ -909,6 +944,10 @@ def main():
                          "fan-out. Ring size no longer moves n (padding does), but "
                          "it caps site degree at ring_size//2, which limits "
                          "interfaces per site and so fan-out")
+    ap.add_argument("--jobs", type=int, default=1, metavar="N",
+                    help="build a sweep's points on N processes (default 1). "
+                         "--hold-len's ring-count solver stays serial: it is a "
+                         "chain, and breaking it would move the sweep's points")
     ap.add_argument("--selfcheck", action="store_true")
     a = ap.parse_args()
     if a.selfcheck:
@@ -919,6 +958,7 @@ def main():
                   ring_size_max=a.ring_size_max, max_meet=a.max_meet)
         return sweep_share(a.sweep_share, a.target_n, a.target_tol,
                            auto_ring_size=a.auto_ring_size, hold_len=a.hold_len,
+                           jobs=a.jobs,
                            **kw)
     export_and_plot(a.family, a.rings, a.seed, a.ring_size, a.spof, a.share,
                     a.width_max, a.ring_size_max, a.prune_solo,
