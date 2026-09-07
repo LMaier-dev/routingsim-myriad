@@ -34,29 +34,15 @@ SPLIT python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --topo
 # OVERVIEW: control-plane volume per phase (convergence, churn, each failure
 # fraction) for every protocol variant, averaged over topologies AND failure
 # schedules with the spread drawn as boxplots.
-#   --tr-extremes  only the lowest-tr and highest-tr point of the ringgrow sweep,
-#                  all 5 topology seeds of each -> 10 topologies, two far-apart
-#                  points on the transition axis instead of the whole sweep
-#   --repeat N     N failure schedules per topology (seed-set 1..N), so the
-#                  boxes span both spreads; 10 topos x 2 scenarios x 4 configs
-#                  x N seeds runs, all in one --jobs pool
-#   no SPLIT       overview already fans the whole cross product out itself
-# Windows: conv [0,--failure-start) is the initial RIB formation, then churn
-# steady state / one window per node-wave fraction. churn/conv and node/conv
-# measure the same phase in two different runs: they should agree.
-python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --overview --dir ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow10000_A1200_spof0 --tr-extremes --basis native --repeat 10 --jobs 32 --no-refresh-flood --noreplay
+python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --overview --dir ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow10000_A1200_spof0 --tr-extremes --basis native --repeat 10 --jobs 8 --no-refresh-flood --noreplay
+python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --overview --dir ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow10000_A1200_spof0 --tr-extremes --basis native --repeat 10 --jobs 8 --no-refresh-flood --noreplay
 
 # same, on the SPOF-free corpus: every transition two nodes wide, so a failure
 # never severs a ring pair outright
-#python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --overview --dir ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow10000_A1200_spof0 --tr-extremes --basis native --repeat 10 --jobs 64 --no-refresh-flood --noreplay
+python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --overview --dir ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow10000_A1200_spof0 --tr-extremes --basis native --repeat 10 --jobs 8 --no-refresh-flood --noreplay
 
-# DETAILED failure sequence on the same corpus: RIB snapshots on, so these give
-# reconvergence latency per wave, route counts over time and stretch vs LS —
-# what --overview turns off to afford its cross product.
-# One topology only (normal mode takes --topo, not --dir): tr=1920, the middle
-# of the sweep 1200..3000, seed 0. The extremes are the overview's job; the
-# detailed view wants a representative point, not an endpoint.
-# SPLIT here because a single topology's GP and LS runs are otherwise serial.
+
+
 SPLIT python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --topo ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow10000_A1200_spof0.5@median --only churn --basis native --no-refresh-flood --nospof --noreplay
 
 SPLIT python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --topo ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow10000_A1200_spof0.5@median --only node --basis native --no-refresh-flood --nospof --noreplay
