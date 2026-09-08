@@ -49,10 +49,6 @@ mapfile -t RUNS < <(grep -vE '^\s*(#|$)' "$RUNFILE")
 # it stamps the binary and each eval below then skips it. GATE=0 to skip entirely.
 if [[ "${GATE:-1}" == 1 ]]; then
     echo "running oracle gate once (serial) …"
-    # Run in an if-condition, not bare: under pipefail, set -e would otherwise
-    # abort on a failing gate before the message below runs, leaving the log as
-    # the only clue. tee hides the gate's own status, so read PIPESTATUS[0] --
-    # and read it in the same command, since any later one overwrites it.
     if ( cd "$WORKDIR" && python3 "$MYRIAD_DIR/eval_entrypoint.py" gate ) \
         2>&1 | tee "$LOGDIR/gate.log" | tail -3; rc=${PIPESTATUS[0]}; (( rc != 0 )); then
         echo "oracle gate FAILED (exit $rc) — see $LOGDIR/gate.log" >&2
@@ -102,8 +98,14 @@ for cmd in "${RUNS[@]}"; do
     cfgs=()
     if [[ "$cmd" == SPLIT\ * ]]; then
         base="${cmd#SPLIT }"
-        mapfile -t cfgs < <(cd "$WORKDIR" && $base --list-configs 2>/dev/null)
-        (( ${#cfgs[@]} )) || cfgs=(gp ls)   # older eval, or the query failed
+        mapfile -t cfgs < <(cd "$WORKDIR" && eval "$base --list-configs" 2>/dev/null)
+        if (( ! ${#cfgs[@]} )); then       # older eval, or the query failed
+            echo "WARNING: --list-configs gave nothing for:" >&2
+            echo "  $base" >&2
+            echo "  falling back to (gp ls) — any other config gets no pane," >&2
+            echo "  and --post will then fail on the first one missing." >&2
+            cfgs=(gp ls)
+        fi
     fi
 
     if (( ${#cfgs[@]} )); then

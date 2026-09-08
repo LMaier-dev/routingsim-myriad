@@ -333,20 +333,18 @@ def topo_set(args):
     return found
 
 
-def overview_windows(scenario, fractions, spacing):
+def overview_windows(scenario, fractions, spacing, conv=True):
     """(label, t0, t1) measurement windows for one scenario.
 
-    Every scenario opens with `conv`, [0, --failure-start): the network forming
-    its RIB from nothing, before any failure. That is the initial-convergence
-    cost in the same units as the failure windows, which is the only way to read
-    "a wave costs X" against "coming up costs Y". It is measured per scenario
-    rather than once because the node runs override refreshInterval, so their
-    formation is not the churn runs' formation.
+    `conv` is [0, --failure-start): the network forming its RIB from nothing,
+    before any failure fires. That is the initial-convergence cost in the same
+    units as the failure windows, which is the only way to read "a wave costs X"
+    against "coming up costs Y".
 
     After it, churn's steady state is one window to the end of the run, and each
     node wave owns the span from its own failures to the next wave. No failure
     window carries any of the formation burst."""
-    conv = [("conv", 0.0, churn_start())]
+    conv = [("conv", 0.0, churn_start())] if conv else []
     if scenario == "churn":
         return conv + [("churn", churn_start(), _sec(traffic_simtime()))]
     waves = wave_times(fractions, spacing)
@@ -376,14 +374,19 @@ def overview(inis, topos, scenarios, fractions, spacing, run_sims):
     mode uses. No RIB dump: this mode never scores routes, and snapshotting
     dominates the runtime of the big runs."""
     plan = {}
-    for scenario in [s for s in scenarios if s != "link"]:
+    for i, scenario in enumerate([s for s in scenarios if s != "link"]):
         dyn, desc = scenario_dynamics(scenario, fractions, spacing)
         if scenario == "node":
             dyn += node_conditions(spacing)
             simt, desc = node_simtime(len(fractions), spacing), desc + "\n            " + grace_note()
         else:
             simt = traffic_simtime()
-        wins = overview_windows(scenario, fractions, spacing)
+        # conv goes to the first scenario only; see overview_windows.
+        wins = overview_windows(scenario, fractions, spacing, conv=(i == 0))
+        if i and node_refresh(spacing) < churn_start():
+            print(f"  ! this scenario refreshes every {node_refresh(spacing):g}s, "
+                  f"inside the [0,{churn_start():g})s formation window, so its "
+                  f"convergence is not the one measured above")
         print(f"\n=== {scenario} ({simt}) ===")
         announce(scenario, opts=dyn + overrides(sim_time_limit=simt), dynamics=desc)
         print("  windows: " + ", ".join(f"{l} [{a:g},{b:g})s" for l, a, b in wins))
@@ -435,13 +438,15 @@ def overview_report(plan, res):
     print(f"\n=== overview: control-plane volume per failure window "
           f"({ntopo} topolog{'y' if ntopo == 1 else 'ies'} × {H.REPEATS} seed(s), "
           f"warmup excluded) ===")
-    print(f"{'window':>10}{'config':>13}{'runs':>6}{'messages':>14}{'bytes':>16}"
-          f"{'mean bytes ± sd':>26}{'B/msg':>9}{'KB/s':>12}{'×LS':>8}")
+    # Volumes and rates in MB (1e6 bytes). B/msg and max B stay in bytes: a PDU
+    # is a few hundred bytes, and 0.0004 MB reads worse than 440.
+    print(f"{'window':>10}{'config':>13}{'runs':>6}{'messages':>14}{'MB':>14}"
+          f"{'mean MB ± sd':>22}{'B/msg':>9}{'MB/s':>10}{'×LS':>8}")
     rows = []
     with open(os.path.join(OUT, "overview.csv"), "w", newline="") as fh:
         w = csv.writer(fh)
         w.writerow(["scenario", "window", "t0", "t1", "config", "topology",
-                    "seed", "bytes", "messages"])
+                    "seed", "MB", "messages"])
         for scenario, (_, _, wins, _) in plan.items():
             for lab, t0, t1 in wins:
                 ref = _median([v[0] for v in res.get((scenario, lab, "ls"), [])])
@@ -451,21 +456,25 @@ def overview_report(plan, res):
                         continue
                     for b, m, topo, seed in sorted(vals, key=lambda v: (v[2], v[3])):
                         w.writerow([scenario, lab, f"{t0:g}", f"{t1:g}", name,
-                                    topo, seed, f"{b:.0f}", m])
+                                    topo, seed, f"{b / 1e6:.6f}", m])
                     b, m = _median([v[0] for v in vals]), _median([v[1] for v in vals])
                     mu, sd = _mean_sd([v[0] for v in vals])
-                    win = lab if lab == scenario else f"{scenario}/{lab}"
+                    # conv is the run set's, not this scenario's (see
+                    # overview_windows), so it carries no scenario prefix.
+                    win = (lab if lab in (scenario, "conv")
+                           else f"{scenario}/{lab}")
                     rows.append((win, name, len(vals), m, b, mu, sd,
-                                 b / m if m else 0, b / (t1 - t0) / 1000,
+                                 b / m if m else 0, b / (t1 - t0) / 1e6,
                                  b / ref if ref else 0))
-    for win, name, n, m, b, mu, sd, per, kbs, rel in rows:
-        print(f"{win:>10}{name:>13}{n:>6}{m:>14,.0f}{b:>16,.0f}"
-              f"{f'{mu:,.0f} ± {sd:,.0f}':>26}"
-              f"{per:>9.0f}{kbs:>12,.1f}{(f'{rel:.2f}×' if rel else '-'):>8}")
+    for win, name, n, m, b, mu, sd, per, mbs, rel in rows:
+        print(f"{win:>10}{name:>13}{n:>6}{m:>14,.0f}{b / 1e6:>14,.2f}"
+              f"{f'{mu / 1e6:,.2f} ± {sd / 1e6:,.2f}':>22}"
+              f"{per:>9.0f}{mbs:>10,.3f}{(f'{rel:.2f}×' if rel else '-'):>8}")
     print("\nmedian over every run; per-run values (topology, seed) in "
-          "overview.csv, spread in the boxplots. Node windows run from one "
-          "wave's failures to the next, churn's from --failure-start to the end "
-          "of the run." + (" With --dir the boxes pool topologies and seeds — "
+          "overview.csv, spread in the boxplots. conv is [0,--failure-start), "
+          "measured once for the whole set since no scenario fails before that "
+          "cut. Node windows run from one wave's failures to the next, churn's "
+          "from --failure-start to the end of the run." + (" With --dir the boxes pool topologies and seeds — "
                            "slice overview.csv by topology to separate them."
                            if ntopo > 1 else ""))
 
@@ -483,6 +492,15 @@ def _mean_sd(v):
     return mu, (sum((x - mu) ** 2 for x in v) / len(v)) ** 0.5
 
 
+def _win_title(lab, t0, t1):
+    """Plot-facing name for a measurement window."""
+    if lab == "churn":
+        return f"Network Churn\nover {t1 - t0:g}s"
+    if lab == "conv":
+        return "Initial\nConvergence"
+    return f"Catastrophic {lab}\nNetwork Outage"
+
+
 def overview_plots(plan, res):
     try:
         import matplotlib
@@ -491,16 +509,19 @@ def overview_plots(plan, res):
     except ImportError:
         print("\n(matplotlib not available — skipping plots)")
         return
-    labels = [(s, lab) for s, (_, _, wins, _) in plan.items() for lab, _, _ in wins]
-    names = [n for n in CONFIGS if any((s, l, n) in res for s, l in labels)]
+    # The figure is read away from the console, so it spells its windows out;
+    # the table keeps the terse keys, whose column is 10 characters wide.
+    labels = [(s, lab, t0, t1) for s, (_, _, wins, _) in plan.items()
+              for lab, t0, t1 in wins]
+    names = [n for n in CONFIGS if any((s, l, n) in res for s, l, _, _ in labels)]
     for idx, (ylabel, fname, scale) in enumerate(
-            (("bytes per window (log)", "overview_bytes.png", 1),
+            (("MB per window (log)", "overview_bytes.png", 1e6),
              ("messages per window (log)", "overview_messages.png", 1))):
         fig, ax = plt.subplots(figsize=(1.6 * len(labels) + 3, 4.5))
         w = 0.8 / len(names)
         for i, name in enumerate(names):
             data = [[v[idx] / scale for v in res.get((s, l, name), [])] or [0]
-                    for s, l in labels]
+                    for s, l, _, _ in labels]
             bp = ax.boxplot(data, positions=[x + i * w - 0.4 + w / 2
                                              for x in range(len(labels))],
                             widths=w * 0.9, patch_artist=True, manage_ticks=False)
@@ -511,14 +532,13 @@ def overview_plots(plan, res):
                 box.set(facecolor=COLORS[name], alpha=0.35)
             ax.plot([], [], color=COLORS[name], label=name)
         ax.set_xticks(range(len(labels)))
-        ax.set_xticklabels([l if l == s else f"{s}\n{l}" for s, l in labels],
+        ax.set_xticklabels([_win_title(l, t0, t1) for _, l, t0, t1 in labels],
                            fontsize=8)
         ax.set_yscale("log")
-        ntopo = len({v[2] for vals in res.values() for v in vals})
+        # No topology/seed count in the title: it goes in the caption, where
+        # there is room to say what the spread actually spans.
         ax.set(ylabel=ylabel, xlabel="failure window",
-               title=title(f"Control-plane volume per failure window "
-                           + (f"({ntopo} topologies × {H.REPEATS} seeds)"
-                              if ntopo > 1 else f"({H.REPEATS} seeds)")))
+               title=title("Control-plane volume per failure window"))
         ax.legend(fontsize=8); ax.grid(axis="y", alpha=0.3); fig.tight_layout()
         fig.savefig(os.path.join(OUT, fname), dpi=120)
         print(f"  wrote {fname}")
@@ -842,7 +862,7 @@ def main(args=None):
             r["bytes_post"] = bytes_after(ser, churn_start())
             if scenario == "churn":   # same byte-rate series the churn plots use
                 churn_bytes[name] = ser
-            print(f"  ✓ {r['msgs']:.0f} msgs, {r['bytes']/1000:.0f} KB")
+            print(f"  ✓ {r['msgs']:.0f} msgs, {r['bytes']/1e6:.1f} MB")
 
     # --- escalating node waves: ONE run per config, scored per wave ---
     if "node" in scenarios:
@@ -936,33 +956,37 @@ def report(traffic, reconv, fractions, scenarios, spacing, churn_bytes=None):
         print(f"\n=== control-plane traffic over {traffic_simtime()}{repeats_note()} ===")
         # bytes(post) excludes the formation burst; blank where no time series
         # exists (link scenario, or opp_scavetool missing).
-        print(f"{'config':>12}{'scenario':>10}{'messages':>20}{'bytes':>22}"
-              f"{'bytes(post)':>22}{'B/msg':>9}{'max B':>9}")
+        # MB = 1e6 bytes. B/msg and max B stay in bytes: those are single-PDU
+        # sizes, a few hundred bytes each, unreadable as MB.
+        print(f"{'config':>12}{'scenario':>10}{'messages':>20}{'MB':>18}"
+              f"{'MB(post)':>18}{'B/msg':>9}{'max B':>9}")
         for name, scenario in sorted(rows, key=lambda x: (x[1], x[0])):
             r = traffic[(name, scenario)]
             m, b, bp = r["msgs"], r["bytes"], r.get("bytes_post")
-            ms, bs = f"{m:.0f}" + pm(m, ".0f"), f"{b:.0f}" + pm(b, ".0f")
-            bps = f"{bp:.0f}" if bp is not None else "-"
-            print(f"{name:>12}{scenario:>10}{ms:>20}{bs:>22}{bps:>22}"
+            ms = f"{m:.0f}" + pm(m, ".0f")
+            bs = f"{b / 1e6:.2f}" + pm(b / 1e6, ".2f")
+            bps = f"{bp / 1e6:.2f}" if bp is not None else "-"
+            print(f"{name:>12}{scenario:>10}{ms:>20}{bs:>18}{bps:>18}"
                   f"{(b/m if m else 0):>9.1f}{r['max_b']:>9.0f}")
         for name in ("gp", "ls"):
             base, lnk = traffic.get((name, "churn")), traffic.get((name, "link"))
             if base and lnk:
                 print(f"  {name.upper()} link-churn cost (link−churn): "
                       f"+{lnk['msgs']-base['msgs']:.0f} msgs, "
-                      f"+{lnk['bytes']-base['bytes']:.0f} bytes")
+                      f"+{(lnk['bytes']-base['bytes']) / 1e6:.2f} MB")
 
         for name in ("gp", "ls"):
             r = traffic.get((name, "churn"))
             if not r:
                 continue
             print(f"\n--- {name.upper()} churn per-type ---")
-            print(f"{'type':>14}{'messages':>20}{'bytes':>22}{'B/msg':>9}{'%bytes':>8}")
+            print(f"{'type':>14}{'messages':>20}{'MB':>18}{'B/msg':>9}{'%MB':>8}")
             tot = sum(r["per_type_bytes"].values()) or 1
             for t in sorted(r["counts"], key=lambda k: -r["per_type_bytes"].get(k, 0)):
                 c, b = r["counts"][t], r["per_type_bytes"].get(t, 0)
-                cs, bs = f"{c:.0f}" + pm(c, ".0f"), f"{b:.0f}" + pm(b, ".0f")
-                print(f"{t:>14}{cs:>20}{bs:>22}{(b/c if c else 0):>9.0f}"
+                cs = f"{c:.0f}" + pm(c, ".0f")
+                bs = f"{b / 1e6:.2f}" + pm(b / 1e6, ".2f")
+                print(f"{t:>14}{cs:>20}{bs:>18}{(b/c if c else 0):>9.0f}"
                       f"{100*b/tot:>7.1f}%")
 
     if churn_bytes and any(churn_bytes.get(n, ([], []))[0] for n in COLORS):
@@ -970,7 +994,7 @@ def report(traffic, reconv, fractions, scenarios, spacing, churn_bytes=None):
         # matters is what the protocol costs per second to hold steady state.
         print(f"\n=== steady-state cost under churn ({CHURN_NODES} node(s) every "
               f"{CHURN_PERIOD:g}s, after t={churn_start():g}s) ===")
-        print(f"{'config':>12}{'mean B/s':>14}{'peak B/s':>14}{'vs LS':>9}")
+        print(f"{'config':>12}{'mean MB/s':>14}{'peak MB/s':>14}{'vs LS':>9}")
         means = {}
         for name in COLORS:
             ts, bps = churn_bytes.get(name, ([], []))
@@ -980,7 +1004,7 @@ def report(traffic, reconv, fractions, scenarios, spacing, churn_bytes=None):
         ref = means.get("ls", (0, 0))[0]
         for name, (mean, peak) in means.items():
             rel = f"{mean/ref:.1f}×" if ref else "-"
-            print(f"{name:>12}{mean:>14.0f}{peak:>14.0f}{rel:>9}")
+            print(f"{name:>12}{mean / 1e6:>14.3f}{peak / 1e6:>14.3f}{rel:>9}")
 
     if "node" not in scenarios:
         return
@@ -1043,7 +1067,7 @@ def plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0=None,
         x = range(len(protos))
         for key, ylabel, fname, scale, note in (
                 ("msgs", "sent messages", "traffic_messages.png", 1, "whole run"),
-                ("bytes_post", "bytes (KB)", "traffic_bytes.png", 1000,
+                ("bytes_post", "bytes (MB)", "traffic_bytes.png", 1e6,
                  "after warmup")):
             avail = [s for s in scenarios
                      if any(traffic.get((n, s), {}).get(key) is not None
@@ -1076,12 +1100,12 @@ def plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0=None,
             ts, bps = churn_bytes.get(name, ([], []))
             if not ts:
                 continue
-            ax.plot(ts, bps, color=color, lw=1.0, label=name)
+            ax.plot(ts, [b / 1e6 for b in bps], color=color, lw=1.0, label=name)
         ax.axvline(churn_start(), color="gray", lw=0.8)
         ax.text(churn_start(), ax.get_ylim()[1], " churn starts", fontsize=8,
                 color="gray", va="top")
         ax.set_yscale("log")
-        ax.set(xlabel="time (s)", ylabel="control-plane bytes/s (log)",
+        ax.set(xlabel="time (s)", ylabel="control-plane MB/s (log)",
                title=title(f"Control-plane cost under steady churn "
                            f"({CHURN_NODES} node(s) every {CHURN_PERIOD:g}s)"))
         ax.legend(fontsize=8); fig.tight_layout()
@@ -1158,10 +1182,10 @@ def plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0=None,
                     bts, bps = bytes0.get(name, ([], []))
                     if not bts:
                         continue
-                    ax2.plot(bts, bps, color=color, lw=1.0, ls=":", alpha=0.95,
-                             label=f"{name} bytes/s")
+                    ax2.plot(bts, [b / 1e6 for b in bps], color=color, lw=1.0,
+                             ls=":", alpha=0.95, label=f"{name} MB/s")
                 ax2.set_yscale("log")
-                ax2.set_ylabel("control-plane bytes/s (log)")
+                ax2.set_ylabel("control-plane MB/s (log)")
                 h2, l2 = ax2.get_legend_handles_labels()
                 handles, labels = handles + h2, labels + l2
 

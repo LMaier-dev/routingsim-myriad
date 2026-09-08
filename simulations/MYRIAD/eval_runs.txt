@@ -51,9 +51,30 @@ SPLIT python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --topo
 # overview: bytes and messages per phase (conv, churn, each wave fraction),
 # boxplotted over the tr extremes x --repeat failure schedules. No snapshots.
 # Every config runs in this one process, so no --post is needed.
-python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --overview --dir ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow2500_A300_spof0.5 --tr-extremes --basis native --repeat 4 --jobs 16 --no-refresh-flood --noreplay
+python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --overview --dir ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow2500_A300_spof0.5 --tr-extremes --basis native --repeat 4 --jobs 16 --no-refresh-flood
 
 
+# ---------------------------------------------------------------------------
+# German HV grid (real topology, myriad_topologies/export.py --csv). Two
+# variants share the same 199 mined rings:
+#   _n2312      the whole graph. 62% of nodes sit on 2-node ECHO rings only
+#               (the radial part of the grid), spof 89%
+#   _core_n981  the 2-core. Same rings, 145 echo rings left on the bridges
+#               between them, spof 58%
 
-# BIG run ~ 60GB RAM each job 20GB
-python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --overview --dir ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow10000_A1200_spof0.5 --tr-extremes --basis native --repeat 3 --jobs 3 --no-refresh-flood --noreplay
+# path optimality vs SPF on real geometry, echo rings included
+python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py costdrift --topo ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/German_HV_net_n2312.min.ring.txt --basis native --no-refresh-flood --nospof
+
+# this should show that refresh is necessary for echo ring heavy topos
+SPLIT python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --topo ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/German_HV_net_n2312.min.ring.txt --only churn --basis native --no-refresh-flood --noreplay
+
+# this should show that refresh is necessary for echo ring heavy topos
+SPLIT python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --topo ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/German_HV_net_core_n981.min.ring.txt --only churn --basis native --no-refresh-flood --nospof
+
+
+# RUN THIS SEPARATELY
+# Measured on tb23, tr1200/seed0, one sim at a time: LS 44.0GB / 27min,
+# GP 18.3GB / 3min. measure() runs ls then gp SEQUENTIALLY, so a job peaks at
+# max(), not the sum -- but that is still 44GB, and --jobs 4 asks for 176GB on a
+# 125GB box. --jobs 2 fits.
+# cd ~/routingsim/simulations/MYRIAD/ && python3 ./eval_scaling.py --dir ./myriad_topologies/csv/delaunay_grow10000_A1200_spof0.5 --x-key tr --jobs 4 --no-batch-panel 

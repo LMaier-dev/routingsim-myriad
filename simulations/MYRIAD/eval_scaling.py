@@ -400,8 +400,8 @@ def sweep(items, nobatch=False, conv=False):
         seeds = f" (mean of {len(paths)} seeds)" if len(paths) > 1 else ""
         # The label is two lines for the plot's tick; flatten it for the console.
         flat = label.replace("\n", " ")
-        print(f"  {flat:<14}{seeds} LS={_n(r['ls'])}/{r['ls_b']/1000:.0f}KB  "
-              f"GP({mode})={_n(r['gp'])}/{r['gp_b']/1000:.0f}KB  "
+        print(f"  {flat:<14}{seeds} LS={_n(r['ls'])}/{r['ls_b']/1e6:.2f}MB  "
+              f"GP({mode})={_n(r['gp'])}/{r['gp_b']/1e6:.2f}MB  "
               f"batches={r['nb']:.0f} avg_sz={r['avg_sz']:.1f} "
               f"max_sz={r['max_sz']:.0f}{ct_str}")
     return out
@@ -511,15 +511,15 @@ def plot(res, title, xlabel, outfile, nobatch=False, batch_panel=True,
     # Bytes share the panel on a twin axis: message count alone hides the fact
     # that GP's PDUs are far fatter, so the two curves can rank opposite ways.
     axB = axL.twinx()
-    kb = lambda ser: [b / 1000 for b in ser]
-    kb_sd = lambda ser: (None if _sd(ser) is None else [v / 1000 for v in _sd(ser)])
-    axB.errorbar(xs, kb(res["ls_b"]), yerr=kb_sd(res["ls_b"]), fmt=fmt("o"),
+    mb = lambda ser: [b / 1e6 for b in ser]
+    mb_sd = lambda ser: (None if _sd(ser) is None else [v / 1e6 for v in _sd(ser)])
+    axB.errorbar(xs, mb(res["ls_b"]), yerr=mb_sd(res["ls_b"]), fmt=fmt("o"),
                  ls="" if regress else "--", capsize=3, ms=ms, color="tab:blue",
-                 alpha=0.45, label="LS bytes" + fit(axB, kb(res["ls_b"]), "tab:blue", "--"))
-    axB.errorbar(xs, kb(res["gp_b"]), yerr=kb_sd(res["gp_b"]), fmt=fmt("s"),
+                 alpha=0.45, label="LS bytes" + fit(axB, mb(res["ls_b"]), "tab:blue", "--"))
+    axB.errorbar(xs, mb(res["gp_b"]), yerr=mb_sd(res["gp_b"]), fmt=fmt("s"),
                  ls="" if regress else "--", capsize=3, ms=ms, color="tab:red",
-                 alpha=0.45, label="GP bytes" + fit(axB, kb(res["gp_b"]), "tab:red", "--"))
-    axB.set_ylabel("routing bytes sent (KB, dashed)")
+                 alpha=0.45, label="GP bytes" + fit(axB, mb(res["gp_b"]), "tab:red", "--"))
+    axB.set_ylabel("routing bytes sent (MB, dashed)")
     h1, l1 = axL.get_legend_handles_labels()
     h2, l2 = axB.get_legend_handles_labels()
     axL.legend(h1 + h2, l1 + l2, fontsize=8)

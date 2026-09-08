@@ -32,12 +32,14 @@ from eval_harness import (BIN, SIM_ROOT, MYRIAD_DIR, announce, apply_repeat_args
 HERE = str(MYRIAD_DIR)
 OUT = os.path.join(HERE, "eval", "convergence")
 
-# GP batching sweep, strict geometric x4 from 1us to 1s; 0s = batching off
-# (baseline). Straddles the per-hop delay spread (eval_common: 0.01-0.25ms) and
-# runs up to the ~1s working ceiling (hold>=~1.5s livelocks on Grid10 as
-# overlapping refresh generations compound; 2s never converges).
+# GP batching sweep, strict geometric x4 from 1us to 262144us; 0s = batching off
+# (baseline). Straddles the per-hop delay spread (eval_common: 0.01-0.25ms).
+# 1s is left out: it sits at the working ceiling (hold>=~1.5s livelocks on
+# Grid10 as overlapping refresh generations compound, 2s never converges), so it
+# reports the edge of the livelock rather than the batching tradeoff the sweep
+# is about.
 HOLDS = ["0s", "1us", "4us", "16us", "64us", "256us", "1024us", "4096us",
-         "16384us", "65536us", "262144us", "1s"]
+         "16384us", "65536us", "262144us"]
 
 # Warmup + one refresh cycle: convergence lands well inside the first cycle, the
 # rest is headroom for a refresh generation to heal first-round transients.
@@ -211,7 +213,7 @@ def main(args=None):
                              label=f"LS messages ({ls_msgs:.0f})"))
     axL.set(xlabel="holdInterval (s, log scale)", ylabel="convergence time (s)")
     axR.set_ylabel("total sent messages")
-    axL.set_title(title("Batching tradeoff: convergence time vs messages"))
+    axL.set_title(title("Convergence time and message count vs hold interval"))
     axL.legend(handles=lines, fontsize=7, loc="center left")
     fig.tight_layout()
     fig.savefig(os.path.join(OUT, "tradeoff.png"), dpi=120)
