@@ -38,7 +38,8 @@ from concurrent.futures import ThreadPoolExecutor
 
 import eval_harness as harness
 from eval_harness import (BIN, SIM_ROOT, SRC, REPO, MYRIAD_DIR, add_repeat_args,
-                          announce, apply_repeat_args, common, ensure_ring_labels,
+                          announce, apply_repeat_args, byte_unit, common,
+                          ensure_ring_labels, fmt_bytes,
                           NED_MODULE, PROTO_COLOR, overrides, pm,
                           rep_path, repeat_mean, repeats_note, run_sim, simtime,
                           warmup_s)
@@ -407,14 +408,15 @@ def sweep(items, nobatch=False, conv=False):
         seeds = f" (mean of {len(paths)} seeds)" if len(paths) > 1 else ""
         # The label is two lines for the plot's tick; flatten it for the console.
         flat = label.replace("\n", " ")
-        print(f"  {flat:<14}{seeds} LS={_n(r['ls'])}/{r['ls_b']/1e6:.2f}MB  "
-              f"PV({mode})={_n(r['pv'])}/{r['pv_b']/1e6:.2f}MB  "
+        # Per value, not per column
+        print(f"  {flat:<14}{seeds} LS={_n(r['ls'])}/{fmt_bytes(r['ls_b'])}  "
+              f"PV({mode})={_n(r['pv'])}/{fmt_bytes(r['pv_b'])}  "
               f"batches={r['nb']:.0f} avg_sz={r['avg_sz']:.1f} "
               f"max_sz={r['max_sz']:.0f}{ct_str}")
-        print(f"  {'':<14}{'':<{len(seeds)}} state/router LS={r['ls_s']/1e6:.3f}MB "
-              f"PV={r['pv_s']/1e6:.3f}MB   link max/med LS="
-              f"{r['ls_lmax']/1e6:.3f}/{r['ls_lmed']/1e6:.3f}MB PV="
-              f"{r['pv_lmax']/1e6:.3f}/{r['pv_lmed']/1e6:.3f}MB")
+        print(f"  {'':<14}{'':<{len(seeds)}} state/router "
+              f"LS={fmt_bytes(r['ls_s'])} PV={fmt_bytes(r['pv_s'])}   "
+              f"link max/med LS={fmt_bytes(r['ls_lmax'])}/{fmt_bytes(r['ls_lmed'])} "
+              f"PV={fmt_bytes(r['pv_lmax'])}/{fmt_bytes(r['pv_lmed'])}")
     return out
 
 
@@ -541,15 +543,17 @@ def plot(res, title, xlabel, outfile, nobatch=False, batch_panel=True,
         # Bytes share the panel on a twin axis: message count alone hides the fact
         # that PV's PDUs are far fatter, so the two curves can rank opposite ways.
         axB = axL.twinx()
-        mb = lambda ser: [b / 1e6 for b in ser]
-        mb_sd = lambda ser: (None if _sd(ser) is None else [v / 1e6 for v in _sd(ser)])
+        # One unit for both series
+        bdiv, bname = byte_unit(list(res["ls_b"]) + list(res["pv_b"]))
+        mb = lambda ser: [b / bdiv for b in ser]
+        mb_sd = lambda ser: (None if _sd(ser) is None else [v / bdiv for v in _sd(ser)])
         axB.errorbar(xs, mb(res["ls_b"]), yerr=mb_sd(res["ls_b"]), fmt=fmt("o"),
                      ls="" if regress else "--", capsize=3, ms=ms, color=PROTO_COLOR["ls"],
                      alpha=0.45, label="LS bytes" + fit(axB, mb(res["ls_b"]), PROTO_COLOR["ls"], "--"))
         axB.errorbar(xs, mb(res["pv_b"]), yerr=mb_sd(res["pv_b"]), fmt=fmt("s"),
                      ls="" if regress else "--", capsize=3, ms=ms, color=PROTO_COLOR["pv"],
                      alpha=0.45, label="PV bytes" + fit(axB, mb(res["pv_b"]), PROTO_COLOR["pv"], "--"))
-        axB.set_ylabel("routing bytes sent (MB, dashed)")
+        axB.set_ylabel(f"routing bytes sent ({bname}, dashed)")
         h1, l1 = axL.get_legend_handles_labels()
         h2, l2 = axB.get_legend_handles_labels()
         axL.legend(h1 + h2, l1 + l2, fontsize=8)
@@ -590,7 +594,9 @@ def plot(res, title, xlabel, outfile, nobatch=False, batch_panel=True,
         # starts far below and climbs with the ring count. The crossing is the
         # result -- neither protocol dominates, and this says where the boundary is.
         axS = axes.pop(0)
-        mbv = lambda ser: [v / 1e6 for v in ser]
+        # Its own unit, not the byte panel's
+        sdiv, sname = byte_unit(list(res["ls_s"]) + list(res["pv_s"]))
+        mbv = lambda ser: [v / sdiv for v in ser]
         axS.errorbar(xs, mbv(res["ls_s"]), yerr=_sd(res["ls_s"]), fmt=fmt("o"),
                      capsize=3, ms=ms, color=PROTO_COLOR["ls"],
                      label="LS (LSDB)" + fit(axS, mbv(res["ls_s"]), PROTO_COLOR["ls"]))
@@ -598,7 +604,8 @@ def plot(res, title, xlabel, outfile, nobatch=False, batch_panel=True,
                      capsize=3, ms=ms, color=PROTO_COLOR["pv"],
                      label="PV (RIB)" + fit(axS, mbv(res["pv_s"]), PROTO_COLOR["pv"]))
         ticks(axS)
-        axS.set_xlabel(xlabel); axS.set_ylabel("routing state per router (MB)")
+        axS.set_xlabel(xlabel)
+        axS.set_ylabel(f"routing state per router ({sname})")
         axS.set_title("Per-router control-plane state")
         axS.legend(fontsize=8); axS.grid(True, alpha=0.3)
 
@@ -609,17 +616,20 @@ def plot(res, title, xlabel, outfile, nobatch=False, batch_panel=True,
     # tell a uniformly busy network from one overloaded link.
     if has_link:
         axH = axes.pop(0)
+        ldiv, lname = byte_unit([v for k in ("ls_lmax", "pv_lmax", "ls_lmed",
+                                             "pv_lmed") for v in res[k]])
+        lkv = lambda ser: [v / ldiv for v in ser]
         for key, med, c, mk, lab in (("ls_lmax", "ls_lmed", PROTO_COLOR["ls"], "o", "LS"),
                                      ("pv_lmax", "pv_lmed", PROTO_COLOR["pv"], "s", "PV")):
-            axH.errorbar(xs, mbv(res[key]), yerr=_sd(res[key]), fmt=fmt(mk),
+            axH.errorbar(xs, lkv(res[key]), yerr=_sd(res[key]), fmt=fmt(mk),
                          capsize=3, ms=ms, color=c,
-                         label=f"{lab} busiest link" + fit(axH, mbv(res[key]), c))
-            axH.errorbar(xs, mbv(res[med]), yerr=_sd(res[med]), fmt=fmt(mk),
+                         label=f"{lab} busiest link" + fit(axH, lkv(res[key]), c))
+            axH.errorbar(xs, lkv(res[med]), yerr=_sd(res[med]), fmt=fmt(mk),
                          ls="" if regress else "--", capsize=3, ms=ms, color=c,
                          alpha=0.45,
-                         label=f"{lab} median link" + fit(axH, mbv(res[med]), c, "--"))
+                         label=f"{lab} median link" + fit(axH, lkv(res[med]), c, "--"))
         ticks(axH)
-        axH.set_xlabel(xlabel); axH.set_ylabel("bytes on one link (MB)")
+        axH.set_xlabel(xlabel); axH.set_ylabel(f"bytes on one link ({lname})")
         axH.set_title("Link load: busiest vs median")
         axH.legend(fontsize=8); axH.grid(True, alpha=0.3)
 
@@ -806,6 +816,11 @@ def main(args=None):
                         help="run PV+LS on ONE topology .txt and print counts (no "
                              "sweep, no plot). Path relative to simulations/topologies "
                              "or absolute.")
+        ap.add_argument("--tag", default=None, metavar="NAME",
+                        help="suffix the output folder, so two runs that differ "
+                             "only in --set keep their own inis, result dirs and "
+                             "plots instead of overwriting each other "
+                             "(e.g. --no-batch --tag no-batch)")
         add_repeat_args(ap)
         args = ap.parse_args()
         apply_repeat_args(args)
@@ -816,7 +831,8 @@ def main(args=None):
     BASIS = args.basis
     MAX_RING_SIZE = getattr(args, "max_ring_size", 0) or 0
     basis_dir = os.path.join(EVAL_DIR, f"{BASIS}_cycles"
-                             + (f"_m{MAX_RING_SIZE}" if MAX_RING_SIZE else ""))
+                             + (f"_m{MAX_RING_SIZE}" if MAX_RING_SIZE else "")
+                             + (f"_{args.tag}" if getattr(args, "tag", None) else ""))
     TOPO_DIR = os.path.join(basis_dir, "topologies")
     INI_DIR = os.path.join(basis_dir, "ini")
     PLOT_DIR = os.path.join(basis_dir, "plots")

@@ -21,6 +21,8 @@ python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py costdrift --topo ~/ro
 
 # GRID scaling behavior vs linkstate TODO add bandwith
 python3 ~/routingsim/simulations/MYRIAD/eval_scaling.py --basis min
+# GRID no batching as comparison
+python3 ~/routingsim/simulations/MYRIAD/eval_scaling.py --basis min --set holdInterval=0s --tag no-batch
 
 python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py convergence --topo ~/routingsim/simulations/topologies/grid_10,10.txt
 
@@ -69,7 +71,7 @@ python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py costdrift --topo ~/ro
 SPLIT python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --topo ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/German_HV_net_n2312.min.ring.txt --only churn --basis native --no-refresh-flood --noreplay
 
 # this should show that refresh is necessary for echo ring heavy topos
-SPLIT python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --topo ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/German_HV_net_core_n981.min.ring.txt --only churn --basis native --no-refresh-flood --nospof
+SPLIT python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --topo ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/German_HV_net_core_n981.min.ring.txt --only churn --basis native --nospof
 
 
 # ---------------------------------------------------------------------------

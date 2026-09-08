@@ -444,6 +444,32 @@ def pm(v, spec=".1f"):
     return f"±{sd:{spec}}" if sd is not None else ""
 
 
+_BYTE_UNITS = ((1e9, "GB"), (1e6, "MB"), (1e3, "kB"), (1.0, "B"))
+
+
+def byte_unit(vals):
+    """(divisor, name) for a whole COLUMN or plot axis, chosen from its largest
+    value. One unit for the set, not per value: a column mixing '4.1 kB' and
+    '2.3 MB' cannot be scanned or ranked by eye, and an axis has one scale by
+    definition. Use fmt_bytes for a standalone value instead."""
+    m = max((abs(v) for v in vals if v is not None), default=0.0)
+    for div, name in _BYTE_UNITS:
+        if m >= div:
+            return div, name
+    return 1.0, "B"
+
+
+def fmt_bytes(v, unit=None):
+    """One value at its own scale, for a log line: '812 B', '4.07 kB', '1.53 GB'.
+    Three significant figures, so the width stays put as the magnitude moves.
+    Pass `unit` (a byte_unit() pair) to hold a column to a single scale."""
+    if v is None:
+        return "-"
+    div, name = unit or byte_unit([v])
+    q = v / div
+    return f"{q:,.0f} {name}" if div == 1.0 else f"{q:,.3g} {name}"
+
+
 def repeats_note():
     """Table-header suffix stating the repeat count (empty for a single run)."""
     return f" [mean±sd over {REPEATS} runs]" if REPEATS > 1 else ""
