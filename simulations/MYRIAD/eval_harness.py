@@ -8,6 +8,7 @@ import re
 import shutil
 import statistics
 import subprocess
+import tempfile
 import sys
 
 MYRIAD_DIR  = Path(__file__).parent
@@ -412,7 +413,11 @@ def write_proto_ini(out_path, proto, topo_path, ring_labels_path,
         lines.extend(extra_lines)
     lines.extend(ring_label_lines(ring_labels_path))
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
-    Path(out_path).write_text("\n".join(lines) + "\n")
+    fd, tmp = tempfile.mkstemp(dir=Path(out_path).parent,
+                               prefix=Path(out_path).name + ".", suffix=".tmp")
+    with os.fdopen(fd, "w") as f:
+        f.write("\n".join(lines) + "\n")
+    os.replace(tmp, out_path)
     return str(out_path)
 
 
