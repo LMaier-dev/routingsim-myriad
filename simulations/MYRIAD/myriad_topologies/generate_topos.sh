@@ -8,6 +8,12 @@
 #                           AND node count; every interface is a plain two-node
 #                           corridor, so nothing has to be solved for
 #
+# and one that moves n instead:
+#   ringgrow --sweep-n      NODE count, at a fixed ring and transition count.
+#                           fan = 4*tr - 2*spof, so the ring graph stays put and
+#                           only n (and the length that follows it) moves -- the
+#                           axis per-router state and link load scale on
+#
 # sum(ring lengths) = n + sharing surplus, so only two of {n, ring count, ring
 # length} can be pinned at once. ringpipe spends the ring count on it (--hold-len
 # solves --rings per point); ringgrow keeps the ring count and lets the length
@@ -17,6 +23,7 @@
 # Every name carries the achieved figures, so sweep with:
 #   eval_scaling.py --dir ./csv/<family>/ --x-key share
 #   eval_scaling.py --dir ./csv/<family>/ --x-key tr
+#   eval_scaling.py --dir ./csv/<family>/ --x-key n
 # Every topology is its own point on those plots, seeds included, so a curve is
 # a regression over the spread rather than one lucky draw.
 #   generate_topos.sh [grow|pipe|all]     default all; each family is wiped and
@@ -58,6 +65,9 @@ TARGET_N_TR=2500
 RING_SIZE_TR=4
 SWEEP_TR="300 400 500 600 700"
 
+TR_N=500
+SWEEP_N="2000 3000 4000 6000 8000"
+
 LOG_DIR=$(mktemp -d)
 trap 'rm -rf "$LOG_DIR"' EXIT
 
@@ -85,6 +95,7 @@ gen() {
 if [[ $WHICH != pipe ]]; then
     wipe "delaunay_grow${TARGET_N_TR}_A${RINGS_TR}_spof0"
     wipe "delaunay_grow${TARGET_N_TR}_A${RINGS_TR}_spof${SPOF}"
+    wipe "delaunay_nsweep_A${RINGS_TR}_tr${TR_N}_spof${SPOF}"
     PY=ringgrow.py
 
     gen "full: transition sweep, A=${RINGS_TR} n=${TARGET_N_TR}" \
@@ -94,6 +105,10 @@ if [[ $WHICH != pipe ]]; then
     gen "full: transition sweep, A=${RINGS_TR} n=${TARGET_N_TR}" \
         --family delaunay --rings $RINGS_TR --sweep-tr $SWEEP_TR \
         --ring-size $RING_SIZE_TR --spof $SPOF --target-n $TARGET_N_TR
+
+    gen "full: node sweep, A=${RINGS_TR} tr=${TR_N}" \
+        --family delaunay --rings $RINGS_TR --tr $TR_N --sweep-n $SWEEP_N \
+        --ring-size $RING_SIZE_TR --spof $SPOF
 
     RINGS_TR=1200
     TARGET_N_TR=10000

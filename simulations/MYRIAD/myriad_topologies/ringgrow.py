@@ -246,6 +246,32 @@ def sweep(trs, rings, target_n=0, jobs=1, **kw):
               f"spof={s['spofpct']:5.1f}% diam={s['diam']:4}")
 
 
+def sweep_n(counts, rings, tr, jobs=1, **kw):
+    """One topology per NODE COUNT, at a fixed ring AND transition count.
+
+    fan-out = 4*tr - 2*s and edges = n + tr are identities (see the docstring),
+    so with A and tr pinned the ring GRAPH is the same at every point and n only
+    moves the ring length, (n + 2*tr - s)/A. That is the axis per-router state
+    scales on: LS holds a row per node, PV holds its rings, and nothing else
+    about the topology is moving underneath the curve.
+
+    The floor is 2*tr + 2*A + s, the same for every point, so one check does."""
+    counts = sorted(counts)
+    floor = floor_n(rings, tr, **kw)
+    if counts[0] < floor:
+        raise ValueError(
+            f"n={counts[0]} is below the floor {floor} this A/tr forces "
+            f"(2*tr + 2*A + spof); padding only adds. Drop the low counts, or "
+            f"lower --tr/--rings.")
+    sub = (f"{kw.get('family', 'gabriel')}_nsweep_A{rings}_tr{tr}"
+           f"_spof{kw.get('spof', 0.0):g}")
+    for n, (s, rl, *_) in zip(counts, rp._pmap(
+            _point, jobs, [(rings, tr, n, sub, kw) for n in counts])):
+        print(f"A={rings:4} tr={s['pairs']:6} n={s['n']:6} ringlen={rl:3} "
+              f"fan={s['fan']:7} deg={s['avgdeg']:5.2f} "
+              f"spof={s['spofpct']:5.1f}% diam={s['diam']:4}")
+
+
 def _selfcheck():
     for fam in ("gabriel", "delaunay"):
         for tr in (60, 150, 300):
@@ -268,6 +294,17 @@ def _selfcheck():
                 assert s["m"] == 1000 + tr, (case, s["m"])
                 assert (sum(len(r) for r in plan)
                         == 1000 + 2 * tr - s["spof"]), case
+    # --sweep-n's premise: at a fixed A and tr the ring graph does not move with
+    # n, only the ring length does.
+    base = None
+    for n in (600, 1200, 2400):
+        g, plan, _ = build(rings=50, seed=1, tr=150, target_n=n,
+                           family="delaunay", spof=0.3)
+        s = score(g, plan)
+        assert s["n"] == n and s["pairs"] == 150, (n, s["n"], s["pairs"])
+        assert (s["fan"], s["spof"]) == (base or (s["fan"], s["spof"])), (n, s["fan"])
+        base = (s["fan"], s["spof"])
+        assert rp._median_len(plan) == (n + 2 * 150 - s["spof"]) // 50, n
     print("ringgrow selfcheck ok")
 
 
@@ -293,6 +330,11 @@ def main():
     ap.add_argument("--sweep-tr", type=int, nargs="+", metavar="TR",
                     help="one topology per transition count, all at the same A "
                          "and --target-n")
+    ap.add_argument("--sweep-n", type=int, nargs="+", metavar="N",
+                    help="one topology per NODE count, all at the same A and "
+                         "--tr. fan = 4*tr - 2*spof, so fan and the ring graph "
+                         "stay put and only the ring length follows n -- the "
+                         "axis per-router state and link load scale on")
     ap.add_argument("--jobs", type=int, default=1, metavar="N",
                     help="build a sweep's points on N processes (default 1)")
     ap.add_argument("--selfcheck", action="store_true")
@@ -300,10 +342,14 @@ def main():
     if a.selfcheck:
         return _selfcheck()
     kw = dict(family=a.family, seed=a.seed, ring_size=a.ring_size, spof=a.spof)
+    if a.sweep_n:
+        if not a.tr:
+            ap.error("--sweep-n needs --tr: it is what holds fan-out fixed")
+        return sweep_n(a.sweep_n, a.rings, a.tr, a.jobs, **kw)
     if a.sweep_tr:
         return sweep(a.sweep_tr, a.rings, a.target_n, a.jobs, **kw)
     if not a.tr:
-        ap.error("--tr or --sweep-tr")
+        ap.error("--tr, --sweep-tr or --sweep-n")
     export(a.rings, a.tr, target_n=a.target_n, **kw)
 
 

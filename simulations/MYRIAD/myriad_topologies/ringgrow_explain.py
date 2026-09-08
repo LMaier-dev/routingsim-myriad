@@ -11,6 +11,10 @@ re-implemented here, so the picture cannot drift from what the generator does:
 
     sites -> pair order -> lay A rings -> merge tr pairs -> spof -> pad
 
+The last pass is also the whole of --sweep-n: padding moves n without touching
+the ring graph, so panel 6 is that sweep drawn once. Panel 8 spells it out
+against panel 4's --sweep-tr.
+
     python3 myriad_topologies/ringgrow_explain.py [--rings 5] [--tr 7] ...
 
 Writes gallery/ringgrow_pipeline.png.
@@ -66,6 +70,11 @@ def main():
         sg.add_edge(u, v)
     spos = {i: tuple(pts[i]) for i in sg}
 
+    # Ring dots sit at their site positions, so three near-collinear sites hide
+    # the outer pair's edge behind the middle dot. Panels 2 and 7 bow their edges.
+    RAD = 0.12
+    CURVE = f"arc3,rad={RAD}"
+
     fig, axes = plt.subplots(2, 4, figsize=(22, 11.5))
     ax = axes.ravel()
 
@@ -86,9 +95,14 @@ def main():
     for k, (u, v) in enumerate(pairs):
         ax[1].annotate("", xy=spos[v], xytext=spos[u],
                        arrowprops=dict(arrowstyle="-", lw=2.0, color="tab:blue",
-                                       alpha=0.8))
+                                       alpha=0.8, connectionstyle=CURVE))
+        # On the curve, not the chord: three near-collinear sites would otherwise
+        # put the outer pair's number on the middle ring's dot. arc3 bows to
+        # mid + rad/2 * perp(v-u).
+        (x0, y0), (x1, y1) = spos[u], spos[v]
         ax[1].annotate(str(k + 1),
-                       ((spos[u][0] + spos[v][0]) / 2, (spos[u][1] + spos[v][1]) / 2),
+                       ((x0 + x1) / 2 + RAD / 2 * (y1 - y0),
+                        (y0 + y1) / 2 - RAD / 2 * (x1 - x0)),
                        ha="center", va="center", fontsize=8, color="tab:blue",
                        bbox=dict(boxstyle="circle,pad=0.12", fc="white",
                                  ec="tab:blue", lw=0.8))
@@ -125,7 +139,9 @@ def main():
                f"6. add spare routers back to {a.target_n}",
                "spread evenly, so the loops stay about the same length. The "
                "network gets bigger; the number of transitions does not "
-               "change.\n" + note(g3, plan3))
+               "change. --sweep-n is this step and nothing else: rerun it at "
+               "several --target-n and every point is the SAME ring graph at a "
+               "different size.\n" + note(g3, plan3))
 
     # 7. the ring graph: what the plan looks like to the control plane
     ifc = interfaces(plan3)
@@ -140,12 +156,14 @@ def main():
     rgg.add_edges_from(wid)
     rpos_d = {k: rpos[k] for k in rgg}
     nx.draw_networkx_edges(ax=ax[6], G=rgg, pos=rpos_d, width=2.2,
+                           connectionstyle=CURVE, arrows=True, arrowstyle="-",
                            edge_color=["tab:red" if wid[e] == 1 else "0.45"
                                        for e in rgg.edges()])
     nx.draw_networkx_nodes(ax=ax[6], G=rgg, pos=rpos_d, node_size=420,
                            node_color=[RING_COLORS[k % len(RING_COLORS)] for k in rgg])
     nx.draw_networkx_labels(ax=ax[6], G=rgg, pos=rpos_d, font_size=9, font_color="w")
     nx.draw_networkx_edge_labels(ax=ax[6], G=rgg, pos=rpos_d, font_size=7,
+                                 connectionstyle=CURVE,
                                  edge_labels={e: str(w) for e, w in wid.items()})
     head(ax[6], f"7. what the routing sees: {rgg.number_of_edges()} transitions",
          "one dot per ring, one line per pair that meets -- and this is exactly "
@@ -179,11 +197,20 @@ def main():
                "against the identity, on this very plan:\n\n"
                f"{ok}\n\n"
                "so ring length and mean degree MOVE with tr, by exactly this\n"
-               "much. That is the price of the x axis, not a confound -- which\n"
-               "is what ringpipe's --hold-len solver was paying to avoid.\n\n"
-               "the file name keeps the result:\n"
-               f"  _A{fin['rings']} _tr{tr_} _fan{fin['fan']} _n{n}",
-               transform=ax[7].transAxes, va="top", ha="left", fontsize=9.5,
+               "much -- the price of the x axis, not a confound, and what\n"
+               "ringpipe's --hold-len solver was paying to avoid.\n\n"
+               "the same identities give TWO sweeps out of one generator:\n\n"
+               "  --sweep-tr  n fixed, tr swept: the ring graph IS the axis.\n"
+               "  --sweep-n   tr fixed, n swept -- panel 6 alone. fan does not\n"
+               "              contain n, so fan, transitions and the ring graph\n"
+               "              are identical at every point and only the length\n"
+               "              follows -- the axis per-router state scales on (LS\n"
+               "              keeps a row per node, path-vector keeps its rings),\n"
+               "              which no n-pinned sweep can show. Floor:\n"
+               "              n >= 2*tr + 2*A + spof.\n"
+               f"the file name keeps the result: _A{fin['rings']} _tr{tr_} "
+               f"_fan{fin['fan']} _n{n}",
+               transform=ax[7].transAxes, va="top", ha="left", fontsize=7.0,
                family="monospace")
 
     fig.suptitle(f"ringgrow.py --family {a.family} --rings {a.rings} --tr {a.tr} "
