@@ -58,10 +58,6 @@ TARGET_N_TR=2500
 RING_SIZE_TR=4
 SWEEP_TR="300 400 500 600 700"
 
-#RINGS_TR=1200
-#TARGET_N_TR=10000
-#SWEEP_TR="1200 1560 1920 2280 2640 3000"
-
 LOG_DIR=$(mktemp -d)
 trap 'rm -rf "$LOG_DIR"' EXIT
 
@@ -98,6 +94,14 @@ if [[ $WHICH != pipe ]]; then
     gen "full: transition sweep, A=${RINGS_TR} n=${TARGET_N_TR}" \
         --family delaunay --rings $RINGS_TR --sweep-tr $SWEEP_TR \
         --ring-size $RING_SIZE_TR --spof $SPOF --target-n $TARGET_N_TR
+
+    RINGS_TR=1200
+    TARGET_N_TR=10000
+    SWEEP_TR="1200 1560 1920 2280 2640 3000"
+    
+    gen "full: transition sweep, A=${RINGS_TR} n=${TARGET_N_TR}" \
+        --family delaunay --rings $RINGS_TR --sweep-tr $SWEEP_TR \
+        --ring-size $RING_SIZE_TR --spof $SPOF --target-n $TARGET_N_TR
 fi
 
 if [[ $WHICH != grow ]]; then
@@ -111,10 +115,5 @@ if [[ $WHICH != grow ]]; then
     gen "full: share sweep at FIXED ring length, n=${TARGET_N}" \
         --family delaunay --rings $RINGS_BIG --width-max 6 --max-meet 12 \
         --sweep-share 0 0.49 0.65 0.74 0.84 0.915 0.875 0.952 --hold-len 16 \
-        --spof 0 --ring-size 8 --target-n $TARGET_N &
-
-    gen "full: share sweep at FIXED ring length, n=${TARGET_N}" \
-        --family delaunay --rings $RINGS_BIG --width-max 6 --max-meet 12 \
-        --sweep-share 0 0.49 0.65 0.74 0.84 0.915 0.875 0.952 --hold-len 16 \
-        --spof $SPOF --ring-size 8 --target-n $TARGET_N
+        --spof $SPOF --ring-size 8 --target-n $TARGET_ND
 fi

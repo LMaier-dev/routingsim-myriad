@@ -52,3 +52,8 @@ SPLIT python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --topo
 # boxplotted over the tr extremes x --repeat failure schedules. No snapshots.
 # Every config runs in this one process, so no --post is needed.
 python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --overview --dir ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow2500_A300_spof0.5 --tr-extremes --basis native --repeat 4 --jobs 16 --no-refresh-flood --noreplay
+
+
+
+# BIG run ~ 60GB RAM
+python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --overview --dir ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow10000_A1200_spof0.5 --tr-extremes --basis native --repeat 4 --jobs 6 --no-refresh-flood --noreplay
