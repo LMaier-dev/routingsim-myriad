@@ -55,5 +55,5 @@ python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --overview -
 
 
 
-# BIG run ~ 60GB RAM
-python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --overview --dir ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow10000_A1200_spof0.5 --tr-extremes --basis native --repeat 4 --jobs 6 --no-refresh-flood --noreplay
+# BIG run ~ 60GB RAM each job 20GB
+python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --overview --dir ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow10000_A1200_spof0.5 --tr-extremes --basis native --repeat 3 --jobs 3 --no-refresh-flood --noreplay
