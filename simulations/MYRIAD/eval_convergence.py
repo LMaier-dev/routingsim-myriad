@@ -2,7 +2,7 @@
 """Convergence comparison: MyriadGP (batching sweep) vs MyriadLS (reference).
 
 The oracle test proves both protocols reach the same optimum. This measures how
-fast and how cheaply each gets there. GP is swept over the batching holdInterval
+fast and how cheaply each gets there. PV is swept over the batching holdInterval
 {0s..1s}; LS has no such knob so it's a single reference run. Every run enables
 observational RIB snapshots (snapshotInterval), which are provably non-intrusive
 (identical message counts / final RIB with snapshots off), so the measurement
@@ -27,12 +27,12 @@ import sys
 from eval_harness import (BIN, SIM_ROOT, MYRIAD_DIR, announce, apply_repeat_args,
                           common, ensure_ring_labels, overrides, pm, rep_path,
                           repeat_mean, repeats_note, run_sim, simtime, title, warmup_s,
-                          write_proto_ini, add_topo_args)
+                          write_proto_ini, add_topo_args, PROTO_COLOR)
 
 HERE = str(MYRIAD_DIR)
 OUT = os.path.join(HERE, "eval", "convergence")
 
-# GP batching sweep, strict geometric x4 from 1us to 262144us; 0s = batching off
+# PV batching sweep, strict geometric x4 from 1us to 262144us; 0s = batching off
 # (baseline). Straddles the per-hop delay spread (eval_common: 0.01-0.25ms).
 # 1s is left out: it sits at the working ceiling (hold>=~1.5s livelocks on
 # Grid10 as overlapping refresh generations compound, 2s never converges), so it
@@ -132,7 +132,7 @@ def main(args=None):
     labels = ensure_ring_labels(args.topo, args.basis,
                                 getattr(args, 'max_ring_size', 0),
                                 not getattr(args, 'no_echo_rings', False))
-    gp_ini = write_proto_ini(os.path.join(OUT, "gp.ini"), "gp",
+    pv_ini = write_proto_ini(os.path.join(OUT, "pv.ini"), "pv",
                              args.topo, labels, update_jitter=args.update_jitter)
     ls_ini = write_proto_ini(os.path.join(OUT, "ls.ini"), "ls", args.topo, labels)
     announce("convergence", opts=overrides(sim_time_limit=SIMTIME))
@@ -150,16 +150,16 @@ def main(args=None):
     ls_ct, ls_msgs = ls["ct"], ls["msgs"]
     print(f"  ✓ LS done: conv={ls_ct}s, msgs={ls_msgs:.0f}")
 
-    # GP over the holdInterval sweep. rankUseSpof=false ranks purely by cost, so
-    # GP's converged RIB targets the same optimum LS computes (see the oracle test)
+    # PV over the holdInterval sweep. rankUseSpof=false ranks purely by cost, so
+    # PV's converged RIB targets the same optimum LS computes (see the oracle test)
     # — required for the %-optimal numbers to be meaningful (else spof-first ranking
     # picks costlier redundant paths and never matches the pure-cost truth).
     gp = {}  # hold -> {"ct", "msgs", "fo"}
     for h in HOLDS:
-        print(f"  → GP hold={h} …", flush=True)
-        dump = os.path.join(OUT, f"gp_{h}.txt")
+        print(f"  → PV hold={h} …", flush=True)
+        dump = os.path.join(OUT, f"pv_{h}.txt")
         gp[h] = repeat_mean(lambda rep, h=h, dump=dump: derive(
-            *run_proto(gp_ini, "ribDumpFile", dump,
+            *run_proto(pv_ini, "ribDumpFile", dump,
                        os.path.join(OUT, f"res_gp_{h}"),
                        overrides(holdInterval=h, rankUseSpof="false"), rep),
             truth, warmup_s()))
@@ -170,7 +170,7 @@ def main(args=None):
     print(f"\n=== convergence vs holdInterval "
           f"(LS ref: conv={ls_ct:.1f}s, msgs={ls_msgs:.0f}, {len(truth)} pairs)"
           f"{repeats_note()} ===")
-    print(f"  GP warmup={common('collectWarmupDuration')} (subtracted from GP conv times)")
+    print(f"  PV warmup={common('collectWarmupDuration')} (subtracted from PV conv times)")
     print(f"{'hold':>8}{'conv_time':>16}{'sent_total':>18}{'final %opt':>12}")
 
     def row(label, r):
@@ -198,18 +198,21 @@ def main(args=None):
     fig, axL = plt.subplots()
     axR = axL.twinx()
     axL.set_xscale("log")
+    # Colour is the protocol, never the axis: both PV series are red and both LS
+    # references blue, and the two metrics are told apart by marker and alpha.
+    pv, ls_c = PROTO_COLOR["pv"], PROTO_COLOR["ls"]
     lines = [
-        axL.plot(gx, [gp[h]["ct"] for h in geo], "o-", color="C0",
-                 label="GP convergence time")[0],
-        axR.plot(gx, [gp[h]["msgs"] for h in geo], "s-", color="C3",
-                 label="GP sent messages")[0],
+        axL.plot(gx, [gp[h]["ct"] for h in geo], "o-", color=pv,
+                 label="Path-Vector (PV) convergence time")[0],
+        axR.plot(gx, [gp[h]["msgs"] for h in geo], "s--", color=pv, alpha=.55,
+                 label="PV sent messages")[0],
     ]
     if has_off:
-        lines.append(axR.axhline(gp["0s"]["msgs"], ls=":", color="C3", alpha=.6,
-                                 label="GP messages, no batching (0s)"))
-    lines.append(axL.axhline(ls_ct, ls="--", color="C0", alpha=.5,
+        lines.append(axR.axhline(gp["0s"]["msgs"], ls=":", color=pv, alpha=.6,
+                                 label="PV messages, no batching (0s)"))
+    lines.append(axL.axhline(ls_ct, ls="-", color=ls_c, alpha=.6,
                              label=f"LS convergence ({ls_ct:.1f}s)"))
-    lines.append(axR.axhline(ls_msgs, ls="--", color="C3", alpha=.5,
+    lines.append(axR.axhline(ls_msgs, ls="--", color=ls_c, alpha=.45,
                              label=f"LS messages ({ls_msgs:.0f})"))
     axL.set(xlabel="holdInterval (s, log scale)", ylabel="convergence time (s)")
     axR.set_ylabel("total sent messages")

@@ -7,7 +7,7 @@
 # --tag <name> suffixes the output dir; use it when two runs share a topology
 # and scenario (e.g. basis=min vs tree) so they don't overwrite each other.
 #
-# Prefix a dynamics line with `SPLIT ` to run its GP and LS halves as parallel
+# Prefix a dynamics line with `SPLIT ` to run its PV and LS halves as parallel
 # processes, then auto-combine the plots (--post). Same window, ~2x faster, and
 # the flags stay written once. Example:
 #   SPLIT python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --topo ~/routingsim/simulations/topologies/grid_10,10.txt --only churn --basis tree
@@ -32,11 +32,11 @@ python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py convergence --topo ~/
 # -- rings 9.8..11.8 long, tr swept 300..700 -- at a quarter of the scale.
 #
 # Why quarter scale: memory is per-node RIB (every node holds a route to each
-# origin ring), so it scales with n*A. One n=10000 GP run plateaued at 9.8GB;
+# origin ring), so it scales with n*A. One n=10000 PV run plateaued at 9.8GB;
 # n=2500 lands around 1GB, well under 3GB even for LS. That is what lets all
 # three lines below run at once: run_evals.sh has no concurrency gate, it opens
 # every line's window together, and a SPLIT line starts one process PER CONFIG.
-#   churn 4 configs (gp, gp_noreplay, gp_nospof, ls) + node 3 + overview 16
+#   churn 4 configs (pv, pv_noreplay, pv_nospof, ls) + node 3 + overview 16
 #   = 23 concurrent sims. At 10000 nodes that was 225GB; here it is ~25-70GB.
 # If a per-run peak turns out higher than 3GB, --jobs on the overview line is
 # the dial: it is 16 of those 23.
@@ -84,7 +84,7 @@ python3 ~/routingsim/simulations/MYRIAD/eval_scaling.py --dir ~/routingsim/simul
 
 # RUN THIS SEPARATELY (peaks at around 75GB with 4 jobs)
 # Measured on tb23, tr1200/seed0, one sim at a time: LS 44.0GB / 27min,
-# GP 18.3GB / 3min. measure() runs ls then gp SEQUENTIALLY, so a job peaks at
+# PV 18.3GB / 3min. measure() runs ls then pv SEQUENTIALLY, so a job peaks at
 # max(), not the sum -- but that is still 44GB, and --jobs 4 asks for 176GB on a
 # 125GB box. --jobs 2 fits.
 # cd ~/routingsim/simulations/MYRIAD/ && python3 ./eval_scaling.py --dir ./myriad_topologies/csv/delaunay_grow10000_A1200_spof0.5 --x-key tr --jobs 4 --no-batch-panel 

@@ -173,7 +173,7 @@ def main(args=None):
     for config, (topo, labels) in CONFIGS.items():
         print(f"\n=== {config} ===")
         lbl = _labels_for(config, topo, labels)
-        gp_ini = write_proto_ini(os.path.join(OUT, f"gp_{config}.ini"), "gp",
+        gp_ini = write_proto_ini(os.path.join(OUT, f"pv_{config}.ini"), "pv",
                                  topo, lbl, extra_lines=_REFRESH_LINES)
         ls_ini = write_proto_ini(os.path.join(OUT, f"ls_{config}.ini"), "ls",
                                  topo, lbl, extra_lines=_REFRESH_LINES)
@@ -190,7 +190,7 @@ def main(args=None):
     label = topo.stem
     print(f"\n=== {label} (custom, basis={args.basis}) ===")
     labels = ensure_ring_labels(topo, args.basis)
-    gp_ini = write_proto_ini(os.path.join(OUT, f"gp_{label}.ini"), "gp",
+    gp_ini = write_proto_ini(os.path.join(OUT, f"pv_{label}.ini"), "pv",
                              topo, labels, extra_lines=_REFRESH_LINES,
                              update_jitter=args.update_jitter, warmup=args.warmup)
     ls_ini = write_proto_ini(os.path.join(OUT, f"ls_{label}.ini"), "ls",

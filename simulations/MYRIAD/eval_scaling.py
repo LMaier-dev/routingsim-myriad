@@ -3,12 +3,11 @@
 grid topologies scale two ways:
 
   1. square   : 2x2, 3x3, ... 10x10   (both dimensions grow -> dense 2D ring-mesh)
-  2. width    : 3x3, 3x4, ... 3x30    (one dimension grows -> ring-adjacency stays
-                                        a narrow ladder, GP's favourable case)
+  2. flower   : N petals of N routers (ring SIZE grows, ring-graph stays a star)
 
 For each topology it generates ring labels, writes a self-contained .ini per
 (protocol, topology), runs Cmdenv, sums the per-type `sent_total` scalars, and
-(for sweeps) plots LS vs GP.
+(for sweeps) plots LS vs PV.
 
 Everything generated lands in eval/<basis>_cycles/ (git-ignored). Nothing touches
 the tracked myriad{gp,ls}.ini. Run from anywhere:
@@ -40,7 +39,7 @@ from concurrent.futures import ThreadPoolExecutor
 import eval_harness as harness
 from eval_harness import (BIN, SIM_ROOT, SRC, REPO, MYRIAD_DIR, add_repeat_args,
                           announce, apply_repeat_args, common, ensure_ring_labels,
-                          overrides, pm,
+                          NED_MODULE, PROTO_COLOR, overrides, pm,
                           rep_path, repeat_mean, repeats_note, run_sim, simtime,
                           warmup_s)
 
@@ -136,32 +135,6 @@ def gen_topology(dimx, dimy):
     return path
 
 
-def gen_ladder(W):
-    """2xW ladder: W columns of 2 nodes, every rung present and top/bottom rails
-    present. minimum_cycle_basis decomposes it into W-1 unit-square (4-node)
-    rings chained in a line, each sharing a rung (2-node bridge, spof=0) with its
-    neighbours only. The ring-adjacency graph is thus a pure 1-D LINE (path of
-    W-1 rings) -> zero path diversity, GP's very best case. Writes ladder2_W.txt,
-    returns its path."""
-    path = os.path.join(TOPO_DIR, f"ladder2_{W}.txt")
-    if os.path.exists(path):
-        return path
-    nid = lambda r, c: r * W + c
-    edges = []
-    for c in range(W):                      # rungs
-        edges.append((nid(0, c), nid(1, c)))
-    for c in range(W - 1):                  # top + bottom rails
-        edges.append((nid(0, c), nid(0, c + 1)))
-        edges.append((nid(1, c), nid(1, c + 1)))
-    with open(path, "w") as f:
-        f.write(f"# 2x{W} ladder: {W-1} unit-square rings chained in a 1-D line\n")
-        f.write("# pure 1-D ring-adjacency graph (no path diversity), GP best case\n")
-        f.write(f"{2 * W}\t{len(edges)}\n")
-        for a, b in edges:
-            f.write(f"{a}\t{b}\n")
-    return path
-
-
 def gen_flower(N):
     """The `myriad_large` flower, generalised: one central ring of 2N routers
     plus N petal rings of N routers each. Each petal shares an ADJACENT PAIR of
@@ -217,7 +190,7 @@ def write_ini(proto, topo_path, ring_lines):
     stem = os.path.splitext(os.path.basename(topo_path))[0]
     topo_path = os.path.abspath(topo_path)   # the sim runs from SIM_ROOT
     ini_path = os.path.join(INI_DIR, f"{proto}_{stem}.ini")
-    proto_ned = f"routingsim.routing.MYRIAD.myriad{proto}"
+    proto_ned = f"routingsim.routing.MYRIAD.myriad{NED_MODULE[proto]}"
     lines = [
         f"include {COMMON_INI}",
         "[General]",
@@ -299,7 +272,7 @@ def state_stats(proto, ini_path, tag="", rep=0):
 
 
 def batch_stats(ini_path, tag="", rep=0):
-    """Read the GP run's already-written .sca (message_count ran first) and
+    """Read the PV run's already-written .sca (message_count ran first) and
     return (n_batches, avg_entries, max_entries) for the inter-ring UPDATE
     batching. n_batches = sum of sent_update_batch (packets on the wire);
     avg = batch_entries_total / n_batches (mean chains coalesced per packet)."""
@@ -315,41 +288,41 @@ def batch_stats(ini_path, tag="", rep=0):
 
 
 def measure(topo, nobatch=False, conv=False):
-    """LS + GP on one topology -> the result dict for one sweep point."""
+    """LS + PV on one topology -> the result dict for one sweep point."""
     rings = ring_label_lines(topo)
     ls_ini = write_ini("ls", topo, rings)
-    gp_ini = write_ini("gp", topo, rings)
+    pv_ini = write_ini("pv", topo, rings)
 
-    # One repeat = this topology's LS+GP pair (plus its batch/convergence
+    # One repeat = this topology's LS+PV pair (plus its batch/convergence
     # readouts) on one seed; repeat_mean averages the numbers across repeats.
     def one(rep):
         ls_extra = []
-        gp_extra = overrides(holdInterval="0s") if nobatch else []
+        pv_extra = overrides(holdInterval="0s") if nobatch else []
         if conv:
             stem = os.path.splitext(os.path.basename(topo))[0]
             ls_dump = rep_path(os.path.join(INI_DIR, f"dump_ls_{stem}.txt"), rep)
-            gp_dump = rep_path(os.path.join(INI_DIR, f"dump_gp_{stem}.txt"), rep)
-            for d in (ls_dump, gp_dump):   # C++ appends; clear stale prior runs
+            pv_dump = rep_path(os.path.join(INI_DIR, f"dump_pv_{stem}.txt"), rep)
+            for d in (ls_dump, pv_dump):   # C++ appends; clear stale prior runs
                 if os.path.exists(d):
                     os.remove(d)
             conv_opts = overrides(snapshotInterval=CONV_SNAP,
                                   snapshotFormat='"stats"',
                                   sim_time_limit=CONV_SIMTIME)
             ls_extra += [f'--**.oracleDumpFile="{ls_dump}"', *conv_opts]
-            gp_extra += [f'--**.ribDumpFile="{gp_dump}"', *conv_opts]
+            pv_extra += [f'--**.ribDumpFile="{pv_dump}"', *conv_opts]
         r = {"ls": message_count("ls", ls_ini, extra_args=ls_extra or None, rep=rep),
-             "gp": message_count("gp", gp_ini, extra_args=gp_extra or None, rep=rep)}
+             "pv": message_count("pv", pv_ini, extra_args=pv_extra or None, rep=rep)}
         r["ls_b"] = byte_count("ls", ls_ini, rep=rep)
-        r["gp_b"] = byte_count("gp", gp_ini, rep=rep)
-        r["nb"], r["avg_sz"], r["max_sz"] = batch_stats(gp_ini, rep=rep)
+        r["pv_b"] = byte_count("pv", pv_ini, rep=rep)
+        r["nb"], r["avg_sz"], r["max_sz"] = batch_stats(pv_ini, rep=rep)
         r["ls_s"], r["ls_lmax"], r["ls_lmed"] = state_stats("ls", ls_ini, rep=rep)
-        r["gp_s"], r["gp_lmax"], r["gp_lmed"] = state_stats("gp", gp_ini, rep=rep)
+        r["pv_s"], r["pv_lmax"], r["pv_lmed"] = state_stats("pv", pv_ini, rep=rep)
         if conv:
             r["ls_ct"] = (convergence_time(parse_stats(ls_dump))
                           if os.path.exists(ls_dump) else None)
-            raw = (convergence_time(parse_stats(gp_dump))
-                   if os.path.exists(gp_dump) else None)
-            r["gp_ct"] = (raw - warmup_s()) if raw is not None else None
+            raw = (convergence_time(parse_stats(pv_dump))
+                   if os.path.exists(pv_dump) else None)
+            r["pv_ct"] = (raw - warmup_s()) if raw is not None else None
         return r
 
     return repeat_mean(one)
@@ -377,20 +350,20 @@ def _sd(series):
 
 
 def sweep(items, nobatch=False, conv=False):
-    """items: list of (label, [topo_path, ...]) -- one path per seed, averaged. Runs LS and ONE GP per topology. GP
+    """items: list of (label, [topo_path, ...]) -- one path per seed, averaged. Runs LS and ONE PV per topology. PV
     uses the holdInterval pinned in eval_common.ini (batching on); pass
     nobatch=True to override it to 0s — the pre-batching baseline, which is far
     slower (no coalescing) so it's opt-in, not run every sweep. Returns a dict of
-    parallel series: labels, ls, gp, avg_sz, max_sz, and (if conv) ls_ct, gp_ct.
+    parallel series: labels, ls, pv, avg_sz, max_sz, and (if conv) ls_ct, pv_ct.
 
     With --jobs>1 the topologies run concurrently (each writes its own ini and
     result dir, so they don't collide); results still print in sweep order."""
-    out = {k: [] for k in ("labels", "ls", "gp", "ls_b", "gp_b", "avg_sz", "max_sz",
-                           "ls_s", "gp_s", "ls_lmax", "gp_lmax",
-                           "ls_lmed", "gp_lmed")}
+    out = {k: [] for k in ("labels", "ls", "pv", "ls_b", "pv_b", "avg_sz", "max_sz",
+                           "ls_s", "pv_s", "ls_lmax", "pv_lmax",
+                           "ls_lmed", "pv_lmed")}
     if conv:
         out["ls_ct"] = []
-        out["gp_ct"] = []
+        out["pv_ct"] = []
     # A point is a LIST of topologies (its seeds); the grid sweeps and --single
     # have only one each and pass it bare, which would otherwise iterate as
     # characters.
@@ -413,21 +386,21 @@ def sweep(items, nobatch=False, conv=False):
     for (label, paths), r in zip(items, results):
         out["labels"].append(label)
         out["ls"].append(r["ls"])
-        out["gp"].append(r["gp"])
+        out["pv"].append(r["pv"])
         out["ls_b"].append(r["ls_b"])
-        out["gp_b"].append(r["gp_b"])
+        out["pv_b"].append(r["pv_b"])
         out["avg_sz"].append(r["avg_sz"])
         out["max_sz"].append(r["max_sz"])
-        for k in ("ls_s", "gp_s", "ls_lmax", "gp_lmax", "ls_lmed", "gp_lmed"):
+        for k in ("ls_s", "pv_s", "ls_lmax", "pv_lmax", "ls_lmed", "pv_lmed"):
             out[k].append(r[k])
         mode = "no-batch" if nobatch else "batched"
         ct_str = ""
         if conv:
             out["ls_ct"].append(r["ls_ct"])
-            out["gp_ct"].append(r["gp_ct"])
+            out["pv_ct"].append(r["pv_ct"])
             def _ct(v):
                 return "None" if v is None else f"{v:.2f}{pm(v, '.2f')}s"
-            ct_str = f"  LS_ct={_ct(r['ls_ct'])}  GP_ct={_ct(r['gp_ct'])}"
+            ct_str = f"  LS_ct={_ct(r['ls_ct'])}  PV_ct={_ct(r['pv_ct'])}"
         # message_count returns None when a run produced no .sca
         def _n(v):
             return "None" if v is None else f"{v:.0f}{pm(v, '.0f')}"
@@ -435,13 +408,13 @@ def sweep(items, nobatch=False, conv=False):
         # The label is two lines for the plot's tick; flatten it for the console.
         flat = label.replace("\n", " ")
         print(f"  {flat:<14}{seeds} LS={_n(r['ls'])}/{r['ls_b']/1e6:.2f}MB  "
-              f"GP({mode})={_n(r['gp'])}/{r['gp_b']/1e6:.2f}MB  "
+              f"PV({mode})={_n(r['pv'])}/{r['pv_b']/1e6:.2f}MB  "
               f"batches={r['nb']:.0f} avg_sz={r['avg_sz']:.1f} "
               f"max_sz={r['max_sz']:.0f}{ct_str}")
-        print(f"  {'':<14}{'':<{len(seeds)}} state/router LS={r['ls_s']/1e3:.1f}kB "
-              f"GP={r['gp_s']/1e3:.1f}kB   link max/med LS="
-              f"{r['ls_lmax']/1e3:.0f}/{r['ls_lmed']/1e3:.0f}kB GP="
-              f"{r['gp_lmax']/1e3:.0f}/{r['gp_lmed']/1e3:.0f}kB")
+        print(f"  {'':<14}{'':<{len(seeds)}} state/router LS={r['ls_s']/1e6:.3f}MB "
+              f"PV={r['pv_s']/1e6:.3f}MB   link max/med LS="
+              f"{r['ls_lmax']/1e6:.3f}/{r['ls_lmed']/1e6:.3f}MB PV="
+              f"{r['pv_lmax']/1e6:.3f}/{r['pv_lmed']/1e6:.3f}MB")
     return out
 
 
@@ -466,7 +439,7 @@ def _regress(ax, xs, ys, color, ls="-"):
 def plot(res, title, xlabel, outfile, nobatch=False, batch_panel=True,
          xs=None, invert=False, regress=False, rings=None):
     """Message counts, optionally the batch-size panel, and a convergence panel
-    when res carries ls_ct/gp_ct. `res` is the dict from sweep().
+    when res carries ls_ct/pv_ct. `res` is the dict from sweep().
 
     Points measured over several seeds carry their spread in Stat.sd, drawn as
     error bars: a sweep's curve means little without a sense of how much of it is
@@ -499,10 +472,17 @@ def plot(res, title, xlabel, outfile, nobatch=False, batch_panel=True,
 
     def ticks(ax):
         if regress:
-            # Evenly spaced numeric ticks from 0 (matplotlib's own locator), not
-            # one tick per measurement: with a point per topology the old
-            # per-point labels would be dozens of overlapping strings.
-            ax.set_xlim(0, max(xs) * 1.05)
+            # Evenly spaced numeric ticks (matplotlib's own locator), not one per
+            # measurement: with a point per topology the old per-point labels
+            # would be dozens of overlapping strings.
+            #
+            # Spanning the measurements rather than starting at 0: the swept knob
+            # never goes near 0 (tr >= A-1, ring length >= 3), so the empty run-up
+            # only compresses the data and leaves the #rings axis unlabelled where
+            # it cannot interpolate.
+            lo, hi = min(xs), max(xs)
+            pad = (hi - lo) * 0.05 or max(abs(hi) * 0.05, 1)
+            ax.set_xlim(lo - pad, hi + pad)
             if invert:
                 ax.invert_xaxis()
             if rings:
@@ -532,7 +512,8 @@ def plot(res, title, xlabel, outfile, nobatch=False, batch_panel=True,
                             fontsize=8)
         top.set_xlabel("#rings", fontsize=9)
 
-    gp_label = "Path-Vector, no batching" if nobatch else "Path-Vector, batched"
+    pv_label = ("Path-Vector (PV), no batching" if nobatch
+                else "Path-Vector (PV), batched")
     # In regress mode the trend is the fitted line, so the markers stay
     # unconnected — a line through 50 scattered topologies is noise, not shape.
     fmt = (lambda m: m if regress else m + "-")
@@ -540,24 +521,24 @@ def plot(res, title, xlabel, outfile, nobatch=False, batch_panel=True,
     fit = ((lambda ax, ser, c, ls="-": _regress(ax, xs, ser, c, ls)) if regress
            else (lambda ax, ser, c, ls="-": ""))
     axL.errorbar(xs, res["ls"], yerr=_sd(res["ls"]), fmt=fmt("o"), capsize=3, ms=ms,
-                 label="Link-State (LS)" + fit(axL, res["ls"], "tab:blue"),
-                 color="tab:blue")
-    axL.errorbar(xs, res["gp"], yerr=_sd(res["gp"]), fmt=fmt("s"), capsize=3, ms=ms,
-                 label=gp_label + fit(axL, res["gp"], "tab:red"), color="tab:red")
+                 label="Link-State (LS)" + fit(axL, res["ls"], PROTO_COLOR["ls"]),
+                 color=PROTO_COLOR["ls"])
+    axL.errorbar(xs, res["pv"], yerr=_sd(res["pv"]), fmt=fmt("s"), capsize=3, ms=ms,
+                 label=pv_label + fit(axL, res["pv"], PROTO_COLOR["pv"]), color=PROTO_COLOR["pv"])
     ticks(axL)
     axL.set_xlabel(xlabel); axL.set_ylabel("routing messages sent")
     axL.set_title(title); axL.grid(True, alpha=0.3)
     # Bytes share the panel on a twin axis: message count alone hides the fact
-    # that GP's PDUs are far fatter, so the two curves can rank opposite ways.
+    # that PV's PDUs are far fatter, so the two curves can rank opposite ways.
     axB = axL.twinx()
     mb = lambda ser: [b / 1e6 for b in ser]
     mb_sd = lambda ser: (None if _sd(ser) is None else [v / 1e6 for v in _sd(ser)])
     axB.errorbar(xs, mb(res["ls_b"]), yerr=mb_sd(res["ls_b"]), fmt=fmt("o"),
-                 ls="" if regress else "--", capsize=3, ms=ms, color="tab:blue",
-                 alpha=0.45, label="LS bytes" + fit(axB, mb(res["ls_b"]), "tab:blue", "--"))
-    axB.errorbar(xs, mb(res["gp_b"]), yerr=mb_sd(res["gp_b"]), fmt=fmt("s"),
-                 ls="" if regress else "--", capsize=3, ms=ms, color="tab:red",
-                 alpha=0.45, label="GP bytes" + fit(axB, mb(res["gp_b"]), "tab:red", "--"))
+                 ls="" if regress else "--", capsize=3, ms=ms, color=PROTO_COLOR["ls"],
+                 alpha=0.45, label="LS bytes" + fit(axB, mb(res["ls_b"]), PROTO_COLOR["ls"], "--"))
+    axB.errorbar(xs, mb(res["pv_b"]), yerr=mb_sd(res["pv_b"]), fmt=fmt("s"),
+                 ls="" if regress else "--", capsize=3, ms=ms, color=PROTO_COLOR["pv"],
+                 alpha=0.45, label="PV bytes" + fit(axB, mb(res["pv_b"]), PROTO_COLOR["pv"], "--"))
     axB.set_ylabel("routing bytes sent (MB, dashed)")
     h1, l1 = axL.get_legend_handles_labels()
     h2, l2 = axB.get_legend_handles_labels()
@@ -581,13 +562,13 @@ def plot(res, title, xlabel, outfile, nobatch=False, batch_panel=True,
     if has_conv:
         axC = axes.pop(0)
         ls_cts = [v for v in res["ls_ct"]]
-        gp_cts = [v for v in res["gp_ct"]]
+        pv_cts = [v for v in res["pv_ct"]]
         axC.errorbar(xs, ls_cts, yerr=_sd(ls_cts), fmt=fmt("o"), capsize=3, ms=ms,
-                     label="LS convergence time" + fit(axC, ls_cts, "tab:blue"),
-                     color="tab:blue")
-        axC.errorbar(xs, gp_cts, yerr=_sd(gp_cts), fmt=fmt("s"), capsize=3, ms=ms,
-                     label="GP convergence time" + fit(axC, gp_cts, "tab:red"),
-                     color="tab:red")
+                     label="LS convergence time" + fit(axC, ls_cts, PROTO_COLOR["ls"]),
+                     color=PROTO_COLOR["ls"])
+        axC.errorbar(xs, pv_cts, yerr=_sd(pv_cts), fmt=fmt("s"), capsize=3, ms=ms,
+                     label="PV convergence time" + fit(axC, pv_cts, PROTO_COLOR["pv"]),
+                     color=PROTO_COLOR["pv"])
         ticks(axC)
         axC.set_xlabel(xlabel); axC.set_ylabel("convergence time (s)")
         axC.set_title("Convergence time vs network size")
@@ -595,39 +576,39 @@ def plot(res, title, xlabel, outfile, nobatch=False, batch_panel=True,
 
     if has_state:
         # Memory. LS holds ~one LSA per origin regardless of the ring plan, so at
-        # fixed n it is a flat, high floor; GP holds chains per origin RING, so it
+        # fixed n it is a flat, high floor; PV holds chains per origin RING, so it
         # starts far below and climbs with the ring count. The crossing is the
         # result -- neither protocol dominates, and this says where the boundary is.
         axS = axes.pop(0)
-        kb = lambda ser: [v / 1e3 for v in ser]
-        axS.errorbar(xs, kb(res["ls_s"]), yerr=_sd(res["ls_s"]), fmt=fmt("o"),
-                     capsize=3, ms=ms, color="tab:blue",
-                     label="LS (LSDB)" + fit(axS, kb(res["ls_s"]), "tab:blue"))
-        axS.errorbar(xs, kb(res["gp_s"]), yerr=_sd(res["gp_s"]), fmt=fmt("s"),
-                     capsize=3, ms=ms, color="tab:red",
-                     label="GP (RIB)" + fit(axS, kb(res["gp_s"]), "tab:red"))
+        mbv = lambda ser: [v / 1e6 for v in ser]
+        axS.errorbar(xs, mbv(res["ls_s"]), yerr=_sd(res["ls_s"]), fmt=fmt("o"),
+                     capsize=3, ms=ms, color=PROTO_COLOR["ls"],
+                     label="LS (LSDB)" + fit(axS, mbv(res["ls_s"]), PROTO_COLOR["ls"]))
+        axS.errorbar(xs, mbv(res["pv_s"]), yerr=_sd(res["pv_s"]), fmt=fmt("s"),
+                     capsize=3, ms=ms, color=PROTO_COLOR["pv"],
+                     label="PV (RIB)" + fit(axS, mbv(res["pv_s"]), PROTO_COLOR["pv"]))
         ticks(axS)
-        axS.set_xlabel(xlabel); axS.set_ylabel("routing state per router (kB)")
+        axS.set_xlabel(xlabel); axS.set_ylabel("routing state per router (MB)")
         axS.set_title("Per-router control-plane state")
         axS.legend(fontsize=8); axS.grid(True, alpha=0.3)
 
         # Hotspotting. Bytes are per LINK: a node on many rings relays between
-        # k(k-1) ring pairs, which is exactly the per-node term in `fan`, so GP's
+        # k(k-1) ring pairs, which is exactly the per-node term in `fan`, so PV's
         # busiest link should climb with the axis while LS floods per edge and
         # stays flat. The max-vs-median GAP is the hotspot; the max alone cannot
         # tell a uniformly busy network from one overloaded link.
         axH = axes.pop(0)
-        for key, med, c, mk, lab in (("ls_lmax", "ls_lmed", "tab:blue", "o", "LS"),
-                                     ("gp_lmax", "gp_lmed", "tab:red", "s", "GP")):
-            axH.errorbar(xs, kb(res[key]), yerr=_sd(res[key]), fmt=fmt(mk),
+        for key, med, c, mk, lab in (("ls_lmax", "ls_lmed", PROTO_COLOR["ls"], "o", "LS"),
+                                     ("pv_lmax", "pv_lmed", PROTO_COLOR["pv"], "s", "PV")):
+            axH.errorbar(xs, mbv(res[key]), yerr=_sd(res[key]), fmt=fmt(mk),
                          capsize=3, ms=ms, color=c,
-                         label=f"{lab} busiest link" + fit(axH, kb(res[key]), c))
-            axH.errorbar(xs, kb(res[med]), yerr=_sd(res[med]), fmt=fmt(mk),
+                         label=f"{lab} busiest link" + fit(axH, mbv(res[key]), c))
+            axH.errorbar(xs, mbv(res[med]), yerr=_sd(res[med]), fmt=fmt(mk),
                          ls="" if regress else "--", capsize=3, ms=ms, color=c,
                          alpha=0.45,
-                         label=f"{lab} median link" + fit(axH, kb(res[med]), c, "--"))
+                         label=f"{lab} median link" + fit(axH, mbv(res[med]), c, "--"))
         ticks(axH)
-        axH.set_xlabel(xlabel); axH.set_ylabel("bytes on one link (kB)")
+        axH.set_xlabel(xlabel); axH.set_ylabel("bytes on one link (MB)")
         axH.set_title("Link load: busiest vs median")
         axH.legend(fontsize=8); axH.grid(True, alpha=0.3)
 
@@ -665,9 +646,6 @@ def draw_topologies(outfile):
         return {col * dimx + row: (col, dimx - 1 - row)
                 for col in range(dimy) for row in range(dimx)}
 
-    def ladder_pos(W):
-        return {r * W + c: (c, -r) for r in range(2) for c in range(W)}
-
     def flower_pos(N):
         # Central ring 2N on a circle; each petal (shared pair 2p,2p+1 + N-2 unique
         # nodes) laid out as a closed regular N-gon whose one edge is the shared
@@ -700,8 +678,6 @@ def draw_topologies(outfile):
 
     reps = [
         ("square 5x5",           gen_topology(5, 5), grid_pos(5, 5)),
-        ("width 3x8",            gen_topology(3, 8), grid_pos(3, 8)),
-        ("ladder 2x8 (1-D line)", gen_ladder(8),     ladder_pos(8)),
         ("flower N=5",           gen_flower(5),      flower_pos(5)),
     ]
 
@@ -766,13 +742,13 @@ def draw_topologies(outfile):
 
 def main(args=None):
     if args is None:
-        ap = argparse.ArgumentParser(description="GP-vs-LS message-count scaling eval")
+        ap = argparse.ArgumentParser(description="PV-vs-LS message-count scaling eval")
         ap.add_argument("--quick", action="store_true", help="short sweeps for a smoke test")
-        ap.add_argument("--only", choices=["square", "width", "ladder", "flower", "topos"],
+        ap.add_argument("--only", choices=["square", "flower", "topos"],
                         help="run just one sweep instead of all four ('topos' = draw "
                              "the representative topology pictures only, no sims)")
         ap.add_argument("--no-batch", dest="nobatch", action="store_true",
-                        help="run GP with holdInterval=0s (pre-batching baseline). "
+                        help="run PV with holdInterval=0s (pre-batching baseline). "
                              "Far slower (no coalescing) — off by default; the normal "
                              "run uses the holdInterval pinned in eval_common.ini.")
         ap.add_argument("--convergence", action="store_true",
@@ -787,7 +763,7 @@ def main(args=None):
         ap.add_argument("--max-ring-size", dest="max_ring_size", type=int, default=0,
                         help="drop rings larger than this; members fall back to "
                              "echo rings (0 = keep all, the default). Long rings "
-                             "dominate GP's fan-out, and --basis tree produces "
+                             "dominate PV's fan-out, and --basis tree produces "
                              "very large ones. Results nest under a .mN label file.")
         ap.add_argument("--dir", metavar="DIR",
                         help="sweep every .txt in DIR instead of the built-in "
@@ -804,9 +780,9 @@ def main(args=None):
         ap.add_argument("--no-batch-panel", action="store_true",
                         help="accepted for compatibility and now the only "
                              "behaviour: dir sweeps never draw the batch-size "
-                             "panel. Not --nobatch, which turns GP's batching OFF")
+                             "panel. Not --nobatch, which turns PV's batching OFF")
         ap.add_argument("--single", metavar="TOPO",
-                        help="run GP+LS on ONE topology .txt and print counts (no "
+                        help="run PV+LS on ONE topology .txt and print counts (no "
                              "sweep, no plot). Path relative to simulations/topologies "
                              "or absolute.")
         add_repeat_args(ap)
@@ -889,7 +865,7 @@ def main(args=None):
         # scales, and it is inverse to length (n = rings x length - surplus), so
         # the axis is inverted to put the growing quantity on the growing side.
         plot(sweep(items, args.nobatch, args.convergence),
-             f"GP vs LS: {name}", XNAME.get(args.x_key, args.x_key),
+             f"Path-Vector vs Link-State: {name}", XNAME.get(args.x_key, args.x_key),
              os.path.join(PLOT_DIR, f"dir_{name}_{args.x_key}.png"), args.nobatch,
              # Batch size is a property of the UPDATE encoding, not of the swept
              # knob; on a dir sweep the panel competes for width with the state
@@ -917,38 +893,17 @@ def main(args=None):
 
     if args.quick:
         square_dims = [(n, n) for n in range(3, 6)]
-        width_dims = [(3, w) for w in range(3, 9)]
-        ladder_widths = list(range(3, 9))
         flower_N = list(range(3, 8))
     else:
         square_dims = [(n, n) for n in range(3, 11)]       # 3x3 .. 10x10
-        width_dims = [(3, w) for w in range(3, 31)]        # 3x3 .. 3x30
-        ladder_widths = list(range(3, 31))                 # ladder3_3 .. ladder3_30
         flower_N = list(range(3, 13))                      # flower_3 .. flower_12
 
     if args.only in (None, "square"):
         print("== square sweep (NxN) ==")
         s_items = [(f"{x}x{y}", gen_topology(x, y)) for (x, y) in square_dims]
         plot(sweep(s_items, args.nobatch, args.convergence),
-             "GP vs LS: square grid scaling (dense 2D ring-mesh)",
+             "Path-Vector vs Link-State: square grid scaling (dense 2D ring-mesh)",
              "grid size", os.path.join(PLOT_DIR, "square_scaling.png"), args.nobatch)
-
-    if args.only in (None, "width"):
-        print("== width sweep (3xW) ==")
-        w_items = [(f"3x{w}", gen_topology(3, w)) for (_, w) in width_dims]
-        plot(sweep(w_items, args.nobatch, args.convergence),
-             "GP vs LS: width scaling (3xW ladder ring-mesh)",
-             "grid size", os.path.join(PLOT_DIR, "width_scaling.png"), args.nobatch)
-
-    if args.only in (None, "ladder"):
-        # 2xW ladder = W-1 unit-square rings chained in a pure 1-D line. Zero
-        # path diversity (each ring adjacent only to its two neighbours), so this
-        # is GP's very best case and the linear-scaling floor for the sweep.
-        print("== ladder sweep (2xW, 1-D line of unit-square rings) ==")
-        l_items = [(f"L2x{w}", gen_ladder(w)) for w in ladder_widths]
-        plot(sweep(l_items, args.nobatch, args.convergence),
-             "GP vs LS: ladder scaling (2xW, pure 1-D line of rings)",
-             "ladder width", os.path.join(PLOT_DIR, "ladder_scaling.png"), args.nobatch)
 
     if args.only in (None, "flower"):
         # Ring-SIZE sweep (orthogonal to the others, which grow path diversity):
@@ -961,7 +916,7 @@ def main(args=None):
         print("== flower sweep (central 2N + N petals of N, ring size grows) ==")
         f_items = [(f"F{N}", gen_flower(N)) for N in flower_N]
         plot(sweep(f_items, args.nobatch, args.convergence),
-             "GP vs LS: flower scaling (N petals of N routers, star ring-graph)",
+             "Path-Vector vs Link-State: flower scaling (N petals of N routers, star ring-graph)",
              "flower N (ring size; N^2 nodes)", os.path.join(PLOT_DIR, "flower_scaling.png"),
              args.nobatch)
 

@@ -89,8 +89,8 @@ for cmd in "${RUNS[@]}"; do
     name="$(printf '%02d' $i)_${slug}"
     log="$LOGDIR/$name.log"
 
-    # SPLIT <dynamics run>: one pane per config the run's flags select (gp,
-    # gp_nospof, ls, …), all writing the same topo-scoped output dir, plus a
+    # SPLIT <dynamics run>: one pane per config the run's flags select (pv,
+    # pv_nospof, ls, …), all writing the same topo-scoped output dir, plus a
     # final pane that waits for them and runs --post to draw the combined
     # plots. Asking the eval for the list keeps this in step with
     # --nospof/--noreplay instead of hardcoding the families. The pre-run
@@ -102,9 +102,9 @@ for cmd in "${RUNS[@]}"; do
         if (( ! ${#cfgs[@]} )); then       # older eval, or the query failed
             echo "WARNING: --list-configs gave nothing for:" >&2
             echo "  $base" >&2
-            echo "  falling back to (gp ls) — any other config gets no pane," >&2
+            echo "  falling back to (pv ls) — any other config gets no pane," >&2
             echo "  and --post will then fail on the first one missing." >&2
-            cfgs=(gp ls)
+            cfgs=(pv ls)
         fi
     fi
 

@@ -8,7 +8,7 @@ traffic (messages/bytes per PDU type) and, where nodes fail, reconvergence time.
                 --churn-period                      failure rate the network absorbs
     link        LinkFailure, repeating flaps     → overhead per unit of link churn
     node        EscalatingFailure, growing waves → reconvergence vs failure size,
-                swept over --fractions, with the GP recovery-replay ablation
+                swept over --fractions, with the PV recovery-replay ablation
 
     python3 simulations/MYRIAD/eval_dynamics.py [--topo PATH] [--only churn|link|node]
 
@@ -41,7 +41,7 @@ from eval_harness import (BIN, MYRIAD_DIR, _sec, add_topo_args, announce,
                           apply_repeat_args, common, dynamics_args,
                           ensure_ring_labels, overrides, pm, refresh_s, rep_path,
                           repeat_mean, repeats_note, run_sim, simtime, title, warmup_s,
-                          write_proto_ini)
+                          write_proto_ini, PROTO_COLOR, PROTO_LABEL)
 
 OUT = os.path.join(str(MYRIAD_DIR), "eval", "dynamics")
 RECOVERY_NETWORK = "routingsim.simulations.MYRIAD.RecoveryNetwork"
@@ -50,6 +50,7 @@ CHURN_NETWORK = "routingsim.simulations.MYRIAD.ChurnNetwork"
 DEFAULT_FRACTIONS = [0.05, 0.1, 0.2, 0.4, 0.8]
 CHURN_NODES, CHURN_PERIOD = 1, 1.0  # churn scenario: nodes down per period, seconds
 FAILURE_START = 100.0              # churn / first node wave, and the measurement cut
+QUIET_LEN = 25.0                   # idle-baseline window, ending at FAILURE_START
 DOWN_MIN, DOWN_JITTER = 2.0, 8.0   # per-node downtime: DOWN_MIN + U(0, JITTER)
 COLLECT_RETRY_LIMIT = 3            # mirrors MyriadGp.h
 
@@ -62,22 +63,25 @@ UNKNOWN_RING_SIZE = 1 << 20   # mirrors MyriadGp.h
 DOWN_RE = re.compile(r"^scalar\s+\S+\s+down_(\d+)_(\d+)\s+([0-9.]+)", re.M)
 
 # name -> (protocol, dump parameter, recoveryReplayEnabled, refreshFloodsUpdate).
-# Last two: None = don't override (NED default, true). gp_noreplay is the
+# Last two: None = don't override (NED default, true). pv_noreplay is the
 # refresh-bound baseline; opt in with --noreplay. It NEEDS refreshFloodsUpdate's
 # default (true) — periodic reflood is its only propagation path without replay
 # — so --no-refresh-flood (below) only touches the "gp" entry, never this one.
-# A blanket --set refreshFloodsUpdate=... would hit both and cripple gp_noreplay.
-CONFIGS = {"gp": ("gp", "ribDumpFile", "true", None),
-           "gp_noreplay": ("gp", "ribDumpFile", "false", None),
-           # rankUseSpof=false: pure-cost ranking, so GP targets the same optimum
+# A blanket --set refreshFloodsUpdate=... would hit both and cripple pv_noreplay.
+CONFIGS = {"pv": ("pv", "ribDumpFile", "true", None),
+           "pv_noreplay": ("pv", "ribDumpFile", "false", None),
+           # rankUseSpof=false: pure-cost ranking, so PV targets the same optimum
            # LS computes and the stretch table isolates recovery damage from the
            # redundancy premium production ranking pays on purpose.
-           "gp_nospof": ("gp", "ribDumpFile", "true", None),
+           "pv_nospof": ("pv", "ribDumpFile", "true", None),
            "ls": ("ls", "oracleDumpFile", None, None)}
 
-EXTRA_OPTS = {"gp_nospof": ["--**.rankUseSpof=false"]}
+EXTRA_OPTS = {"pv_nospof": ["--**.rankUseSpof=false"]}
 
-COLORS = {"gp": "C0", "gp_noreplay": "C3", "gp_nospof": "C1", "ls": "C2"}
+# Colours and legend names are the harness's, so every figure in the eval uses
+# the same ones. Ordered to match CONFIGS.
+COLORS = {n: PROTO_COLOR[n] for n in CONFIGS}
+DISPLAY = {n: PROTO_LABEL[n] for n in CONFIGS}
 
 
 def churn_start():
@@ -136,7 +140,7 @@ def scenario_dynamics(scenario, fractions=None, spacing=None):
     """(cli options, human description) for one scenario. Periods derive from the
     central refresh interval so churn scales with --refresh."""
     if scenario == "churn":
-        # Not warmup_s(): collectWarmupDuration is also when GP unblocks
+        # Not warmup_s(): collectWarmupDuration is also when PV unblocks
         # forwardChainInterRing, so churn starting there superimposes the initial
         # propagation burst on the first failure. Settle first, then churn.
         return dynamics_args("churn", numNodes=CHURN_NODES,
@@ -210,8 +214,8 @@ def measure(name, ini, scenario, dyn, simt=None, rep=0, run=True):
 
     # series[node][t] = (route count, summed chain cost, max chain cost,
     # cost-basis count) — [0] drives reconvergence/presence (unfiltered, so LS
-    # and GP compare on the same table-refill basis), [1] drives stretch, [3] is
-    # the origin count the cost sum ranges over (LS: live-reachable only; GP: ==
+    # and PV compare on the same table-refill basis), [1] drives stretch, [3] is
+    # the origin count the cost sum ranges over (LS: live-reachable only; PV: ==
     # [0]) so stretch is scored only where both price the same set.
     series = defaultdict(dict)
     if scenario in ("node", "churn") and os.path.exists(dump):
@@ -344,7 +348,22 @@ def overview_windows(scenario, fractions, spacing, conv=True):
     After it, churn's steady state is one window to the end of the run, and each
     node wave owns the span from its own failures to the next wave. No failure
     window carries any of the formation burst."""
-    conv = [("conv", 0.0, churn_start())] if conv else []
+    # quiet rides with conv: same run, same reason. Measuring it per scenario
+    # would compare windows under different refresh intervals -- the node
+    # scenario sets refreshInterval = --wave-spacing, which fires inside [0,
+    # --failure-start) and is not the hello floor at all (see the warning in
+    # overview()).
+    conv = ([("conv", 0.0, churn_start()),
+             ("quiet", max(0.0, churn_start() - QUIET_LEN), churn_start())]
+            if conv else [])
+    # The last QUIET_LEN seconds before the first failure: converged, nothing
+    # failing, and (at the default 120s refresh) no refresh cycle yet either, so
+    # what is left is the hello floor. Every variant should read the SAME value
+    # here -- they run the same hello protocol -- and a variant that reads high
+    # is still finishing its formation when the failures land, which would put
+    # convergence cost inside the failure windows. It is the tail of `conv`, not
+    # a window beside it: conv stays the whole formation cost so it can be
+    # compared against a wave as "coming up costs Y".
     if scenario == "churn":
         return conv + [("churn", churn_start(), _sec(traffic_simtime()))]
     waves = wave_times(fractions, spacing)
@@ -355,13 +374,15 @@ def overview_windows(scenario, fractions, spacing, conv=True):
 def tx_windows(resdir, windows):
     """{label: (bytes, messages)} per window. One vector sample is one PDU, so
     counting samples in a window IS that window's message volume."""
+    # No break on the first hit: windows may NEST. quiet is the tail of conv, so
+    # a sample in [75,100) belongs to both, and stopping at conv would leave the
+    # idle baseline reading a flat zero.
     out = {lab: [0.0, 0] for lab, _, _ in windows}
     for t, v in _tx_samples(resdir):
         for lab, t0, t1 in windows:
             if t0 <= t < t1:
                 out[lab][0] += v
                 out[lab][1] += 1
-                break
     return {k: tuple(v) for k, v in out.items()}
 
 
@@ -383,10 +404,18 @@ def overview(inis, topos, scenarios, fractions, spacing, run_sims):
             simt = traffic_simtime()
         # conv goes to the first scenario only; see overview_windows.
         wins = overview_windows(scenario, fractions, spacing, conv=(i == 0))
-        if i and node_refresh(spacing) < churn_start():
-            print(f"  ! this scenario refreshes every {node_refresh(spacing):g}s, "
-                  f"inside the [0,{churn_start():g})s formation window, so its "
-                  f"convergence is not the one measured above")
+        if scenario == "node" and node_refresh(spacing) < churn_start():
+            if i:
+                print(f"  ! this scenario refreshes every {node_refresh(spacing):g}s, "
+                      f"inside the [0,{churn_start():g})s formation window, so its "
+                      f"convergence is not the one measured above")
+            else:
+                # It owns conv/quiet, and quiet is meant to be the hello floor.
+                print(f"  ! conv/quiet come from this scenario, which refreshes "
+                      f"every {node_refresh(spacing):g}s — a refresh lands inside "
+                      f"the [{max(0.0, churn_start() - QUIET_LEN):g},"
+                      f"{churn_start():g})s idle window, so it is NOT the hello "
+                      f"floor. Run churn alongside, or raise --wave-spacing.")
         print(f"\n=== {scenario} ({simt}) ===")
         announce(scenario, opts=dyn + overrides(sim_time_limit=simt), dynamics=desc)
         print("  windows: " + ", ".join(f"{l} [{a:g},{b:g})s" for l, a, b in wins))
@@ -461,7 +490,7 @@ def overview_report(plan, res):
                     mu, sd = _mean_sd([v[0] for v in vals])
                     # conv is the run set's, not this scenario's (see
                     # overview_windows), so it carries no scenario prefix.
-                    win = (lab if lab in (scenario, "conv")
+                    win = (lab if lab in (scenario, "conv", "quiet")
                            else f"{scenario}/{lab}")
                     rows.append((win, name, len(vals), m, b, mu, sd,
                                  b / m if m else 0, b / (t1 - t0) / 1e6,
@@ -498,6 +527,8 @@ def _win_title(lab, t0, t1):
         return f"Network Churn\nover {t1 - t0:g}s"
     if lab == "conv":
         return "Initial\nConvergence"
+    if lab == "quiet":
+        return f"Idle Baseline\n({t1 - t0:g}s pre-failure)"
     return f"Catastrophic {lab}\nNetwork Outage"
 
 
@@ -524,13 +555,13 @@ def overview_plots(plan, res):
                     for s, l, _, _ in labels]
             bp = ax.boxplot(data, positions=[x + i * w - 0.4 + w / 2
                                              for x in range(len(labels))],
-                            widths=w * 0.9, patch_artist=True, manage_ticks=False)
+                            widths=w * 0.5, patch_artist=True, manage_ticks=False)
             for part in ("boxes", "medians", "whiskers", "caps", "fliers"):
                 for art in bp[part]:
                     art.set(color=COLORS[name])
             for box in bp["boxes"]:
                 box.set(facecolor=COLORS[name], alpha=0.35)
-            ax.plot([], [], color=COLORS[name], label=name)
+            ax.plot([], [], color=COLORS[name], label=DISPLAY.get(name, name))
         ax.set_xticks(range(len(labels)))
         ax.set_xticklabels([_win_title(l, t0, t1) for _, l, t0, t1 in labels],
                            fontsize=8)
@@ -567,7 +598,7 @@ def reach_base(series, wave0):
 def network_reachability(series, wave0, base=None):
     """(times, % of a reference route total present network-wide). base defaults to
     this series' own pre-wave peak; pass LS's peak (reach_base of the ls series) to
-    normalise every config against the same converged optimum, so GP cannot read
+    normalise every config against the same converged optimum, so PV cannot read
     >100% merely from a slower initial fill undercounting its own base."""
     ts, tot = _reach_total(series)
     if not ts:
@@ -621,7 +652,7 @@ def _at(ser, t):
 
 
 def stretch_at(series, ref_series, t):
-    """Mean path-cost stretch over the whole network at time t: GP chain cost
+    """Mean path-cost stretch over the whole network at time t: PV chain cost
     divided by the LS (Dijkstra) optimum for the same routes.
 
     Scored only on routers whose cost-basis count equals LS's live-reachable
@@ -692,19 +723,24 @@ def main(args=None):
                             "one failure fraction to the next; also the refresh "
                             "interval of the node scenario "
                             "(default 2*(down-min+down-jitter))")
+        p.add_argument("--extra-warmup", type=float, default=0.0, metavar="S",
+                       help="give the network S more seconds to converge before "
+                            "the first failure (adds to --failure-start, and the "
+                            "run horizon follows). Raise it when the idle-baseline "
+                            "window still shows formation traffic")
         p.add_argument("--failure-start", type=float, default=None,
                        help="seconds of warmup before failures begin — churn "
                             "start and first node wave alike, and the cut every "
                             f"post-warmup measurement uses (default {FAILURE_START:g})")
         p.add_argument("--noreplay", action="store_true",
-                       help="also run GP with recoveryReplayEnabled=false")
+                       help="also run PV with recoveryReplayEnabled=false")
         p.add_argument("--nospof", action="store_true",
-                       help="also run GP with rankUseSpof=false, so its stretch "
+                       help="also run PV with rankUseSpof=false, so its stretch "
                             "against LS is pure path cost")
         p.add_argument("--no-refresh-flood", action="store_true",
-                       help="GP's routine (already-king) refresh only re-verifies "
-                            "ring state, no reflood — only the 'gp' config, since "
-                            "gp_noreplay needs its default (true) as its sole "
+                       help="PV's routine (already-king) refresh only re-verifies "
+                            "ring state, no reflood — only the 'pv' config, since "
+                            "pv_noreplay needs its default (true) as its sole "
                             "propagation path without replay")
         p.add_argument("--protos", default=None,
                        help="comma list of exact config names to run (see "
@@ -748,28 +784,29 @@ def main(args=None):
     DOWN_JITTER = getattr(args, "down_jitter", None) or DOWN_JITTER
     CHURN_NODES = getattr(args, "churn_nodes", None) or CHURN_NODES
     CHURN_PERIOD = getattr(args, "churn_period", None) or CHURN_PERIOD
-    FAILURE_START = getattr(args, "failure_start", None) or FAILURE_START
+    FAILURE_START = ((getattr(args, "failure_start", None) or FAILURE_START)
+                     + getattr(args, "extra_warmup", 0.0))
     if not getattr(args, "noreplay", False):
-        CONFIGS.pop("gp_noreplay", None)
+        CONFIGS.pop("pv_noreplay", None)
     if not getattr(args, "nospof", False):
-        CONFIGS.pop("gp_nospof", None)
+        CONFIGS.pop("pv_nospof", None)
     if getattr(args, "no_refresh_flood", False):
-        # Every GP config but gp_noreplay, whose sole propagation path without
-        # replay is the periodic reflood. gp_nospof differs from gp in ranking
-        # alone, so it has to share gp's refresh regime or the two-series
+        # Every PV config but pv_noreplay, whose sole propagation path without
+        # replay is the periodic reflood. pv_nospof differs from pv in ranking
+        # alone, so it has to share pv's refresh regime or the two-series
         # comparison carries two variables.
         for name, (proto, dumppar, replay, _) in list(CONFIGS.items()):
-            if proto == "gp" and name != "gp_noreplay":
+            if proto == "pv" and name != "pv_noreplay":
                 CONFIGS[name] = (proto, dumppar, replay, "false")
 
-    # GP and LS can run in separate panes (--protos gp / --protos ls), then --post
+    # PV and LS can run in separate panes (--protos pv / --protos ls), then --post
     # recombines. Post mode simulates nothing — it re-parses whatever result dirs
     # the prior runs left under the (identical) topo-scoped OUT.
     run_sims = not getattr(args, "post", False)
     if getattr(args, "protos", None) and run_sims:
         # Exact config names, so a split can put every variant in its own pane.
-        # NOT prefix/family matching: "gp" is itself a config name, so "gp" also
-        # selecting gp_nospof would make two panes write one result dir.
+        # NOT prefix/family matching: "pv" is itself a config name, so "pv" also
+        # selecting pv_nospof would make two panes write one result dir.
         want = {p.strip() for p in args.protos.split(",")}
         if not want <= set(CONFIGS):
             sys.exit(f"--protos {args.protos}: unknown config "
@@ -807,18 +844,18 @@ def main(args=None):
         sys.exit(f"RoutingSim binary not found at {BIN} — build it first.")
 
     inis = {}
-    need_protos = {CONFIGS[n][0] for n in CONFIGS}  # "gp"/"ls" bases actually used
+    need_protos = {CONFIGS[n][0] for n in CONFIGS}  # "pv"/"ls" bases actually used
     for topo in topos if run_sims else []:
         labels = ensure_ring_labels(topo, args.basis,
                                     getattr(args, 'max_ring_size', 0),
                                     not getattr(args, 'no_echo_rings', False))
-        for proto in [p for p in ("gp", "ls") if p in need_protos]:
+        for proto in [p for p in ("pv", "ls") if p in need_protos]:
             for net, key in ((None, "flat"), (RECOVERY_NETWORK, "recovery"),
                              (CHURN_NETWORK, "churn")):
                 inis[(topo, proto, key)] = write_proto_ini(
                     os.path.join(OUT, f"{stem(topo)}_{proto}_{key}.ini"),
                     proto, topo, labels,
-                    update_jitter=args.update_jitter if proto == "gp" else None,
+                    update_jitter=args.update_jitter if proto == "pv" else None,
                     **({"network": net} if net else {}))
 
     traffic, series0, bytes0, churn_bytes = {}, {}, {}, {}
@@ -842,7 +879,7 @@ def main(args=None):
         # Under churn the stretch configs run too, so steady-state path quality
         # is scored on the same runs as the byte rates; elsewhere only the two
         # production protocols carry traffic totals.
-        want = ["gp", "ls"] + ([n for n in ("gp_nospof", "gp_noreplay")
+        want = ["pv", "ls"] + ([n for n in ("pv_nospof", "pv_noreplay")
                                 if n in CONFIGS] if scenario == "churn" else [])
         for name in [n for n in want if n in CONFIGS]:
             print(f"  → {name.upper()} …", flush=True)
@@ -939,7 +976,7 @@ def main(args=None):
                       f"net(max)={r[frac]['max']:.0f}s{warn}")
 
     report(traffic, reconv, fractions, scenarios, spacing, churn_bytes)
-    # A --protos pane holds only half the data; the PNGs overlay GP and LS, so let
+    # A --protos pane holds only half the data; the PNGs overlay PV and LS, so let
     # --post (or a full run) draw them once both halves exist on disk.
     if run_sims and getattr(args, "protos", None):
         print(f"\nrun-only (--protos {args.protos}); once the other pane is done, "
@@ -968,14 +1005,14 @@ def report(traffic, reconv, fractions, scenarios, spacing, churn_bytes=None):
             bps = f"{bp / 1e6:.2f}" if bp is not None else "-"
             print(f"{name:>12}{scenario:>10}{ms:>20}{bs:>18}{bps:>18}"
                   f"{(b/m if m else 0):>9.1f}{r['max_b']:>9.0f}")
-        for name in ("gp", "ls"):
+        for name in ("pv", "ls"):
             base, lnk = traffic.get((name, "churn")), traffic.get((name, "link"))
             if base and lnk:
                 print(f"  {name.upper()} link-churn cost (link−churn): "
                       f"+{lnk['msgs']-base['msgs']:.0f} msgs, "
                       f"+{(lnk['bytes']-base['bytes']) / 1e6:.2f} MB")
 
-        for name in ("gp", "ls"):
+        for name in ("pv", "ls"):
             r = traffic.get((name, "churn"))
             if not r:
                 continue
@@ -1042,8 +1079,8 @@ def report(traffic, reconv, fractions, scenarios, spacing, churn_bytes=None):
           "over the `scored` routers — those whose route count matches LS's there "
           "and that price no chain at the unknown-ring-size placeholder (a short "
           "router would read <1 purely from missing chains). Rising = replay "
-          "handing back worse chains than the crash took away. Compare gp_nospof "
-          "(pure-cost ranking) against gp, whose spof-first ranking pays a "
+          "handing back worse chains than the crash took away. Compare pv_nospof "
+          "(pure-cost ranking) against pv, whose spof-first ranking pays a "
           "redundancy premium on top.")
 
 
@@ -1061,7 +1098,7 @@ def plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0=None,
     # Bytes are post-warmup (bytes_post, from the .vec time series): the run
     # totals carry the RIB formation burst, which on a short run dwarfs what the
     # failures themselves cost. Messages have no such series, so they stay run
-    # totals and say so. Every config that ran gets a bar, not just gp/ls.
+    # totals and say so. Every config that ran gets a bar, not just pv/ls.
     if scenarios:
         protos = [n for n in CONFIGS if any((n, s) in traffic for s in scenarios)]
         x = range(len(protos))
@@ -1083,7 +1120,8 @@ def plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0=None,
                               label=s, color=f"C{i}")
                 ax.bar_label(bars, fmt="%.0f", fontsize=8)
             ax.set_xticks(list(x))
-            ax.set_xticklabels([p.upper() for p in protos], fontsize=8)
+            ax.set_xticklabels([DISPLAY.get(p, p.upper()) for p in protos],
+                               fontsize=8)
             ax.set(ylabel=ylabel,
                    title=title(f"Control plane ({traffic_simtime()}, {note})"))
             ax.legend(fontsize=8); fig.tight_layout()
@@ -1093,14 +1131,15 @@ def plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0=None,
     # Steady churn: the same byte-rate series recovery_node.png draws under its
     # waves, but with a constant failure rate — a flat trace is the protocol's
     # sustained cost of keeping the topology converged, a rising one is damage
-    # accumulating. Log y, since GP and LS differ by more than an order.
+    # accumulating. Log y, since PV and LS differ by more than an order.
     if churn_bytes and any(churn_bytes.get(n, ([], []))[0] for n in COLORS):
         fig, ax = plt.subplots(figsize=(8, 4.5))
         for name, color in COLORS.items():
             ts, bps = churn_bytes.get(name, ([], []))
             if not ts:
                 continue
-            ax.plot(ts, [b / 1e6 for b in bps], color=color, lw=1.0, label=name)
+            ax.plot(ts, [b / 1e6 for b in bps], color=color, lw=1.0,
+                    label=DISPLAY.get(name, name))
         ax.axvline(churn_start(), color="gray", lw=0.8)
         ax.text(churn_start(), ax.get_ylim()[1], " churn starts", fontsize=8,
                 color="gray", va="top")
@@ -1126,7 +1165,7 @@ def plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0=None,
                     continue
                 ax.plot([f * 100 for f in fr],
                         [reconv[name][f]["stretch"] for f in fr],
-                        "o-", color=color, label=name)
+                        "o-", color=color, label=DISPLAY.get(name, name))
             ax.axhline(1.0, ls=":", color="gray", label="LS optimum")
             ax.set(xlabel="nodes failed (%)", ylabel="mean path cost / LS optimum",
                    title=title("Path-cost stretch after recovery"))
@@ -1138,16 +1177,17 @@ def plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0=None,
         # percentage of its pre-wave value, so a 5% node wave shows as a ~5% dip.
         fig, ax = plt.subplots(figsize=(3 + 1.6 * len(waves), 4.5))
         drew = False
-        # gp_nospof only differs in path *cost* ranking, not in reachability —
-        # it traces gp here. It earns its line on stretch_vs_fraction.png.
-        pcolors = {n: c for n, c in COLORS.items() if n != "gp_nospof"}
+        # pv_nospof only differs in path *cost* ranking, not in reachability —
+        # it traces pv here. It earns its line on stretch_vs_fraction.png.
+        pcolors = {n: c for n, c in COLORS.items() if n != "pv_nospof"}
         ls_base = reach_base(series0.get("ls", {}), waves[0][1])
         for name, color in pcolors.items():
             ts, pct = network_reachability(series0.get(name, {}), waves[0][1],
                                            base=ls_base)
             if not ts:
                 continue
-            ax.plot(ts, pct, color=color, lw=1.4, ls="--", label=name)
+            ax.plot(ts, pct, color=color, lw=1.4, ls="--",
+                    label=DISPLAY.get(name, name))
             drew = True
         if drew:
             dead = _sec(common("deadInterval", "9s"))
@@ -1183,7 +1223,8 @@ def plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0=None,
                     if not bts:
                         continue
                     ax2.plot(bts, [b / 1e6 for b in bps], color=color, lw=1.0,
-                             ls=":", alpha=0.95, label=f"{name} MB/s")
+                             ls=":", alpha=0.95,
+                             label=f"{DISPLAY.get(name, name)} MB/s")
                 ax2.set_yscale("log")
                 ax2.set_ylabel("control-plane MB/s (log)")
                 h2, l2 = ax2.get_legend_handles_labels()
@@ -1197,7 +1238,7 @@ def plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0=None,
     # Path cost over time under CONSTANT churn, not escalating waves: a steady
     # failure rate keeps the network intact enough that every sample is a real
     # comparison, where the 80% wave shatters the grid and the mean stops meaning
-    # anything. gp_nospof (not gp) is the config comparable to LS — production
+    # anything. pv_nospof (not pv) is the config comparable to LS — production
     # spof-first ranking pays a redundancy premium that is not churn damage.
     scolors = {n: c for n, c in COLORS.items()
                if n != "ls" and (churn_series or {}).get(n)}
@@ -1209,11 +1250,12 @@ def plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0=None,
             if not ts:
                 continue
             curves[name] = (ts, st)
-            ax.plot(ts, st, color=color, lw=1.4, ls="--", label=name)
+            ax.plot(ts, st, color=color, lw=1.4, ls="--",
+                    label=DISPLAY.get(name, name))
             allst += [v for v in st if v == v]
             drew = True
         if drew:
-            ax.axhline(1.0, ls=":", color="gray", label="ls optimum")
+            ax.axhline(1.0, ls=":", color="gray", label="LS optimum")
             # One router replaying a wildly-priced chain drags the network mean
             # into the thousands and flattens everything else. Scale to the 99th
             # percentile and mark the clipped spikes.

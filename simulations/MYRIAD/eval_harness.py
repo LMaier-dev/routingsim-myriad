@@ -369,6 +369,23 @@ def run_sim(cmd, cwd=None, allow_budget_expired=False, rep=0):
     return proc
 
 
+# Everything an eval names -- config keys, result dirs, CSV values, plot text --
+# calls the path-vector protocol `pv`. The NED module keeps its original name, so
+# this map is the one place the two vocabularies meet.
+NED_MODULE = {"pv": "gp", "ls": "ls"}
+
+# One colour per protocol variant, everywhere. A reader who learns "red is
+# path-vector" on one figure must not have to relearn it on the next, so this is
+# the only place a series colour is chosen. A second metric for the SAME variant
+# in one figure keeps the colour and changes the marker/linestyle/alpha instead.
+PROTO_COLOR = {"pv": "tab:red", "ls": "tab:blue",
+               "pv_noreplay": "darkturquoise", "pv_nospof": "tab:purple"}
+# Figure- and table-facing names, keyed the same way (see eval_dynamics.CONFIGS).
+PROTO_LABEL = {"pv": "Path-Vector (PV)", "ls": "Link-State (LS)",
+               "pv_noreplay": "Path-Vector (refresh-bound)",
+               "pv_nospof": "Path-Vector (spof-blind)"}
+
+
 def write_proto_ini(out_path, proto, topo_path, ring_labels_path,
                     extra_lines=None, update_jitter=None, warmup=None,
                     network="routingsim.simulations.DefaultNetwork"):
@@ -379,7 +396,7 @@ def write_proto_ini(out_path, proto, topo_path, ring_labels_path,
         f"include {COMMON_INI}",
         "[General]",
         f"ned-path={SRC};{SIM_ROOT}",
-        f'**.protocols = "routingsim.routing.MYRIAD.myriad{proto}"',
+        f'**.protocols = "routingsim.routing.MYRIAD.myriad{NED_MODULE[proto]}"',
         f"network = {network}",
         f'*.manager.topologyFile = "{Path(topo_path).resolve()}"',
         "*.mainStatistics.samplingInterval = 0.01s",
@@ -548,8 +565,12 @@ def topo_label(path):
 
 
 def title(base):
-    """Plot title with the topology appended, when a script bound one."""
-    return f"{base} — {TOPO_LABEL}" if TOPO_LABEL else base
+    """Plot title with the topology on its own line, when a script bound one.
+
+    Second line, not appended: a generated topology's name carries its whole
+    parameter set (RINGGROW DELAUNAY A300 SPOF0.5 RL10 TR500 ...), which runs off
+    both ends of the figure when it shares the line with the description."""
+    return f"{base}\n{TOPO_LABEL}" if TOPO_LABEL else base
 
 
 def add_topo_args(parser):

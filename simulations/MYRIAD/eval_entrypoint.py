@@ -46,10 +46,10 @@ def main():
         add_topo_args(sp)
         if name == "costdrift":
             sp.add_argument("--nospof", action="store_true",
-                            help="also run GP with rankUseSpof=false, whose "
+                            help="also run PV with rankUseSpof=false, whose "
                                  "pure-cost chains should land on the oracle")
             sp.add_argument("--no-refresh-flood", action="store_true",
-                            help="GP's routine refresh only re-verifies ring "
+                            help="PV's routine refresh only re-verifies ring "
                                  "state, no reflood")
         if name == "dynamics":
             sp.add_argument("--only", choices=["churn", "link", "node"])
@@ -71,14 +71,18 @@ def main():
                             help="warmup seconds before failures begin (churn "
                                  "start and first node wave) and the cut every "
                                  "post-warmup measurement uses (default 100)")
+            sp.add_argument("--extra-warmup", type=float, default=0.0, metavar="S",
+                            help="give the network S more seconds to converge "
+                                 "before the first failure (adds to "
+                                 "--failure-start; the run horizon follows)")
             sp.add_argument("--noreplay", action="store_true",
-                            help="also run GP with recoveryReplayEnabled=false")
+                            help="also run PV with recoveryReplayEnabled=false")
             sp.add_argument("--nospof", action="store_true",
-                            help="also run GP with rankUseSpof=false, for a "
+                            help="also run PV with rankUseSpof=false, for a "
                                  "pure-cost stretch against LS")
             sp.add_argument("--no-refresh-flood", action="store_true",
-                            help="GP's routine refresh only re-verifies ring "
-                                 "state, no reflood (gp config only)")
+                            help="PV's routine refresh only re-verifies ring "
+                                 "state, no reflood (pv config only)")
             sp.add_argument("--protos", default=None,
                             help="exact config names to run (see --list-configs), "
                                  "default all; split across panes, then --post "

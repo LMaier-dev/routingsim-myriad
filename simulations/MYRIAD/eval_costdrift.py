@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Path cost-drift: MyriadGP (production, rankUseSpof=true) vs oracle (LS/Dijkstra).
 
-GP's spof-first ranking deliberately picks costlier but more-redundant paths.
+PV's spof-first ranking deliberately picks costlier but more-redundant paths.
 This measures by how much — the "redundancy premium" per (node, origin) route.
-Any negative drift (GP cheaper than optimal) is a bug flag.
+Any negative drift (PV cheaper than optimal) is a bug flag.
 
     python3 simulations/MYRIAD/eval_costdrift.py [--topo PATH] [--basis {min,tree}]
 
@@ -16,21 +16,22 @@ import sys
 from eval_harness import (BIN, SIM_ROOT, MYRIAD_DIR, announce, apply_repeat_args,
                           ensure_ring_labels, overrides, pm, rep_path, repeat_mean,
                           repeats_note, run_sim, simtime, title, write_proto_ini,
+                          PROTO_COLOR,
                           add_topo_args)
 
 HERE = str(MYRIAD_DIR)
 OUT = os.path.join(HERE, "eval", "costdrift")
 
-# One refresh cycle: GP converges to the ideal cost within the first flood.
+# One refresh cycle: PV converges to the ideal cost within the first flood.
 SIMTIME = simtime(cycles=1)
 SNAPSHOT = "30s"
 
 
 def parse_snapshots(path):
     """Timestamped dump -> {t(float): {(node, 'origin=r'): (cost, length, spof)}}.
-    length = GP's `len` (chain ring count) or the oracle's `hops` (min-cost path
+    length = PV's `len` (chain ring count) or the oracle's `hops` (min-cost path
     ring count) — the same quantity from either side. spof = single-router ring
-    transitions on the chain (GP only; absent in the oracle dump -> 0)."""
+    transitions on the chain (PV only; absent in the oracle dump -> 0)."""
     snaps = {}
     for line in open(path):
         line = line.strip()
@@ -80,15 +81,15 @@ def main(args=None):
                                 getattr(args, 'max_ring_size', 0),
                                 not getattr(args, 'no_echo_rings', False))
     want_nospof = getattr(args, "nospof", False)
-    gp_extra = (["**.refreshFloodsUpdate = false"]
+    pv_extra = (["**.refreshFloodsUpdate = false"]
                 if getattr(args, "no_refresh_flood", False) else None)
-    gp_ini = write_proto_ini(os.path.join(OUT, "gp.ini"), "gp", args.topo, labels,
-                             extra_lines=gp_extra,
+    pv_ini = write_proto_ini(os.path.join(OUT, "pv.ini"), "pv", args.topo, labels,
+                             extra_lines=pv_extra,
                              update_jitter=args.update_jitter)
     ls_ini = write_proto_ini(os.path.join(OUT, "ls.ini"), "ls", args.topo, labels)
     announce("costdrift", opts=overrides(sim_time_limit=SIMTIME))
 
-    # One repeat = the LS+GP pair on the same seed (the drift is a per-run
+    # One repeat = the LS+PV pair on the same seed (the drift is a per-run
     # comparison, so both sides must come from the same repeat). Rep 0's raw
     # drift is kept for the plots — the per-route dicts aren't averagable.
     raw = {}
@@ -101,45 +102,45 @@ def main(args=None):
                       os.path.join(OUT, "res_ls"), rep)
         if rep == 0:
             print(f"  ✓ LS done ({len(oracle)} entries)")
-            print("  → GP production (rankUseSpof=true) …", flush=True)
-        gp = _run(gp_ini, "ribDumpFile",
+            print("  → PV production (rankUseSpof=true) …", flush=True)
+        pv = _run(pv_ini, "ribDumpFile",
                   os.path.join(OUT, "drift_gp.txt"),
                   os.path.join(OUT, "res_gp"), rep)
         if rep == 0:
-            print(f"  ✓ GP done ({len(gp)} entries)")
+            print(f"  ✓ PV done ({len(pv)} entries)")
             if want_nospof:
-                print("  → GP no-spof (rankUseSpof=false) …", flush=True)
+                print("  → PV no-spof (rankUseSpof=false) …", flush=True)
         # Pure-cost ranking at production margin 0.2: with the selectPreferred
         # spof-first bug fixed, cost-only ranking lands on the oracle optimum, so
         # its scatter cloud sits on y=x and isolates the spof premium from any real
-        # GP suboptimality.
-        nospof = _run(gp_ini, "ribDumpFile",
+        # PV suboptimality.
+        nospof = _run(pv_ini, "ribDumpFile",
                       os.path.join(OUT, "drift_gp_nospof.txt"),
                       os.path.join(OUT, "res_gp_nospof"), rep,
                       extra=["--**.rankUseSpof=false",
                              "--**.ecmpCostMargin=0.2"]) if want_nospof else {}
         if rep == 0 and want_nospof:
-            print(f"  ✓ GP no-spof done ({len(nospof)} entries)")
+            print(f"  ✓ PV no-spof done ({len(nospof)} entries)")
 
-        # --- compute drift (cost and chain length, both GP − oracle) ---
-        common = [k for k in oracle if k in gp]
-        cost_drift = {k: gp[k][0] - oracle[k][0] for k in common}
-        len_drift = {k: gp[k][1] - oracle[k][1] for k in common}
-        missing = [k for k in oracle if k not in gp]
+        # --- compute drift (cost and chain length, both PV − oracle) ---
+        common = [k for k in oracle if k in pv]
+        cost_drift = {k: pv[k][0] - oracle[k][0] for k in common}
+        len_drift = {k: pv[k][1] - oracle[k][1] for k in common}
+        missing = [k for k in oracle if k not in pv]
         negative = {k: v for k, v in cost_drift.items() if v < 0}
         cvals, lvals = list(cost_drift.values()), list(len_drift.values())
         ns_common = [k for k in oracle if k in nospof]
         ns_drift = {k: nospof[k][0] - oracle[k][0] for k in ns_common}
         nsvals = list(ns_drift.values())
         if rep == 0:
-            raw.update(oracle=oracle, gp=gp, common=common, cost=cost_drift,
+            raw.update(oracle=oracle, pv=pv, common=common, cost=cost_drift,
                        length=len_drift, negative=negative,
                        nospof=nospof, ns_common=ns_common)
         # Chains crossing a single-router ring transition: 0 on a 2-connected
         # topology (grid), non-zero means the RIB had no redundant alternative.
-        spofs = [gp[k][2] for k in common]
+        spofs = [pv[k][2] for k in common]
         return {
-            "n_oracle": len(oracle), "n_gp": len(gp),
+            "n_oracle": len(oracle), "n_pv": len(pv),
             "missing": len(missing), "negative": len(negative),
             "spof_chains": sum(1 for s in spofs if s),
             "spof_frac": (sum(1 for s in spofs if s) / len(spofs) * 100) if spofs else 0.0,
@@ -152,13 +153,13 @@ def main(args=None):
         }
 
     r = repeat_mean(one)
-    oracle, gp, common = raw["oracle"], raw["gp"], raw["common"]
+    oracle, pv, common = raw["oracle"], raw["pv"], raw["common"]
     cost_drift, len_drift, negative = raw["cost"], raw["length"], raw["negative"]
 
-    print(f"\n=== Cost-drift: GP(production) − oracle{repeats_note()} ===")
+    print(f"\n=== Cost-drift: PV(production) − oracle{repeats_note()} ===")
     print(f"  routes in oracle : {r['n_oracle']:.0f}{pm(r['n_oracle'], '.1f')}")
-    print(f"  routes in GP     : {r['n_gp']:.0f}{pm(r['n_gp'], '.1f')}")
-    print(f"  missing in GP    : {r['missing']:.1f}" + (" (BUG)" if r["missing"] else ""))
+    print(f"  routes in PV     : {r['n_pv']:.0f}{pm(r['n_pv'], '.1f')}")
+    print(f"  missing in PV    : {r['missing']:.1f}" + (" (BUG)" if r["missing"] else ""))
     print(f"  negative drift   : {r['negative']:.1f}" + (" (BUG)" if r["negative"] else ""))
     if r["cost"]:
         lo, mean, hi = r["cost"]
@@ -192,16 +193,17 @@ def main(args=None):
     mean_len = [sum(by_cost[c]) / len(by_cost[c]) for c in cxs]
 
     fig, ax = plt.subplots()
-    ax.bar([p - 0.2 for p in pos], cxs, width=0.4, color="C0",
+    ax.bar([p - 0.2 for p in pos], cxs, width=0.4, color=PROTO_COLOR["pv"],
            label="cost drift (Σ members²)")
-    ax.bar([p + 0.2 for p in pos], mean_len, width=0.4, color="C1",
+    ax.bar([p + 0.2 for p in pos], mean_len, width=0.4,
+           color=PROTO_COLOR["pv"], alpha=0.5,
            label="mean chain-length drift (hops)")
     for p, n in zip(pos, counts):
         ax.text(p, 0, f"n={n}", ha="center", va="bottom", fontsize=6, rotation=90)
     ax.set_xticks(pos)
     ax.set_xticklabels([str(c) for c in cxs], rotation=45, ha="right", fontsize=7)
-    ax.set(xlabel="cost-drift bucket  GP − oracle", ylabel="drift (GP − oracle)",
-           title=title("Cost vs length drift: GP production vs oracle"))
+    ax.set(xlabel="cost-drift bucket  PV − oracle", ylabel="drift (PV − oracle)",
+           title=title("Cost vs length drift: Path-Vector vs oracle"))
     ax.legend(fontsize=8)
     if negative:
         ax.text(0.02, 0.95, f"BUG: {len(negative)} negative cost drift",
@@ -211,18 +213,20 @@ def main(args=None):
 
     nospof, ns_common = raw["nospof"], raw["ns_common"]
     ox = [oracle[k][0] for k in common]
-    gy = [gp[k][0] for k in common]
+    gy = [pv[k][0] for k in common]
     nx_ = [oracle[k][0] for k in ns_common]
     ny = [nospof[k][0] for k in ns_common]
     lo, hi = min(ox + gy + ny), max(ox + gy + ny)
 
     fig, ax = plt.subplots()
-    ax.scatter(ox, gy, s=4, alpha=0.4, color="C0", label="GP production (spof-first)")
+    ax.scatter(ox, gy, s=4, alpha=0.4, color=PROTO_COLOR["pv"],
+               label="Path-Vector (PV), spof-first")
     if ns_common:
-        ax.scatter(nx_, ny, s=4, alpha=0.4, color="C1", label="GP rankUseSpof=false")
+        ax.scatter(nx_, ny, s=4, alpha=0.4, color=PROTO_COLOR["pv_nospof"],
+                   label="Path-Vector (spof-blind)")
     ax.plot([lo, hi], [lo, hi], "k--", lw=0.8, label="y = x  (optimal)")
-    ax.set(xlabel="oracle cost (Dijkstra)", ylabel="GP cost",
-           title=title("GP vs oracle path cost"))
+    ax.set(xlabel="oracle cost (Dijkstra)", ylabel="Path-Vector (PV) cost",
+           title=title("Path-Vector vs oracle path cost"))
     ax.legend(fontsize=8)
     fig.tight_layout()
     fig.savefig(os.path.join(OUT, "scatter.png"), dpi=120)
