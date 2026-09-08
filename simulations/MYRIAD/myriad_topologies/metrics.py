@@ -112,7 +112,13 @@ def cover_rings(g, cap=10, basis="tree"):
     cheap) or minimum_cycle_basis ("min", small/slow). Rings larger than `cap`
     are dropped (cap=0 keeps all); their edges fall back to echo rings in
     rings_to_membership. cycle_basis yields walkable simple cycles."""
-    cycles = nx.minimum_cycle_basis(g) if basis == "min" else nx.cycle_basis(g)
+    # A cycle never runs through a degree-1 node, so the 2-core has the same
+    # cycle space. minimum_cycle_basis is superlinear in |V|*|E|, and real grids
+    # are mostly tree (German_HV: 2312 nodes -> 981 in the core), so pruning
+    # first is the difference between minutes and hours. Pruned edges come back
+    # as echo rings in rings_to_membership.
+    core = nx.k_core(g, 2) if basis == "min" else g
+    cycles = nx.minimum_cycle_basis(core) if basis == "min" else nx.cycle_basis(g)
     return [c for c in cycles if not cap or len(c) <= cap]
 
 
