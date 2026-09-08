@@ -8,6 +8,10 @@ namespace routingsim {
 
 Define_Module(MyriadLS);
 
+std::unordered_map<LsaPoolKey, std::weak_ptr<const LsaHeader>,
+                   LsaPoolKeyHash> MyriadLS::lsaPool;
+size_t MyriadLS::lsaPoolPruneAt = 1024;
+
 namespace {
 using namespace msgsize;
 
@@ -22,6 +26,41 @@ int64_t lsaBytes(const LsaHeader* h) {
             b += (int64_t) check_and_cast<const RingsLsa*>(h)->getRingsArraySize() * U32; break;
     }
     return b;
+}
+// Same row, same content? (origin, type, seq) is normally enough to answer yes,
+// but a rebooted node restarts its sequence at 1 and may say something different
+// there than it did before, so the pool verifies rather than assumes.
+bool sameLsa(const LsaHeader& a, const LsaHeader& b) {
+    if (a.getType() != b.getType() || a.getSeq_no() != b.getSeq_no()
+            || a.getLsa_origin() != b.getLsa_origin())
+        return false;
+    switch (a.getType()) {
+        case LSA_ADJACENCIES: {
+            auto &x = *check_and_cast<const AdjacenciesLsa*>(&a);
+            auto &y = *check_and_cast<const AdjacenciesLsa*>(&b);
+            if (x.getAdjacenciesArraySize() != y.getAdjacenciesArraySize()) return false;
+            for (size_t i = 0; i < x.getAdjacenciesArraySize(); ++i)
+                if (!(x.getAdjacencies(i) == y.getAdjacencies(i))) return false;
+            return true;
+        }
+        case LSA_SUBNETS: {
+            auto &x = *check_and_cast<const SubnetsLsa*>(&a);
+            auto &y = *check_and_cast<const SubnetsLsa*>(&b);
+            if (x.getSubnetsArraySize() != y.getSubnetsArraySize()) return false;
+            for (size_t i = 0; i < x.getSubnetsArraySize(); ++i)
+                if (x.getSubnets(i) != y.getSubnets(i)) return false;
+            return true;
+        }
+        case LSA_RINGS: {
+            auto &x = *check_and_cast<const RingsLsa*>(&a);
+            auto &y = *check_and_cast<const RingsLsa*>(&b);
+            if (x.getRingsArraySize() != y.getRingsArraySize()) return false;
+            for (size_t i = 0; i < x.getRingsArraySize(); ++i)
+                if (x.getRings(i) != y.getRings(i)) return false;
+            return true;
+        }
+    }
+    return false;
 }
 int64_t lsuBytes(const MyriadLSU* p) {
     int64_t b = MYRIADLS_HDR;
@@ -142,6 +181,26 @@ void MyriadLS::reset() {
 }
 
 
+LsaPtr MyriadLS::intern(const LsaHeader& h) {
+    LsaPoolKey k{h.getLsa_origin(), h.getType(), h.getSeq_no()};
+    auto& slot = lsaPool[k];
+    if (auto sp = slot.lock())
+        if (sameLsa(*sp, h)) return sp;      // hit: every holder shares this row
+
+    LsaPtr sp(check_and_cast<LsaHeader*>(h.dup()));
+    slot = sp;
+
+    // ponytail: entries whose last holder is gone linger; sweep when the table
+    // has doubled, which bounds it at ~2x live. A generation counter per row
+    // would be exact, if the sweep ever shows up in a profile.
+    if (lsaPool.size() > lsaPoolPruneAt) {
+        for (auto it = lsaPool.begin(); it != lsaPool.end(); )
+            it = it->second.expired() ? lsaPool.erase(it) : std::next(it);
+        lsaPoolPruneAt = 2 * lsaPool.size() + 1024;
+    }
+    return sp;
+}
+
 void MyriadLS::buildSelfRingsLsa(uint16_t seq) {
     auto lsa = std::make_unique<RingsLsa>();
     lsa->setSeq_no(seq);
@@ -149,7 +208,7 @@ void MyriadLS::buildSelfRingsLsa(uint16_t seq) {
     lsa->setRingsArraySize(selfRings.size());
     for (size_t i = 0; i < selfRings.size(); ++i) lsa->setRings(i, selfRings[i]);
 
-    lsdb[LsaKey{myId, LSA_RINGS}] = std::move(lsa);
+    lsdb[LsaKey{myId, LSA_RINGS}] = intern(*lsa);
 }
 
 void MyriadLS::buildSelfSubnetsLsa(uint16_t seq) {
@@ -161,7 +220,7 @@ void MyriadLS::buildSelfSubnetsLsa(uint16_t seq) {
     lsa->setSubnets(0, (static_cast<uint32_t>(myId) << 8) | 0x01);
     lsa->setSubnets(1, (static_cast<uint32_t>(myId) << 8) | 0x02);
 
-    lsdb[LsaKey{myId, LSA_SUBNETS}] = std::move(lsa);
+    lsdb[LsaKey{myId, LSA_SUBNETS}] = intern(*lsa);
 }
 
 void MyriadLS::buildSelfAdjacenciesLsa(uint16_t seq) {
@@ -176,7 +235,7 @@ void MyriadLS::buildSelfAdjacenciesLsa(uint16_t seq) {
     lsa->setAdjacenciesArraySize(adj.size());
     for (size_t i = 0; i < adj.size(); ++i) lsa->setAdjacencies(i, adj[i]);
 
-    lsdb[LsaKey{myId, LSA_ADJACENCIES}] = std::move(lsa);
+    lsdb[LsaKey{myId, LSA_ADJACENCIES}] = intern(*lsa);
 }
 
 void MyriadLS::installSelfLsas() {
@@ -265,7 +324,7 @@ void MyriadLS::logLsdb() {
                     << " age=" << lsa->getAge();
         switch (lsa->getType()) {
             case LSA_RINGS: {
-                auto* r = check_and_cast<RingsLsa*>(lsa.get());
+                auto* r = check_and_cast<const RingsLsa*>(lsa.get());
                 EV << " rings=[";
                 for (size_t i = 0; i < r->getRingsArraySize(); ++i)
                     EV << (i ? "," : "") << (char)r->getRings(i);
@@ -273,7 +332,7 @@ void MyriadLS::logLsdb() {
                 break;
             }
             case LSA_SUBNETS: {
-                auto* s = check_and_cast<SubnetsLsa*>(lsa.get());
+                auto* s = check_and_cast<const SubnetsLsa*>(lsa.get());
                 EV << " subnets=[";
                 for (size_t i = 0; i < s->getSubnetsArraySize(); ++i)
                     EV << (i ? "," : "") << s->getSubnets(i);
@@ -281,7 +340,7 @@ void MyriadLS::logLsdb() {
                 break;
             }
             case LSA_ADJACENCIES: {
-                auto* a = check_and_cast<AdjacenciesLsa*>(lsa.get());
+                auto* a = check_and_cast<const AdjacenciesLsa*>(lsa.get());
                 EV << " adjacencies=[";
                 for (size_t i = 0; i < a->getAdjacenciesArraySize(); ++i)
                     EV << (i ? "," : "") << (int)a->getAdjacencies(i);
@@ -402,7 +461,7 @@ void MyriadLS::handleLSU(MyriadLSU* lsu, nodeid_t from) {
         } else {
             auto it = lsdb.find(key);
             if (it == lsdb.end() || it->second->getSeq_no() < h->getSeq_no()) {
-                lsdb[key] = std::unique_ptr<LsaHeader>(check_and_cast<LsaHeader*>(h->dup()));
+                lsdb[key] = intern(*h);
                 installed = true;
                 MLOG_N_DEBUG(from) << "installed LSA " << (int)key.origin
                                    << "/" << key.type << " seq=" << h->getSeq_no() << "\n";
@@ -539,7 +598,7 @@ void MyriadLS::dumpOracleTo(const std::string& path, const std::string& tprefix,
     std::map<ringspf::NodeId, std::vector<ringspf::RingId>> perNodeRings;
     for (const auto& [key, lsa] : lsdb) {
         if (key.type != LSA_RINGS) continue;
-        auto* r = check_and_cast<RingsLsa*>(lsa.get());
+        auto* r = check_and_cast<const RingsLsa*>(lsa.get());
         auto& rs = perNodeRings[(ringspf::NodeId)key.origin];
         for (size_t i = 0; i < r->getRingsArraySize(); ++i)
             rs.push_back(r->getRings(i));
@@ -562,7 +621,7 @@ void MyriadLS::dumpOracleTo(const std::string& path, const std::string& tprefix,
     std::map<nodeid_t, std::vector<nodeid_t>> adj;
     for (const auto& [key, lsa] : lsdb) {
         if (key.type != LSA_ADJACENCIES) continue;
-        auto* a = check_and_cast<AdjacenciesLsa*>(lsa.get());
+        auto* a = check_and_cast<const AdjacenciesLsa*>(lsa.get());
         auto& v = adj[key.origin];
         for (size_t i = 0; i < a->getAdjacenciesArraySize(); ++i)
             v.push_back(a->getAdjacencies(i));

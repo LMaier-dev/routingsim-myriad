@@ -23,7 +23,35 @@ namespace routingsim {
         }
     };
 
-    using Lsdb = std::unordered_map<LsaKey, std::unique_ptr<LsaHeader>, LsaKeyHash>;
+    // An LSA's content is fixed by (origin, type, seq) -- an origin only changes
+    // what it says by bumping the seq -- so every router's copy of the same row
+    // is byte-identical. Storing one object and sharing it turns the LSDB from
+    // O(nodes * origins) allocations into O(origins): at n=10000 that was 3e8
+    // cObjects (44GB) for 3e4 distinct LSAs. The database each router sees is
+    // unchanged; only the simulator stops duplicating it.
+    //
+    // Const because sharing makes an installed LSA everyone's. Nothing mutates
+    // one today (setters run only in buildSelf*Lsa, on a fresh object), and the
+    // send paths dup() out of the LSDB before an LSU adopts the pointer.
+    using LsaPtr = std::shared_ptr<const LsaHeader>;
+    using Lsdb = std::unordered_map<LsaKey, LsaPtr, LsaKeyHash>;
+
+    struct LsaPoolKey {
+        nodeid_t origin;
+        MyriadLSAType type;
+        uint16_t seq;
+        bool operator==(const LsaPoolKey& o) const {
+            return origin == o.origin && type == o.type && seq == o.seq;
+        }
+    };
+
+    struct LsaPoolKeyHash {
+        size_t operator()(const LsaPoolKey& k) const noexcept {
+            return std::hash<nodeid_t>()(k.origin)
+                 ^ (static_cast<size_t>(k.type) << 16)
+                 ^ (static_cast<size_t>(k.seq) << 24);
+        }
+    };
 
     // id/state/deadTimer/rings are inherited from HelloNeighbor.
     struct NeighborEntry : HelloNeighbor {
@@ -103,6 +131,13 @@ namespace routingsim {
             simtime_t snapshotInterval;      // periodic oracle snapshot; 0 = off
             TimerMsg* snapshotTimer = nullptr;
             bool snapshotStats = false;      // periodic snapshot as aggregate stats, not full
+
+            // The shared copy of `h`, creating it if this is the first router to
+            // install that row. Weak, so a row dies with the last LSDB holding it.
+            static LsaPtr intern(const LsaHeader& h);
+            static std::unordered_map<LsaPoolKey, std::weak_ptr<const LsaHeader>,
+                                      LsaPoolKeyHash> lsaPool;
+            static size_t lsaPoolPruneAt;
 
             void buildSelfRingsLsa(uint16_t seq);
             void buildSelfSubnetsLsa(uint16_t seq);
