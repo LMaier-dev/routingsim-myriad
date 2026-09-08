@@ -101,6 +101,8 @@ namespace routingsim {
             void originateSelfLsa(MyriadLSAType type, uint16_t minSeq = 0);
             void doOriginateSelfLsa(MyriadLSAType type, uint16_t minSeq);
             void logLsdb();
+            // Bytes of LSDB state one router holds; see the definition.
+            uint64_t lsdbBytes() const;
             void buildPendingDbd(NeighborEntry& nbr);
             void logDbd(const MyriadDBD* dbd, nodeid_t from);
             void sendDBD(nodeid_t to, bool init, bool master, uint16_t seq_no);

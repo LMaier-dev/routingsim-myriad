@@ -71,7 +71,10 @@ XNAME = {"rl": "length", "len": "length", "A": "#rings", "fan": "fan",
          "tr": "transitions (ring pairs)"}
 
 SENT_TOTAL_RE = re.compile(r"^scalar\s+\S+\s+sent_total\s+([0-9.]+)", re.M)
-BYTES_RE = re.compile(r"^scalar\s+\S+\s+bytes_(\S+)\s+([0-9.]+)", re.M)
+# bytes_total only. The old `bytes_(\S+)` also matched the per-type bytes_<type>
+# (which bytes_total already sums) and the bytes_max_<type> largest-PDU gauges,
+# so every byte figure came out roughly doubled.
+BYTES_RE = re.compile(r"^scalar\s+\S+\s+bytes_total\s+([0-9.]+)", re.M)
 
 
 def _sum_scalar(scas, name):
@@ -265,9 +268,34 @@ def byte_count(proto, ini_path, tag="", rep=0):
     Reads the .sca message_count already produced — no second run."""
     res = rep_path(
         os.path.join(INI_DIR, f"res_{proto}{tag}_{os.path.basename(ini_path)}"), rep)
-    return sum(int(float(m.group(2)))
+    return sum(int(float(m.group(1)))
                for sca in glob.glob(os.path.join(res, "*.sca"))
                for m in BYTES_RE.finditer(open(sca).read()))
+
+
+def _mean_scalar(scas, name):
+    """Mean of a named per-node scalar across all .sca files (0 if absent)."""
+    vals = [float(m.group(1))
+            for sca in scas
+            for m in re.finditer(rf"^scalar\s+\S+\s+{re.escape(name)}\s+([0-9.]+)",
+                                 open(sca).read(), re.M)]
+    return (sum(vals) / len(vals)) if vals else 0.0
+
+
+def state_stats(proto, ini_path, tag="", rep=0):
+    """(mean state_bytes per router, max link bytes, median link bytes) from the
+    already-written .sca. state_bytes is what ONE router holds, so the mean is
+    the per-router figure and mean*n the network total.
+
+    Link bytes are per link, and the max is taken over every link in the run --
+    the hotspot, which a per-node total cannot show. The median comes along
+    because the max alone can't distinguish a hot network from one hot link."""
+    res = rep_path(
+        os.path.join(INI_DIR, f"res_{proto}{tag}_{os.path.basename(ini_path)}"), rep)
+    scas = glob.glob(os.path.join(res, "*.sca"))
+    return (_mean_scalar(scas, "state_bytes"),
+            _max_scalar(scas, "linkbytes_max"),
+            _mean_scalar(scas, "linkbytes_med"))
 
 
 def batch_stats(ini_path, tag="", rep=0):
@@ -314,6 +342,8 @@ def measure(topo, nobatch=False, conv=False):
         r["ls_b"] = byte_count("ls", ls_ini, rep=rep)
         r["gp_b"] = byte_count("gp", gp_ini, rep=rep)
         r["nb"], r["avg_sz"], r["max_sz"] = batch_stats(gp_ini, rep=rep)
+        r["ls_s"], r["ls_lmax"], r["ls_lmed"] = state_stats("ls", ls_ini, rep=rep)
+        r["gp_s"], r["gp_lmax"], r["gp_lmed"] = state_stats("gp", gp_ini, rep=rep)
         if conv:
             r["ls_ct"] = (convergence_time(parse_stats(ls_dump))
                           if os.path.exists(ls_dump) else None)
@@ -355,7 +385,9 @@ def sweep(items, nobatch=False, conv=False):
 
     With --jobs>1 the topologies run concurrently (each writes its own ini and
     result dir, so they don't collide); results still print in sweep order."""
-    out = {k: [] for k in ("labels", "ls", "gp", "ls_b", "gp_b", "avg_sz", "max_sz")}
+    out = {k: [] for k in ("labels", "ls", "gp", "ls_b", "gp_b", "avg_sz", "max_sz",
+                           "ls_s", "gp_s", "ls_lmax", "gp_lmax",
+                           "ls_lmed", "gp_lmed")}
     if conv:
         out["ls_ct"] = []
         out["gp_ct"] = []
@@ -386,6 +418,8 @@ def sweep(items, nobatch=False, conv=False):
         out["gp_b"].append(r["gp_b"])
         out["avg_sz"].append(r["avg_sz"])
         out["max_sz"].append(r["max_sz"])
+        for k in ("ls_s", "gp_s", "ls_lmax", "gp_lmax", "ls_lmed", "gp_lmed"):
+            out[k].append(r[k])
         mode = "no-batch" if nobatch else "batched"
         ct_str = ""
         if conv:
@@ -404,6 +438,10 @@ def sweep(items, nobatch=False, conv=False):
               f"GP({mode})={_n(r['gp'])}/{r['gp_b']/1e6:.2f}MB  "
               f"batches={r['nb']:.0f} avg_sz={r['avg_sz']:.1f} "
               f"max_sz={r['max_sz']:.0f}{ct_str}")
+        print(f"  {'':<14}{'':<{len(seeds)}} state/router LS={r['ls_s']/1e3:.1f}kB "
+              f"GP={r['gp_s']/1e3:.1f}kB   link max/med LS="
+              f"{r['ls_lmax']/1e3:.0f}/{r['ls_lmed']/1e3:.0f}kB GP="
+              f"{r['gp_lmax']/1e3:.0f}/{r['gp_lmed']/1e3:.0f}kB")
     return out
 
 
@@ -452,7 +490,8 @@ def plot(res, title, xlabel, outfile, nobatch=False, batch_panel=True,
     if xs is None:
         xs = list(range(len(labels)))
     has_conv = "ls_ct" in res and any(v is not None for v in res["ls_ct"])
-    ncols = 1 + bool(batch_panel) + bool(has_conv)
+    has_state = "ls_s" in res and any(res["ls_s"])
+    ncols = 1 + bool(batch_panel) + bool(has_conv) + 2 * bool(has_state)
     fig, axes = plt.subplots(1, ncols, figsize=(7.5 * ncols, 6), squeeze=False)
     axes = list(axes[0])
     axL = axes.pop(0)
@@ -553,6 +592,44 @@ def plot(res, title, xlabel, outfile, nobatch=False, batch_panel=True,
         axC.set_xlabel(xlabel); axC.set_ylabel("convergence time (s)")
         axC.set_title("Convergence time vs network size")
         axC.legend(); axC.grid(True, alpha=0.3)
+
+    if has_state:
+        # Memory. LS holds ~one LSA per origin regardless of the ring plan, so at
+        # fixed n it is a flat, high floor; GP holds chains per origin RING, so it
+        # starts far below and climbs with the ring count. The crossing is the
+        # result -- neither protocol dominates, and this says where the boundary is.
+        axS = axes.pop(0)
+        kb = lambda ser: [v / 1e3 for v in ser]
+        axS.errorbar(xs, kb(res["ls_s"]), yerr=_sd(res["ls_s"]), fmt=fmt("o"),
+                     capsize=3, ms=ms, color="tab:blue",
+                     label="LS (LSDB)" + fit(axS, kb(res["ls_s"]), "tab:blue"))
+        axS.errorbar(xs, kb(res["gp_s"]), yerr=_sd(res["gp_s"]), fmt=fmt("s"),
+                     capsize=3, ms=ms, color="tab:red",
+                     label="GP (RIB)" + fit(axS, kb(res["gp_s"]), "tab:red"))
+        ticks(axS)
+        axS.set_xlabel(xlabel); axS.set_ylabel("routing state per router (kB)")
+        axS.set_title("Per-router control-plane state")
+        axS.legend(fontsize=8); axS.grid(True, alpha=0.3)
+
+        # Hotspotting. Bytes are per LINK: a node on many rings relays between
+        # k(k-1) ring pairs, which is exactly the per-node term in `fan`, so GP's
+        # busiest link should climb with the axis while LS floods per edge and
+        # stays flat. The max-vs-median GAP is the hotspot; the max alone cannot
+        # tell a uniformly busy network from one overloaded link.
+        axH = axes.pop(0)
+        for key, med, c, mk, lab in (("ls_lmax", "ls_lmed", "tab:blue", "o", "LS"),
+                                     ("gp_lmax", "gp_lmed", "tab:red", "s", "GP")):
+            axH.errorbar(xs, kb(res[key]), yerr=_sd(res[key]), fmt=fmt(mk),
+                         capsize=3, ms=ms, color=c,
+                         label=f"{lab} busiest link" + fit(axH, kb(res[key]), c))
+            axH.errorbar(xs, kb(res[med]), yerr=_sd(res[med]), fmt=fmt(mk),
+                         ls="" if regress else "--", capsize=3, ms=ms, color=c,
+                         alpha=0.45,
+                         label=f"{lab} median link" + fit(axH, kb(res[med]), c, "--"))
+        ticks(axH)
+        axH.set_xlabel(xlabel); axH.set_ylabel("bytes on one link (kB)")
+        axH.set_title("Link load: busiest vs median")
+        axH.legend(fontsize=8); axH.grid(True, alpha=0.3)
 
     fig.tight_layout()
     fig.savefig(outfile, dpi=110)
@@ -725,9 +802,9 @@ def main(args=None):
                              "so the ring count -- which is inverse to length at "
                              "fixed n -- grows left to right")
         ap.add_argument("--no-batch-panel", action="store_true",
-                        help="drop the inter-ring batch-size panel, leaving just "
-                             "the message/byte counts (and convergence, with -c). "
-                             "Not --nobatch, which turns GP's batching OFF")
+                        help="accepted for compatibility and now the only "
+                             "behaviour: dir sweeps never draw the batch-size "
+                             "panel. Not --nobatch, which turns GP's batching OFF")
         ap.add_argument("--single", metavar="TOPO",
                         help="run GP+LS on ONE topology .txt and print counts (no "
                              "sweep, no plot). Path relative to simulations/topologies "
@@ -814,7 +891,10 @@ def main(args=None):
         plot(sweep(items, args.nobatch, args.convergence),
              f"GP vs LS: {name}", XNAME.get(args.x_key, args.x_key),
              os.path.join(PLOT_DIR, f"dir_{name}_{args.x_key}.png"), args.nobatch,
-             batch_panel=not args.no_batch_panel,
+             # Batch size is a property of the UPDATE encoding, not of the swept
+             # knob; on a dir sweep the panel competes for width with the state
+             # and link-load ones, which is what this axis is actually about.
+             batch_panel=False,
              xs=xs, invert=args.x_key in ("rl", "len"), regress=True, rings=rings)
         return
 

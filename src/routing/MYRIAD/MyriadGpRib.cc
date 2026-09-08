@@ -1,5 +1,6 @@
 #include "routing/MYRIAD/MyriadGpRib.h"
 #include "routing/MYRIAD/MyriadHelper.h"
+#include "routing/MYRIAD/MyriadPduSize.h"
 #include <algorithm>
 #include <limits>
 #include <ostream>
@@ -295,6 +296,28 @@ size_t MyriadGpRib::knownOrigins() const {
     size_t n = 0;
     for (auto& [origin, rs] : rings) if (rs.hasPreferred) ++n;
     return n;
+}
+
+uint64_t MyriadGpRib::stateBytes() const {
+    // A chain is the path vector itself; the rest of RibEntry is its scalars.
+    auto entry = [](const RibEntry& e) {
+        return e.chain.size() * msgsize::U32     // chain
+             + msgsize::U64                      // chain_cost
+             + 2 * msgsize::U32;                 // seq_no + spof_count
+    };
+    uint64_t b = 0;
+    for (const auto& [origin, r] : rings) {
+        b += 2 * msgsize::U32;                   // origin ring key + curSeq
+        b += r.rr.size() * msgsize::RR;
+        for (const auto& frame : r.frames)
+            for (const auto& e : frame) b += entry(e);
+        for (const auto& [front, e] : r.soleFront) b += msgsize::U32 + entry(e);
+        if (r.hasPreferred) b += entry(r.preferred);
+    }
+    // degrades is per culprit ring, bounded by the ring count and tiny next to
+    // the chains; counted for completeness rather than because it moves the number.
+    b += degrades.size() * 3 * msgsize::U32;
+    return b;
 }
 
 MyriadGpRib::ReplayQuality MyriadGpRib::replayQuality() const {

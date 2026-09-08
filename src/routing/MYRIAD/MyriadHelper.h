@@ -3,6 +3,7 @@
 
 #include "foundation.h"
 #include "routing/KIRA/TimerMsg.h"
+#include <algorithm>
 #include <cstring>
 #include <sstream>
 #include <string>
@@ -94,8 +95,20 @@ class MyriadHelper : public Protocol {
             for (auto& [type, b] : sentBytes)
                 recordScalar(("bytes_" + type).c_str(), b);
             unsigned long long totalBytes = 0;
-            for (auto& [nbr, st] : node().getLinkUsageMap()) totalBytes += st.bytecount;
+            std::vector<unsigned long long> perLink;
+            for (auto& [nbr, st] : node().getLinkUsageMap()) {
+                totalBytes += st.bytecount;
+                perLink.push_back(st.bytecount);
+            }
             recordScalar("bytes_total", totalBytes);
+            // Per LINK, not per node
+            if (!perLink.empty()) {
+                auto mid = perLink.begin() + perLink.size() / 2;
+                std::nth_element(perLink.begin(), mid, perLink.end());
+                recordScalar("linkbytes_med", (double) *mid);
+                recordScalar("linkbytes_max",
+                             (double) *std::max_element(perLink.begin(), perLink.end()));
+            }
             // Largest single PDU observed, per type and overall.
             for (auto& [type, b] : sentMaxBytes)
                 recordScalar(("bytes_max_" + type).c_str(), b);

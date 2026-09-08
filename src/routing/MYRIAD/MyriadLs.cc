@@ -655,11 +655,36 @@ void MyriadLS::startSnapshot() {
 void MyriadLS::finish() {
     logLsdb();
     recordSendScalars();
+    recordScalar("state_bytes", (double) lsdbBytes());
 
     // Optimality oracle (see RingSpfOracle)
     std::string oracleFile = par("oracleDumpFile").stdstringValue();
     if (!oracleFile.empty())
         dumpOracleTo(oracleFile, snapshotInterval > 0 ? "t=" + simTime().str() + " " : "", false);
+}
+
+// Protocol state THIS router holds, at the wire field widths of MyriadPduSize.h
+// so it is commensurable with bytes_total and with GP's state_bytes.
+uint64_t MyriadLS::lsdbBytes() const {
+    uint64_t b = 0;
+    for (const auto& [key, lsa] : lsdb) {
+        b += msgsize::LSA_HDR;
+        switch (lsa->getType()) {
+            case LSA_ADJACENCIES:
+                b += check_and_cast<const AdjacenciesLsa*>(lsa.get())
+                         ->getAdjacenciesArraySize() * msgsize::NODEID;
+                break;
+            case LSA_SUBNETS:
+                b += check_and_cast<const SubnetsLsa*>(lsa.get())
+                         ->getSubnetsArraySize() * msgsize::U32;
+                break;
+            case LSA_RINGS:
+                b += check_and_cast<const RingsLsa*>(lsa.get())
+                         ->getRingsArraySize() * msgsize::U32;
+                break;
+        }
+    }
+    return b;
 }
 
 void MyriadLS::handleDBD(MyriadDBD* dbd, nodeid_t from) {

@@ -115,5 +115,5 @@ if [[ $WHICH != grow ]]; then
     gen "full: share sweep at FIXED ring length, n=${TARGET_N}" \
         --family delaunay --rings $RINGS_BIG --width-max 6 --max-meet 12 \
         --sweep-share 0 0.49 0.65 0.74 0.84 0.915 0.875 0.952 --hold-len 16 \
-        --spof $SPOF --ring-size 8 --target-n $TARGET_ND
+        --spof $SPOF --ring-size 8 --target-n $TARGET_N
 fi

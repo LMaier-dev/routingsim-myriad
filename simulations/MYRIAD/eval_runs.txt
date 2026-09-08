@@ -72,7 +72,17 @@ SPLIT python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --topo
 SPLIT python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --topo ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/German_HV_net_core_n981.min.ring.txt --only churn --basis native --no-refresh-flood --nospof
 
 
-# RUN THIS SEPARATELY
+# ---------------------------------------------------------------------------
+# Memory and hotspotting vs fan-out, at FIXED n=1000 (ringpipe --sweep-share
+# with --hold-len, so ring length is pinned and only fan moves).
+#
+# spof0.25, not the 0.5 the rest of the corpus uses -- that is what is on disk.
+# generate_topos.sh pipe now builds a spof0.5 twin; switch the path if you want
+# it to match the grow families.
+python3 ~/routingsim/simulations/MYRIAD/eval_scaling.py --dir ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_shr1000_rl16_spof0.25 --x-key fan --jobs 4
+
+
+# RUN THIS SEPARATELY (peaks at around 75GB with 4 jobs)
 # Measured on tb23, tr1200/seed0, one sim at a time: LS 44.0GB / 27min,
 # GP 18.3GB / 3min. measure() runs ls then gp SEQUENTIALLY, so a job peaks at
 # max(), not the sum -- but that is still 44GB, and --jobs 4 asks for 176GB on a

@@ -102,6 +102,10 @@ namespace routingsim {
             // knows the network.
             size_t knownOrigins() const;
 
+            // Bytes of RIB state this router holds, at the wire field widths of
+            // MyriadPduSize.h so it is commensurable with MyriadLS::lsdbBytes().
+            uint64_t stateBytes() const;
+
             // How good my RIB is as a replay source: breadth plus the totals
             // over the per-origin preferred chains, so a lap can rank members
             // that know equally much by how well they know it.

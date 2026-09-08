@@ -83,9 +83,23 @@ def _pair_order(family, pts, rng, seed):
     return out
 
 
+def _graph_of(rings_l):
+    """The router graph a plan describes: every ring is a cycle over its nodes."""
+    g = nx.Graph()
+    for r in rings_l:
+        for j in range(len(r)):
+            g.add_edge(r[j], r[(j + 1) % len(r)])
+    return g
+
+
 def build(rings=150, seed=0, ring_size=8, tr=0, target_n=0, family="gabriel",
-          spof=0.0):
-    """A rings, `tr` transitions between them, padded to exactly target_n nodes."""
+          spof=0.0, stages=None):
+    """A rings, `tr` transitions between them, padded to exactly target_n nodes.
+
+    stages: optional dict, filled with the intermediate states (pts, pairs, and
+    the plan after each pass) for ringgrow_explain.py. Purely an observer -- the
+    build is identical whether it is passed or not, which is what stops the
+    picture from drifting away from the generator."""
     if tr < rings - 1:
         raise ValueError(f"--tr {tr} below {rings - 1}: fewer transitions than "
                          f"the ring graph needs to stay connected")
@@ -111,6 +125,12 @@ def build(rings=150, seed=0, ring_size=8, tr=0, target_n=0, family="gabriel",
         plan[r] = list(range(nxt, nxt + length[r]))
         nxt += length[r]
 
+    snap = ((lambda k: stages.__setitem__(k, [list(plan[r]) for r in range(rings)]))
+            if stages is not None else (lambda k: None))
+    if stages is not None:
+        stages.update(pts=pts, pairs=pairs)
+    snap("laid")            # A disjoint rings, all filler
+
     slot, made = dict.fromkeys(range(rings), 0), []
     for a, b in pairs:
         # a's next two (still filler, since slots only ever advance) move into
@@ -119,6 +139,8 @@ def build(rings=150, seed=0, ring_size=8, tr=0, target_n=0, family="gabriel",
         plan[b][j:j + 2] = plan[a][i:i + 2]
         slot[a], slot[b] = i + 2, j + 2
         made.append((b, j))
+
+    snap("merged")          # tr transitions made, each two nodes wide
 
     # A SPOF transition is one the two rings meet at a SINGLE node, so losing it
     # severs them. Narrow one by handing b back its own copy of the run's first
@@ -129,11 +151,10 @@ def build(rings=150, seed=0, ring_size=8, tr=0, target_n=0, family="gabriel",
         plan[b][j] = nxt
         nxt += 1
 
+    snap("narrowed")        # the --spof share squeezed to one shared node
+
     rings_l = [plan[r] for r in range(rings)]
-    g = nx.Graph()
-    for r in rings_l:
-        for j in range(len(r)):
-            g.add_edge(r[j], r[(j + 1) % len(r)])
+    g = _graph_of(rings_l)
     idx = {v: k for k, v in enumerate(sorted(g.nodes()))}
     h = nx.Graph()
     h.add_edges_from((idx[u], idx[v]) for u, v in g.edges())

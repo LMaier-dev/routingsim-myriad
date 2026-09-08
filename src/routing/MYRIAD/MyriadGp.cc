@@ -1385,6 +1385,7 @@ void MyriadGP::finish() {
     recordScalar("batch_entries_total", batchEntriesTotal);
     recordScalar("batch_max_entries", batchMaxEntries);
     recordScalar("batches_created", batchesCreated);
+    recordScalar("state_bytes", (double) rib.stateBytes());
 
     // Test hook (test_rib_batching.py). With periodic snapshots on, emit a final
     // t=<simTime> snapshot so the end state is captured
