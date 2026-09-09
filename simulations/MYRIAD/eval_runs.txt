@@ -41,12 +41,12 @@ python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py convergence --topo ~/
 # route counts over time, stretch vs LS
 SPLIT python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --topo ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow2500_A300_spof0.5@median --only churn --basis native --no-refresh-flood --nospof --noreplay
 
-SPLIT python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --topo ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow2500_A300_spof0.5@median --only node --basis native --no-refresh-flood --noreplay
+SPLIT python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --topo ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow2500_A300_spof0.5@median --only node --basis native --no-refresh-flood --noreplay --wave-spacing 50
 
 # overview: bytes and messages per phase (conv, churn, each wave fraction),
 # boxplotted over the tr extremes x --repeat failure schedules. No snapshots.
 # Every config runs in this one process, so no --post is needed.
-python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --overview --dir ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow2500_A300_spof0.5 --tr-extremes --basis native --repeat 4 --jobs 32 --no-refresh-flood
+python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --overview --dir ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow2500_A300_spof0.5 --tr-extremes --basis native --repeat 4 --jobs 32 --no-refresh-flood --wave-spacing 50
 
 
 # ---------------------------------------------------------------------------
