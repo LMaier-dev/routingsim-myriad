@@ -242,6 +242,12 @@ namespace routingsim {
             unsigned long batchMaxEntries = 0;
             unsigned long batchesCreated = 0;
 
+            // RR bytes actually put on the wire, per link and in total, for the
+            // bytes_norr_* scalars.
+            std::unordered_map<nodeid_t, unsigned long long> rrBytesPerLink;
+            unsigned long long rrBytesTotal = 0;
+            void countRr(nodeid_t to, const cPacket* inner);
+
         private:
             MyriadGpRib rib;
             // Present iff I am a member of the ring; see RibRing in MyriadGpRib.h

@@ -38,6 +38,21 @@ int64_t gpBatchBytes(const MyriadGpUpdateBatch* p) {
     return b;
 }
 
+// RR bytes inside a GP PDU, tallied per link alongside countSend so the eval can
+// report PV's volume with reachability records subtracted out (bytes_norr_*)
+int64_t gpRrBytes(const cPacket* p) {
+    // Collect and Update both derive from MyriadGpNLRI, which owns the rr array.
+    if (auto* n = dynamic_cast<const MyriadGpNLRI*>(p))
+        return (int64_t) n->getRrArraySize() * RR;
+    if (auto* b = dynamic_cast<const MyriadGpUpdateBatch*>(p)) {
+        int64_t entries = 0;
+        for (size_t i = 0; i < b->getEntriesArraySize(); ++i)
+            entries += (int64_t) b->getEntries(i).getRrArraySize();
+        return entries * RR;
+    }
+    return 0;   // Hello, Degrade
+}
+
 static uint32_t satAdd(uint32_t a, uint32_t b) {
     return (b > std::numeric_limits<uint32_t>::max() - a) ? std::numeric_limits<uint32_t>::max() : a + b;
 }
@@ -286,6 +301,7 @@ void MyriadGP::sendRingReliable(RingInflight& fl, nodeid_t primary, nodeid_t fal
     np->setAttributes(np->getAttributes() | NODEPKT_ATTR_CONTROL_PLANE_PROCESSING_DELAY);
     np->encapsulate(pkt->dup());
     countSend(sendTypeLabel(pkt->getName()), np->getByteLength());
+    countRr(primary, pkt);
     sendToNode(primary, std::move(np));
 
     h->timer = addOneShotTimer(interval, [this, h](short) {
@@ -313,6 +329,7 @@ void MyriadGP::ringRetxFire(RingTx* h) {
     np->setAttributes(np->getAttributes() | NODEPKT_ATTR_CONTROL_PLANE_PROCESSING_DELAY);
     np->encapsulate(h->pkt->dup());
     countSend(sendTypeLabel(h->pkt->getName()), np->getByteLength());
+    countRr(to, h->pkt);
     sendToNode(to, std::move(np));
 
     h->timer = addOneShotTimer(h->interval, [this, h](short) {
@@ -776,6 +793,7 @@ void MyriadGP::insertAndForwardCollect(MyriadGpCollect* pkt, uint32_t R, nodeid_
     pkt->setByteLength(gpCollectBytes(pkt));
     np->encapsulate(pkt->dup());
     countSend("collect", np->getByteLength());
+    countRr(to, pkt);
     sendToNode(to, std::move(np));
     MLOG_N_DEBUG(to) << "forward COLLECT ring='" << R
                      << "' seq=" << pkt->getSeq_no()
@@ -938,6 +956,7 @@ void MyriadGP::forwardUpdateInRing(MyriadGpUpdate* pkt, uint32_t ring, nodeid_t 
     pkt->setByteLength(gpUpdateBytes(pkt));
     np->encapsulate(pkt->dup());
     countSend("update", np->getByteLength());
+    countRr(to, pkt);
     sendToNode(to, std::move(np));
     MLOG_N_DEBUG(to) << "forward UPDATE in-ring='" << ring
                      << "' seq=" << pkt->getSeq_no() << "\n";
@@ -1278,6 +1297,7 @@ void MyriadGP::forwardBatchInRing(MyriadGpUpdateBatch* pkt, uint32_t ring, nodei
     pkt->setByteLength(gpBatchBytes(pkt));
     np->encapsulate(pkt->dup());
     countSend("update_batch", np->getByteLength());
+    countRr(to, pkt);
     sendToNode(to, std::move(np));
     MLOG_N_DEBUG(to) << "forward batch in-ring='" << ring
                      << "' seq=" << pkt->getSeq_no() << "\n";
@@ -1381,8 +1401,37 @@ void MyriadGP::dumpRibTo(std::ostream& f, const std::string& tprefix, bool stats
     rib.dumpTo(f, tprefix, stats, (int)myId);
 }
 
+void MyriadGP::countRr(nodeid_t to, const cPacket* inner) {
+    int64_t b = gpRrBytes(inner);
+    if (b <= 0) return;
+    rrBytesPerLink[to] += (unsigned long long) b;
+    rrBytesTotal += (unsigned long long) b;
+}
+
 void MyriadGP::finish() {
     recordSendScalars();
+    // Same volume figures recordSendScalars writes, minus the RR bytes on each
+    // link (see gpRrBytes).
+    if (carryRr) {
+        recordScalar("bytes_rr_total", (double) rrBytesTotal);
+        unsigned long long norrTotal = 0;
+        std::vector<unsigned long long> perLink;
+        for (auto& [nbr, st] : node().getLinkUsageMap()) {
+            auto it = rrBytesPerLink.find(nbr);
+            unsigned long long rr = (it == rrBytesPerLink.end()) ? 0 : it->second;
+            unsigned long long b = st.bytecount > rr ? st.bytecount - rr : 0;
+            norrTotal += b;
+            perLink.push_back(b);
+        }
+        recordScalar("bytes_norr_total", (double) norrTotal);
+        if (!perLink.empty()) {
+            auto mid = perLink.begin() + perLink.size() / 2;
+            std::nth_element(perLink.begin(), mid, perLink.end());
+            recordScalar("linkbytes_norr_med", (double) *mid);
+            recordScalar("linkbytes_norr_max",
+                         (double) *std::max_element(perLink.begin(), perLink.end()));
+        }
+    }
     recordScalar("batch_entries_total", batchEntriesTotal);
     recordScalar("batch_max_entries", batchMaxEntries);
     recordScalar("batches_created", batchesCreated);

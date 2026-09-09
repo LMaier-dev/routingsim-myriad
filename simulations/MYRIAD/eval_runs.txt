@@ -20,7 +20,10 @@
 python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py costdrift --topo ~/routingsim/simulations/topologies/grid_10,10.txt --no-refresh-flood --nospof --tag grid
 
 # GRID scaling behavior vs linkstate TODO add bandwith
-python3 ~/routingsim/simulations/MYRIAD/eval_scaling.py --basis min
+# --norr: these sweeps are seconds, so take the real carryRr=false run. Here it
+# also doubles as the check on the subtractive series: batches on these grids
+# average 1-2 entries and never reach the cap, so the two must agree.
+python3 ~/routingsim/simulations/MYRIAD/eval_scaling.py --basis min --norr
 # GRID no batching as comparison
 python3 ~/routingsim/simulations/MYRIAD/eval_scaling.py --basis min --set holdInterval=0s --tag no-batch
 
@@ -84,7 +87,7 @@ SPLIT python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --topo
 #
 # --no-state-panel: per-router state and link load are functions of the NODE
 # COUNT, which this sweep pins at 1000. They live on the n sweep below.
-python3 ~/routingsim/simulations/MYRIAD/eval_scaling.py --dir ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_shr1000_rl16_spof0.5 --x-key fan --jobs 4 --no-state-panel
+python3 ~/routingsim/simulations/MYRIAD/eval_scaling.py --dir ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_shr1000_rl16_spof0.5 --x-key fan --jobs 4 --no-state-panel --norr
 
 
 # ---------------------------------------------------------------------------
@@ -98,4 +101,4 @@ python3 ~/routingsim/simulations/MYRIAD/eval_scaling.py --dir ~/routingsim/simul
 # PV 18.3GB / 3min. measure() runs ls then pv SEQUENTIALLY, so a job peaks at
 # max(), not the sum -- but that is still 44GB, and --jobs 4 asks for 176GB on a
 # 125GB box. --jobs 2 fits.
-# cd ~/routingsim/simulations/MYRIAD/ && python3 ./eval_scaling.py --dir ./myriad_topologies/csv/delaunay_grow10000_A1200_spof0.5 --x-key tr --jobs 4 --no-batch-panel 
+# cd ~/routingsim/simulations/MYRIAD/ && python3 ./eval_scaling.py --dir ./myriad_topologies/csv/delaunay_grow10000_A1200_spof0.5 --x-key tr --jobs 2 --no-batch-panel 

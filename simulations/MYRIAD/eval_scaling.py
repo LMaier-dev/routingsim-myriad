@@ -272,6 +272,26 @@ def state_stats(proto, ini_path, tag="", rep=0):
             _mean_scalar(scas, "linkbytes_med"))
 
 
+def norr_stats(ini_path, tag="", rep=0):
+    """(total bytes, max link bytes, median link bytes) with PV's reachability
+    records subtracted out, from the PV run's own .sca — no second simulation.
+
+    MyriadGp tallies the RR bytes it puts on each link (gpRrBytes) and finish()
+    writes the subtracted figures, so this is the same run's packets minus the RR
+    fields -- the cost of RR AS A FIELD, which is what the series claims and all
+    it claims. It is an upper bound on removing RR altogether, and a loose one:
+    batches pack to maxBatchBytes (4096 in eval_common.ini), so RR also displaces
+    chains and multiplies the batch laps. On ringgrow tr500/n2500 the bound reads 3.79 GB where a real
+    carryRr=false run measures 2.08 GB, against 6.19 GB carrying RR.
+
+    Zeros on a .sca written before the scalars existed, which drops the series."""
+    res = rep_path(os.path.join(INI_DIR, f"res_pv{tag}_{os.path.basename(ini_path)}"), rep)
+    scas = glob.glob(os.path.join(res, "*.sca"))
+    return (_sum_scalar(scas, "bytes_norr_total"),
+            _max_scalar(scas, "linkbytes_norr_max"),
+            _mean_scalar(scas, "linkbytes_norr_med"))
+
+
 def batch_stats(ini_path, tag="", rep=0):
     """Read the PV run's already-written .sca (message_count ran first) and
     return (n_batches, avg_entries, max_entries) for the inter-ring UPDATE
@@ -289,8 +309,14 @@ def batch_stats(ini_path, tag="", rep=0):
     return created, avg, mx
 
 
-def measure(topo, nobatch=False, conv=False):
-    """LS + PV on one topology -> the result dict for one sweep point."""
+def measure(topo, nobatch=False, conv=False, norr=False):
+    """LS + PV on one topology -> the result dict for one sweep point.
+
+    norr runs a THIRD sim of the same PV ini with carryRr=false and uses its real
+    numbers for the RR-excluded series, instead of subtracting RR out of the PV
+    run (norr_stats). Truer — a real no-RR run also packs fuller batches, which
+    the subtraction cannot see — but it is a whole extra simulation per point, so
+    it stays opt-in: the 10k sweeps are 12h and memory-bound."""
     rings = ring_label_lines(topo)
     ls_ini = write_ini("ls", topo, rings)
     pv_ini = write_ini("pv", topo, rings)
@@ -316,6 +342,14 @@ def measure(topo, nobatch=False, conv=False):
              "pv": message_count("pv", pv_ini, extra_args=pv_extra or None, rep=rep)}
         r["ls_b"] = byte_count("ls", ls_ini, rep=rep)
         r["pv_b"] = byte_count("pv", pv_ini, rep=rep)
+        if norr:
+            message_count("pv", pv_ini, tag="_norr", rep=rep,
+                          extra_args=(pv_extra or []) + overrides(carryRr="false"))
+            r["pv_nr_b"] = byte_count("pv", pv_ini, tag="_norr", rep=rep)
+            _, r["pv_nr_lmax"], r["pv_nr_lmed"] = state_stats("pv", pv_ini,
+                                                              tag="_norr", rep=rep)
+        else:
+            r["pv_nr_b"], r["pv_nr_lmax"], r["pv_nr_lmed"] = norr_stats(pv_ini, rep=rep)
         r["nb"], r["avg_sz"], r["max_sz"] = batch_stats(pv_ini, rep=rep)
         r["ls_s"], r["ls_lmax"], r["ls_lmed"] = state_stats("ls", ls_ini, rep=rep)
         r["pv_s"], r["pv_lmax"], r["pv_lmed"] = state_stats("pv", pv_ini, rep=rep)
@@ -351,7 +385,7 @@ def _sd(series):
     return sds if any(sds) else None
 
 
-def sweep(items, nobatch=False, conv=False):
+def sweep(items, nobatch=False, conv=False, norr=False):
     """items: list of (label, [topo_path, ...]) -- one path per seed, averaged. Runs LS and ONE PV per topology. PV
     uses the holdInterval pinned in eval_common.ini (batching on); pass
     nobatch=True to override it to 0s — the pre-batching baseline, which is far
@@ -362,7 +396,12 @@ def sweep(items, nobatch=False, conv=False):
     result dir, so they don't collide); results still print in sweep order."""
     out = {k: [] for k in ("labels", "ls", "pv", "ls_b", "pv_b", "avg_sz", "max_sz",
                            "ls_s", "pv_s", "ls_lmax", "pv_lmax",
-                           "ls_lmed", "pv_lmed")}
+                           "ls_lmed", "pv_lmed",
+                           "pv_nr_b", "pv_nr_lmax", "pv_nr_lmed")}
+    # Which flavour filled the pv_nr_* series: a real carryRr=false run, or RR
+    # subtracted out of the PV run. They are not the same measurement, so the
+    # plot must not label them the same way.
+    out["norr_real"] = norr
     if conv:
         out["ls_ct"] = []
         out["pv_ct"] = []
@@ -373,7 +412,7 @@ def sweep(items, nobatch=False, conv=False):
     # One job per (point, seed) rather than per point: with 5 seeds and 6 points
     # that is 30 independent runs, which fills --jobs far better than 6 would.
     jobs = [(i, t) for i, (_, paths) in enumerate(items) for t in paths]
-    run_one = lambda j: measure(j[1], nobatch, conv)
+    run_one = lambda j: measure(j[1], nobatch, conv, norr)
     if (harness.JOBS or 1) > 1 and len(jobs) > 1:
         harness.PROGRESS = False    # N concurrent sims would fight over the \r line
         with ThreadPoolExecutor(max_workers=harness.JOBS) as ex:
@@ -393,7 +432,8 @@ def sweep(items, nobatch=False, conv=False):
         out["pv_b"].append(r["pv_b"])
         out["avg_sz"].append(r["avg_sz"])
         out["max_sz"].append(r["max_sz"])
-        for k in ("ls_s", "pv_s", "ls_lmax", "pv_lmax", "ls_lmed", "pv_lmed"):
+        for k in ("ls_s", "pv_s", "ls_lmax", "pv_lmax", "ls_lmed", "pv_lmed",
+                  "pv_nr_b", "pv_nr_lmax", "pv_nr_lmed"):
             out[k].append(r[k])
         mode = "no-batch" if nobatch else "batched"
         ct_str = ""
@@ -418,6 +458,13 @@ def sweep(items, nobatch=False, conv=False):
               f"LS={fmt_bytes(r['ls_s'])} PV={fmt_bytes(r['pv_s'])}   "
               f"link max/med LS={fmt_bytes(r['ls_lmax'])}/{fmt_bytes(r['ls_lmed'])} "
               f"PV={fmt_bytes(r['pv_lmax'])}/{fmt_bytes(r['pv_lmed'])}")
+        if r["pv_nr_b"]:
+            print(f"  {'':<14}{'':<{len(seeds)}} "
+                  f"{'PV no RR (own run)' if norr else 'PV minus RR      '}  "
+                  f"{fmt_bytes(r['pv_nr_b'])} "
+                  f"({100 * (1 - r['pv_nr_b'] / r['pv_b']):.0f}% of PV bytes are RR)"
+                  f"   link max/med={fmt_bytes(r['pv_nr_lmax'])}/"
+                  f"{fmt_bytes(r['pv_nr_lmed'])}")
     return out
 
 
@@ -546,6 +593,12 @@ def plot(res, title, xlabel, outfile, nobatch=False, batch_panel=True,
         axB = axL.twinx()
         # One unit for both series
         bdiv, bname = byte_unit(list(res["ls_b"]) + list(res["pv_b"]))
+        # Bytes only, no message series: the RR-excluded figure is subtracted
+        # from the SAME packets (see norr_stats), so its message count is PV's
+        # by construction and a second identical curve would only mislead.
+        has_norr = "pv_nr_b" in res and any(res["pv_nr_b"])
+        nr_lab = ("PV bytes, no RR (own run)" if res.get("norr_real")
+                  else "PV bytes, RR fields excluded")
         mb = lambda ser: [b / bdiv for b in ser]
         mb_sd = lambda ser: (None if _sd(ser) is None else [v / bdiv for v in _sd(ser)])
         axB.errorbar(xs, mb(res["ls_b"]), yerr=mb_sd(res["ls_b"]), fmt=fmt("o"),
@@ -554,6 +607,12 @@ def plot(res, title, xlabel, outfile, nobatch=False, batch_panel=True,
         axB.errorbar(xs, mb(res["pv_b"]), yerr=mb_sd(res["pv_b"]), fmt=fmt("s"),
                      ls="" if regress else "--", capsize=3, ms=ms, color=PROTO_COLOR["pv"],
                      alpha=0.45, label="PV bytes" + fit(axB, mb(res["pv_b"]), PROTO_COLOR["pv"], "--"))
+        if has_norr:
+            axB.errorbar(xs, mb(res["pv_nr_b"]), yerr=mb_sd(res["pv_nr_b"]), fmt=fmt("D"),
+                         ls="" if regress else "--", capsize=3, ms=ms,
+                         color=PROTO_COLOR["pv_norr"], alpha=0.7,
+                         label=nr_lab
+                               + fit(axB, mb(res["pv_nr_b"]), PROTO_COLOR["pv_norr"], "--"))
         axB.set_ylabel(f"routing bytes sent ({bname}, dashed)")
         h1, l1 = axL.get_legend_handles_labels()
         h2, l2 = axB.get_legend_handles_labels()
@@ -617,11 +676,17 @@ def plot(res, title, xlabel, outfile, nobatch=False, batch_panel=True,
     # tell a uniformly busy network from one overloaded link.
     if has_link:
         axH = axes.pop(0)
+        # RR rides chains, so it concentrates on the links chains transit: the
+        # busiest link is where excluding it pays most, which the totals hide.
+        nr = (("pv_nr_lmax", "pv_nr_lmed", PROTO_COLOR["pv_norr"], "D",
+               "PV, no RR (own run)" if res.get("norr_real")
+               else "PV, RR fields excluded"),) \
+            if ("pv_nr_lmax" in res and any(res["pv_nr_lmax"])) else ()
         ldiv, lname = byte_unit([v for k in ("ls_lmax", "pv_lmax", "ls_lmed",
                                              "pv_lmed") for v in res[k]])
         lkv = lambda ser: [v / ldiv for v in ser]
         for key, med, c, mk, lab in (("ls_lmax", "ls_lmed", PROTO_COLOR["ls"], "o", "LS"),
-                                     ("pv_lmax", "pv_lmed", PROTO_COLOR["pv"], "s", "PV")):
+                                     ("pv_lmax", "pv_lmed", PROTO_COLOR["pv"], "s", "PV")) + nr:
             axH.errorbar(xs, lkv(res[key]), yerr=_sd(res[key]), fmt=fmt(mk),
                          capsize=3, ms=ms, color=c,
                          label=f"{lab} busiest link" + fit(axH, lkv(res[key]), c))
@@ -821,6 +886,12 @@ def main(args=None):
                         help="accepted for compatibility and now the only "
                              "behaviour: dir sweeps never draw the batch-size "
                              "panel. Not --nobatch, which turns PV's batching OFF")
+        ap.add_argument("--norr", action="store_true",
+                        help="measure the RR-excluded series with a real extra "
+                             "carryRr=false run per point instead of subtracting "
+                             "RR out of the PV run. Truer (a real no-RR run also "
+                             "packs fuller batches) but one more simulation per "
+                             "point, so it is off by default")
         ap.add_argument("--single", metavar="TOPO",
                         help="run PV+LS on ONE topology .txt and print counts (no "
                              "sweep, no plot). Path relative to simulations/topologies "
@@ -912,7 +983,7 @@ def main(args=None):
         # Length sweeps read right-to-left: at a fixed n the ring COUNT is what
         # scales, and it is inverse to length (n = rings x length - surplus), so
         # the axis is inverted to put the growing quantity on the growing side.
-        plot(sweep(items, args.nobatch, args.convergence),
+        plot(sweep(items, args.nobatch, args.convergence, getattr(args, "norr", False)),
              f"Path-Vector vs Link-State: {name}", XNAME.get(args.x_key, args.x_key),
              os.path.join(PLOT_DIR, f"dir_{name}_{args.x_key}.png"), args.nobatch,
              # Batch size is a property of the UPDATE encoding, not of the swept
@@ -934,7 +1005,7 @@ def main(args=None):
             sys.exit(f"topology not found: {args.single}")
         label = os.path.splitext(os.path.basename(topo))[0]
         print(f"== single topology ({BASIS} cycles): {label} ==")
-        sweep([(label, topo)], args.nobatch)
+        sweep([(label, topo)], args.nobatch, norr=getattr(args, "norr", False))
         return
 
     announce("scaling", opts=overrides(sim_time_limit=CONV_SIMTIME) if args.convergence else [])
@@ -951,7 +1022,7 @@ def main(args=None):
     if args.only in (None, "square"):
         print("== square sweep (NxN) ==")
         s_items = [(f"{x}x{y}", gen_topology(x, y)) for (x, y) in square_dims]
-        plot(sweep(s_items, args.nobatch, args.convergence),
+        plot(sweep(s_items, args.nobatch, args.convergence, getattr(args, "norr", False)),
              "Path-Vector vs Link-State: square grid scaling (dense 2D ring-mesh)",
              "grid size", os.path.join(PLOT_DIR, "square_scaling.png"), args.nobatch,
              state_panel=False)
@@ -966,7 +1037,7 @@ def main(args=None):
         # size-2N petals); here petals are size N by request.
         print("== flower sweep (central 2N + N petals of N, ring size grows) ==")
         f_items = [(f"F{N}", gen_flower(N)) for N in flower_N]
-        plot(sweep(f_items, args.nobatch, args.convergence),
+        plot(sweep(f_items, args.nobatch, args.convergence, getattr(args, "norr", False)),
              "Path-Vector vs Link-State: flower scaling (N petals of N routers, star ring-graph)",
              "flower N (ring size; N^2 nodes)", os.path.join(PLOT_DIR, "flower_scaling.png"),
              args.nobatch, state_panel=False)
