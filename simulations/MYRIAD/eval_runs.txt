@@ -35,16 +35,6 @@ python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py convergence --topo ~/
 # ---------------------------------------------------------------------------
 # n=2500 corpus (generate_topos.sh grow). Same experiment as the n=10000 family
 # -- rings 9.8..11.8 long, tr swept 300..700 -- at a quarter of the scale.
-#
-# Why quarter scale: memory is per-node RIB (every node holds a route to each
-# origin ring), so it scales with n*A. One n=10000 PV run plateaued at 9.8GB;
-# n=2500 lands around 1GB, well under 3GB even for LS. That is what lets all
-# three lines below run at once: run_evals.sh has no concurrency gate, it opens
-# every line's window together, and a SPLIT line starts one process PER CONFIG.
-#   churn 4 configs (pv, pv_noreplay, pv_nospof, ls) + node 3 + overview 16
-#   = 23 concurrent sims. At 10000 nodes that was 225GB; here it is ~25-70GB.
-# If a per-run peak turns out higher than 3GB, --jobs on the overview line is
-# the dial: it is 16 of those 23.
 # ---------------------------------------------------------------------------
 
 # detailed failure sequence, RIB snapshots ON: reconvergence latency per wave,
@@ -81,19 +71,15 @@ SPLIT python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --topo
 # Memory and hotspotting vs fan-out, at FIXED n=1000 (ringpipe --sweep-share
 # with --hold-len, so ring length is pinned and only fan moves).
 #
-# spof0.25, not the 0.5 the rest of the corpus uses -- that is what is on disk.
-# generate_topos.sh pipe now builds a spof0.5 twin; switch the path if you want
-# it to match the grow families.
-#
 # --no-state-panel: per-router state and link load are functions of the NODE
 # COUNT, which this sweep pins at 1000. They live on the n sweep below.
-python3 ~/routingsim/simulations/MYRIAD/eval_scaling.py --dir ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_shr1000_rl16_spof0.5 --x-key fan --jobs 4 --no-state-panel --norr
+python3 ~/routingsim/simulations/MYRIAD/eval_scaling.py --dir ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_shr1000_rl16_spof0.5 --x-key fan --jobs 6 --no-state-panel --norr
 
 
 # ---------------------------------------------------------------------------
 # Per-router RIB state vs NODE COUNT (generate_topos.sh grow; ringgrow
 # --sweep-n, A=300 tr=750 fixed). No message volume and link load because they barely move.
-python3 ~/routingsim/simulations/MYRIAD/eval_scaling.py --dir ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_nsweep_A300_tr750_spof0.5 --x-key n --jobs 16 --only-state
+python3 ~/routingsim/simulations/MYRIAD/eval_scaling.py --dir ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_nsweep_A300_tr750_spof0.5 --x-key n --jobs 6 --only-state
 
 
 # RUN THIS SEPARATELY (peaks at around 75GB with 4 jobs)
