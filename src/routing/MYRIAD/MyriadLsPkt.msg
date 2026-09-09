@@ -71,7 +71,6 @@ packet MyriadDBD extends MyriadLsHeader {
 class LsaHeader extends cObject {
     MyriadLSAType type;
     uint16_t seq_no;
-    uint32_t age; // flush if too old
     nodeid_t lsa_origin;
 }
 

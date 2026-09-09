@@ -23,7 +23,7 @@ int64_t lsaBytes(const LsaHeader* h) {
         case LSA_SUBNETS:
             b += (int64_t) check_and_cast<const SubnetsLsa*>(h)->getSubnetsArraySize() * U32; break;
         case LSA_RINGS:
-            b += (int64_t) check_and_cast<const RingsLsa*>(h)->getRingsArraySize() * U32; break;
+            b += (int64_t) check_and_cast<const RingsLsa*>(h)->getRingsArraySize() * RING; break;
     }
     return b;
 }
@@ -74,7 +74,7 @@ int64_t ackBytes(const MyriadAck* p) {
     return MYRIADLS_HDR + (int64_t) p->getAckedArraySize() * LSA_HDR;
 }
 int64_t dbdBytes(const MyriadDBD* p) {
-    return MYRIADLS_HDR + U16 + 3          // seq_no + init/master/more bools
+    return MYRIADLS_HDR + SEQ + 3          // seq_no + init/master/more bools
          + (int64_t) p->getLs_dbdsArraySize() * LSA_HDR;
 }
 } // namespace
@@ -309,8 +309,7 @@ void MyriadLS::logDbd(const MyriadDBD* dbd, nodeid_t from) {
         const LsaHeader& h = dbd->getLs_dbds(i);
         MLOG_N_DEBUG(from) << "  origin=" << (int)h.getLsa_origin()
                            << " type=" << h.getType()
-                           << " seq=" << h.getSeq_no()
-                           << " age=" << h.getAge() << "\n";
+                           << " seq=" << h.getSeq_no() << "\n";
     }
 }
 
@@ -320,8 +319,7 @@ void MyriadLS::logLsdb() {
     for (const auto& [key, lsa] : lsdb) {
         MLOG_INFO() << "  origin=" << (int)key.origin
                     << " type=" << key.type
-                    << " seq=" << lsa->getSeq_no()
-                    << " age=" << lsa->getAge();
+                    << " seq=" << lsa->getSeq_no();
         switch (lsa->getType()) {
             case LSA_RINGS: {
                 auto* r = check_and_cast<const RingsLsa*>(lsa.get());
@@ -680,7 +678,7 @@ uint64_t MyriadLS::lsdbBytes() const {
                 break;
             case LSA_RINGS:
                 b += check_and_cast<const RingsLsa*>(lsa.get())
-                         ->getRingsArraySize() * msgsize::U32;
+                         ->getRingsArraySize() * msgsize::RING;
                 break;
         }
     }

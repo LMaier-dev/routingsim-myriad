@@ -82,7 +82,7 @@ namespace routingsim {
         uint32_t seq = 0;
         uint32_t spof = 0;
         std::vector<uint32_t> fwdChain;
-        uint64_t fwdCost = 0;
+        uint32_t fwdCost = 0;
         std::vector<MyriadGpRr> rr;
     };
 
@@ -161,7 +161,7 @@ namespace routingsim {
             // chain fanned into, so the caller can mark the lapping packet.
             void processChain(uint32_t curRing, uint32_t seq, uint32_t spof,
                               const std::vector<uint32_t>& chain,
-                              uint64_t chainCost,
+                              uint32_t chainCost,
                               const std::vector<MyriadGpRr>& rr,
                               const std::vector<MyriadGpRr>* originRrTrailer,
                               std::vector<uint32_t>& handled);
@@ -169,13 +169,13 @@ namespace routingsim {
             // `handled`. hold=0 sends now; hold>0 queues for the next flush.
             void forwardChainInterRing(uint32_t curRing, uint32_t seq, uint32_t spof,
                               const std::vector<uint32_t>& chain,
-                              uint64_t chainCost,
+                              uint32_t chainCost,
                               const std::vector<MyriadGpRr>& rr,
                               std::vector<uint32_t>& handled);
             // Build a single-chain transition UPDATE (the hold=0 immediate path).
             MyriadGpUpdate* buildTransitionUpdate(uint32_t R2, nodeid_t src, uint32_t seq,
                                   uint32_t spof, const std::vector<uint32_t>& fwdChain,
-                                  uint64_t fwdCost,
+                                  uint32_t fwdCost,
                                   const std::vector<MyriadGpRr>& rr);
             // Emit the held transitions as one batch per (R2, primary) bucket,
             // each lapping R2 under a single circular-ACK.
@@ -191,7 +191,8 @@ namespace routingsim {
             // Retransmits after the initial send.
             static constexpr int COLLECT_RETRY_LIMIT = 3;
             // Placeholder ring size until the origin-UPDATE trailer arrives.
-            static constexpr uint32_t UNKNOWN_RING_SIZE = 1u << 20;
+            // Placeholder ring size until the origin-UPDATE trailer arrives
+            static constexpr uint32_t UNKNOWN_RING_SIZE = 1u << 12;
 
             // First send to `primary`, retransmits alternate to `fallback` (equal
             // args = probe). onBudgetExpired fires after retryLimit misses. Takes

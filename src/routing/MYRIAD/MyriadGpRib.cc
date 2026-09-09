@@ -8,14 +8,14 @@
 
 namespace routingsim {
 
-uint64_t MyriadGpRib::sizeToCost(uint32_t s) const {
+uint32_t MyriadGpRib::sizeToCost(uint32_t s) const {
     if (s == 2) s = (uint32_t) echoRingSize;   // see MyriadGp.ned
-    // s^ringCostExponent with u64 saturation; UNKNOWN_RING_SIZE at e>=4 overflows,
-    // saturating to max keeps it costly rather than wrapping to 0.
-    uint64_t term = 1;
+    // s^ringCostExponent with u32 saturation: a high exponent on a big ring still
+    // overflows, and saturating keeps it costly rather than wrapping to 0.
+    uint32_t term = 1;
     for (long k = 0; k < ringCostExponent; ++k) {
-        if (term > std::numeric_limits<uint64_t>::max() / (s ? s : 1))
-            return std::numeric_limits<uint64_t>::max();
+        if (term > std::numeric_limits<uint32_t>::max() / (s ? s : 1))
+            return std::numeric_limits<uint32_t>::max();
         term *= s;
     }
     return term;
@@ -40,7 +40,7 @@ void MyriadGpRib::invalidate(uint32_t ring) {
     rs.hasPreferred = false;
 }
 
-void MyriadGpRib::installSelfChain(uint32_t ring, uint32_t originSeq, uint64_t cost) {
+void MyriadGpRib::installSelfChain(uint32_t ring, uint32_t originSeq, uint32_t cost) {
     RibRing& rs = rings[ring];
     if (originSeq > rs.curSeq) {            // flip: fresh generation of my own ring
         rs.curSeq = originSeq;
@@ -55,11 +55,11 @@ void MyriadGpRib::installSelfChain(uint32_t ring, uint32_t originSeq, uint64_t c
     selectPreferred(rs);
 }
 
-bool MyriadGpRib::withinMargin(uint64_t a, uint64_t b) const {
+bool MyriadGpRib::withinMargin(uint32_t a, uint32_t b) const {
     if (ecmpCostMargin <= 0) return a <= b;
     // double, since b may be sizeToCost's uint64 saturation where b*(1+m) wraps.
     double lim = (double)b * (1.0 + ecmpCostMargin);
-    double cap = (double)std::numeric_limits<uint64_t>::max();
+    double cap = (double)std::numeric_limits<uint32_t>::max();
     return (double)a <= (lim > cap ? cap : lim);
 }
 
@@ -241,7 +241,7 @@ bool MyriadGpRib::applyDegrade(uint32_t ring, uint32_t seq, uint32_t beacon) {
 
 // originRrTrailer is the rr to adopt on a seq-advance (the packet's own rr).
 StoreResult MyriadGpRib::store(uint32_t origin, const std::vector<uint32_t>& fullChain,
-                               uint64_t fullCost, uint32_t seq, uint32_t spof,
+                               uint32_t fullCost, uint32_t seq, uint32_t spof,
                                const std::vector<MyriadGpRr>* originRrTrailer) {
     StoreResult res;
     RibRing& originRs = rings[origin];
@@ -301,22 +301,22 @@ size_t MyriadGpRib::knownOrigins() const {
 uint64_t MyriadGpRib::stateBytes() const {
     // A chain is the path vector itself; the rest of RibEntry is its scalars.
     auto entry = [](const RibEntry& e) {
-        return e.chain.size() * msgsize::U32     // chain
-             + msgsize::U64                      // chain_cost
-             + 2 * msgsize::U32;                 // seq_no + spof_count
+        return e.chain.size() * msgsize::RING    // chain
+             + msgsize::COST                     // chain_cost
+             + msgsize::SEQ + msgsize::SPOF;     // seq_no + spof_count
     };
     uint64_t b = 0;
     for (const auto& [origin, r] : rings) {
-        b += 2 * msgsize::U32;                   // origin ring key + curSeq
+        b += msgsize::RING + msgsize::SEQ;       // origin ring key + curSeq
         b += r.rr.size() * msgsize::RR;
         for (const auto& frame : r.frames)
             for (const auto& e : frame) b += entry(e);
-        for (const auto& [front, e] : r.soleFront) b += msgsize::U32 + entry(e);
+        for (const auto& [front, e] : r.soleFront) b += msgsize::RING + entry(e);
         if (r.hasPreferred) b += entry(r.preferred);
     }
     // degrades is per culprit ring, bounded by the ring count and tiny next to
     // the chains; counted for completeness rather than because it moves the number.
-    b += degrades.size() * 3 * msgsize::U32;
+    b += degrades.size() * (msgsize::RING + 2 * msgsize::SEQ);
     return b;
 }
 

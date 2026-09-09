@@ -16,7 +16,7 @@ namespace routingsim {
     // chain[0] = latest ring, chain.back() = origin.
     struct RibEntry {
         std::vector<uint32_t> chain;
-        uint64_t chain_cost = 0;           // sum of memberCount^ringCostExponent over chain
+        uint32_t chain_cost = 0;           // sum of memberCount^ringCostExponent over chain
         uint32_t seq_no = 0;
         uint32_t spof_count = 0;
     };
@@ -60,7 +60,7 @@ namespace routingsim {
             }
             void clear() { rings.clear(); degrades.clear(); }
 
-            uint64_t sizeToCost(uint32_t s) const;
+            uint32_t sizeToCost(uint32_t s) const;
             uint32_t curSeq(uint32_t ring) const;
             const std::vector<MyriadGpRr>& rr(uint32_t ring) const;
             void setRr(uint32_t ring, std::vector<MyriadGpRr> v) { rings[ring].rr = std::move(v); }
@@ -69,10 +69,10 @@ namespace routingsim {
             // Adopt generation `originSeq` for a ring I originate on and install
             // my trivial [ring] chain — else the king has no entry to its own
             // ring and backfills a looped-back detour.
-            void installSelfChain(uint32_t ring, uint32_t originSeq, uint64_t cost);
+            void installSelfChain(uint32_t ring, uint32_t originSeq, uint32_t cost);
 
             StoreResult store(uint32_t origin, const std::vector<uint32_t>& fullChain,
-                              uint64_t fullCost, uint32_t seq, uint32_t spof,
+                              uint32_t fullCost, uint32_t seq, uint32_t spof,
                               const std::vector<MyriadGpRr>* originRrTrailer);
 
             // Cancel if injecting `cand` into `frontRing` would teach it nothing
@@ -90,7 +90,7 @@ namespace routingsim {
             // Pointers borrow from the RIB; invalid after any mutating call.
             struct ReplayChain {
                 const std::vector<uint32_t>* chain;
-                uint64_t cost;
+                uint32_t cost;
                 uint32_t spof;
                 const std::vector<MyriadGpRr>* rr;   // the origin ring's rr
             };
@@ -112,7 +112,7 @@ namespace routingsim {
             struct ReplayQuality {
                 uint32_t origins = 0;
                 uint32_t spofTotal = 0;
-                uint64_t costTotal = 0;
+                uint64_t costTotal = 0;   // sums over all origins: stays 64-bit
             };
             ReplayQuality replayQuality() const;
 
@@ -134,7 +134,7 @@ namespace routingsim {
             // See MyriadGp.ned. 0 = exact-equality co-best.
             double ecmpCostMargin = 0.0;
             bool ecmpDiverseEviction = true;
-            bool withinMargin(uint64_t a, uint64_t b) const;
+            bool withinMargin(uint32_t a, uint32_t b) const;
             // spof, then out-of-margin cheaper; flat for in-band equal-spof pairs
             // so an in-band arrival widens the ECMP set instead of replacing it.
             bool strictlyBetter(const RibEntry& a, const RibEntry& b) const;

@@ -100,7 +100,7 @@ packet MyriadGpCollect extends MyriadGpNLRI {
     // Not part of the election.
     uint32_t lap_max_routes;
     uint32_t lap_max_spof;
-    uint64_t lap_max_cost;
+    uint64_t lap_max_cost;   // SUM over a replay source's origins: stays 64-bit
     // Who holds the figures above.
     nodeid_t lap_max_owner;
     // Set by the one member that replayed on this REPLAY lap; makes the rest
@@ -121,7 +121,7 @@ packet MyriadGpUpdate extends MyriadGpNLRI {
     // Rings already flooded into on this lap, so the second bridge of a double
     // transition doesn't duplicate; reset empty on inter-ring transition.
     uint32_t handled_rings[];
-    uint64_t chain_cost;      // sum of memberCount^e over ring_chain; accumulated per-hop
+    uint32_t chain_cost;      // sum of memberCount^e over ring_chain; accumulated per-hop
     // Origin ring's size (origin UPDATE trailer only, like widths); on the
     // origin UPDATE ring_chain is empty so this carries the size instead.
     uint32_t member_count;
@@ -136,7 +136,7 @@ class MyriadGpUpdateEntry {
     uint32_t ring_chain[];
     uint32_t spof_count;
     MyriadGpRr rr[];
-    uint64_t chain_cost;
+    uint32_t chain_cost;
     uint32_t handled_rings[];
 }
 

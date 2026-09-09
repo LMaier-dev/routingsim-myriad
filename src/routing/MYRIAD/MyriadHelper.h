@@ -3,6 +3,7 @@
 
 #include "foundation.h"
 #include "routing/KIRA/TimerMsg.h"
+#include "routing/MYRIAD/MyriadPduSize.h"
 #include <algorithm>
 #include <cstring>
 #include <sstream>
@@ -76,6 +77,7 @@ class MyriadHelper : public Protocol {
         // e.g. to see it spike during a failure wave.
         cOutVector* txBytesVec = nullptr;
         void countSend(const std::string& type, unsigned long long bytes = 0) {
+            bytes += msgsize::FRAME;
             sentCounts[type]++;
             sentBytes[type] += bytes;
             auto& m = sentMaxBytes[type];
@@ -113,6 +115,11 @@ class MyriadHelper : public Protocol {
             for (auto& [type, b] : sentMaxBytes)
                 recordScalar(("bytes_max_" + type).c_str(), b);
             recordScalar("bytes_max", sentMaxBytesOverall);
+        }
+
+        void sendToNode(nodeid_t nid, NodePkt_p pkt, simtime_t delay = 0) {
+            pkt->setByteLength(pkt->getByteLength() + msgsize::FRAME);
+            Protocol::sendToNode(nid, std::move(pkt), delay);
         }
 
         void onInitialize() override {

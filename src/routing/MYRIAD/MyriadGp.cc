@@ -14,32 +14,32 @@ namespace {
 using namespace msgsize;
 
 int64_t gpCollectBytes(const MyriadGpCollect* p) {
-    return MYRIADGP_HDR + U32 + U32 + U32 + U64 + NODEID + 3 * BOOL
+    return MYRIADGP_HDR + RSIZE + RSIZE + SPOF + COST + NODEID + 3 * BOOL
                                                            // member_count + lap max quad + crashed + claimed + kind
          + (int64_t) p->getRrArraySize() * RR
          + (int64_t) p->getTransitionsArraySize() * TRANSITION;
 }
 int64_t gpUpdateBytes(const MyriadGpUpdate* p) {
-    return MYRIADGP_HDR + U32 + U32 + U64                  // member_count + spof_count + chain_cost
+    return MYRIADGP_HDR + RSIZE + SPOF + COST              // member_count + spof_count + chain_cost
          + (int64_t) p->getRrArraySize() * RR
-         + (int64_t) p->getRing_chainArraySize() * U32
-         + (int64_t) p->getHandled_ringsArraySize() * U32
+         + (int64_t) p->getRing_chainArraySize() * RING
+         + (int64_t) p->getHandled_ringsArraySize() * RING
          + (int64_t) p->getWidthsArraySize() * TRANSITION;
 }
 int64_t gpBatchBytes(const MyriadGpUpdateBatch* p) {
     int64_t b = MYRIADGP_HDR;
     for (size_t i = 0; i < p->getEntriesArraySize(); ++i) {
         const MyriadGpUpdateEntry& e = p->getEntries(i);
-        b += U32 + U32 + U64                               // seq_no + spof_count + chain_cost
-           + (int64_t) e.getRing_chainArraySize() * U32
-           + (int64_t) e.getHandled_ringsArraySize() * U32
+        b += SEQ + SPOF + COST                             // seq_no + spof_count + chain_cost
+           + (int64_t) e.getRing_chainArraySize() * RING
+           + (int64_t) e.getHandled_ringsArraySize() * RING
            + (int64_t) e.getRrArraySize() * RR;
     }
     return b;
 }
 
-static uint64_t satAdd(uint64_t a, uint64_t b) {
-    return (b > std::numeric_limits<uint64_t>::max() - a) ? std::numeric_limits<uint64_t>::max() : a + b;
+static uint32_t satAdd(uint32_t a, uint32_t b) {
+    return (b > std::numeric_limits<uint32_t>::max() - a) ? std::numeric_limits<uint32_t>::max() : a + b;
 }
 } // namespace
 
@@ -794,7 +794,8 @@ void MyriadGP::floodDegrade(uint32_t ring, uint32_t seq, uint32_t beacon, nodeid
     tmpl->setRing_id(ring);
     tmpl->setSeq_no(seq);
     tmpl->setBeacon_no(beacon);
-    tmpl->setByteLength(msgsize::TYPE_TAG + msgsize::NODEID + 3 * msgsize::U32);
+    tmpl->setByteLength(msgsize::TYPE_TAG + msgsize::NODEID
+                        + msgsize::SEQ + msgsize::RING + msgsize::U8);
     for (auto& [nid, nbr] : neighbors) {
         if (nid == skip) continue;
         auto np = std::make_unique<NodePkt>("Myriad_GP_Degrade_Pkt");
@@ -875,7 +876,7 @@ void MyriadGP::handleUpdate(MyriadGpUpdate* update, nodeid_t sender) {
 // See the declaration in MyriadGp.h for the rest.
 void MyriadGP::processChain(uint32_t curRing, uint32_t seq, uint32_t spof,
                             const std::vector<uint32_t>& chain,
-                            uint64_t chainCost,
+                            uint32_t chainCost,
                             const std::vector<MyriadGpRr>& rr,
                             const std::vector<MyriadGpRr>* originRrTrailer,
                             std::vector<uint32_t>& handled) {
@@ -898,7 +899,7 @@ void MyriadGP::processChain(uint32_t curRing, uint32_t seq, uint32_t spof,
     for (uint32_t c : chain) fullChain.push_back(c);
 
     uint32_t curSize = memberCountOf(curRing);
-    uint64_t fullCost = satAdd(rib.sizeToCost(curSize ? curSize : UNKNOWN_RING_SIZE), chainCost);
+    uint32_t fullCost = satAdd(rib.sizeToCost(curSize ? curSize : UNKNOWN_RING_SIZE), chainCost);
 
     StoreResult r = rib.store(origin, fullChain, fullCost, seq, spof, originRrTrailer);
     if (r.dup) {
@@ -944,7 +945,7 @@ void MyriadGP::forwardUpdateInRing(MyriadGpUpdate* pkt, uint32_t ring, nodeid_t 
 
 MyriadGpUpdate* MyriadGP::buildTransitionUpdate(uint32_t R2, nodeid_t src, uint32_t seq,
                               uint32_t spof, const std::vector<uint32_t>& fwdChain,
-                              uint64_t fwdCost,
+                              uint32_t fwdCost,
                               const std::vector<MyriadGpRr>& rr) {
     auto* fwd = new MyriadGpUpdate("Myriad_GP_Update");
     fwd->setType(MYRIADGP_UPDATE);
@@ -963,7 +964,7 @@ MyriadGpUpdate* MyriadGP::buildTransitionUpdate(uint32_t R2, nodeid_t src, uint3
 
 void MyriadGP::forwardChainInterRing(uint32_t curRing, uint32_t seq, uint32_t spof,
                           const std::vector<uint32_t>& chain,
-                          uint64_t chainCost,
+                          uint32_t chainCost,
                           const std::vector<MyriadGpRr>& rr,
                           std::vector<uint32_t>& handled) {
     // During COLLECT warmup suppress inter-ring forwarding; memberCounts are
@@ -1025,7 +1026,7 @@ void MyriadGP::forwardChainInterRing(uint32_t curRing, uint32_t seq, uint32_t sp
         uint32_t fwdSpof = spof + (doubleTransition ? 0 : 1);
 
         uint32_t curSize = memberCountOf(curRing);
-        uint64_t fwdCost = satAdd(rib.sizeToCost(curSize ? curSize : UNKNOWN_RING_SIZE), chainCost);
+        uint32_t fwdCost = satAdd(rib.sizeToCost(curSize ? curSize : UNKNOWN_RING_SIZE), chainCost);
 
         // Fan-out suppression: a node in k rings otherwise re-advertises into all k-1 other rings.
         if (suppressRedundantTransitions) {

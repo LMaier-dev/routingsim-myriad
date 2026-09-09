@@ -275,17 +275,18 @@ def state_stats(proto, ini_path, tag="", rep=0):
 def batch_stats(ini_path, tag="", rep=0):
     """Read the PV run's already-written .sca (message_count ran first) and
     return (n_batches, avg_entries, max_entries) for the inter-ring UPDATE
-    batching. n_batches = sum of sent_update_batch (packets on the wire);
-    avg = batch_entries_total / n_batches (mean chains coalesced per packet)."""
+    batching. n_batches = batches actually built (batches_created);
+    avg = batch_entries_total / batches_created (mean chains coalesced INTO one
+    batch)."""
     res = rep_path(os.path.join(INI_DIR, f"res_pv{tag}_{os.path.basename(ini_path)}"), rep)
     scas = glob.glob(os.path.join(res, "*.sca"))
     if not scas:
         return 0, 0.0, 0
-    n_batches = _sum_scalar(scas, "sent_update_batch")
+    created = _sum_scalar(scas, "batches_created")
     entries = _sum_scalar(scas, "batch_entries_total")
     mx = _max_scalar(scas, "batch_max_entries")
-    avg = (entries / n_batches) if n_batches else 0.0
-    return n_batches, avg, mx
+    avg = (entries / created) if created else 0.0
+    return created, avg, mx
 
 
 def measure(topo, nobatch=False, conv=False):
@@ -569,7 +570,7 @@ def plot(res, title, xlabel, outfile, nobatch=False, batch_panel=True,
                      label="max entries / batch"
                            + fit(axR, res["max_sz"], "tab:olive", "--"))
         ticks(axR)
-        axR.set_xlabel(xlabel); axR.set_ylabel("chains coalesced per batch packet")
+        axR.set_xlabel(xlabel); axR.set_ylabel("chains coalesced into one batch")
         axR.set_title("Inter-ring UPDATE batch size"); axR.legend()
         axR.grid(True, alpha=0.3)
 
