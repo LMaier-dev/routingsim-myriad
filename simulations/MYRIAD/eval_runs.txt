@@ -56,7 +56,7 @@ SPLIT python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --topo
 # overview: bytes and messages per phase (conv, churn, each wave fraction),
 # boxplotted over the tr extremes x --repeat failure schedules. No snapshots.
 # Every config runs in this one process, so no --post is needed.
-python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --overview --dir ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow2500_A300_spof0.5 --tr-extremes --basis native --repeat 4 --jobs 16 --no-refresh-flood
+python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --overview --dir ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow2500_A300_spof0.5 --tr-extremes --basis native --repeat 4 --jobs 32 --no-refresh-flood
 
 
 # ---------------------------------------------------------------------------
@@ -93,7 +93,7 @@ python3 ~/routingsim/simulations/MYRIAD/eval_scaling.py --dir ~/routingsim/simul
 # ---------------------------------------------------------------------------
 # Per-router RIB state vs NODE COUNT (generate_topos.sh grow; ringgrow
 # --sweep-n, A=300 tr=750 fixed). No message volume and link load because they barely move.
-python3 ~/routingsim/simulations/MYRIAD/eval_scaling.py --dir ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_nsweep_A300_tr750_spof0.5 --x-key n --jobs 4 --only-state
+python3 ~/routingsim/simulations/MYRIAD/eval_scaling.py --dir ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_nsweep_A300_tr750_spof0.5 --x-key n --jobs 16 --only-state
 
 
 # RUN THIS SEPARATELY (peaks at around 75GB with 4 jobs)
@@ -101,4 +101,4 @@ python3 ~/routingsim/simulations/MYRIAD/eval_scaling.py --dir ~/routingsim/simul
 # PV 18.3GB / 3min. measure() runs ls then pv SEQUENTIALLY, so a job peaks at
 # max(), not the sum -- but that is still 44GB, and --jobs 4 asks for 176GB on a
 # 125GB box. --jobs 2 fits.
-# cd ~/routingsim/simulations/MYRIAD/ && python3 ./eval_scaling.py --dir ./myriad_topologies/csv/delaunay_grow10000_A1200_spof0.5 --x-key tr --jobs 2 --no-batch-panel 
+# cd ~/routingsim/simulations/MYRIAD/ && python3 ./eval_scaling.py --dir ./myriad_topologies/csv/delaunay_grow10000_A1200_spof0.5 --x-key tr --jobs 6 --no-batch-panel 
