@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Compare MyriadLS (link-state) vs MyriadGP (path-vector) message counts as
-grid topologies scale two ways:
+grid topologies scale:
 
-  1. square   : 2x2, 3x3, ... 10x10   (both dimensions grow -> dense 2D ring-mesh)
-  2. flower   : N petals of N routers (ring SIZE grows, ring-graph stays a star)
+  square : 2x2, 3x3, ... 10x10   (both dimensions grow -> dense 2D ring-mesh)
 
 For each topology it generates ring labels, writes a self-contained .ini per
 (protocol, topology), runs Cmdenv, sums the per-type `sent_total` scalars, and
@@ -137,7 +136,8 @@ def gen_topology(dimx, dimy):
 
 
 def gen_flower(N):
-    """The `myriad_large` flower, generalised: one central ring of 2N routers
+    """Kept for the representative-topologies figure only; the flower SWEEP is
+    gone. The `myriad_large` flower, generalised: one central ring of 2N routers
     plus N petal rings of N routers each. Each petal shares an ADJACENT PAIR of
     central nodes (a 2-node redundant bridge -> spof=0), the shared pairs
     disjoint and consecutive around the central ring. The ring-adjacency graph
@@ -520,6 +520,11 @@ def plot(res, title, xlabel, outfile, nobatch=False, batch_panel=True,
     # moves) and only the per-router state is actually a function of the axis.
     if only_state:
         has_conv = batch_panel = False
+    # Batching off (--nobatch, or --set holdInterval=0s) leaves nothing coalesced,
+    # so the panel would be a flat zero taking half the figure. Gate on the data,
+    # not on the flag: both routes to "off" then drop it.
+    batched = any(res.get("avg_sz") or ())
+    batch_panel = batch_panel and batched
     has_link = has_state and not only_state
     ncols = (not only_state) + bool(batch_panel) + bool(has_conv) + bool(has_state) + bool(has_link)
     fig, axes = plt.subplots(1, ncols, figsize=(7.5 * ncols, 6), squeeze=False)
@@ -571,7 +576,10 @@ def plot(res, title, xlabel, outfile, nobatch=False, batch_panel=True,
 
     if axL is None:
         fig.suptitle(title)
-    pv_label = ("Path-Vector (PV), no batching" if nobatch
+    # Read the label off the data too: --set holdInterval=0s turns batching off
+    # without setting --nobatch, and the figure said "batched" over a run with
+    # zero batches.
+    pv_label = ("Path-Vector (PV), no batching" if (nobatch or not batched)
                 else "Path-Vector (PV), batched")
     # In regress mode the trend is the fitted line, so the markers stay
     # unconnected — a line through 50 scattered topologies is noise, not shape.
@@ -834,7 +842,7 @@ def main(args=None):
     if args is None:
         ap = argparse.ArgumentParser(description="PV-vs-LS message-count scaling eval")
         ap.add_argument("--quick", action="store_true", help="short sweeps for a smoke test")
-        ap.add_argument("--only", choices=["square", "flower", "topos"],
+        ap.add_argument("--only", choices=["square", "topos"],
                         help="run just one sweep instead of all four ('topos' = draw "
                              "the representative topology pictures only, no sims)")
         ap.add_argument("--no-batch", dest="nobatch", action="store_true",
@@ -1014,10 +1022,8 @@ def main(args=None):
 
     if args.quick:
         square_dims = [(n, n) for n in range(3, 6)]
-        flower_N = list(range(3, 8))
     else:
         square_dims = [(n, n) for n in range(3, 11)]       # 3x3 .. 10x10
-        flower_N = list(range(3, 13))                      # flower_3 .. flower_12
 
     if args.only in (None, "square"):
         print("== square sweep (NxN) ==")
@@ -1026,21 +1032,6 @@ def main(args=None):
              "Path-Vector vs Link-State: square grid scaling (dense 2D ring-mesh)",
              "grid size", os.path.join(PLOT_DIR, "square_scaling.png"), args.nobatch,
              state_panel=False)
-
-    if args.only in (None, "flower"):
-        # Ring-SIZE sweep (orthogonal to the others, which grow path diversity):
-        # the myriad_large flower generalised — central ring of 2N + N petals of
-        # N routers each, 2-node bridges (spof=0). Ring-graph stays a pure STAR
-        # at every N, so diversity is minimal and constant; only ring size (and
-        # node count = N^2) grows. Isolates the cost of larger rings from the
-        # cost of more paths. Same star shape as myriad_large (which uses
-        # size-2N petals); here petals are size N by request.
-        print("== flower sweep (central 2N + N petals of N, ring size grows) ==")
-        f_items = [(f"F{N}", gen_flower(N)) for N in flower_N]
-        plot(sweep(f_items, args.nobatch, args.convergence, getattr(args, "norr", False)),
-             "Path-Vector vs Link-State: flower scaling (N petals of N routers, star ring-graph)",
-             "flower N (ring size; N^2 nodes)", os.path.join(PLOT_DIR, "flower_scaling.png"),
-             args.nobatch, state_panel=False)
 
     if args.only is None:
         print("== drawing representative topologies ==")

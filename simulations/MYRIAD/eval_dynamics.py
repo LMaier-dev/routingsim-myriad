@@ -59,7 +59,22 @@ SENT_RE = re.compile(r"^scalar\s+\S+\s+sent_(\S+)\s+([0-9.]+)", re.M)
 BYTES_RE = re.compile(r"^scalar\s+\S+\s+bytes_(\S+)\s+([0-9.]+)", re.M)
 STATS_RE = re.compile(r"^t=([0-9.]+)s?\s+(\d+)\s+n=(\d+)\s+cost_sum=(\d+)"
                       r"\s+cost_max=(\d+)(?:\s+present=(\d+))?", re.M)
-UNKNOWN_RING_SIZE = 1 << 20   # mirrors MyriadGp.h
+def _unknown_ring_size():
+    """UNKNOWN_RING_SIZE read out of MyriadGp.h, not mirrored here.
+
+    It was mirrored, and it drifted: the C++ went 1<<20 -> 1<<12 and this copy
+    did not, so stretch_at's filter kept every router holding an unknown-priced
+    chain (~1.7e7) instead of dropping it, and mean stretch read in the thousands
+    instead of ~1. Parsing the header cannot drift."""
+    src = (H.SRC / "routing" / "MYRIAD" / "MyriadGp.h").read_text()
+    m = re.search(r"UNKNOWN_RING_SIZE\s*=\s*1u?\s*<<\s*(\d+)", src)
+    if not m:
+        sys.exit("could not read UNKNOWN_RING_SIZE from MyriadGp.h — "
+                 "the constant moved or changed form; fix _unknown_ring_size()")
+    return 1 << int(m.group(1))
+
+
+UNKNOWN_RING_SIZE = _unknown_ring_size()
 # EscalatingFailure records when each node it failed came back: down_<node>_<wave>
 DOWN_RE = re.compile(r"^scalar\s+\S+\s+down_(\d+)_(\d+)\s+([0-9.]+)", re.M)
 
@@ -83,6 +98,12 @@ EXTRA_OPTS = {"pv_nospof": ["--**.rankUseSpof=false"]}
 # the same ones. Ordered to match CONFIGS.
 COLORS = {n: PROTO_COLOR[n] for n in CONFIGS}
 DISPLAY = {n: PROTO_LABEL[n] for n in CONFIGS}
+
+# Not a config -- no sim of its own. It is PV's OWN sends with the reachability
+# bytes subtracted (the txBytesNoRr vector), so it is drawn in PV's colour,
+# dotted, to read as "the same run minus RR" rather than a fourth protocol.
+NORR = "pv_norr"
+DISPLAY[NORR] = "Path-Vector (RR excluded)"
 
 
 def churn_start():
@@ -248,7 +269,7 @@ def _scavetool():
                      if os.access(p, os.X_OK)), None))
 
 
-def _tx_samples(resdir):
+def _tx_samples(resdir, vec="txBytes"):
     """Yield (time, byte length) for every control-plane PDU any node sent, from
     the per-node txBytes OMNeT++ vector (see MyriadHelper::countSend) rather than
     the finish()-time byte scalars, which only give the run total. One sample IS
@@ -264,13 +285,14 @@ def _tx_samples(resdir):
     for stale in glob.glob(os.path.join(resdir, "*.vci")):
         os.remove(stale)  # reused result-dir: old index's byte offsets don't match this run's .vec
     csv_path = os.path.join(resdir, "txbytes_export.csv")
-    subprocess.run([tool, "export", "-f", "name =~ txBytes",
+    subprocess.run([tool, "export", "-f", f"name =~ {vec}",
                     "-F", "CSV-R", "-o", csv_path, vecs[0]],
                    check=True, capture_output=True, text=True)
     try:
         with open(csv_path, newline="") as f:
             for row in csv.DictReader(f):
-                if row["type"] != "vector":
+                # PV emits txBytes AND txBytesNoRr; keep only the one asked for.
+                if row["type"] != "vector" or row.get("name") != vec:
                     continue
                 for t, v in zip(row["vectime"].split(), row["vecvalue"].split()):
                     yield float(t), float(v)
@@ -278,11 +300,14 @@ def _tx_samples(resdir):
         os.remove(csv_path)
 
 
-def bytes_over_time(resdir, bin_s=1.0):
+def bytes_over_time(resdir, bin_s=1.0, vec="txBytes"):
     """(bin start times, network-wide bytes/s in that bin) — a failure wave's
-    traffic spike is then visible directly."""
+    traffic spike is then visible directly.
+
+    vec="txBytesNoRr" gives PV's same send events with the reachability-record
+    bytes taken out (MyriadGP::countGpSend); LS never writes that vector."""
     bins = defaultdict(float)
-    for t, v in _tx_samples(resdir):
+    for t, v in _tx_samples(resdir, vec):
         bins[int(t // bin_s)] += v
     if not bins:
         return [], []
@@ -562,10 +587,13 @@ def overview_plots(plan, res):
                             widths=w * 0.5, patch_artist=True, manage_ticks=False)
             for part in ("boxes", "medians", "whiskers", "caps", "fliers"):
                 for art in bp[part]:
-                    # markeredgecolor too: a flier carries its own black edge
-                    # colour that set(color=) does not touch, so outliers came
-                    # out black and unattributable to a config.
-                    art.set(color=COLORS[name], markeredgecolor=COLORS[name])
+                    art.set(color=COLORS[name])
+            # Fliers only, and only these: they are Line2D and carry their own
+            # black marker edge that set(color=) does not touch, so outliers came
+            # out black and unattributable to a config. The boxes are PathPatch
+            # under patch_artist=True and reject marker properties outright.
+            for art in bp["fliers"]:
+                art.set(markeredgecolor=COLORS[name])
             for box in bp["boxes"]:
                 box.set(facecolor=COLORS[name], alpha=0.35)
             ax.plot([], [], color=COLORS[name], label=DISPLAY.get(name, name))
@@ -674,7 +702,7 @@ def stretch_at(series, ref_series, t):
     detour costs most.
 
     Routers holding a chain priced at UNKNOWN_RING_SIZE are dropped too: that
-    placeholder is ~10^12 per hop and drowns every real cost in the sum. It means
+    placeholder dwarfs every real cost in the sum. It means
     a ring whose size this router has not learned yet, i.e. missing information,
     not a bad path."""
     num = den = 0
@@ -902,10 +930,13 @@ def main(args=None):
             # — which on RGG n=100 read 6.6x LS where the steady state is 1.4x.
             # Only the .vec series has a time axis, so post-warmup bytes come
             # from there; messages have no such series and stay run-total.
-            ser = bytes_over_time(os.path.join(OUT, f"res_{name}_{scenario}"))
+            resd = os.path.join(OUT, f"res_{name}_{scenario}")
+            ser = bytes_over_time(resd)
             r["bytes_post"] = bytes_after(ser, churn_start())
             if scenario == "churn":   # same byte-rate series the churn plots use
                 churn_bytes[name] = ser
+                if name == "pv":      # what the same sends cost without RR
+                    churn_bytes[NORR] = bytes_over_time(resd, vec="txBytesNoRr")
             print(f"  ✓ {r['msgs']:.0f} msgs, {fmt_bytes(r['bytes'])}")
 
     # --- escalating node waves: ONE run per config, scored per wave ---
@@ -930,6 +961,9 @@ def main(args=None):
                     series0.setdefault(name, ser)
                     resdir = rep_path(os.path.join(OUT, f"res_{name}_node"), rep)
                     bytes0.setdefault(name, bytes_over_time(resdir))
+                    if name == "pv":
+                        bytes0.setdefault(NORR,
+                                          bytes_over_time(resdir, vec="txBytesNoRr"))
                 res = {"traffic": tr}
                 for i, (frac, wt) in enumerate(waves):
                     end = waves[i + 1][1] if i + 1 < len(waves) else float("inf")
@@ -1104,6 +1138,7 @@ def plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0=None,
         import matplotlib
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
+        from matplotlib.patches import Patch
     except ImportError:
         print("\n(matplotlib not available — skipping plots)")
         return
@@ -1129,18 +1164,33 @@ def plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0=None,
                 continue
             w = 0.8 / len(avail)
             fig, ax = plt.subplots()
-            for i, s in enumerate(avail):
-                vals = [(traffic.get((n, s), {}).get(key) or 0) / scale
-                        for n in protos]
-                bars = ax.bar([p + i * w - 0.4 + w/2 for p in x], vals, w,
-                              label=s, color=f"C{i}")
-                ax.bar_label(bars, fmt="%.0f", fontsize=8)
+            # Colour is the PROTOCOL, as everywhere else in the eval; scenarios
+            # (usually just one) are told apart by hatch. Colouring by scenario
+            # made every bar the same blue and the protocol unreadable.
+            hatches = ["", "//", "..", "xx"]
+            for i, sc in enumerate(avail):
+                raw = [traffic.get((n, sc), {}).get(key) or 0 for n in protos]
+                bars = ax.bar([p + i * w - 0.4 + w/2 for p in x],
+                              [v / scale for v in raw], w,
+                              color=[COLORS[n] for n in protos],
+                              hatch=hatches[i % len(hatches)], edgecolor="white")
+                # fmt="%.0f" rounded 1.49GB to "1" and 0.49GB to "0". Label from
+                # the RAW value at its own scale instead.
+                ax.bar_label(bars, labels=[fmt_bytes(v) if scale != 1
+                                           else f"{v:,.0f}" for v in raw],
+                             fontsize=8)
             ax.set_xticks(list(x))
             ax.set_xticklabels([DISPLAY.get(p, p.upper()) for p in protos],
                                fontsize=8)
             ax.set(ylabel=ylabel,
                    title=title(f"Control plane ({traffic_simtime()}, {note})"))
-            ax.legend(fontsize=8); fig.tight_layout()
+            # One scenario = one hatch = nothing to key, and the x labels already
+            # name the protocols.
+            if len(avail) > 1:
+                ax.legend(handles=[Patch(facecolor="0.85", edgecolor="white",
+                                         hatch=hatches[i % len(hatches)], label=sc)
+                                   for i, sc in enumerate(avail)], fontsize=8)
+            fig.tight_layout()
             fig.savefig(os.path.join(OUT, fname), dpi=120)
             made.append(fname)
 
@@ -1150,13 +1200,19 @@ def plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0=None,
     # accumulating. Log y, since PV and LS differ by more than an order.
     if churn_bytes and any(churn_bytes.get(n, ([], []))[0] for n in COLORS):
         fig, ax = plt.subplots(figsize=(8, 4.5))
-        rdiv, rname = byte_unit([b for n in COLORS
+        # pv_nospof is dropped: it differs only in path-cost RANKING, so its byte
+        # rate traces pv exactly and the purple just hid the red. The RR-excluded
+        # trace takes its place — same PV run, dotted, RR bytes subtracted.
+        cseries = [(n, COLORS[n], "-") for n in COLORS if n != "pv_nospof"]
+        if churn_bytes.get(NORR, ([], []))[0]:
+            cseries.append((NORR, COLORS["pv"], ":"))
+        rdiv, rname = byte_unit([b for n, _, _ in cseries
                                  for b in churn_bytes.get(n, ([], []))[1]])
-        for name, color in COLORS.items():
+        for name, color, style in cseries:
             ts, bps = churn_bytes.get(name, ([], []))
             if not ts:
                 continue
-            ax.plot(ts, [b / rdiv for b in bps], color=color, lw=1.0,
+            ax.plot(ts, [b / rdiv for b in bps], color=color, lw=1.0, ls=style,
                     label=DISPLAY.get(name, name))
         ax.axvline(churn_start(), color="gray", lw=0.8)
         ax.text(churn_start(), ax.get_ylim()[1], " churn starts", fontsize=8,
@@ -1208,7 +1264,9 @@ def plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0=None,
                     label=DISPLAY.get(name, name))
             drew = True
         if drew:
-            dead = _sec(common("deadInterval", "9s"))
+            # No worst-case-detection marker: a crimson dash-dot per wave plus its
+            # legend entry crowded the plot without changing any reading taken
+            # from it.
             for frac, wt in waves:
                 ax.axvline(wt, color="gray", lw=0.8)
                 # Every node of the wave is down for DOWN_MIN, then reboots
@@ -1216,13 +1274,7 @@ def plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0=None,
                 ax.axvspan(wt, wt + DOWN_MIN, color="gray", alpha=0.18, lw=0)
                 ax.axvspan(wt + DOWN_MIN, wt + DOWN_MIN + DOWN_JITTER,
                            color="gray", alpha=0.09, lw=0)
-                # Worst case a neighbour still believes the last-rebooting node
-                # is alive: its reboot deadline plus a full dead-timer.
-                ax.axvline(wt + DOWN_MIN + DOWN_JITTER + dead, color="crimson",
-                           ls="-.", lw=0.7, alpha=0.5)
                 ax.text(wt, 101, f" {frac:.0%}", fontsize=9, color="gray")
-            ax.plot([], [], color="crimson", ls="-.", lw=0.7, alpha=0.5,
-                    label=f"worst-case detection (+deadInterval {dead:g}s)")
             ax.set(xlim=(0, max(ts)),
                    xlabel="time (s) — solid: wave fails, dark: all down, "
                           "light: reboot window",
@@ -1236,21 +1288,26 @@ def plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0=None,
             # actual instantaneous cost, not an artifact of message counting.
             if bytes0 and any(bytes0.get(n, ([], []))[0] for n in COLORS):
                 ax2 = ax.twinx()
-                b2div, b2name = byte_unit([b for n in COLORS
+                b2div, b2name = byte_unit([b for n in list(COLORS) + [NORR]
                                            for b in bytes0.get(n, ([], []))[1]])
-                for name, color in pcolors.items():
+                bseries = [(n, c, ":") for n, c in pcolors.items()]
+                if bytes0.get(NORR, ([], []))[0]:
+                    # Same PV sends minus RR; dashed so it separates from PV's
+                    # own dotted trace in the same colour.
+                    bseries.append((NORR, COLORS["pv"], (0, (1, 3))))
+                for name, color, style in bseries:
                     bts, bps = bytes0.get(name, ([], []))
                     if not bts:
                         continue
                     ax2.plot(bts, [b / b2div for b in bps], color=color, lw=1.0,
-                             ls=":", alpha=0.95,
+                             ls=style, alpha=0.95,
                              label=f"{DISPLAY.get(name, name)} {b2name}/s")
                 ax2.set_yscale("log")
                 ax2.set_ylabel(f"control-plane {b2name}/s (log)")
                 h2, l2 = ax2.get_legend_handles_labels()
                 handles, labels = handles + h2, labels + l2
 
-            ax.legend(handles, labels, fontsize=7, loc="lower right")
+            ax.legend(handles, labels, fontsize=7, loc="lower left")
             fig.tight_layout()
             fig.savefig(os.path.join(OUT, "recovery_node.png"), dpi=120)
             made.append("recovery_node.png")

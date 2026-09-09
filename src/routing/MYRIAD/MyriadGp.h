@@ -246,7 +246,8 @@ namespace routingsim {
             // bytes_norr_* scalars.
             std::unordered_map<nodeid_t, unsigned long long> rrBytesPerLink;
             unsigned long long rrBytesTotal = 0;
-            void countRr(nodeid_t to, const cPacket* inner);
+            void countGpSend(const std::string& type, unsigned long long bytes,
+                             nodeid_t to, const cPacket* inner);
 
         private:
             MyriadGpRib rib;

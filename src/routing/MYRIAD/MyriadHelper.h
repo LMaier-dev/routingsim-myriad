@@ -57,7 +57,7 @@ struct PendingTx {
 
 class MyriadHelper : public Protocol {
     public:
-        ~MyriadHelper() override { delete txBytesVec; }
+        ~MyriadHelper() override { delete txBytesVec; delete txBytesNoRrVec; }
 
     protected:
         nodeid_t myId;
@@ -76,7 +76,9 @@ class MyriadHelper : public Protocol {
         // all nodes' txBytes in a time window for network-wide overhead-over-time,
         // e.g. to see it spike during a failure wave.
         cOutVector* txBytesVec = nullptr;
-        void countSend(const std::string& type, unsigned long long bytes = 0) {
+        cOutVector* txBytesNoRrVec = nullptr;
+        void countSend(const std::string& type, unsigned long long bytes = 0,
+                       unsigned long long excluded = 0) {
             bytes += msgsize::FRAME;
             sentCounts[type]++;
             sentBytes[type] += bytes;
@@ -84,6 +86,8 @@ class MyriadHelper : public Protocol {
             if (bytes > m) m = bytes;
             if (bytes > sentMaxBytesOverall) sentMaxBytesOverall = bytes;
             if (txBytesVec) txBytesVec->record((double) bytes);
+            if (txBytesNoRrVec)
+                txBytesNoRrVec->record((double) (bytes - std::min(bytes, excluded)));
         }
         static std::string sendTypeLabel(const char* pktName);
         void recordSendScalars() {

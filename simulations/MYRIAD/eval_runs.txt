@@ -63,9 +63,6 @@ python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py costdrift --topo ~/ro
 # this should show that refresh is necessary for echo ring heavy topos
 SPLIT python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --topo ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/German_HV_net_n2312.min.ring.txt --only churn --basis native --no-refresh-flood --noreplay
 
-# this should show that refresh is necessary for echo ring heavy topos
-SPLIT python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --topo ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/German_HV_net_core_n981.min.ring.txt --only churn --basis native --nospof
-
 
 # ---------------------------------------------------------------------------
 # Memory and hotspotting vs fan-out, at FIXED n=1000 (ringpipe --sweep-share

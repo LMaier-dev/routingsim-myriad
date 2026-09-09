@@ -110,7 +110,7 @@ def main():
 
     sc = sub.add_parser("scaling")
     sc.add_argument("--quick", action="store_true")
-    sc.add_argument("--only", choices=["square", "width", "ladder", "flower", "topos"])
+    sc.add_argument("--only", choices=["square", "topos"])
     sc.add_argument("--no-batch", dest="nobatch", action="store_true")
     sc.add_argument("--convergence", action="store_true")
     sc.add_argument("--basis", choices=["min", "tree", "short", "all"], default="min")
