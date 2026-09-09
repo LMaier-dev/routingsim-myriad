@@ -562,7 +562,10 @@ def overview_plots(plan, res):
                             widths=w * 0.5, patch_artist=True, manage_ticks=False)
             for part in ("boxes", "medians", "whiskers", "caps", "fliers"):
                 for art in bp[part]:
-                    art.set(color=COLORS[name])
+                    # markeredgecolor too: a flier carries its own black edge
+                    # colour that set(color=) does not touch, so outliers came
+                    # out black and unattributable to a config.
+                    art.set(color=COLORS[name], markeredgecolor=COLORS[name])
             for box in bp["boxes"]:
                 box.set(facecolor=COLORS[name], alpha=0.35)
             ax.plot([], [], color=COLORS[name], label=DISPLAY.get(name, name))

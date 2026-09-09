@@ -17,7 +17,7 @@
 # without pinning a tr/fan/seed filename that regeneration renames.
 
 # GRID "Correctness"
-python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py costdrift --topo ~/routingsim/simulations/topologies/grid_10,10.txt --no-refresh-flood --nospof
+python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py costdrift --topo ~/routingsim/simulations/topologies/grid_10,10.txt --no-refresh-flood --nospof --tag grid
 
 # GRID scaling behavior vs linkstate TODO add bandwith
 python3 ~/routingsim/simulations/MYRIAD/eval_scaling.py --basis min
@@ -65,7 +65,7 @@ python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --overview -
 #               between them, spof 58%
 
 # path optimality vs SPF on real geometry, echo rings included
-python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py costdrift --topo ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/German_HV_net_n2312.min.ring.txt --basis native --no-refresh-flood --nospof
+python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py costdrift --topo ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/German_HV_net_n2312.min.ring.txt --basis native --no-refresh-flood --nospof --tag hv
 
 # this should show that refresh is necessary for echo ring heavy topos
 SPLIT python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --topo ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/German_HV_net_n2312.min.ring.txt --only churn --basis native --no-refresh-flood --noreplay

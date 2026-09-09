@@ -56,7 +56,7 @@ PLOT_DIR = os.path.join(EVAL_DIR, "plots")
 BASIS = "min"   # ring basis for topo2rings; set from --basis in main()
 # Drop rings above this many members (0 = keep all); set from --max-ring-size.
 MAX_RING_SIZE = 0
-CONV_SNAP = "0.5s"      # stats snapshots are tiny; poll finely for convergence times
+CONV_SNAP = "0.1s"
 CONV_SIMTIME = simtime(cycles=1)
 
 # Canonical fair-timing knobs live in eval_common.ini (single source of truth,
@@ -277,7 +277,7 @@ def batch_stats(ini_path, tag="", rep=0):
     return (n_batches, avg_entries, max_entries) for the inter-ring UPDATE
     batching. n_batches = sum of sent_update_batch (packets on the wire);
     avg = batch_entries_total / n_batches (mean chains coalesced per packet)."""
-    res = rep_path(os.path.join(INI_DIR, f"res_gp{tag}_{os.path.basename(ini_path)}"), rep)
+    res = rep_path(os.path.join(INI_DIR, f"res_pv{tag}_{os.path.basename(ini_path)}"), rep)
     scas = glob.glob(os.path.join(res, "*.sca"))
     if not scas:
         return 0, 0.0, 0
@@ -762,6 +762,9 @@ def draw_topologies(outfile):
 
 
 def main(args=None):
+    # Declared up front: --conv-snapshot's help text reads CONV_SNAP, and Python
+    # rejects a `global` that follows any use of the name in the same function.
+    global BASIS, MAX_RING_SIZE, TOPO_DIR, INI_DIR, PLOT_DIR, CONV_SNAP
     if args is None:
         ap = argparse.ArgumentParser(description="PV-vs-LS message-count scaling eval")
         ap.add_argument("--quick", action="store_true", help="short sweeps for a smoke test")
@@ -775,6 +778,11 @@ def main(args=None):
         ap.add_argument("--convergence", action="store_true",
                         help="also measure convergence time per topology (extends "
                              f"sim-time-limit to {CONV_SIMTIME}; adds a third plot panel).")
+        ap.add_argument("--conv-snapshot", dest="conv_snapshot", default=None,
+                        metavar="T",
+                        help=f"snapshot interval under --convergence, which sets "
+                             f"the resolution of the measured convergence time "
+                             f"(default {CONV_SNAP})")
         ap.add_argument("--basis", choices=["min", "tree", "short", "all"], default="min",
                         help="ring basis: min=minimum_cycle_basis (default), "
                              "tree=cycle_basis (spanning-tree; 'all' is a legacy "
@@ -827,8 +835,10 @@ def main(args=None):
 
     # Nest all outputs under a per-basis subfolder so min_cycles and tree_cycles
     # keep separate cached labels, inis, and plots.
-    global BASIS, MAX_RING_SIZE, TOPO_DIR, INI_DIR, PLOT_DIR
     BASIS = args.basis
+    if getattr(args, "conv_snapshot", None):
+        v = args.conv_snapshot
+        CONV_SNAP = f"{v}s" if str(v)[-1].isdigit() else str(v)
     MAX_RING_SIZE = getattr(args, "max_ring_size", 0) or 0
     basis_dir = os.path.join(EVAL_DIR, f"{BASIS}_cycles"
                              + (f"_m{MAX_RING_SIZE}" if MAX_RING_SIZE else "")
@@ -942,7 +952,8 @@ def main(args=None):
         s_items = [(f"{x}x{y}", gen_topology(x, y)) for (x, y) in square_dims]
         plot(sweep(s_items, args.nobatch, args.convergence),
              "Path-Vector vs Link-State: square grid scaling (dense 2D ring-mesh)",
-             "grid size", os.path.join(PLOT_DIR, "square_scaling.png"), args.nobatch)
+             "grid size", os.path.join(PLOT_DIR, "square_scaling.png"), args.nobatch,
+             state_panel=False)
 
     if args.only in (None, "flower"):
         # Ring-SIZE sweep (orthogonal to the others, which grow path diversity):
@@ -957,7 +968,7 @@ def main(args=None):
         plot(sweep(f_items, args.nobatch, args.convergence),
              "Path-Vector vs Link-State: flower scaling (N petals of N routers, star ring-graph)",
              "flower N (ring size; N^2 nodes)", os.path.join(PLOT_DIR, "flower_scaling.png"),
-             args.nobatch)
+             args.nobatch, state_panel=False)
 
     if args.only is None:
         print("== drawing representative topologies ==")

@@ -7,7 +7,7 @@ Any negative drift (PV cheaper than optimal) is a bug flag.
 
     python3 simulations/MYRIAD/eval_costdrift.py [--topo PATH] [--basis {min,tree}]
 
-Outputs histogram.png + scatter.png under simulations/MYRIAD/eval/costdrift/.
+Outputs scatter.png under simulations/MYRIAD/eval/costdrift/<topo>[_<tag>]/.
 """
 import argparse
 import os
@@ -73,6 +73,12 @@ def main(args=None):
         args.snapshot = SNAPSHOT
     apply_repeat_args(args)
 
+    # Per topology (and --tag), like dynamics: OUT was a bare constant, so two
+    # costdrift runs silently overwrote each other's plots -- and --tag was
+    # accepted but had nothing to act on.
+    global OUT
+    OUT = os.path.join(OUT, os.path.splitext(os.path.basename(args.topo))[0]
+                       + (f"_{args.tag}" if getattr(args, "tag", None) else ""))
     os.makedirs(OUT, exist_ok=True)
     if not os.path.exists(BIN):
         sys.exit(f"RoutingSim binary not found at {BIN} — build first.")
@@ -133,8 +139,7 @@ def main(args=None):
         ns_drift = {k: nospof[k][0] - oracle[k][0] for k in ns_common}
         nsvals = list(ns_drift.values())
         if rep == 0:
-            raw.update(oracle=oracle, pv=pv, common=common, cost=cost_drift,
-                       length=len_drift, negative=negative,
+            raw.update(oracle=oracle, pv=pv, common=common,
                        nospof=nospof, ns_common=ns_common)
         # Chains crossing a single-router ring transition: 0 on a 2-connected
         # topology (grid), non-zero means the RIB had no redundant alternative.
@@ -154,7 +159,6 @@ def main(args=None):
 
     r = repeat_mean(one)
     oracle, pv, common = raw["oracle"], raw["pv"], raw["common"]
-    cost_drift, len_drift, negative = raw["cost"], raw["length"], raw["negative"]
 
     print(f"\n=== Cost-drift: PV(production) − oracle{repeats_note()} ===")
     print(f"  routes in oracle : {r['n_oracle']:.0f}{pm(r['n_oracle'], '.1f')}")
@@ -180,36 +184,8 @@ def main(args=None):
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
     except ImportError:
-        print("\n(matplotlib not available — skipping plots)")
+        print("\n(matplotlib not available — skipping the plot)")
         return
-
-    from collections import defaultdict
-    by_cost = defaultdict(list)
-    for k in common:
-        by_cost[cost_drift[k]].append(len_drift[k])
-    cxs = sorted(by_cost)
-    pos = list(range(len(cxs)))
-    counts = [len(by_cost[c]) for c in cxs]
-    mean_len = [sum(by_cost[c]) / len(by_cost[c]) for c in cxs]
-
-    fig, ax = plt.subplots()
-    ax.bar([p - 0.2 for p in pos], cxs, width=0.4, color=PROTO_COLOR["pv"],
-           label="cost drift (Σ members²)")
-    ax.bar([p + 0.2 for p in pos], mean_len, width=0.4,
-           color=PROTO_COLOR["pv"], alpha=0.5,
-           label="mean chain-length drift (hops)")
-    for p, n in zip(pos, counts):
-        ax.text(p, 0, f"n={n}", ha="center", va="bottom", fontsize=6, rotation=90)
-    ax.set_xticks(pos)
-    ax.set_xticklabels([str(c) for c in cxs], rotation=45, ha="right", fontsize=7)
-    ax.set(xlabel="cost-drift bucket  PV − oracle", ylabel="drift (PV − oracle)",
-           title=title("Cost vs length drift: Path-Vector vs oracle"))
-    ax.legend(fontsize=8)
-    if negative:
-        ax.text(0.02, 0.95, f"BUG: {len(negative)} negative cost drift",
-                transform=ax.transAxes, color="C3", va="top", fontsize=9)
-    fig.tight_layout()
-    fig.savefig(os.path.join(OUT, "histogram.png"), dpi=120)
 
     nospof, ns_common = raw["nospof"], raw["ns_common"]
     ox = [oracle[k][0] for k in common]
@@ -225,13 +201,14 @@ def main(args=None):
         ax.scatter(nx_, ny, s=4, alpha=0.4, color=PROTO_COLOR["pv_nospof"],
                    label="Path-Vector (spof-blind)")
     ax.plot([lo, hi], [lo, hi], "k--", lw=0.8, label="y = x  (optimal)")
-    ax.set(xlabel="oracle cost (Dijkstra)", ylabel="Path-Vector (PV) cost",
-           title=title("Path-Vector vs oracle path cost"))
+    ax.set(xlabel="Link-State (LS), cost (Dijkstra)",
+           ylabel="Path-Vector (PV) cost",
+           title=title("Path-Vector vs Link-State path cost"))
     ax.legend(fontsize=8)
     fig.tight_layout()
     fig.savefig(os.path.join(OUT, "scatter.png"), dpi=120)
 
-    print(f"\nplots -> {OUT}/{{histogram,scatter}}.png")
+    print(f"\nplot -> {OUT}/scatter.png")
 
 
 if __name__ == "__main__":

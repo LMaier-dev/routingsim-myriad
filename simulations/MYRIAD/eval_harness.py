@@ -380,7 +380,7 @@ NED_MODULE = {"pv": "gp", "ls": "ls"}
 # the only place a series colour is chosen. A second metric for the SAME variant
 # in one figure keeps the colour and changes the marker/linestyle/alpha instead.
 PROTO_COLOR = {"pv": "tab:red", "ls": "tab:blue",
-               "pv_noreplay": "darkturquoise", "pv_nospof": "tab:purple"}
+               "pv_noreplay": "tab:orange", "pv_nospof": "tab:purple"}
 # Figure- and table-facing names, keyed the same way (see eval_dynamics.CONFIGS).
 PROTO_LABEL = {"pv": "Path-Vector (PV)", "ls": "Link-State (LS)",
                "pv_noreplay": "Path-Vector (refresh-bound)",
