@@ -487,7 +487,7 @@ def _regress(ax, xs, ys, color, ls="-"):
 
 
 def plot(res, title, xlabel, outfile, nobatch=False, batch_panel=True,
-         state_panel=True, only_state=False,
+         state_panel=True, link_panel=True,
          xs=None, invert=False, regress=False, rings=None):
     """Message counts, optionally the batch-size panel, and a convergence panel
     when res carries ls_ct/pv_ct. `res` is the dict from sweep().
@@ -515,21 +515,21 @@ def plot(res, title, xlabel, outfile, nobatch=False, batch_panel=True,
         xs = list(range(len(labels)))
     has_conv = "ls_ct" in res and any(v is not None for v in res["ls_ct"])
     has_state = state_panel and "ls_s" in res and any(res["ls_s"])
-    # only_state drops the volume and link-load panels: on an n sweep both are
-    # near-flat (fan and the ring graph are pinned, so per-link load barely
-    # moves) and only the per-router state is actually a function of the axis.
-    if only_state:
-        has_conv = batch_panel = False
+    # State and link load are chosen independently: an n sweep wants state next to
+    # the volume panel but not link load (fan and the ring graph are pinned there,
+    # so per-link load barely moves), a fan sweep wants exactly the opposite.
+    has_link = link_panel and "ls_lmax" in res and any(res["ls_lmax"])
     # Batching off (--nobatch, or --set holdInterval=0s) leaves nothing coalesced,
     # so the panel would be a flat zero taking half the figure. Gate on the data,
     # not on the flag: both routes to "off" then drop it.
     batched = any(res.get("avg_sz") or ())
     batch_panel = batch_panel and batched
-    has_link = has_state and not only_state
-    ncols = (not only_state) + bool(batch_panel) + bool(has_conv) + bool(has_state) + bool(has_link)
+    # The volume panel is always drawn: message count and bytes are the headline
+    # of every sweep.
+    ncols = 1 + bool(batch_panel) + bool(has_conv) + bool(has_state) + bool(has_link)
     fig, axes = plt.subplots(1, ncols, figsize=(7.5 * ncols, 6), squeeze=False)
     axes = list(axes[0])
-    axL = None if only_state else axes.pop(0)
+    axL = axes.pop(0)
     axR = axes.pop(0) if batch_panel else None
 
     def ticks(ax):
@@ -574,8 +574,6 @@ def plot(res, title, xlabel, outfile, nobatch=False, batch_panel=True,
                             fontsize=8)
         top.set_xlabel("#rings", fontsize=9)
 
-    if axL is None:
-        fig.suptitle(title)
     # Read the label off the data too: --set holdInterval=0s turns batching off
     # without setting --nobatch, and the figure said "batched" over a run with
     # zero batches.
@@ -587,44 +585,43 @@ def plot(res, title, xlabel, outfile, nobatch=False, batch_panel=True,
     ms = 4 if regress else 6
     fit = ((lambda ax, ser, c, ls="-": _regress(ax, xs, ser, c, ls)) if regress
            else (lambda ax, ser, c, ls="-": ""))
-    if axL is not None:
-        axL.errorbar(xs, res["ls"], yerr=_sd(res["ls"]), fmt=fmt("o"), capsize=3, ms=ms,
-                     label="Link-State (LS)" + fit(axL, res["ls"], PROTO_COLOR["ls"]),
-                     color=PROTO_COLOR["ls"])
-        axL.errorbar(xs, res["pv"], yerr=_sd(res["pv"]), fmt=fmt("s"), capsize=3, ms=ms,
-                     label=pv_label + fit(axL, res["pv"], PROTO_COLOR["pv"]), color=PROTO_COLOR["pv"])
-        ticks(axL)
-        axL.set_xlabel(xlabel); axL.set_ylabel("routing messages sent")
-        axL.set_title(title); axL.grid(True, alpha=0.3)
-        # Bytes share the panel on a twin axis: message count alone hides the fact
-        # that PV's PDUs are far fatter, so the two curves can rank opposite ways.
-        axB = axL.twinx()
-        # One unit for both series
-        bdiv, bname = byte_unit(list(res["ls_b"]) + list(res["pv_b"]))
-        # Bytes only, no message series: the RR-excluded figure is subtracted
-        # from the SAME packets (see norr_stats), so its message count is PV's
-        # by construction and a second identical curve would only mislead.
-        has_norr = "pv_nr_b" in res and any(res["pv_nr_b"])
-        nr_lab = ("PV bytes, no RR (own run)" if res.get("norr_real")
-                  else "PV bytes, RR fields excluded")
-        mb = lambda ser: [b / bdiv for b in ser]
-        mb_sd = lambda ser: (None if _sd(ser) is None else [v / bdiv for v in _sd(ser)])
-        axB.errorbar(xs, mb(res["ls_b"]), yerr=mb_sd(res["ls_b"]), fmt=fmt("o"),
-                     ls="" if regress else "--", capsize=3, ms=ms, color=PROTO_COLOR["ls"],
-                     alpha=0.45, label="LS bytes" + fit(axB, mb(res["ls_b"]), PROTO_COLOR["ls"], "--"))
-        axB.errorbar(xs, mb(res["pv_b"]), yerr=mb_sd(res["pv_b"]), fmt=fmt("s"),
-                     ls="" if regress else "--", capsize=3, ms=ms, color=PROTO_COLOR["pv"],
-                     alpha=0.45, label="PV bytes" + fit(axB, mb(res["pv_b"]), PROTO_COLOR["pv"], "--"))
-        if has_norr:
-            axB.errorbar(xs, mb(res["pv_nr_b"]), yerr=mb_sd(res["pv_nr_b"]), fmt=fmt("D"),
-                         ls="" if regress else "--", capsize=3, ms=ms,
-                         color=PROTO_COLOR["pv_norr"], alpha=0.7,
-                         label=nr_lab
-                               + fit(axB, mb(res["pv_nr_b"]), PROTO_COLOR["pv_norr"], "--"))
-        axB.set_ylabel(f"routing bytes sent ({bname}, dashed)")
-        h1, l1 = axL.get_legend_handles_labels()
-        h2, l2 = axB.get_legend_handles_labels()
-        axL.legend(h1 + h2, l1 + l2, fontsize=8)
+    axL.errorbar(xs, res["ls"], yerr=_sd(res["ls"]), fmt=fmt("o"), capsize=3, ms=ms,
+                 label="Link-State (LS)" + fit(axL, res["ls"], PROTO_COLOR["ls"]),
+                 color=PROTO_COLOR["ls"])
+    axL.errorbar(xs, res["pv"], yerr=_sd(res["pv"]), fmt=fmt("s"), capsize=3, ms=ms,
+                 label=pv_label + fit(axL, res["pv"], PROTO_COLOR["pv"]), color=PROTO_COLOR["pv"])
+    ticks(axL)
+    axL.set_xlabel(xlabel); axL.set_ylabel("routing messages sent")
+    axL.set_title(title); axL.grid(True, alpha=0.3)
+    # Bytes share the panel on a twin axis: message count alone hides the fact
+    # that PV's PDUs are far fatter, so the two curves can rank opposite ways.
+    axB = axL.twinx()
+    # One unit for both series
+    bdiv, bname = byte_unit(list(res["ls_b"]) + list(res["pv_b"]))
+    # Bytes only, no message series: the RR-excluded figure is subtracted
+    # from the SAME packets (see norr_stats), so its message count is PV's
+    # by construction and a second identical curve would only mislead.
+    has_norr = "pv_nr_b" in res and any(res["pv_nr_b"])
+    nr_lab = ("PV bytes, no RR (own run)" if res.get("norr_real")
+              else "PV bytes, RR fields excluded")
+    mb = lambda ser: [b / bdiv for b in ser]
+    mb_sd = lambda ser: (None if _sd(ser) is None else [v / bdiv for v in _sd(ser)])
+    axB.errorbar(xs, mb(res["ls_b"]), yerr=mb_sd(res["ls_b"]), fmt=fmt("o"),
+                 ls="" if regress else "--", capsize=3, ms=ms, color=PROTO_COLOR["ls"],
+                 alpha=0.45, label="LS bytes" + fit(axB, mb(res["ls_b"]), PROTO_COLOR["ls"], "--"))
+    axB.errorbar(xs, mb(res["pv_b"]), yerr=mb_sd(res["pv_b"]), fmt=fmt("s"),
+                 ls="" if regress else "--", capsize=3, ms=ms, color=PROTO_COLOR["pv"],
+                 alpha=0.45, label="PV bytes" + fit(axB, mb(res["pv_b"]), PROTO_COLOR["pv"], "--"))
+    if has_norr:
+        axB.errorbar(xs, mb(res["pv_nr_b"]), yerr=mb_sd(res["pv_nr_b"]), fmt=fmt("D"),
+                     ls="" if regress else "--", capsize=3, ms=ms,
+                     color=PROTO_COLOR["pv_norr"], alpha=0.7,
+                     label=nr_lab
+                           + fit(axB, mb(res["pv_nr_b"]), PROTO_COLOR["pv_norr"], "--"))
+    axB.set_ylabel(f"routing bytes sent ({bname}, dashed)")
+    h1, l1 = axL.get_legend_handles_labels()
+    h2, l2 = axB.get_legend_handles_labels()
+    axL.legend(h1 + h2, l1 + l2, fontsize=8)
 
     if axR is not None:
         axR.errorbar(xs, res["avg_sz"], yerr=_sd(res["avg_sz"]), fmt=fmt("s"),
@@ -880,16 +877,14 @@ def main(args=None):
                              "sweeps plot DESCENDING, "
                              "so the ring count -- which is inverse to length at "
                              "fixed n -- grows left to right")
-        ap.add_argument("--only-state", dest="only_state", action="store_true",
-                        help="draw ONLY the per-router state panel. For an n "
-                             "sweep, where fan and the ring graph are pinned: "
-                             "message volume and link load barely move there, so "
-                             "state is the only curve the axis explains")
         ap.add_argument("--no-state-panel", action="store_true",
-                        help="drop the per-router state and link-load panels. "
-                             "Both scale with NODE COUNT, so they belong on an n "
-                             "sweep (ringgrow --sweep-n), not on a sweep that "
-                             "holds n fixed")
+                        help="drop the per-router state panel (RIB vs LSDB). It "
+                             "scales with NODE COUNT, so it says nothing on a "
+                             "sweep that holds n fixed")
+        ap.add_argument("--no-link-panel", action="store_true",
+                        help="drop the link-load panel. Per-link load is a "
+                             "function of FAN, so it says nothing on an n sweep "
+                             "where the ring graph is pinned")
         ap.add_argument("--no-batch-panel", action="store_true",
                         help="accepted for compatibility and now the only "
                              "behaviour: dir sweeps never draw the batch-size "
@@ -999,7 +994,7 @@ def main(args=None):
              # and link-load ones, which is what this axis is actually about.
              batch_panel=False,
              state_panel=not getattr(args, "no_state_panel", False),
-             only_state=getattr(args, "only_state", False),
+             link_panel=not getattr(args, "no_link_panel", False),
              xs=xs, invert=args.x_key in ("rl", "len"), regress=True, rings=rings)
         return
 
@@ -1031,7 +1026,7 @@ def main(args=None):
         plot(sweep(s_items, args.nobatch, args.convergence, getattr(args, "norr", False)),
              "Path-Vector vs Link-State: square grid scaling (dense 2D ring-mesh)",
              "grid size", os.path.join(PLOT_DIR, "square_scaling.png"), args.nobatch,
-             state_panel=False)
+             state_panel=False, link_panel=False)
 
     if args.only is None:
         print("== drawing representative topologies ==")

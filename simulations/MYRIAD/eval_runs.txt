@@ -68,15 +68,30 @@ SPLIT python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --topo
 # Memory and hotspotting vs fan-out, at FIXED n=1000 (ringpipe --sweep-share
 # with --hold-len, so ring length is pinned and only fan moves).
 #
-# --no-state-panel: per-router state and link load are functions of the NODE
-# COUNT, which this sweep pins at 1000. They live on the n sweep below.
+# Volume (messages + bytes) and LINK LOAD, both with and without RR. No state
+# panel: per-router RIB is a function of NODE COUNT, which this sweep pins at
+# 1000. --norr makes the RR-excluded series a real carryRr=false run rather than
+# a subtraction, which n=1000 can afford.
 python3 ~/routingsim/simulations/MYRIAD/eval_scaling.py --dir ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_shr1000_rl16_spof0.5 --x-key fan --jobs 6 --no-state-panel --norr
 
 
 # ---------------------------------------------------------------------------
 # Per-router RIB state vs NODE COUNT (generate_topos.sh grow; ringgrow
-# --sweep-n, A=300 tr=750 fixed). No message volume and link load because they barely move.
-python3 ~/routingsim/simulations/MYRIAD/eval_scaling.py --dir ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_nsweep_A300_tr750_spof0.5 --x-key n --jobs 6 --only-state
+# --sweep-n, A=300 tr=750 fixed), alongside volume with and without RR.
+# --no-link-panel: per-link load is a function of FAN, and the ring graph is
+# pinned here. No --norr: n runs to 8000, so the RR-excluded series comes from
+# the free in-run subtraction instead of a third simulation per point.
+#
+# --jobs 2, NOT 6: LS holds an LSDB row per origin at every node, so its memory
+# goes with n^2 -- 44GB measured at n=10000 scales to ~28GB at the n=8000 points
+# here. measure() runs ls then pv sequentially so a job peaks at max(), but 6 of
+# those is ~168GB on a box with ~78GB free. Run this one on its own.
+python3 ~/routingsim/simulations/MYRIAD/eval_scaling.py --dir ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_nsweep_A300_tr750_spof0.5 --x-key n --jobs 2 --no-link-panel
+
+# All three panels on the ringgrow corpus the dynamics runs use: state, volume
+# and link load, each with and without RR. tr is the swept knob, so fan moves
+# (link load means something) and n is fixed at 2500 (state is comparable).
+python3 ~/routingsim/simulations/MYRIAD/eval_scaling.py --dir ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow2500_A300_spof0.5 --x-key tr --jobs 6
 
 
 # RUN THIS SEPARATELY (peaks at around 75GB with 4 jobs)
