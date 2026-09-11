@@ -117,6 +117,15 @@ namespace routingsim {
             void startSnapshot();
             void dumpOracleTo(const std::string& path, const std::string& tprefix, bool stats);
 
+            // SPF accounting. MyriadLS forwards on the LSDB and never runs
+            // Dijkstra in-protocol, so this charges what one WOULD cost to every
+            // topology-LSA install -- i.e. spf-interval 0, no coalescing.
+            void countSpf();
+            // Ops one Dijkstra over the current ring graph would cost.
+            uint64_t spfOps();
+            // (relaxations, rings) of the ring graph the LSDB currently holds.
+            std::pair<uint64_t, uint64_t> spfGraphSize();
+
         private:
             // `neighbors` (typed std::unordered_map<nodeid_t, NeighborEntry>)
             // is inherited from MyriadHelloProto<NeighborEntry>.
@@ -129,6 +138,11 @@ namespace routingsim {
             std::unordered_map<LsaKey, simtime_t, LsaKeyHash> lastOriginated;
             struct PendingOriginate { uint16_t minSeq = 0; TimerMsg* timer = nullptr; };
             std::unordered_map<LsaKey, PendingOriginate, LsaKeyHash> pendingOriginate;
+
+            // Ring-graph dimensions, recomputed only when a RINGS LSA installs
+            // (membership is static once formed, so in practice: once).
+            bool spfSizeDirty = true;
+            uint64_t spfEdges = 0, spfRings = 0;
 
             simtime_t snapshotInterval;      // periodic oracle snapshot; 0 = off
             TimerMsg* snapshotTimer = nullptr;

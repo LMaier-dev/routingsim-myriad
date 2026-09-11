@@ -167,6 +167,7 @@ void MyriadLS::reset() {
     }
     neighbors.clear();
     lsdb.clear();
+    spfSizeDirty = true;
     for (auto& [key, pend] : pendingOriginate) cancelAndDelete(pend.timer);
     pendingOriginate.clear();
     lastOriginated.clear();
@@ -281,6 +282,11 @@ void MyriadLS::doOriginateSelfLsa(MyriadLSAType type, uint16_t minSeq) {
     }
 
     MLOG_INFO() << "originated self-LSA type=" << type << " seq=" << newSeq << "\n";
+
+    // Own topology change counts too: a router recomputes on its own lost
+    // adjacency rather than waiting to hear it back from the flood.
+    if (type != LSA_SUBNETS) countSpf();
+    if (type == LSA_RINGS) spfSizeDirty = true;
 
     // Flood to TWOWAY+ neighbors (OSPF's Exchange+): an LSA originated mid-exchange
     // must reach a neighbor whose DBD summary was already snapshotted.
@@ -461,6 +467,8 @@ void MyriadLS::handleLSU(MyriadLSU* lsu, nodeid_t from) {
             if (it == lsdb.end() || it->second->getSeq_no() < h->getSeq_no()) {
                 lsdb[key] = intern(*h);
                 installed = true;
+                if (key.type != LSA_SUBNETS) countSpf();  // topology changed
+                if (key.type == LSA_RINGS) spfSizeDirty = true;
                 MLOG_N_DEBUG(from) << "installed LSA " << (int)key.origin
                                    << "/" << key.type << " seq=" << h->getSeq_no() << "\n";
             }
@@ -639,6 +647,42 @@ void MyriadLS::dumpOracleTo(const std::string& path, const std::string& tprefix,
                         presentCount, &allRings);
 }
 
+std::pair<uint64_t, uint64_t> MyriadLS::spfGraphSize() {
+    if (spfSizeDirty) {
+        // The graph RingSpfOracle builds
+        std::set<uint32_t> ringSet;
+        uint64_t edges = 0;
+        for (const auto& [key, lsa] : lsdb) {
+            if (key.type != LSA_RINGS) continue;
+            auto* r = check_and_cast<const RingsLsa*>(lsa.get());
+            size_t k = r->getRingsArraySize();
+            for (size_t i = 0; i < k; ++i) ringSet.insert(r->getRings(i));
+            edges += (uint64_t) k * (k - 1);   // ordered pairs = 2 * C(k,2)
+        }
+        spfRings = ringSet.size();
+        spfEdges = edges;
+        spfSizeDirty = false;
+    }
+    return {spfEdges, spfRings};
+}
+
+// Binary-heap Dijkstra over the current ring graph: a relaxation per edge, a
+// sift per settled vertex
+uint64_t MyriadLS::spfOps() {
+    auto [e, r] = spfGraphSize();
+    if (!r) return 0;
+    uint64_t logr = 0;
+    for (uint64_t v = r; v > 1; v >>= 1) ++logr;
+    return e + r * (logr + 1);
+}
+
+// One SPF charged per topology-LSA install: spf-interval 0, the upper bound.
+// Real OSPF coalesces a failure's burst into one run, but how much it coalesces
+// swings the total by ~20x, eval replays and sets window itself.
+void MyriadLS::countSpf() {
+    if (uint64_t ops = spfOps()) countCalc(ops);
+}
+
 void MyriadLS::startSnapshot() {
     // Re-arms itself like the hello timer; purely observational (see header).
     snapshotTimer = addOneShotTimer(snapshotInterval, [this](short) {
@@ -653,7 +697,12 @@ void MyriadLS::startSnapshot() {
 void MyriadLS::finish() {
     logLsdb();
     recordSendScalars();
+    recordCalcScalars();
     recordScalar("state_bytes", (double) lsdbBytes());
+    // The per-run SPF input, so calc_ops reads as "N Dijkstras over R rings".
+    auto [e, r] = spfGraphSize();
+    recordScalar("spf_rings", (double) r);
+    recordScalar("spf_edges", (double) e);
 
     // Optimality oracle (see RingSpfOracle)
     std::string oracleFile = par("oracleDumpFile").stdstringValue();

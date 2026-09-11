@@ -57,7 +57,9 @@ struct PendingTx {
 
 class MyriadHelper : public Protocol {
     public:
-        ~MyriadHelper() override { delete txBytesVec; delete txBytesNoRrVec; }
+        ~MyriadHelper() override {
+            delete txBytesVec; delete txBytesNoRrVec; delete calcOpsVec;
+        }
 
     protected:
         nodeid_t myId;
@@ -89,6 +91,21 @@ class MyriadHelper : public Protocol {
             if (txBytesNoRrVec)
                 txBytesNoRrVec->record((double) (bytes - std::min(bytes, excluded)));
         }
+        // Route-computation work in one unit for both protocols: an "op" is one
+        // ring-graph edge relaxation (LS Dijkstra) or one candidate comparison
+        // (PV preference selection)
+        unsigned long long calcRuns = 0, calcOps = 0;
+        cOutVector* calcOpsVec = nullptr;
+        void countCalc(unsigned long long ops) {
+            ++calcRuns;
+            calcOps += ops;
+            if (calcOpsVec) calcOpsVec->record((double) ops);
+        }
+        void recordCalcScalars() {
+            recordScalar("calc_runs", (double) calcRuns);
+            recordScalar("calc_ops", (double) calcOps);
+        }
+
         static std::string sendTypeLabel(const char* pktName);
         void recordSendScalars() {
             unsigned long total = 0;
@@ -131,6 +148,7 @@ class MyriadHelper : public Protocol {
             logLevel = parseLogLevel(par("logLevel").stringValue());
             colorLog = par("colorLog").boolValue();
             txBytesVec = new cOutVector("txBytes");
+            calcOpsVec = new cOutVector("calcOps");
         }
 
         // Default dispatch for TimerMsg callbacks (used by addOneShotTimer and

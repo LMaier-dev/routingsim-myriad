@@ -12,6 +12,14 @@ traffic (messages/bytes per PDU type) and, where nodes fail, reconvergence time.
 
     python3 simulations/MYRIAD/eval_dynamics.py [--topo PATH] [--only churn|link|node]
 
+The churn scenario also scores ROUTE COMPUTATION (right panel of churn_cost.png),
+both protocols
+in one unit — see MyriadHelper::countCalc. LS is drawn once per SPF coalescing
+window (SPF_HOLD_WINDOWS), all derived from one run; PV has no coalescing
+analogue. That choice moves LS by more than an order, so the plot quotes a band
+and not a ratio. The curves also CROSS: PV costs more to form the RIB and much
+less to hold it, so only the post-warmup slope is the steady-state claim.
+
 --overview is a second, traffic-only mode: the same churn and node runs with RIB
 snapshotting off, scored as messages and bytes per failure window (churn steady
 state, then one window per wave fraction), repeated over --repeat RNG seeds and
@@ -39,7 +47,7 @@ csv.field_size_limit(sys.maxsize)  # a node's whole txBytes series is one CSV-R 
 import eval_harness as H   # REPEATS/JOBS/PROGRESS are bound at parse time
 from eval_harness import (BIN, MYRIAD_DIR, _sec, add_topo_args, announce,
                           apply_repeat_args, byte_unit, common, dynamics_args,
-                          ensure_ring_labels, fmt_bytes, overrides, pm,
+                          ensure_ring_labels, fmt_bytes, fmt_si, overrides, pm,
                           refresh_s, rep_path,
                           repeat_mean, repeats_note, run_sim, simtime, title, warmup_s,
                           write_proto_ini, PROTO_COLOR, PROTO_LABEL)
@@ -314,6 +322,78 @@ def bytes_over_time(resdir, bin_s=1.0, vec="txBytes"):
     lo, hi = min(bins), max(bins)
     times = [b * bin_s for b in range(lo, hi + 1)]
     return times, [bins.get(b, 0.0) / bin_s for b in range(lo, hi + 1)]
+
+
+# LS coalescing windows replayed over the recorded SPF triggers. OSPF's
+# spf-interval in the range real implementations back off across (Cisco: 50ms
+# start, 5s max); the total swings ~20x over it, so all three are always drawn
+# rather than one being picked.
+SPF_HOLD_WINDOWS = (0.2, 1.0, 5.0)
+
+
+def _wlabel(w):
+    return "none" if w is None else (f"{w*1000:.0f}ms" if w < 1 else f"{w:g}s")
+
+
+def calc_label(name, w, short=False):
+    base = name.upper() if short else DISPLAY.get(name, name.upper())
+    return f"{base}, no coalescing" if w is None else f"{base}, SPF hold {_wlabel(w)}"
+
+
+def _calc_by_node(resdir, vec="calcOps"):
+    """Yield (module, [(t, ops), ...]) one router at a time: coalescing is per
+    router, so the samples must not be flattened across them."""
+    vecs = glob.glob(os.path.join(resdir, "*.vec"))
+    tool = _scavetool()
+    if not vecs or not tool:
+        return
+    for stale in glob.glob(os.path.join(resdir, "*.vci")):
+        os.remove(stale)
+    csv_path = os.path.join(resdir, "calcops_export.csv")
+    subprocess.run([tool, "export", "-f", f"name =~ {vec}", "-F", "CSV-R",
+                    "-o", csv_path, vecs[0]], check=True, capture_output=True,
+                   text=True)
+    try:
+        with open(csv_path, newline="") as f:
+            for row in csv.DictReader(f):
+                if row["type"] != "vector" or row.get("name") != vec:
+                    continue
+                yield row.get("module", ""), list(zip(
+                    (float(t) for t in row["vectime"].split()),
+                    (float(v) for v in row["vecvalue"].split())))
+    finally:
+        os.remove(csv_path)
+
+
+def calc_series(resdir, windows=(), bin_s=1.0):
+    """{window: (bin times, ops/s)} for the route-computation vector.
+
+    Key None is the raw stream: every recorded trigger charged, i.e. no
+    coalescing. Each window w replays that stream through the rule an LS router
+    would apply -- the first trigger opens a w-long window and triggers inside
+    it are free -- per router, so ONE simulation yields every coalescing model
+    instead of one run per parameter value. The charge is booked when the window
+    opens rather than when it closes; that shifts a sample by at most w and
+    leaves the totals, which the comparison rests on, untouched."""
+    keys = (None,) + tuple(windows)
+    bins = {w: defaultdict(float) for w in keys}
+    for _mod, samples in _calc_by_node(resdir):
+        ends = {w: float("-inf") for w in windows}
+        for t, v in samples:
+            b = int(t // bin_s)
+            bins[None][b] += v
+            for w in windows:
+                if t >= ends[w]:
+                    ends[w] = t + w
+                    bins[w][b] += v
+    out = {}
+    for w in keys:
+        if not bins[w]:
+            continue
+        lo, hi = min(bins[w]), max(bins[w])
+        out[w] = ([b * bin_s for b in range(lo, hi + 1)],
+                  [bins[w].get(b, 0.0) / bin_s for b in range(lo, hi + 1)])
+    return out
 
 
 def bytes_after(series, t0):
@@ -817,8 +897,12 @@ def main(args=None):
     else:
         DOWN_MIN = args.down_min
     DOWN_JITTER = getattr(args, "down_jitter", None) or DOWN_JITTER
-    CHURN_NODES = getattr(args, "churn_nodes", None) or CHURN_NODES
-    CHURN_PERIOD = getattr(args, "churn_period", None) or CHURN_PERIOD
+    _cn = getattr(args, "churn_nodes", None)
+    if _cn is not None:
+        CHURN_NODES = _cn
+    _cp = getattr(args, "churn_period", None)
+    if _cp is not None:
+        CHURN_PERIOD = _cp
     FAILURE_START = ((getattr(args, "failure_start", None) or FAILURE_START)
                      + getattr(args, "extra_warmup", 0.0))
     if not getattr(args, "noreplay", False):
@@ -894,7 +978,7 @@ def main(args=None):
                     **({"network": net} if net else {}))
 
     traffic, series0, bytes0, churn_bytes = {}, {}, {}, {}
-    churn_series = {}
+    churn_series, churn_calc = {}, {}
     reconv = {name: {} for name in CONFIGS}
     # Waves must be spaced so that a failed node's downtime AND its refill both
     # finish before the next wave.
@@ -935,6 +1019,12 @@ def main(args=None):
             r["bytes_post"] = bytes_after(ser, churn_start())
             if scenario == "churn":   # same byte-rate series the churn plots use
                 churn_bytes[name] = ser
+                # pv only, not the pv_* ablations: they re-rank the same
+                # candidate sets and trace it, and each export is an
+                # opp_scavetool pass over a multi-GB .vec (~8 min at n=2500).
+                if name in ("pv", "ls"):
+                    churn_calc[name] = calc_series(
+                        resd, SPF_HOLD_WINDOWS if name == "ls" else ())
                 if name == "pv":      # what the same sends cost without RR
                     churn_bytes[NORR] = bytes_over_time(resd, vec="txBytesNoRr")
             print(f"  ✓ {r['msgs']:.0f} msgs, {fmt_bytes(r['bytes'])}")
@@ -1016,7 +1106,7 @@ def main(args=None):
                       f"mean={r[frac]['mean']:.1f}{pm(r[frac]['mean'])}s, "
                       f"net(max)={r[frac]['max']:.0f}s{warn}")
 
-    report(traffic, reconv, fractions, scenarios, spacing, churn_bytes)
+    report(traffic, reconv, fractions, scenarios, spacing, churn_bytes, churn_calc)
     # A --protos pane holds only half the data; the PNGs overlay PV and LS, so let
     # --post (or a full run) draw them once both halves exist on disk.
     if run_sims and getattr(args, "protos", None):
@@ -1025,10 +1115,11 @@ def main(args=None):
               f"[same --topo/--only/--tag …]")
     else:
         plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0,
-              churn_bytes, churn_series)
+              churn_bytes, churn_series, churn_calc)
 
 
-def report(traffic, reconv, fractions, scenarios, spacing, churn_bytes=None):
+def report(traffic, reconv, fractions, scenarios, spacing, churn_bytes=None,
+           churn_calc=None):
     rows = [(n, s) for (n, s) in traffic if not s.startswith("node")]
     if rows:
         print(f"\n=== control-plane traffic over {traffic_simtime()}{repeats_note()} ===")
@@ -1091,6 +1182,25 @@ def report(traffic, reconv, fractions, scenarios, spacing, churn_bytes=None):
             rel = f"{mean/ref:.1f}×" if ref else "-"
             print(f"{name:>12}{mean / cdiv:>14.3f}{peak / cdiv:>14.3f}{rel:>9}")
 
+    # Route computation, same window as the byte table above. One LS row per
+    # coalescing model, since the choice moves the total by more than an order.
+    if churn_calc and any(churn_calc.get(n) for n in ("ls", "pv")):
+        print(f"\n=== route computation under churn (after t={churn_start():g}s) ===")
+        print(f"{'config':>24}{'ops/s':>14}{'ops (post)':>14}{'vs PV':>9}")
+        post = []
+        for name in ("ls", "pv"):
+            models = churn_calc.get(name) or {}
+            for w in sorted(models, key=lambda x: (x is not None, x)):
+                ts, ops = models[w]
+                v = [o for t, o in zip(ts, ops) if t >= churn_start()]
+                if v:
+                    post.append((name, w, sum(v) / len(v), sum(v)))
+        ref = next((tot for n, _, _, tot in post if n == "pv"), 0)
+        for name, w, rate, tot in post:
+            rel = f"{tot/ref:.1f}×" if ref else "-"
+            print(f"{calc_label(name, w, short=True):>24}"
+                  f"{fmt_si(rate):>14}{fmt_si(tot):>14}{rel:>9}")
+
     if "node" not in scenarios:
         return
     r_s = node_refresh(spacing)
@@ -1133,7 +1243,7 @@ def report(traffic, reconv, fractions, scenarios, spacing, churn_bytes=None):
 
 
 def plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0=None,
-          churn_bytes=None, churn_series=None):
+          churn_bytes=None, churn_series=None, churn_calc=None):
     try:
         import matplotlib
         matplotlib.use("Agg")
@@ -1194,36 +1304,82 @@ def plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0=None,
             fig.savefig(os.path.join(OUT, fname), dpi=120)
             made.append(fname)
 
-    # Steady churn: the same byte-rate series recovery_node.png draws under its
-    # waves, but with a constant failure rate — a flat trace is the protocol's
-    # sustained cost of keeping the topology converged, a rising one is damage
-    # accumulating. Log y, since PV and LS differ by more than an order.
-    if churn_bytes and any(churn_bytes.get(n, ([], []))[0] for n in COLORS):
-        fig, ax = plt.subplots(figsize=(8, 4.5))
-        # pv_nospof is dropped: it differs only in path-cost RANKING, so its byte
-        # rate traces pv exactly and the purple just hid the red. The RR-excluded
-        # trace takes its place — same PV run, dotted, RR bytes subtracted.
-        cseries = [(n, COLORS[n], "-") for n in COLORS if n != "pv_nospof"]
-        if churn_bytes.get(NORR, ([], []))[0]:
-            cseries.append((NORR, COLORS["pv"], ":"))
-        rdiv, rname = byte_unit([b for n, _, _ in cseries
-                                 for b in churn_bytes.get(n, ([], []))[1]])
-        for name, color, style in cseries:
-            ts, bps = churn_bytes.get(name, ([], []))
-            if not ts:
+    # Steady churn in one figure: what a protocol costs to HOLD the topology
+    # converged, as bandwidth (left) and route computation (right).
+    has_b = bool(churn_bytes) and any(churn_bytes.get(n, ([], []))[0] for n in COLORS)
+    has_c = bool(churn_calc) and any(churn_calc.get(n) for n in ("ls", "pv"))
+    if has_b or has_c:
+        ncol = int(has_b) + int(has_c)
+        fig, axs = plt.subplots(1, ncol, figsize=(6.0 * ncol, 4.8), squeeze=False)
+        free = list(axs[0])
+        ax = free.pop(0) if has_b else None
+        ax2 = free.pop(0) if has_c else None
+
+        if ax is not None:
+            cseries = [(n, COLORS[n], "-") for n in COLORS if n != "pv_nospof"]
+            if churn_bytes.get(NORR, ([], []))[0]:
+                cseries.append((NORR, COLORS["pv"], ":"))
+            rdiv, rname = byte_unit([b for n, _, _ in cseries
+                                     for b in churn_bytes.get(n, ([], []))[1]])
+            for name, color, style in cseries:
+                ts, bps = churn_bytes.get(name, ([], []))
+                if not ts:
+                    continue
+                ax.plot(ts, [b / rdiv for b in bps], color=color, lw=1.0,
+                        ls=style, label=DISPLAY.get(name, name))
+            ax.set_yscale("log")
+            ax.set(xlabel="time (s)", ylabel=f"control-plane {rname}/s (log)")
+            ax.set_title("bandwidth", fontsize=9)
+            ax.legend(fontsize=8)
+
+        totals = {}
+        if ax2 is not None:
+            styles = {0.2: ":", 1.0: "--", 5.0: "-."}
+            for name in ("ls", "pv"):
+                models = churn_calc.get(name) or {}
+                # LS: the windows only -- its no-coalescing bound is in the
+                # table, and a fourth blue line costs more than it buys.
+                ws = [w for w in sorted(models, key=lambda x: (x is not None, x))
+                      if not (name == "ls" and w is None)]
+                for w in ws:
+                    ts, ops = models[w]
+                    if not ts:
+                        continue
+                    run, cum = 0.0, []
+                    for v in ops:
+                        run += v
+                        cum.append(run)
+                    ax2.plot(ts, cum, color=COLORS[name], lw=1.4,
+                             ls=styles.get(w, "-"),
+                             label=f"{calc_label(name, w, short=True)}"
+                                   f" ({fmt_si(run)})")
+                    totals[(name, w)] = run
+            ax2.set_yscale("log")
+            ax2.set(xlabel="time (s)",
+                    ylabel="cumulative route-computation ops (log)")
+            ax2.set_title("route computation", fontsize=9)
+            ax2.legend(fontsize=7)
+
+        for a in (ax, ax2):   # after set_yscale, or the marker lands off-axis
+            if a is None:
                 continue
-            ax.plot(ts, [b / rdiv for b in bps], color=color, lw=1.0, ls=style,
-                    label=DISPLAY.get(name, name))
-        ax.axvline(churn_start(), color="gray", lw=0.8)
-        ax.text(churn_start(), ax.get_ylim()[1], " churn starts", fontsize=8,
-                color="gray", va="top")
-        ax.set_yscale("log")
-        ax.set(xlabel="time (s)", ylabel=f"control-plane {rname}/s (log)",
-               title=title(f"Control-plane cost under steady churn "
-                           f"({CHURN_NODES} node(s) every {CHURN_PERIOD:g}s)"))
-        ax.legend(fontsize=8); fig.tight_layout()
-        fig.savefig(os.path.join(OUT, "churn_bytes.png"), dpi=120)
-        made.append("churn_bytes.png")
+            a.axvline(churn_start(), color="gray", lw=0.8)
+            a.text(churn_start(), a.get_ylim()[1], " churn starts", fontsize=8,
+                   color="gray", va="top")
+
+        pvt = totals.get(("pv", None))
+        lst = [v for (n, _w), v in totals.items() if n == "ls"]
+        band = (f"  —  LS/PV compute = {min(lst)/pvt:.0f}–{max(lst)/pvt:.0f}x "
+                f"depending on SPF coalescing" if pvt and lst else "")
+        sub = ("\nPV re-ranks one ring per update and never coalesces; "
+               "only LS has an SPF hold to vary" if has_c else "")
+        fig.suptitle(title(f"Cost of holding the topology converged under churn "
+                           f"({CHURN_NODES} node(s) every {CHURN_PERIOD:g}s)"
+                           f"{band}") + sub, fontsize=10)
+        fig.tight_layout()
+        fig.savefig(os.path.join(OUT, "churn_cost.png"), dpi=120)
+        made.append("churn_cost.png")
+
 
     if "node" in scenarios and any(reconv[n] for n in reconv):
         # Residual path quality after each wave settles: replay restores

@@ -4,6 +4,7 @@
 #include "routing/MYRIAD/MyriadGpPkt_m.h"
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <iosfwd>
 #include <string>
 #include <unordered_map>
@@ -117,6 +118,10 @@ namespace routingsim {
             ReplayQuality replayQuality() const;
 
             void dumpTo(std::ostream& f, const std::string& tprefix, bool stats, int nodeId) const;
+
+            // Called per preference selection with the number of candidates
+            // ranked; see MyriadHelper::countCalc for the unit.
+            std::function<void(unsigned long long)> onCalc;
 
         private:
             std::unordered_map<uint32_t /*origin ring*/, RibRing> rings;

@@ -472,6 +472,14 @@ def fmt_bytes(v, unit=None):
     return f"{q:,.0f} {name}" if div == 1.0 else f"{q:,.3g} {name}"
 
 
+def fmt_si(v):
+    """fmt_bytes' sibling for counts: '812', '4.07 k', '1.53 G'."""
+    for div, suf in ((1e12, "T"), (1e9, "G"), (1e6, "M"), (1e3, "k")):
+        if abs(v) >= div:
+            return f"{v / div:,.3g} {suf}"
+    return f"{v:,.0f}"
+
+
 def repeats_note():
     """Table-header suffix stating the repeat count (empty for a single run)."""
     return f" [mean±sd over {REPEATS} runs]" if REPEATS > 1 else ""

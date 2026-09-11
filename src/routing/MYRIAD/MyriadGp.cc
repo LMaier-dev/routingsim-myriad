@@ -79,6 +79,7 @@ void MyriadGP::onInitialize() {
     rib.configure(par("ringCostExponent"), par("echoRingSize"),
                   par("rankUseSpof"), par("maxEcmpPaths"),
                   par("ecmpCostMargin"), par("ecmpDiverseEviction"));
+    rib.onCalc = [this](unsigned long long ops) { countCalc(ops); };
     degradeEnabled = par("degradeEnabled");
     skipDegradedTransitions = par("skipDegradedTransitions");
     suppressRedundantTransitions = par("suppressRedundantTransitions");
@@ -1406,6 +1407,7 @@ void MyriadGP::countGpSend(const std::string& type, unsigned long long bytes,
 
 void MyriadGP::finish() {
     recordSendScalars();
+    recordCalcScalars();
     // Same volume figures recordSendScalars writes, minus the RR bytes on each
     // link (see gpRrBytes).
     if (carryRr) {

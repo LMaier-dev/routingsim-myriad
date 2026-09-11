@@ -196,6 +196,8 @@ void MyriadGpRib::selectPreferred(RibRing& rs) {
     for (auto& e : rs.frames[rs.cur ^ 1]) consider(e);
     rs.hasPreferred = best != nullptr;
     if (best) rs.preferred = *best;
+    // One op per candidate ranked.
+    if (onCalc) onCalc(rs.frames[rs.cur].size() + rs.frames[rs.cur ^ 1].size());
 }
 
 void MyriadGpRib::reselectAll() {
@@ -217,10 +219,11 @@ void MyriadGpRib::clearDegradeIfRecovered(uint32_t ring) {
 
 std::pair<uint32_t, uint32_t> MyriadGpRib::markDegraded(uint32_t ring) {
     uint32_t seq = rings[ring].curSeq;
+    bool isNew = !degrades.count(ring);
     auto& d = degrades[ring];               // culprit ring -> (seq, beacon)
     if (d.first < seq) d = {seq, 0};        // new generation
     else d.second += 1;                     // re-beacon the current one
-    reselectAll();
+    if (isNew) reselectAll();
     return d;
 }
 
@@ -234,8 +237,9 @@ bool MyriadGpRib::applyDegrade(uint32_t ring, uint32_t seq, uint32_t beacon) {
         && (seq < it->second.first
             || (seq == it->second.first && beacon <= it->second.second)))
         return false;
+    bool isNew = it == degrades.end();
     degrades[ring] = {seq, beacon};
-    reselectAll();
+    if (isNew) reselectAll();
     return true;
 }
 
@@ -254,7 +258,12 @@ StoreResult MyriadGpRib::store(uint32_t origin, const std::vector<uint32_t>& ful
     if (seq == 0 ? !originRs.frames[originRs.cur].empty()
                  : seq < originRs.curSeq) return res;
 
+    // Whether anything selectPreferred RANKS actually moved. It ranks both
+    // frames and nothing else, so soleFront and rr changes do not count.
+    bool framesChanged = false;
+
     if (seq > originRs.curSeq) {              // flip
+        framesChanged = true;
         originRs.curSeq = seq;
         clearDegradeIfRecovered(origin);
         if (originRrTrailer) originRs.rr = *originRrTrailer;
@@ -282,12 +291,16 @@ StoreResult MyriadGpRib::store(uint32_t origin, const std::vector<uint32_t>& ful
     // Same chain lingering in the old frame is a stale quote of this path, not a
     // make-before-break backup; drop it so this generation's cost is the one used.
     auto& of = originRs.frames[originRs.cur ^ 1];
+    size_t ofWas = of.size();
     of.erase(std::remove_if(of.begin(), of.end(),
         [&](const RibEntry& e) { return e.chain == fullChain; }), of.end());
+    if (of.size() != ofWas) framesChanged = true;
 
-    res.propagate = admitToFrame(originRs, cand);
+    if (admitToFrame(originRs, cand)) { res.propagate = true; framesChanged = true; }
     updateSoleFront(originRs, cand);   // replay coverage only; not ranked for the data plane
-    selectPreferred(originRs);
+    // A rejected candidate leaves both frames exactly as they were, so the
+    // winner cannot have moved.
+    if (framesChanged) selectPreferred(originRs);
     res.cobest = originRs.frames[originRs.cur].size();
     return res;
 }

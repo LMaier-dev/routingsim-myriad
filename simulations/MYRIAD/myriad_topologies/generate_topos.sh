@@ -68,6 +68,10 @@ SWEEP_TR="300 400 500 600 700"
 TR_N=750
 SWEEP_N="3000 4000 5000 6000 8000"
 
+RINGS_SMALL=60
+TARGET_N_SMALL=500
+SWEEP_TR_SMALL="60 80 100 120 140"
+
 LOG_DIR=$(mktemp -d)
 trap 'rm -rf "$LOG_DIR"' EXIT
 
@@ -96,7 +100,12 @@ if [[ $WHICH != pipe ]]; then
     wipe "delaunay_grow${TARGET_N_TR}_A${RINGS_TR}_spof0"
     wipe "delaunay_grow${TARGET_N_TR}_A${RINGS_TR}_spof${SPOF}"
     wipe "delaunay_nsweep_A${RINGS_TR}_tr${TR_N}_spof${SPOF}"
+    wipe "delaunay_grow${TARGET_N_SMALL}_A${RINGS_SMALL}_spof${SPOF}"
     PY=ringgrow.py
+
+    gen "quick: transition sweep, A=${RINGS_SMALL} n=${TARGET_N_SMALL}" \
+        --family delaunay --rings $RINGS_SMALL --sweep-tr $SWEEP_TR_SMALL \
+        --ring-size $RING_SIZE_TR --spof $SPOF --target-n $TARGET_N_SMALL
 
     gen "full: transition sweep, A=${RINGS_TR} n=${TARGET_N_TR}" \
         --family delaunay --rings $RINGS_TR --sweep-tr $SWEEP_TR \
