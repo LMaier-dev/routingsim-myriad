@@ -38,6 +38,41 @@ int64_t gpBatchBytes(const MyriadGpUpdateBatch* p) {
     return b;
 }
 
+constexpr int64_t SEC_SIG   = 48;          // one BLS signature (compressed G1)
+constexpr int64_t SEC_LINK_SIG = 48;       // Hello: signature under the router key
+constexpr int64_t SEC_LINK_MAC = 16;       // every other PDU: MAC under K_AB
+constexpr int64_t SEC_HELLO    = 10;       // per Hello: nonce (8) + monotonic counter (2)
+constexpr int64_t SEC_EPOCH = 1;           // (epoch, seq) generation tag
+constexpr int64_t SEC_HOP   = RSIZE + BOOL;  // chain unfolding: ring size + redundancy bit
+
+// Security overhead one PDU would carry, split so each part can be rescaled
+// independently in post-processing.
+void gpSecBytes(const cPacket* p, int64_t& sig, int64_t& strct) {
+    sig = 0;
+    strct = 0;
+    auto chainTerm = [](size_t hops) {
+        return (int64_t) hops * SEC_HOP - (COST + SPOF);
+    };
+    if (auto* b = dynamic_cast<const MyriadGpUpdateBatch*>(p)) {
+        for (size_t i = 0; i < b->getEntriesArraySize(); ++i) {
+            const MyriadGpUpdateEntry& e = b->getEntries(i);
+            size_t hops = e.getRing_chainArraySize();
+            sig += SEC_SIG + (hops ? SEC_SIG : 0);
+            strct += chainTerm(hops);
+        }
+        strct += SEC_EPOCH;
+    } else if (auto* u = dynamic_cast<const MyriadGpUpdate*>(p)) {
+        size_t hops = u->getRing_chainArraySize();
+        sig = SEC_SIG + (hops ? SEC_SIG : 0);
+        strct = chainTerm(hops) + SEC_EPOCH;
+    } else if (dynamic_cast<const MyriadGpDegrade*>(p)) {
+        sig = SEC_SIG;                     // stamped with the culprit ring's key
+        strct = SEC_EPOCH;
+    } else if (dynamic_cast<const MyriadGpCollect*>(p)) {
+        strct = NODEID + SEC_EPOCH;        // next-hop binding; no ring signature
+    }
+}
+
 // RR bytes inside a GP PDU, tallied per link alongside countSend so the eval can
 // report PV's volume with reachability records subtracted out (bytes_norr_*)
 int64_t gpRrBytes(const cPacket* p) {
@@ -87,6 +122,9 @@ void MyriadGP::onInitialize() {
     refreshFloodsUpdate = par("refreshFloodsUpdate");
     carryRr = par("carryRr");
     if (carryRr) txBytesNoRrVec = new cOutVector("txBytesNoRr");
+    txBytesSecVec = new cOutVector("txBytesSec");
+    secLinkPerPdu = SEC_LINK_MAC;
+    secLinkHello  = SEC_LINK_SIG + SEC_HELLO;
     maxCollectHops = par("maxCollectHops");
     maxBatchBytes = par("maxBatchBytes");
     holdInterval = par("holdInterval");
@@ -1398,6 +1436,11 @@ void MyriadGP::dumpRibTo(std::ostream& f, const std::string& tprefix, bool stats
 
 void MyriadGP::countGpSend(const std::string& type, unsigned long long bytes,
                            nodeid_t to, const cPacket* inner) {
+    int64_t sig = 0, strct = 0;
+    gpSecBytes(inner, sig, strct);
+    secSigBytes += sig;
+    secStructBytes += strct;
+    secPduExtra = sig + strct;
     unsigned long long rr = (unsigned long long) std::max<int64_t>(0, gpRrBytes(inner));
     countSend(type, bytes, rr);      // also feeds the RR-excluded txBytes vector
     if (rr) {
@@ -1435,6 +1478,16 @@ void MyriadGP::finish() {
     recordScalar("batch_max_entries", batchMaxEntries);
     recordScalar("batches_created", batchesCreated);
     recordScalar("state_bytes", (double) rib.stateBytes());
+
+    recordScalar("secbytes_sig", (double) secSigBytes);
+    recordScalar("secbytes_struct", (double) secStructBytes);
+    unsigned long sentPkts = 0;
+    for (auto& [t, n] : sentCounts) sentPkts += n;
+    auto hit = sentCounts.find("hello");
+    unsigned long helloPkts = hit == sentCounts.end() ? 0 : hit->second;
+    recordScalar("secbytes_link",
+                 (double) ((int64_t) helloPkts * (SEC_LINK_SIG + SEC_HELLO)
+                           + (int64_t) (sentPkts - helloPkts) * SEC_LINK_MAC));
 
     // Test hook (test_rib_batching.py). With periodic snapshots on, emit a final
     // t=<simTime> snapshot so the end state is captured

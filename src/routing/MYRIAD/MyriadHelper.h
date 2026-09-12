@@ -58,7 +58,8 @@ struct PendingTx {
 class MyriadHelper : public Protocol {
     public:
         ~MyriadHelper() override {
-            delete txBytesVec; delete txBytesNoRrVec; delete calcOpsVec;
+            delete txBytesVec; delete txBytesNoRrVec; delete txBytesSecVec;
+            delete calcOpsVec;
         }
 
     protected:
@@ -79,6 +80,10 @@ class MyriadHelper : public Protocol {
         // e.g. to see it spike during a failure wave.
         cOutVector* txBytesVec = nullptr;
         cOutVector* txBytesNoRrVec = nullptr;
+        cOutVector* txBytesSecVec = nullptr;
+        int64_t secLinkPerPdu = 0;
+        int64_t secLinkHello = 0;
+        int64_t secPduExtra = 0;
         void countSend(const std::string& type, unsigned long long bytes = 0,
                        unsigned long long excluded = 0) {
             bytes += msgsize::FRAME;
@@ -90,6 +95,11 @@ class MyriadHelper : public Protocol {
             if (txBytesVec) txBytesVec->record((double) bytes);
             if (txBytesNoRrVec)
                 txBytesNoRrVec->record((double) (bytes - std::min(bytes, excluded)));
+            if (txBytesSecVec)
+                txBytesSecVec->record((double) ((type == "hello" ? secLinkHello
+                                                                 : secLinkPerPdu)
+                                                + secPduExtra));
+            secPduExtra = 0;   // consumed: the next PDU sets its own
         }
         // Route-computation work in one unit for both protocols: an "op" is one
         // ring-graph edge relaxation (LS Dijkstra) or one candidate comparison

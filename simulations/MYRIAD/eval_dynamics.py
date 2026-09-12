@@ -308,6 +308,38 @@ def _tx_samples(resdir, vec="txBytes"):
         os.remove(csv_path)
 
 
+def _tx_samples_all(resdir):
+    """Yield (vector name, time, value) for every txBytes* sample in one export.
+
+    tx_windows needs three series per send event — the PDU, the same PDU without
+    its reachability records, and what securing it would add — and they are
+    written as three vectors at the same instants. Exporting once and splitting
+    by name beats three scavetool passes over a multi-GB .vec."""
+    vecs = glob.glob(os.path.join(resdir, "*.vec"))
+    tool = _scavetool()
+    if not vecs or not tool:
+        if vecs:
+            print("  ! opp_scavetool not found — skipping byte-rate plot "
+                  "(source omnetpp/setenv or set OMNETPP_ROOT)", flush=True)
+        return
+    for stale in glob.glob(os.path.join(resdir, "*.vci")):
+        os.remove(stale)  # see _tx_samples
+    csv_path = os.path.join(resdir, "txbytes_all_export.csv")
+    subprocess.run([tool, "export", "-f", "name =~ txBytes*",
+                    "-F", "CSV-R", "-o", csv_path, vecs[0]],
+                   check=True, capture_output=True, text=True)
+    try:
+        with open(csv_path, newline="") as f:
+            for row in csv.DictReader(f):
+                if row["type"] != "vector":
+                    continue
+                name = row.get("name")
+                for t, v in zip(row["vectime"].split(), row["vecvalue"].split()):
+                    yield name, float(t), float(v)
+    finally:
+        os.remove(csv_path)
+
+
 def bytes_over_time(resdir, bin_s=1.0, vec="txBytes"):
     """(bin start times, network-wide bytes/s in that bin) — a failure wave's
     traffic spike is then visible directly.
@@ -478,17 +510,33 @@ def overview_windows(scenario, fractions, spacing, conv=True):
 
 
 def tx_windows(resdir, windows):
-    """{label: (bytes, messages)} per window. One vector sample is one PDU, so
-    counting samples in a window IS that window's message volume."""
+    """{label: (bytes, messages, norr bytes, security bytes)} per window.
+
+    One txBytes sample is one PDU, so counting samples in a window IS that
+    window's message volume. The other two series are the same events measured
+    differently: txBytesNoRr drops the reachability records (LS never writes it,
+    and neither does PV with carryRr=false), txBytesSec is the modelled cost of
+    SECURITY.md (PV only). Messages are counted off txBytes alone so a missing
+    sibling vector cannot inflate the count."""
     # No break on the first hit: windows may NEST. quiet is the tail of conv, so
     # a sample in [75,100) belongs to both, and stopping at conv would leave the
     # idle baseline reading a flat zero.
-    out = {lab: [0.0, 0] for lab, _, _ in windows}
-    for t, v in _tx_samples(resdir):
+    COL = {"txBytes": 0, "txBytesNoRr": 2, "txBytesSec": 3}
+    out = {lab: [0.0, 0, 0.0, 0.0] for lab, _, _ in windows}
+    for name, t, v in _tx_samples_all(resdir):
+        col = COL.get(name)
+        if col is None:
+            continue
         for lab, t0, t1 in windows:
             if t0 <= t < t1:
-                out[lab][0] += v
-                out[lab][1] += 1
+                out[lab][col] += v
+                if col == 0:
+                    out[lab][1] += 1
+    # carryRr=false and LS both leave txBytesNoRr unwritten; the run still sent
+    # those bytes, so fall back to the full figure rather than reporting zero.
+    for v in out.values():
+        if not v[2]:
+            v[2] = v[0]
     return {k: tuple(v) for k, v in out.items()}
 
 
@@ -556,8 +604,8 @@ def overview(inis, topos, scenarios, fractions, spacing, run_sims):
         futs = {ex.submit(work, t): t for t in tasks}
         for i, f in enumerate(as_completed(futs), 1):
             topo, scenario, name, rep = futs[f]
-            for lab, (b, m) in f.result().items():
-                res[(scenario, lab, name)].append((b, m, stem(topo), rep))
+            for lab, (b, m, nb, sb) in f.result().items():
+                res[(scenario, lab, name)].append((b, m, stem(topo), rep, nb, sb))
             print(f"  ✓ [{i}/{len(tasks)}] {stem(topo)} {name} {scenario} "
                   f"seed {rep}", flush=True)
     if not any(res.values()):
@@ -565,6 +613,7 @@ def overview(inis, topos, scenarios, fractions, spacing, run_sims):
                  "no runs on disk for --post")
     overview_report(plan, res)
     overview_plots(plan, res)
+    overview_security_plot(plan, res)
 
 
 def overview_report(plan, res):
@@ -578,7 +627,7 @@ def overview_report(plan, res):
     with open(os.path.join(OUT, "overview.csv"), "w", newline="") as fh:
         w = csv.writer(fh)
         w.writerow(["scenario", "window", "t0", "t1", "config", "topology",
-                    "seed", "MB", "messages"])
+                    "seed", "MB", "messages", "MB_norr", "MB_security"])
         for scenario, (_, _, wins, _) in plan.items():
             for lab, t0, t1 in wins:
                 ref = _median([v[0] for v in res.get((scenario, lab, "ls"), [])])
@@ -586,9 +635,11 @@ def overview_report(plan, res):
                     vals = res.get((scenario, lab, name), [])
                     if not vals:
                         continue
-                    for b, m, topo, seed in sorted(vals, key=lambda v: (v[2], v[3])):
+                    for b, m, topo, seed, nb, sb in sorted(vals,
+                                                           key=lambda v: (v[2], v[3])):
                         w.writerow([scenario, lab, f"{t0:g}", f"{t1:g}", name,
-                                    topo, seed, f"{b / 1e6:.6f}", m])
+                                    topo, seed, f"{b / 1e6:.6f}", m,
+                                    f"{nb / 1e6:.6f}", f"{sb / 1e6:.6f}"])
                     b, m = _median([v[0] for v in vals]), _median([v[1] for v in vals])
                     mu, sd = _mean_sd([v[0] for v in vals])
                     # conv is the run set's, not this scenario's (see
@@ -688,6 +739,97 @@ def overview_plots(plan, res):
         ax.legend(fontsize=8); ax.grid(axis="y", alpha=0.3); fig.tight_layout()
         fig.savefig(os.path.join(OUT, fname), dpi=120)
         print(f"  wrote {fname}")
+
+
+# The four situations the security chart scores, in reading order. conv and
+# quiet ride whichever scenario ran first (see overview_windows), churn and the
+# 10% wave come from their own, so each label is looked up across scenarios
+# rather than pinned to one.
+SEC_WINDOWS = ("conv", "quiet", "churn", "10%")
+
+
+def overview_security_plot(plan, res, cfg="pv"):
+    """What SECURITY.md would add, as a percentage of what the same run actually
+    sent, for the four situations that differ in kind: coming up, sitting idle,
+    continuous churn, and one 10% outage wave.
+
+    Two bars each. The numerator is identical in both — signatures, chain
+    unfolding and link authentication do not depend on whether reachability
+    records ride along — so only the denominator moves. The RR-excluded bar is
+    the same cost against the smaller base PV would have once rr stops being
+    carried verbatim, which is why it reads HIGHER: optimising rr out makes
+    security a larger share of what is left, not a smaller one.
+
+    Percentages are formed per run and then averaged, so the error bar is the
+    spread across seeds and topologies rather than a ratio of two medians."""
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+    except ImportError:
+        print("\n(matplotlib not available — skipping security plot)")
+        return
+    cols = []
+    for lab in SEC_WINDOWS:
+        for scenario, (_, _, wins, _) in plan.items():
+            vals = res.get((scenario, lab, cfg))
+            if not vals:
+                continue
+            t0, t1 = next((a, b) for l, a, b in wins if l == lab)
+            full = [100.0 * sb / b for b, _m, _t, _r, _nb, sb in vals if b]
+            norr = [100.0 * sb / nb for b, _m, _t, _r, nb, sb in vals if nb]
+            if full:
+                cols.append((lab, t0, t1, len(vals), _mean_sd(full), _mean_sd(norr)))
+            break
+    if not cols:
+        print("\n(no PV windows carried txBytesSec — security plot skipped)")
+        return
+    # An all-zero chart is the signature of a binary that predates txBytesSec:
+    # run_evals.sh does not build, so a stale src/RoutingSim silently produces
+    # windows that parse fine and score 0%. Say so instead of drawing it.
+    if not any(c[4][0] for c in cols):
+        print("\n! every window scored 0% security overhead — src/RoutingSim is "
+              "almost certainly older than txBytesSec.\n"
+              "  rebuild (make MODE=release) and rerun; not drawing a chart that "
+              "would read as 'security is free'.")
+        return
+
+    print(f"\n=== security overhead for {DISPLAY.get(cfg, cfg)}: what the design "
+          f"in SECURITY.md would add ===")
+    print(f"{'window':>12}{'runs':>6}{'+% RR carried':>18}{'+% RR excluded':>18}")
+    for lab, _t0, _t1, n, f_, nr in cols:
+        print(f"{lab:>12}{n:>6}{f'{f_[0]:.1f} ± {f_[1]:.1f}':>18}"
+              f"{f'{nr[0]:.1f} ± {nr[1]:.1f}':>18}")
+
+    fig, ax = plt.subplots(figsize=(1.9 * len(cols) + 2.5, 4.6))
+    xs = range(len(cols))
+    w = 0.36
+    for i, (lbl, idx, colour) in enumerate(
+            (("RR carried (as the run sent it)", 4, PROTO_COLOR[cfg]),
+             ("RR excluded (same bytes, smaller base)", 5, PROTO_COLOR["pv_norr"]))):
+        stats = [c[idx] for c in cols]
+        pos = [p + (i - 0.5) * w for p in xs]
+        ax.bar(pos, [s[0] for s in stats], w, yerr=[s[1] for s in stats],
+               capsize=3, color=colour, alpha=0.85, label=lbl,
+               edgecolor="black", linewidth=0.4)
+        for p, s in zip(pos, stats):
+            ax.annotate(f"{s[0]:.0f}%", (p, s[0] + s[1]), textcoords="offset points",
+                        xytext=(0, 3), ha="center", fontsize=8)
+    ax.set_xticks(list(xs))
+    ax.set_xticklabels([_win_title(c[0], c[1], c[2]) for c in cols], fontsize=8)
+    ax.set(ylabel="added control-plane bytes (% of what was sent)",
+           xlabel="situation",
+           title=title("Cost of securing MyriadPV, by situation"))
+    # Headroom for the value labels AND the legend: the RR-excluded bar is
+    # several times the RR-carried one, so a default axis puts the legend on top
+    # of the tallest annotation.
+    top = max(s[0] + s[1] for c in cols for s in (c[4], c[5]))
+    ax.set_ylim(0, top * 1.28)
+    ax.legend(fontsize=8, loc="upper right", framealpha=0.95)
+    ax.grid(axis="y", alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(os.path.join(OUT, "overview_security.png"), dpi=120)
+    print("  wrote overview_security.png")
 
 
 def _reach_total(series):
