@@ -228,6 +228,7 @@ namespace routingsim {
             simtime_t collectWarmupDuration; // delay UPDATE origination until COLLECTs settle
             simtime_t collectWarmupInterval; // how often to re-run COLLECTs during warmup
             bool rebooted = false;
+            std::unordered_map<uint32_t /*ring*/, uint32_t> lastOriginSeq;
             // Held transitions bucketed by (target ring, next-hop primary). Two
             // buckets: [0] spof-free transitions, [1] spof-incurring ones, which
             // flush spofHoldMultiplier later. Since spof ranks above cost, a

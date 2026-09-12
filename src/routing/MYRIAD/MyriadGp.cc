@@ -672,7 +672,8 @@ std::vector<nodeid_t> MyriadGP::ringNeighbors(uint32_t ring) {
 
 void MyriadGP::originateUpdate(uint32_t ring) {
     RingMembership& m = memberships[ring];
-    m.originSeq += 1;
+    m.originSeq = std::max({m.originSeq, lastOriginSeq[ring], rib.curSeq(ring)}) + 1;
+    lastOriginSeq[ring] = m.originSeq;
     rib.installSelfChain(ring, m.originSeq,
         rib.sizeToCost(m.memberCount ? m.memberCount : UNKNOWN_RING_SIZE));
     const std::vector<MyriadGpRr>& rr = rib.rr(ring);
@@ -1385,7 +1386,7 @@ void MyriadGP::reset() {
     cancelHelloTimer();
 
     rebooted = true;   // stateless from here on means recovery, not formation
-
+    
     scheduleHello(helloInterval);
     if (snapshotInterval > 0 && !par("ribDumpFile").stdstringValue().empty())
         startSnapshot();
