@@ -59,7 +59,7 @@ class MyriadHelper : public Protocol {
     public:
         ~MyriadHelper() override {
             delete txBytesVec; delete txBytesNoRrVec; delete txBytesSecVec;
-            delete calcOpsVec;
+            delete txBytesSecPerHopVec; delete calcOpsVec;
         }
 
     protected:
@@ -81,9 +81,11 @@ class MyriadHelper : public Protocol {
         cOutVector* txBytesVec = nullptr;
         cOutVector* txBytesNoRrVec = nullptr;
         cOutVector* txBytesSecVec = nullptr;
+        cOutVector* txBytesSecPerHopVec = nullptr;
         int64_t secLinkPerPdu = 0;
         int64_t secLinkHello = 0;
         int64_t secPduExtra = 0;
+        int64_t secPduExtraPerHop = 0;
         void countSend(const std::string& type, unsigned long long bytes = 0,
                        unsigned long long excluded = 0) {
             bytes += msgsize::FRAME;
@@ -95,11 +97,12 @@ class MyriadHelper : public Protocol {
             if (txBytesVec) txBytesVec->record((double) bytes);
             if (txBytesNoRrVec)
                 txBytesNoRrVec->record((double) (bytes - std::min(bytes, excluded)));
+            int64_t link = type == "hello" ? secLinkHello : secLinkPerPdu;
             if (txBytesSecVec)
-                txBytesSecVec->record((double) ((type == "hello" ? secLinkHello
-                                                                 : secLinkPerPdu)
-                                                + secPduExtra));
-            secPduExtra = 0;   // consumed: the next PDU sets its own
+                txBytesSecVec->record((double) (link + secPduExtra));
+            if (txBytesSecPerHopVec)
+                txBytesSecPerHopVec->record((double) (link + secPduExtraPerHop));
+            secPduExtra = secPduExtraPerHop = 0;  // consumed: the next PDU sets its own
         }
         // Route-computation work in one unit for both protocols: an "op" is one
         // ring-graph edge relaxation (LS Dijkstra) or one candidate comparison

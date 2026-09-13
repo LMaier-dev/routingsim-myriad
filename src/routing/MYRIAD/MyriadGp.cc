@@ -39,6 +39,7 @@ int64_t gpBatchBytes(const MyriadGpUpdateBatch* p) {
 }
 
 constexpr int64_t SEC_SIG   = 48;          // one BLS signature (compressed G1)
+constexpr int64_t SEC_SIG_PERHOP = 64;
 constexpr int64_t SEC_LINK_SIG = 48;       // Hello: signature under the router key
 constexpr int64_t SEC_LINK_MAC = 16;       // every other PDU: MAC under K_AB
 constexpr int64_t SEC_HELLO    = 10;       // per Hello: nonce (8) + monotonic counter (2)
@@ -47,26 +48,33 @@ constexpr int64_t SEC_HOP   = RSIZE + BOOL;  // chain unfolding: ring size + red
 
 // Security overhead one PDU would carry, split so each part can be rescaled
 // independently in post-processing.
-void gpSecBytes(const cPacket* p, int64_t& sig, int64_t& strct) {
+void gpSecBytes(const cPacket* p, int64_t& sig, int64_t& strct, int64_t& sigLin) {
     sig = 0;
     strct = 0;
+    sigLin = 0;
     auto chainTerm = [](size_t hops) {
         return (int64_t) hops * SEC_HOP - (COST + SPOF);
+    };
+    auto chainSigLin = [](size_t hops) {
+        return hops ? SEC_SIG_PERHOP * (int64_t) (hops + 1) : 0;
     };
     if (auto* b = dynamic_cast<const MyriadGpUpdateBatch*>(p)) {
         for (size_t i = 0; i < b->getEntriesArraySize(); ++i) {
             const MyriadGpUpdateEntry& e = b->getEntries(i);
             size_t hops = e.getRing_chainArraySize();
             sig += SEC_SIG + (hops ? SEC_SIG : 0);
+            sigLin += SEC_SIG_PERHOP + chainSigLin(hops);
             strct += chainTerm(hops);
         }
         strct += SEC_EPOCH;
     } else if (auto* u = dynamic_cast<const MyriadGpUpdate*>(p)) {
         size_t hops = u->getRing_chainArraySize();
         sig = SEC_SIG + (hops ? SEC_SIG : 0);
+        sigLin = SEC_SIG_PERHOP + chainSigLin(hops);
         strct = chainTerm(hops) + SEC_EPOCH;
     } else if (dynamic_cast<const MyriadGpDegrade*>(p)) {
         sig = SEC_SIG;                     // stamped with the culprit ring's key
+        sigLin = SEC_SIG_PERHOP;           // single signature; nothing to aggregate
         strct = SEC_EPOCH;
     } else if (dynamic_cast<const MyriadGpCollect*>(p)) {
         strct = NODEID + SEC_EPOCH;        // next-hop binding; no ring signature
@@ -123,6 +131,7 @@ void MyriadGP::onInitialize() {
     carryRr = par("carryRr");
     if (carryRr) txBytesNoRrVec = new cOutVector("txBytesNoRr");
     txBytesSecVec = new cOutVector("txBytesSec");
+    txBytesSecPerHopVec = new cOutVector("txBytesSecPerHop");
     secLinkPerPdu = SEC_LINK_MAC;
     secLinkHello  = SEC_LINK_SIG + SEC_HELLO;
     maxCollectHops = par("maxCollectHops");
@@ -1436,11 +1445,13 @@ void MyriadGP::dumpRibTo(std::ostream& f, const std::string& tprefix, bool stats
 
 void MyriadGP::countGpSend(const std::string& type, unsigned long long bytes,
                            nodeid_t to, const cPacket* inner) {
-    int64_t sig = 0, strct = 0;
-    gpSecBytes(inner, sig, strct);
+    int64_t sig = 0, strct = 0, sigLin = 0;
+    gpSecBytes(inner, sig, strct, sigLin);
     secSigBytes += sig;
     secStructBytes += strct;
+    secSigPerHopBytes += sigLin;
     secPduExtra = sig + strct;
+    secPduExtraPerHop = sigLin + strct;
     unsigned long long rr = (unsigned long long) std::max<int64_t>(0, gpRrBytes(inner));
     countSend(type, bytes, rr);      // also feeds the RR-excluded txBytes vector
     if (rr) {
@@ -1480,6 +1491,7 @@ void MyriadGP::finish() {
     recordScalar("state_bytes", (double) rib.stateBytes());
 
     recordScalar("secbytes_sig", (double) secSigBytes);
+    recordScalar("secbytes_sig_perhop", (double) secSigPerHopBytes);
     recordScalar("secbytes_struct", (double) secStructBytes);
     unsigned long sentPkts = 0;
     for (auto& [t, n] : sentCounts) sentPkts += n;

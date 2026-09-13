@@ -510,19 +510,21 @@ def overview_windows(scenario, fractions, spacing, conv=True):
 
 
 def tx_windows(resdir, windows):
-    """{label: (bytes, messages, norr bytes, security bytes)} per window.
+    """{label: (bytes, messages, norr bytes, security bytes, per-hop security)}.
 
     One txBytes sample is one PDU, so counting samples in a window IS that
-    window's message volume. The other two series are the same events measured
+    window's message volume. The other series are the same events measured
     differently: txBytesNoRr drops the reachability records (LS never writes it,
     and neither does PV with carryRr=false), txBytesSec is the modelled cost of
-    SECURITY.md (PV only). Messages are counted off txBytes alone so a missing
-    sibling vector cannot inflate the count."""
+    SECURITY.md (PV only), and txBytesSecPerHop is that same model with the chain
+    signature not aggregated, i.e. what a pairing-free scheme would cost.
+    Messages are counted off txBytes alone so a missing sibling vector cannot
+    inflate the count."""
     # No break on the first hit: windows may NEST. quiet is the tail of conv, so
     # a sample in [75,100) belongs to both, and stopping at conv would leave the
     # idle baseline reading a flat zero.
-    COL = {"txBytes": 0, "txBytesNoRr": 2, "txBytesSec": 3}
-    out = {lab: [0.0, 0, 0.0, 0.0] for lab, _, _ in windows}
+    COL = {"txBytes": 0, "txBytesNoRr": 2, "txBytesSec": 3, "txBytesSecPerHop": 4}
+    out = {lab: [0.0, 0, 0.0, 0.0, 0.0] for lab, _, _ in windows}
     for name, t, v in _tx_samples_all(resdir):
         col = COL.get(name)
         if col is None:
@@ -604,8 +606,8 @@ def overview(inis, topos, scenarios, fractions, spacing, run_sims):
         futs = {ex.submit(work, t): t for t in tasks}
         for i, f in enumerate(as_completed(futs), 1):
             topo, scenario, name, rep = futs[f]
-            for lab, (b, m, nb, sb) in f.result().items():
-                res[(scenario, lab, name)].append((b, m, stem(topo), rep, nb, sb))
+            for lab, (b, m, nb, sb, sp) in f.result().items():
+                res[(scenario, lab, name)].append((b, m, stem(topo), rep, nb, sb, sp))
             print(f"  ✓ [{i}/{len(tasks)}] {stem(topo)} {name} {scenario} "
                   f"seed {rep}", flush=True)
     if not any(res.values()):
@@ -627,7 +629,8 @@ def overview_report(plan, res):
     with open(os.path.join(OUT, "overview.csv"), "w", newline="") as fh:
         w = csv.writer(fh)
         w.writerow(["scenario", "window", "t0", "t1", "config", "topology",
-                    "seed", "MB", "messages", "MB_norr", "MB_security"])
+                    "seed", "MB", "messages", "MB_norr", "MB_security",
+                    "MB_security_perhop"])
         for scenario, (_, _, wins, _) in plan.items():
             for lab, t0, t1 in wins:
                 ref = _median([v[0] for v in res.get((scenario, lab, "ls"), [])])
@@ -635,11 +638,12 @@ def overview_report(plan, res):
                     vals = res.get((scenario, lab, name), [])
                     if not vals:
                         continue
-                    for b, m, topo, seed, nb, sb in sorted(vals,
-                                                           key=lambda v: (v[2], v[3])):
+                    for b, m, topo, seed, nb, sb, sp in sorted(
+                            vals, key=lambda v: (v[2], v[3])):
                         w.writerow([scenario, lab, f"{t0:g}", f"{t1:g}", name,
                                     topo, seed, f"{b / 1e6:.6f}", m,
-                                    f"{nb / 1e6:.6f}", f"{sb / 1e6:.6f}"])
+                                    f"{nb / 1e6:.6f}", f"{sb / 1e6:.6f}",
+                                    f"{sp / 1e6:.6f}"])
                     b, m = _median([v[0] for v in vals]), _median([v[1] for v in vals])
                     mu, sd = _mean_sd([v[0] for v in vals])
                     # conv is the run set's, not this scenario's (see
@@ -760,6 +764,14 @@ def overview_security_plot(plan, res, cfg="pv"):
     carried verbatim, which is why it reads HIGHER: optimising rr out makes
     security a larger share of what is left, not a smaller one.
 
+    The RR-carried bar carries a faded extension to the height the same design
+    would reach without BLS aggregation, one 64 B signature per chain entry
+    instead of one for the whole chain (SEC_SIG_PERHOP). It is an extension
+    rather than a separate bar because dropping aggregation can only cost more:
+    the gap is what the pairing buys. Only that series is extended — the
+    RR-excluded per-hop figure reaches ~2500% and would compress every solid bar
+    to a sliver. Both are still printed in the table above the chart.
+
     Percentages are formed per run and then averaged, so the error bar is the
     spread across seeds and topologies rather than a ratio of two medians."""
     try:
@@ -776,10 +788,13 @@ def overview_security_plot(plan, res, cfg="pv"):
             if not vals:
                 continue
             t0, t1 = next((a, b) for l, a, b in wins if l == lab)
-            full = [100.0 * sb / b for b, _m, _t, _r, _nb, sb in vals if b]
-            norr = [100.0 * sb / nb for b, _m, _t, _r, nb, sb in vals if nb]
+            full = [100.0 * sb / b for b, _m, _t, _r, _nb, sb, _sp in vals if b]
+            norr = [100.0 * sb / nb for b, _m, _t, _r, nb, sb, _sp in vals if nb]
+            pful = [100.0 * sp / b for b, _m, _t, _r, _nb, _sb, sp in vals if b]
+            pnor = [100.0 * sp / nb for b, _m, _t, _r, nb, _sb, sp in vals if nb]
             if full:
-                cols.append((lab, t0, t1, len(vals), _mean_sd(full), _mean_sd(norr)))
+                cols.append((lab, t0, t1, len(vals), _mean_sd(full), _mean_sd(norr),
+                             _mean_sd(pful), _mean_sd(pnor)))
             break
     if not cols:
         print("\n(no PV windows carried txBytesSec — security plot skipped)")
@@ -796,25 +811,41 @@ def overview_security_plot(plan, res, cfg="pv"):
 
     print(f"\n=== security overhead for {DISPLAY.get(cfg, cfg)}: what the design "
           f"in SECURITY.md would add ===")
-    print(f"{'window':>12}{'runs':>6}{'+% RR carried':>18}{'+% RR excluded':>18}")
-    for lab, _t0, _t1, n, f_, nr in cols:
+    print(f"{'window':>12}{'runs':>6}{'+% RR carried':>18}{'+% RR excluded':>18}"
+          f"{'+% no aggr':>13}{'+% no aggr norr':>18}")
+    for lab, _t0, _t1, n, f_, nr, pf, pn in cols:
         print(f"{lab:>12}{n:>6}{f'{f_[0]:.1f} ± {f_[1]:.1f}':>18}"
-              f"{f'{nr[0]:.1f} ± {nr[1]:.1f}':>18}")
+              f"{f'{nr[0]:.1f} ± {nr[1]:.1f}':>18}"
+              f"{f'{pf[0]:.1f}':>13}{f'{pn[0]:.1f}':>18}")
+    print("  'no aggr' is the same design with one 64 B signature per chain entry"
+          " instead of one aggregate for the whole chain.")
 
     fig, ax = plt.subplots(figsize=(1.9 * len(cols) + 2.5, 4.6))
     xs = range(len(cols))
     w = 0.36
-    for i, (lbl, idx, colour) in enumerate(
-            (("RR carried (as the run sent it)", 4, PROTO_COLOR[cfg]),
-             ("RR excluded (same bytes, smaller base)", 5, PROTO_COLOR["pv_norr"]))):
+    for i, (lbl, idx, gidx, colour) in enumerate(
+            (("RR carried (as the run sent it)", 4, 6, PROTO_COLOR[cfg]),
+             ("RR excluded (same bytes, smaller base)", 5, None, PROTO_COLOR["pv_norr"]))):
         stats = [c[idx] for c in cols]
         pos = [p + (i - 0.5) * w for p in xs]
+        # Faded bar first, solid one over it: what stays visible above the solid
+        # bar is the extra a per-hop signature scheme would cost.
+        ghost = [c[gidx] for c in cols] if gidx is not None else []
+        if ghost:
+            ax.bar(pos, [g[0] for g in ghost], w, color=colour, alpha=0.25,
+                   edgecolor="black", linewidth=0.4, linestyle=":")
         ax.bar(pos, [s[0] for s in stats], w, yerr=[s[1] for s in stats],
                capsize=3, color=colour, alpha=0.85, label=lbl,
                edgecolor="black", linewidth=0.4)
         for p, s in zip(pos, stats):
             ax.annotate(f"{s[0]:.0f}%", (p, s[0] + s[1]), textcoords="offset points",
                         xytext=(0, 3), ha="center", fontsize=8)
+        # An idle window carries no ring signature, so the extension collapses
+        # onto the solid bar and the two labels would print on top of each other.
+        for p, s, g in zip(pos, stats, ghost):
+            if g[0] - s[0] > 1.0:
+                ax.annotate(f"{g[0]:.0f}%", (p, g[0]), textcoords="offset points",
+                            xytext=(0, 3), ha="center", fontsize=7, alpha=0.7)
     ax.set_xticks(list(xs))
     ax.set_xticklabels([_win_title(c[0], c[1], c[2]) for c in cols], fontsize=8)
     ax.set(ylabel="added control-plane bytes (% of what was sent)",
@@ -823,9 +854,15 @@ def overview_security_plot(plan, res, cfg="pv"):
     # Headroom for the value labels AND the legend: the RR-excluded bar is
     # several times the RR-carried one, so a default axis puts the legend on top
     # of the tallest annotation.
-    top = max(s[0] + s[1] for c in cols for s in (c[4], c[5]))
+    top = max(v for c in cols
+              for v in (c[4][0] + c[4][1], c[5][0] + c[5][1], c[6][0]))
     ax.set_ylim(0, top * 1.28)
-    ax.legend(fontsize=8, loc="upper right", framealpha=0.95)
+    from matplotlib.patches import Patch
+    handles, _ = ax.get_legend_handles_labels()
+    handles.append(Patch(facecolor="0.45", alpha=0.25, edgecolor="black",
+                         linewidth=0.4, linestyle=":",
+                         label="extension: per-hop signatures (no BLS aggregation)"))
+    ax.legend(handles=handles, fontsize=8, loc="upper right", framealpha=0.95)
     ax.grid(axis="y", alpha=0.3)
     fig.tight_layout()
     fig.savefig(os.path.join(OUT, "overview_security.png"), dpi=120)
