@@ -38,11 +38,7 @@ int64_t gpBatchBytes(const MyriadGpUpdateBatch* p) {
     return b;
 }
 
-constexpr int64_t SEC_SIG   = 48;          // one BLS signature (compressed G1)
-constexpr int64_t SEC_SIG_PERHOP = 64;
-constexpr int64_t SEC_LINK_SIG = 48;       // Hello: signature under the router key
-constexpr int64_t SEC_LINK_MAC = 16;       // every other PDU: MAC under K_AB
-constexpr int64_t SEC_HELLO    = 10;       // per Hello: nonce (8) + monotonic counter (2)
+// Signature and link widths are shared with MyriadLs (see MyriadPduSize.h).
 constexpr int64_t SEC_EPOCH = 1;           // (epoch, seq) generation tag
 constexpr int64_t SEC_HOP   = RSIZE + BOOL;  // chain unfolding: ring size + redundancy bit
 
@@ -1490,16 +1486,7 @@ void MyriadGP::finish() {
     recordScalar("batches_created", batchesCreated);
     recordScalar("state_bytes", (double) rib.stateBytes());
 
-    recordScalar("secbytes_sig", (double) secSigBytes);
-    recordScalar("secbytes_sig_perhop", (double) secSigPerHopBytes);
-    recordScalar("secbytes_struct", (double) secStructBytes);
-    unsigned long sentPkts = 0;
-    for (auto& [t, n] : sentCounts) sentPkts += n;
-    auto hit = sentCounts.find("hello");
-    unsigned long helloPkts = hit == sentCounts.end() ? 0 : hit->second;
-    recordScalar("secbytes_link",
-                 (double) ((int64_t) helloPkts * (SEC_LINK_SIG + SEC_HELLO)
-                           + (int64_t) (sentPkts - helloPkts) * SEC_LINK_MAC));
+    recordSecScalars();
 
     // Test hook (test_rib_batching.py). With periodic snapshots on, emit a final
     // t=<simTime> snapshot so the end state is captured

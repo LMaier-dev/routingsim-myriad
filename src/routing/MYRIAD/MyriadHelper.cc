@@ -66,6 +66,7 @@ PendingTx* MyriadHelper::sendReliable(nodeid_t to, cPacket* pkt, simtime_t inter
     np->setType(packetType);
     np->setAttributes(np->getAttributes() | NODEPKT_ATTR_CONTROL_PLANE_PROCESSING_DELAY);
     np->encapsulate(pkt->dup());
+    secCharge(pkt);
     countSend(sendTypeLabel(pkt->getName()), np->getByteLength());
     sendToNode(to, std::move(np));
 
@@ -81,6 +82,7 @@ void MyriadHelper::retxFire(PendingTx* h) {
     np->setType(packetType);
     np->setAttributes(np->getAttributes() | NODEPKT_ATTR_CONTROL_PLANE_PROCESSING_DELAY);
     np->encapsulate(h->pkt->dup());
+    secCharge(h->pkt);
     countSend(sendTypeLabel(h->pkt->getName()), np->getByteLength());
     sendToNode(h->dest, std::move(np));
 

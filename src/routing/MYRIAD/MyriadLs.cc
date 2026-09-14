@@ -89,6 +89,10 @@ void MyriadLS::onInitialize() {
 
     node().bind(MYRIADLS_PACKET_TYPE, this);
 
+    txBytesSecVec = new cOutVector("txBytesSec");
+    txBytesSecPerHopVec = new cOutVector("txBytesSecPerHop");
+    secLinkPerPdu = msgsize::SEC_LINK_MAC;
+    secLinkHello  = msgsize::SEC_LINK_SIG + msgsize::SEC_HELLO;
 
     installSelfLsas();
 
@@ -433,6 +437,7 @@ void MyriadLS::handleLSR(MyriadLSR* lsr, nodeid_t from) {
     np->setAttributes(np->getAttributes() | NODEPKT_ATTR_CONTROL_PLANE_PROCESSING_DELAY);
     lsu->setByteLength(lsuBytes(lsu));
     np->encapsulate(lsu);
+    secCharge(lsu);
     countSend("lsu", np->getByteLength());
     sendToNode(from, std::move(np));
 }
@@ -694,10 +699,22 @@ void MyriadLS::startSnapshot() {
     });
 }
 
+// an LSA floods network-wide, so the hop-by-hop MAC does not reach far enough to authenticate it. 
+// DBD, LSR and ACK carry only LSA headers and never leave the link, so the MAC is all they need.
+void MyriadLS::secCharge(const cPacket* inner) {
+    auto* u = dynamic_cast<const MyriadLSU*>(inner);
+    int64_t n = u ? (int64_t) u->getLsasArraySize() : 0;
+    secSigBytes += n * msgsize::SEC_SIG;
+    secSigPerHopBytes += n * msgsize::SEC_SIG_PERHOP;
+    secPduExtra = n * msgsize::SEC_SIG;
+    secPduExtraPerHop = n * msgsize::SEC_SIG_PERHOP;
+}
+
 void MyriadLS::finish() {
     logLsdb();
     recordSendScalars();
     recordCalcScalars();
+    recordSecScalars();
     recordScalar("state_bytes", (double) lsdbBytes());
     // The per-run SPF input, so calc_ops reads as "N Dijkstras over R rings".
     auto [e, r] = spfGraphSize();

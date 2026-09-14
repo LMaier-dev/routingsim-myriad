@@ -247,9 +247,6 @@ namespace routingsim {
             // bytes_norr_* scalars.
             std::unordered_map<nodeid_t, unsigned long long> rrBytesPerLink;
             unsigned long long rrBytesTotal = 0;
-            long long secSigBytes = 0;
-            long long secSigPerHopBytes = 0;   // same model, signatures not aggregated
-            long long secStructBytes = 0;
             void countGpSend(const std::string& type, unsigned long long bytes,
                              nodeid_t to, const cPacket* inner);
 

@@ -119,6 +119,22 @@ class MyriadHelper : public Protocol {
             recordScalar("calc_ops", (double) calcOps);
         }
 
+        long long secSigBytes = 0;
+        long long secSigPerHopBytes = 0;   // same model, signatures not aggregated
+        long long secStructBytes = 0;
+        void recordSecScalars() {
+            recordScalar("secbytes_sig", (double) secSigBytes);
+            recordScalar("secbytes_sig_perhop", (double) secSigPerHopBytes);
+            recordScalar("secbytes_struct", (double) secStructBytes);
+            unsigned long sent = 0;
+            for (auto& [t, n] : sentCounts) sent += n;
+            auto hit = sentCounts.find("hello");
+            unsigned long hellos = hit == sentCounts.end() ? 0 : hit->second;
+            recordScalar("secbytes_link",
+                         (double) ((int64_t) hellos * (msgsize::SEC_LINK_SIG + msgsize::SEC_HELLO)
+                                   + (int64_t) (sent - hellos) * msgsize::SEC_LINK_MAC));
+        }
+
         static std::string sendTypeLabel(const char* pktName);
         void recordSendScalars() {
             unsigned long total = 0;
@@ -150,6 +166,8 @@ class MyriadHelper : public Protocol {
                 recordScalar(("bytes_max_" + type).c_str(), b);
             recordScalar("bytes_max", sentMaxBytesOverall);
         }
+
+        virtual void secCharge(const cPacket* inner) {}
 
         void sendToNode(nodeid_t nid, NodePkt_p pkt, simtime_t delay = 0) {
             pkt->setByteLength(pkt->getByteLength() + msgsize::FRAME);

@@ -93,6 +93,8 @@ namespace routingsim {
             void reset() override;
             void finish() override;
 
+            void secCharge(const cPacket* inner) override;
+
             void onTwoWayReached(NeighborEntry& nbr) override;
             void onNeighborDead(NeighborEntry& nbr, bool wasFull) override;
 

@@ -616,6 +616,7 @@ def overview(inis, topos, scenarios, fractions, spacing, run_sims):
     overview_report(plan, res)
     overview_plots(plan, res)
     overview_security_plot(plan, res)
+    overview_security_plot(plan, res, cfg="ls")
 
 
 def overview_report(plan, res):
@@ -797,7 +798,7 @@ def overview_security_plot(plan, res, cfg="pv"):
                              _mean_sd(pful), _mean_sd(pnor)))
             break
     if not cols:
-        print("\n(no PV windows carried txBytesSec — security plot skipped)")
+        print(f"\n(no {cfg} windows carried txBytesSec — security plot skipped)")
         return
     # An all-zero chart is the signature of a binary that predates txBytesSec:
     # run_evals.sh does not build, so a stale src/RoutingSim silently produces
@@ -817,17 +818,24 @@ def overview_security_plot(plan, res, cfg="pv"):
         print(f"{lab:>12}{n:>6}{f'{f_[0]:.1f} ± {f_[1]:.1f}':>18}"
               f"{f'{nr[0]:.1f} ± {nr[1]:.1f}':>18}"
               f"{f'{pf[0]:.1f}':>13}{f'{pn[0]:.1f}':>18}")
-    print("  'no aggr' is the same design with one 64 B signature per chain entry"
-          " instead of one aggregate for the whole chain.")
+    print("  'no aggr' is the same design with one 64 B signature per "
+          + ("chain entry instead of one aggregate for the whole chain."
+             if cfg == "pv" else
+             "LSA instead of 48 B. LS has no chain, so nothing aggregates and "
+             "the gap is the flat 64/48 the pairing-free scheme costs."))
 
     fig, ax = plt.subplots(figsize=(1.9 * len(cols) + 2.5, 4.6))
     xs = range(len(cols))
     w = 0.36
-    for i, (lbl, idx, gidx, colour) in enumerate(
-            (("RR carried (as the run sent it)", 4, 6, PROTO_COLOR[cfg]),
-             ("RR excluded (same bytes, smaller base)", 5, None, PROTO_COLOR["pv_norr"]))):
+    # LS carries no reachability records and never writes txBytesNoRr, so its
+    # RR-excluded figure is the RR-carried one again. One bar only.
+    series = [("RR carried (as the run sent it)", 4, 6, PROTO_COLOR[cfg])]
+    if cfg == "pv":
+        series.append(("RR excluded (same bytes, smaller base)", 5, None,
+                       PROTO_COLOR["pv_norr"]))
+    for i, (lbl, idx, gidx, colour) in enumerate(series):
         stats = [c[idx] for c in cols]
-        pos = [p + (i - 0.5) * w for p in xs]
+        pos = [p + (i - (len(series) - 1) / 2) * w for p in xs]
         # Faded bar first, solid one over it: what stays visible above the solid
         # bar is the extra a per-hop signature scheme would cost.
         ghost = [c[gidx] for c in cols] if gidx is not None else []
@@ -850,7 +858,7 @@ def overview_security_plot(plan, res, cfg="pv"):
     ax.set_xticklabels([_win_title(c[0], c[1], c[2]) for c in cols], fontsize=8)
     ax.set(ylabel="added control-plane bytes (% of what was sent)",
            xlabel="situation",
-           title=title("Cost of securing MyriadPV, by situation"))
+           title=title(f"Cost of securing {DISPLAY.get(cfg, cfg)}, by situation"))
     # Headroom for the value labels AND the legend: the RR-excluded bar is
     # several times the RR-carried one, so a default axis puts the legend on top
     # of the tallest annotation.
@@ -865,8 +873,9 @@ def overview_security_plot(plan, res, cfg="pv"):
     ax.legend(handles=handles, fontsize=8, loc="upper right", framealpha=0.95)
     ax.grid(axis="y", alpha=0.3)
     fig.tight_layout()
-    fig.savefig(os.path.join(OUT, "overview_security.png"), dpi=120)
-    print("  wrote overview_security.png")
+    name = "overview_security.png" if cfg == "pv" else f"overview_security_{cfg}.png"
+    fig.savefig(os.path.join(OUT, name), dpi=120)
+    print(f"  wrote {name}")
 
 
 def _reach_total(series):
