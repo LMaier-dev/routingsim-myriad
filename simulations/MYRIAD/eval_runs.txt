@@ -81,12 +81,7 @@ python3 ~/routingsim/simulations/MYRIAD/eval_scaling.py --dir ~/routingsim/simul
 # --no-link-panel: per-link load is a function of FAN, and the ring graph is
 # pinned here. No --norr: n runs to 8000, so the RR-excluded series comes from
 # the free in-run subtraction instead of a third simulation per point.
-#
-# --jobs 2, NOT 6: LS holds an LSDB row per origin at every node, so its memory
-# goes with n^2 -- 44GB measured at n=10000 scales to ~28GB at the n=8000 points
-# here. measure() runs ls then pv sequentially so a job peaks at max(), but 6 of
-# those is ~168GB on a box with ~78GB free. Run this one on its own.
-python3 ~/routingsim/simulations/MYRIAD/eval_scaling.py --dir ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_nsweep_A300_tr750_spof0.5 --x-key n --jobs 2 --no-link-panel
+python3 ~/routingsim/simulations/MYRIAD/eval_scaling.py --dir ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_nsweep_A300_tr750_spof0.5 --x-key n --jobs 10 --no-link-panel
 
 # All three panels on the ringgrow corpus the dynamics runs use: state, volume
 # and link load, each with and without RR. tr is the swept knob, so fan moves
@@ -99,4 +94,4 @@ python3 ~/routingsim/simulations/MYRIAD/eval_scaling.py --dir ~/routingsim/simul
 # PV 18.3GB / 3min. measure() runs ls then pv SEQUENTIALLY, so a job peaks at
 # max(), not the sum -- but that is still 44GB, and --jobs 4 asks for 176GB on a
 # 125GB box. --jobs 2 fits.
-# cd ~/routingsim/simulations/MYRIAD/ && python3 ./eval_scaling.py --dir ./myriad_topologies/csv/delaunay_grow10000_A1200_spof0.5 --x-key tr --jobs 6 --no-batch-panel 
+# cd ~/routingsim/simulations/MYRIAD/ && python3 ./eval_scaling.py --dir ./myriad_topologies/csv/delaunay_grow10000_A1200_spof0.5 --x-key tr --jobs 2 --no-batch-panel 
