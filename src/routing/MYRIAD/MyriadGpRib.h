@@ -150,7 +150,7 @@ namespace routingsim {
             bool coBest(const RibEntry& a, const RibEntry& b) const;
             // Admit cand to frames[cur]; returns whether it entered.
             bool admitToFrame(RibRing& rs, const RibEntry& cand);
-            // Record cand as its front ring's freshest chain. Never forwards.
+            // Record cand as its front ring's best recent chain. Never forwards.
             bool updateSoleFront(RibRing& rs, const RibEntry& cand);  // true if the slot changed
             // Winner across both frames (+ soleFront if that winner is degraded), cached into rs.preferred:
             // not-degraded → spof → cost → fresh(seq==curSeq) → chain IDs.

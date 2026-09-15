@@ -149,15 +149,16 @@ bool MyriadGpRib::admitToFrame(RibRing& rs, const RibEntry& cand) {
     return true;
 }
 
-// Record cand as its front ring's freshest chain (replay coverage and degrade
-// fallback, never forwarded): newer seq always wins, within a seq betterExact wins.
+// Record cand as its front ring's best recent chain (replay coverage, degrade fallback
+// and suppression, never forwarded). A better chain always wins; a worse one only
+// replaces a slot two generations old, so a path that broke drops out within one cycle.
 bool MyriadGpRib::updateSoleFront(RibRing& rs, const RibEntry& cand) {
     if (cand.chain.empty()) return false;
     auto it = rs.soleFront.find(cand.chain.front());
-    // Same chain always replaces: a re-quote of this very path corrects its cost.
-    if (it == rs.soleFront.end() || cand.seq_no > it->second.seq_no
-        || it->second.chain == cand.chain
-        || (cand.seq_no == it->second.seq_no && betterExact(cand, it->second))) {
+    if (it == rs.soleFront.end()
+        || (it->second.chain == cand.chain && cand.seq_no >= it->second.seq_no)  // same path: re-quote or newer generation
+        || betterExact(cand, it->second)                                          // better, any generation
+        || cand.seq_no >= it->second.seq_no + 2) {                                // slot two generations stale
         rs.soleFront[cand.chain.front()] = cand;
         return true;
     }
@@ -173,9 +174,12 @@ bool MyriadGpRib::ringAlreadyHas(uint32_t origin, uint32_t frontRing,
     auto si = ri->second.soleFront.find(frontRing);
     if (si == ri->second.soleFront.end()) return false;   // ring never quoted it
     const RibEntry& have = si->second;
-    // A newer generation must go through: the old quote may be about to expire,
-    // and seq is what drives make-before-break.
-    if (cand.seq_no > have.seq_no) return false;
+    // TEST (2026-09-15): seq check disabled to compare against the last generation too.
+    // Original: a newer generation must go through: the old quote may be about to
+    // expire, and seq is what drives make-before-break.
+    // if (cand.seq_no > have.seq_no) return false;
+    // A degraded chain is what the fallback needs an alternative to: never suppress against it.
+    if (chainDegraded(have.chain)) return false;
     // Suppress only what the ring would reject outright. ECMP is admitted.
     return !strictlyBetter(cand, have) && !coBest(cand, have);
 }
