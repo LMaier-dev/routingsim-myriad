@@ -705,7 +705,7 @@ def plot(res, title, xlabel, outfile, nobatch=False, batch_panel=True,
         axH.legend(fontsize=8); axH.grid(True, alpha=0.3)
 
     fig.tight_layout()
-    fig.savefig(outfile, dpi=110)
+    fig.savefig(outfile, dpi=200)
     print(f"  wrote {outfile}")
 
 
@@ -828,7 +828,7 @@ def draw_topologies(outfile):
     fig.suptitle("Representative topology per sweep type "
                  "(each node a pie of its ring memberships)", fontsize=13)
     fig.tight_layout()
-    fig.savefig(outfile, dpi=120)
+    fig.savefig(outfile, dpi=200)
     print(f"  wrote {outfile}")
 
 

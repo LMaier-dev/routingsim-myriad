@@ -206,7 +206,7 @@ def main(args=None):
            title=title("Path-Vector vs Link-State path cost"))
     ax.legend(fontsize=8)
     fig.tight_layout()
-    fig.savefig(os.path.join(OUT, "scatter.png"), dpi=120)
+    fig.savefig(os.path.join(OUT, "scatter.png"), dpi=200)
 
     print(f"\nplot -> {OUT}/scatter.png")
 

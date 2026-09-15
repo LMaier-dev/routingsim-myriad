@@ -133,7 +133,7 @@ def draw(g, ring_of, ring_ids, path, stats=(), ring_pos=None):
     ax.axis("off")
     ax.autoscale_view()
     plt.tight_layout()
-    plt.savefig(path, dpi=100)
+    plt.savefig(path, dpi=200)
     plt.close()
 
 

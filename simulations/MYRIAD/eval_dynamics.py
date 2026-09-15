@@ -742,7 +742,7 @@ def overview_plots(plan, res):
         ax.set(ylabel=ylabel, xlabel="failure window",
                title=title("Control-plane volume per failure window"))
         ax.legend(fontsize=8); ax.grid(axis="y", alpha=0.3); fig.tight_layout()
-        fig.savefig(os.path.join(OUT, fname), dpi=120)
+        fig.savefig(os.path.join(OUT, fname), dpi=200)
         print(f"  wrote {fname}")
 
 
@@ -874,7 +874,7 @@ def overview_security_plot(plan, res, cfg="pv"):
     ax.grid(axis="y", alpha=0.3)
     fig.tight_layout()
     name = "overview_security.png" if cfg == "pv" else f"overview_security_{cfg}.png"
-    fig.savefig(os.path.join(OUT, name), dpi=120)
+    fig.savefig(os.path.join(OUT, name), dpi=200)
     print(f"  wrote {name}")
 
 
@@ -1489,7 +1489,7 @@ def plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0=None,
                                          hatch=hatches[i % len(hatches)], label=sc)
                                    for i, sc in enumerate(avail)], fontsize=8)
             fig.tight_layout()
-            fig.savefig(os.path.join(OUT, fname), dpi=120)
+            fig.savefig(os.path.join(OUT, fname), dpi=200)
             made.append(fname)
 
     # Steady churn in one figure: what a protocol costs to HOLD the topology
@@ -1565,7 +1565,7 @@ def plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0=None,
                            f"({CHURN_NODES} node(s) every {CHURN_PERIOD:g}s)"
                            f"{band}") + sub, fontsize=10)
         fig.tight_layout()
-        fig.savefig(os.path.join(OUT, "churn_cost.png"), dpi=120)
+        fig.savefig(os.path.join(OUT, "churn_cost.png"), dpi=200)
         made.append("churn_cost.png")
 
 
@@ -1588,7 +1588,7 @@ def plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0=None,
             ax.set(xlabel="nodes failed (%)", ylabel="mean path cost / LS optimum",
                    title=title("Path-cost stretch after recovery"))
             ax.legend(fontsize=8); fig.tight_layout()
-            fig.savefig(os.path.join(OUT, "stretch_vs_fraction.png"), dpi=120)
+            fig.savefig(os.path.join(OUT, "stretch_vs_fraction.png"), dpi=200)
             made.append("stretch_vs_fraction.png")
 
         # One run, waves growing over time: the whole network's route total as a
@@ -1653,7 +1653,7 @@ def plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0=None,
 
             ax.legend(handles, labels, fontsize=7, loc="lower left")
             fig.tight_layout()
-            fig.savefig(os.path.join(OUT, "recovery_node.png"), dpi=120)
+            fig.savefig(os.path.join(OUT, "recovery_node.png"), dpi=200)
             made.append("recovery_node.png")
 
     # Path cost over time under CONSTANT churn, not escalating waves: a steady
@@ -1702,7 +1702,7 @@ def plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0=None,
                                f"({CHURN_NODES} node(s) every {CHURN_PERIOD:g}s)"))
             ax.legend(fontsize=7, loc="upper left")
             fig.tight_layout()
-            fig.savefig(os.path.join(OUT, "stretch_churn.png"), dpi=120)
+            fig.savefig(os.path.join(OUT, "stretch_churn.png"), dpi=200)
             made.append("stretch_churn.png")
         else:
             plt.close(fig)

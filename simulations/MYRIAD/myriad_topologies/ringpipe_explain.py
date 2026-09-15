@@ -306,7 +306,7 @@ def main():
                  f"{plural(s['pairs'], 'transition')} between them", fontsize=11)
     fig.tight_layout(rect=(0, 0, 1, 0.94))
     os.makedirs(os.path.dirname(a.out), exist_ok=True)
-    fig.savefig(a.out, dpi=120)
+    fig.savefig(a.out, dpi=200)
     print(f"wrote {a.out}")
 
 

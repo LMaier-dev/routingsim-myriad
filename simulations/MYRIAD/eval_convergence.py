@@ -219,7 +219,7 @@ def main(args=None):
     axL.set_title(title("Convergence time and message count vs hold interval"))
     axL.legend(handles=lines, fontsize=7, loc="center left")
     fig.tight_layout()
-    fig.savefig(os.path.join(OUT, "tradeoff.png"), dpi=120)
+    fig.savefig(os.path.join(OUT, "tradeoff.png"), dpi=200)
 
     print(f"\nplots -> {OUT}/tradeoff.png")
 
