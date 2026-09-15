@@ -39,7 +39,6 @@ int64_t gpBatchBytes(const MyriadGpUpdateBatch* p) {
 }
 
 // Signature and link widths are shared with MyriadLs (see MyriadPduSize.h).
-constexpr int64_t SEC_EPOCH = 1;           // (epoch, seq) generation tag
 constexpr int64_t SEC_HOP   = RSIZE + BOOL;  // chain unfolding: ring size + redundancy bit
 
 // Security overhead one PDU would carry, split so each part can be rescaled
@@ -48,33 +47,32 @@ void gpSecBytes(const cPacket* p, int64_t& sig, int64_t& strct, int64_t& sigLin)
     sig = 0;
     strct = 0;
     sigLin = 0;
+    // Design: origin-record signature + one aggregate over [c_0..c_k]; c_k is the
+    // ring being entered, which the wire chain omits (the receiver prepends it).
     auto chainTerm = [](size_t hops) {
-        return (int64_t) hops * SEC_HOP - (COST + SPOF);
+        return (int64_t) (hops + 1) * SEC_HOP - (COST + SPOF);
     };
     auto chainSigLin = [](size_t hops) {
-        return hops ? SEC_SIG_PERHOP * (int64_t) (hops + 1) : 0;
+        return SEC_SIG_PERHOP * (int64_t) (hops + 1);
     };
     if (auto* b = dynamic_cast<const MyriadGpUpdateBatch*>(p)) {
         for (size_t i = 0; i < b->getEntriesArraySize(); ++i) {
             const MyriadGpUpdateEntry& e = b->getEntries(i);
             size_t hops = e.getRing_chainArraySize();
-            sig += SEC_SIG + (hops ? SEC_SIG : 0);
+            sig += 2 * SEC_SIG;
             sigLin += SEC_SIG_PERHOP + chainSigLin(hops);
             strct += chainTerm(hops);
         }
-        strct += SEC_EPOCH;
     } else if (auto* u = dynamic_cast<const MyriadGpUpdate*>(p)) {
         size_t hops = u->getRing_chainArraySize();
-        sig = SEC_SIG + (hops ? SEC_SIG : 0);
+        sig = 2 * SEC_SIG;
         sigLin = SEC_SIG_PERHOP + chainSigLin(hops);
-        strct = chainTerm(hops) + SEC_EPOCH;
+        strct = chainTerm(hops) - RSIZE;   // member_count moves into the entries
     } else if (dynamic_cast<const MyriadGpDegrade*>(p)) {
         sig = SEC_SIG;                     // stamped with the culprit ring's key
         sigLin = SEC_SIG_PERHOP;           // single signature; nothing to aggregate
-        strct = SEC_EPOCH;
-    } else if (dynamic_cast<const MyriadGpCollect*>(p)) {
-        strct = NODEID + SEC_EPOCH;        // next-hop binding; no ring signature
     }
+    // COLLECT: link MAC only; the receiver id is bound inside the MAC, not carried.
 }
 
 // RR bytes inside a GP PDU, tallied per link alongside countSend so the eval can
@@ -247,8 +245,8 @@ void MyriadGP::originateCollect(uint32_t ring, nodeid_t to, MyriadGpCollectKind 
         pkt->setTransitions(i, t);
     }
 
-    // Send one direction now; retransmits alternate to the other neighbor so a
-    // single directional send still reaches every ring member if one side breaks.
+    // Retransmits stay on `to`: a lap crosses every ring link in either direction,
+    // and a PROBE must keep retrying the dead neighbor as its grace period.
     pkt->setByteLength(gpCollectBytes(pkt));
     sendRingReliable(m.collectInflight, to, to, pkt, rxmtInterval,
                      COLLECT_RETRY_LIMIT, [this, ring]() { onCollectBudgetExpired(ring); });
@@ -258,8 +256,8 @@ void MyriadGP::originateCollect(uint32_t ring, nodeid_t to, MyriadGpCollectKind 
 }
 
 void MyriadGP::reoriginateCollect(uint32_t ring, bool routine, MyriadGpCollectKind kind) {
-    // Pick either ring-neighbor as the send target (alternation covers the
-    // other direction on retransmit); skip if the ring isn't fully seen.
+    // Either ring-neighbor works as the target, a lap covers the ring in both
+    // directions; skip if the ring isn't fully seen.
     std::vector<nodeid_t> nbrs = ringNeighbors(ring);
     if (nbrs.empty()) {
         MLOG_DEBUG() << "re-collect ring='" << ring
