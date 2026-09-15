@@ -25,8 +25,8 @@ namespace routingsim {
     // Everything a router keeps per origin ring it knows a route to. Two-frame
     // model: frames[cur] is curSeq's generation, frames[cur^1] the previous one
     // kept for make-before-break; a flip on a newer seq clears the new current.
-    // soleFront holds the freshest chain per front ring — replay coverage, never
-    // forwarded, not counted against a frame's maxEcmpPaths.
+    // soleFront holds the freshest chain per front ring — replay coverage and the
+    // degrade fallback, never forwarded, not counted against a frame's maxEcmpPaths.
     struct RibRing {
         std::vector<MyriadGpRr> rr; // (subnet, owner) pairs; refreshed on a flip
         uint32_t curSeq = 0;
@@ -151,8 +151,8 @@ namespace routingsim {
             // Admit cand to frames[cur]; returns whether it entered.
             bool admitToFrame(RibRing& rs, const RibEntry& cand);
             // Record cand as its front ring's freshest chain. Never forwards.
-            void updateSoleFront(RibRing& rs, const RibEntry& cand);
-            // Winner across both frames + soleFront, cached into rs.preferred:
+            bool updateSoleFront(RibRing& rs, const RibEntry& cand);  // true if the slot changed
+            // Winner across both frames (+ soleFront if that winner is degraded), cached into rs.preferred:
             // not-degraded → spof → cost → fresh(seq==curSeq) → chain IDs.
             void selectPreferred(RibRing& rs);
             void reselectAll();

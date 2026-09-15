@@ -149,16 +149,19 @@ bool MyriadGpRib::admitToFrame(RibRing& rs, const RibEntry& cand) {
     return true;
 }
 
-// Record cand as its front ring's freshest chain (replay coverage, never
-// forwarded): newer seq always wins, within a seq betterExact wins.
-void MyriadGpRib::updateSoleFront(RibRing& rs, const RibEntry& cand) {
-    if (cand.chain.empty()) return;
+// Record cand as its front ring's freshest chain (replay coverage and degrade
+// fallback, never forwarded): newer seq always wins, within a seq betterExact wins.
+bool MyriadGpRib::updateSoleFront(RibRing& rs, const RibEntry& cand) {
+    if (cand.chain.empty()) return false;
     auto it = rs.soleFront.find(cand.chain.front());
     // Same chain always replaces: a re-quote of this very path corrects its cost.
     if (it == rs.soleFront.end() || cand.seq_no > it->second.seq_no
         || it->second.chain == cand.chain
-        || (cand.seq_no == it->second.seq_no && betterExact(cand, it->second)))
+        || (cand.seq_no == it->second.seq_no && betterExact(cand, it->second))) {
         rs.soleFront[cand.chain.front()] = cand;
+        return true;
+    }
+    return false;
 }
 
 bool MyriadGpRib::ringAlreadyHas(uint32_t origin, uint32_t frontRing,
@@ -194,10 +197,17 @@ void MyriadGpRib::selectPreferred(RibRing& rs) {
     };
     for (auto& e : rs.frames[rs.cur]) consider(e);
     for (auto& e : rs.frames[rs.cur ^ 1]) consider(e);
+    size_t ranked = rs.frames[rs.cur].size() + rs.frames[rs.cur ^ 1].size();
+    // Degrade fallback: the frames only hold the best chains, which may all cross
+    // the degraded ring. The freshest chain per front ring can leave around it.
+    if (best && chainDegraded(best->chain)) {
+        for (auto& [front, e] : rs.soleFront) consider(e);
+        ranked += rs.soleFront.size();
+    }
     rs.hasPreferred = best != nullptr;
     if (best) rs.preferred = *best;
     // One op per candidate ranked.
-    if (onCalc) onCalc(rs.frames[rs.cur].size() + rs.frames[rs.cur ^ 1].size());
+    if (onCalc) onCalc(ranked);
 }
 
 void MyriadGpRib::reselectAll() {
@@ -259,7 +269,7 @@ StoreResult MyriadGpRib::store(uint32_t origin, const std::vector<uint32_t>& ful
                  : seq < originRs.curSeq) return res;
 
     // Whether anything selectPreferred RANKS actually moved. It ranks both
-    // frames and nothing else, so soleFront and rr changes do not count.
+    // frames, and soleFront only while a degrade is open; rr changes never count.
     bool framesChanged = false;
 
     if (seq > originRs.curSeq) {              // flip
@@ -297,9 +307,9 @@ StoreResult MyriadGpRib::store(uint32_t origin, const std::vector<uint32_t>& ful
     if (of.size() != ofWas) framesChanged = true;
 
     if (admitToFrame(originRs, cand)) { res.propagate = true; framesChanged = true; }
-    updateSoleFront(originRs, cand);   // replay coverage only; not ranked for the data plane
-    // A rejected candidate leaves both frames exactly as they were, so the
-    // winner cannot have moved.
+    // soleFront is ranked only while a degrade is open, so otherwise a rejected
+    // candidate leaves the winner where it was.
+    if (updateSoleFront(originRs, cand) && !degrades.empty()) framesChanged = true;
     if (framesChanged) selectPreferred(originRs);
     res.cobest = originRs.frames[originRs.cur].size();
     return res;
