@@ -87,6 +87,8 @@ namespace routingsim {
             bool applyDegrade(uint32_t ring, uint32_t seq, uint32_t beacon);
             // Ring has an open degrade: its laps are not closing.
             bool isDegraded(uint32_t ring) const { return degrades.count(ring) != 0; }
+            // A lap of mine closed, so the ring is whole.
+            void clearDegrade(uint32_t ring);
 
             // Pointers borrow from the RIB; invalid after any mutating call.
             struct ReplayChain {

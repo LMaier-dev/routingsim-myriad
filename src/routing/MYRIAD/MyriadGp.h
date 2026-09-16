@@ -62,15 +62,9 @@ namespace routingsim {
         bool isKing = false;
         TimerMsg* refreshTimer = nullptr;   // king: periodic re-collect
         TimerMsg* watchdogTimer = nullptr;  // member: coup if the king goes silent
-        // Batch windows for transitions INTO this ring: [0] spof-free, [1]
-        // spof-incurring. Per ring, so a ring's window starts when that ring
-        // first gets a chain and the two waves stay ordered relative to it.
         TimerMsg* holdTimer[2] = {nullptr, nullptr};
         // Distinguishes "routine, nothing new" refresh from warmup
         bool routineRefreshPending = false;
-        // High-water mark of ring-neighbors. 1 = genuine 2-node ring; a drop from
-        // 2 to 1 is degradation, so we let the lap fail and DEGRADE fires.
-        size_t maxRingNeighbors = 0;
     };
 
     // An inter-ring transition held for batching (see holdInterval); origin is
@@ -148,6 +142,8 @@ namespace routingsim {
             nodeid_t otherRingNeighbor(uint32_t ring, nodeid_t sender);
             // Both TWOWAY+ ring-neighbors for R (0, 1, or 2).
             std::vector<nodeid_t> ringNeighbors(uint32_t ring);
+            // Neighbors that claim `ring` at all.
+            size_t ringDegree(uint32_t ring);
             // True iff R is a genuine 2-node ring, from ring-ids neighbors advertise in hello
             bool isTwoNodeRing(uint32_t ring);
             void originateUpdate(uint32_t ring);
@@ -190,7 +186,6 @@ namespace routingsim {
             void onBatchBudgetExpired(uint32_t ring, uint32_t batchLapSeq);
             // Retransmits after the initial send.
             static constexpr int COLLECT_RETRY_LIMIT = 3;
-            // Placeholder ring size until the origin-UPDATE trailer arrives.
             // Placeholder ring size until the origin-UPDATE trailer arrives
             static constexpr uint32_t UNKNOWN_RING_SIZE = 1u << 12;
 
@@ -230,12 +225,7 @@ namespace routingsim {
             bool rebooted = false;
             std::unordered_map<uint32_t /*ring*/, uint32_t> lastOriginSeq;
             // Held transitions bucketed by (target ring, next-hop primary). Two
-            // buckets: [0] spof-free transitions, [1] spof-incurring ones, which
-            // flush spofHoldMultiplier later. Since spof ranks above cost, a
-            // spof-incurring chain arriving after the spof-free one is already
-            // unpropagatable, so the delay makes it die a hop early instead of
-            // flooding a wave the later one outranks. Timers are per ring, in
-            // RingMembership::holdTimer.
+            // buckets: [0] spof-free transitions, [1] spof-incurring ones.
             std::map<std::pair<uint32_t, nodeid_t>, std::vector<PendingTransition>> pendingTransitions[2];
             double spofHoldMultiplier = 2.0;  // 1 = both buckets flush together (off)
             bool holdCostScaled = true;       // false = flat holdInterval, no ring-cost term

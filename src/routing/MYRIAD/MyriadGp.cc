@@ -35,6 +35,9 @@ int64_t gpBatchBytes(const MyriadGpUpdateBatch* p) {
            + (int64_t) e.getHandled_ringsArraySize() * RING
            + (int64_t) e.getRrArraySize() * RR;
     }
+    // Ring trailer on a replay batch: once per batch, not per entry.
+    if (p->getMember_count() > 0)
+        b += RSIZE + (int64_t) p->getWidthsArraySize() * TRANSITION;
     return b;
 }
 
@@ -169,18 +172,28 @@ void MyriadGP::onTwoWayReached(GpNeighbor& nbr) {
             for (uint32_t r : n.sharedRings) if (r == R) { ++count; break; }
         }
         RingMembership& m = memberships[R];
-        // The high-water mark separates formation from repair: it only grows, so
-        // a count we have never reached means the ring is still coming up, while
-        // a mate merely returning cannot exceed it. A survivor stays silent on a
-        // repair — the standing king's refresh re-announces the ring, and if the
-        // king itself died a watchdog coup elects a new one.
-        bool grew = count > m.maxRingNeighbors;
-        if (grew) m.maxRingNeighbors = count;
-        // Originate once >=1 ring-neighbor is two-way (a genuine 2-node ring has
-        // exactly one and closes its lap via echo; see the echo sites below).
-        if (grew && count <= 2 && m.collectInflight.tx == nullptr) {
-            // reset() wipes memberships, so a rebooted node always "grows". It
-            // probes first; only a closed lap is worth a replay (handleCollect).
+        // Two local truths decide, and nothing is remembered between them: I
+        // hold no state for this ring (formation, or a reboot wiped it), or the
+        // ring is KNOWN degraded and now looks whole again. A survivor on a
+        // healthy ring still stays silent — the king's refresh re-announces it.
+        bool fresh  = m.memberCount == 0;
+        bool repair = rib.isDegraded(R) && count == ringDegree(R);
+        if (count > 2) {
+            MLOG_N_WARN(nbr.id) << "ring '" << R
+                << "' has >2 ring-neighbors (misconfig); ignoring\n";
+        } else if (m.collectInflight.tx != nullptr) {
+            // A lap is already walking. It may be doomed, but its budget expiry
+            // retries (onCollectBudgetExpired) rather than stacking laps here.
+        } else if (repair && !fresh) {
+            // Staggered recovery means several members may probe before one
+            // lap closes; a PROBE neither crowns a king nor re-announces.
+            MLOG_N_INFO(nbr.id) << "repair probe ring='" << R
+                                << "' (degraded, now " << count << "/"
+                                << ringDegree(R) << " up)\n";
+            originateCollect(R, nbr.id, COLLECT_PROBE);
+        } else if (fresh) {
+            // reset() wipes memberships, so a rebooted node is always "fresh".
+            // It probes; only a closed lap is worth a replay (handleCollect).
             if (rebooted) {
                 originateCollect(R, nbr.id, COLLECT_PROBE);  // reboot: immediate, recovery latency matters
             } else if (collectWarmupInterval > 0) {
@@ -194,9 +207,6 @@ void MyriadGP::onTwoWayReached(GpNeighbor& nbr) {
             } else {
                 originateCollect(R, nbr.id, COLLECT_REFRESH);
             }
-        } else if (count > 2) {
-            MLOG_N_WARN(nbr.id) << "ring '" << R
-                << "' has >2 ring-neighbors (misconfig); ignoring\n";
         }
     }
 }
@@ -445,8 +455,10 @@ void MyriadGP::onCollectBudgetExpired(uint32_t ring) {
     MLOG_WARN() << "ring send budget expired ring='" << ring
                 << "' seq=" << m.collectInflight.seq_no << " — ring broken\n";
     // Degrade only on actual degradation
-    if (degradeEnabled && ringNeighbors(ring).size() < m.maxRingNeighbors)
+    if (degradeEnabled && ringNeighbors(ring).size() < ringDegree(ring))
         originateDegrade(ring);
+
+    if (!m.isKing && !m.watchdogTimer) startWatchdog(ring);
 }
 
 void MyriadGP::onUpdateBudgetExpired(uint32_t ring, std::vector<uint32_t> chain) {
@@ -549,6 +561,7 @@ void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t sender) {
 
             // Lap closed: member_count now equals the ring's router count.
             m.memberCount = collect->getMember_count();
+            rib.clearDegrade(R); // the lap closed, so this ring is whole again
 
             // Snapshot the collected data onto ring state.
             std::vector<MyriadGpRr> collected;
@@ -696,12 +709,15 @@ nodeid_t MyriadGP::otherRingNeighbor(uint32_t ring, nodeid_t sender) {
     return undefined_node;
 }
 
-bool MyriadGP::isTwoNodeRing(uint32_t ring) {
-    // Echo Path check
+size_t MyriadGP::ringDegree(uint32_t ring) {
     size_t claimants = 0;
     for (auto& [nid, n] : neighbors)
         for (uint32_t r : n.sharedRings) if (r == ring) { ++claimants; break; }
-    return claimants <= 1;
+    return claimants;
+}
+
+bool MyriadGP::isTwoNodeRing(uint32_t ring) {
+    return ringDegree(ring) <= 1;   // echo path: the ring is just the two of us
 }
 
 std::vector<nodeid_t> MyriadGP::ringNeighbors(uint32_t ring) {
@@ -1296,6 +1312,17 @@ void MyriadGP::replayInto(uint32_t ring) {
         batch->setRouter_id_src(myId);
         batch->setCurrent_ring(ring);
         batch->setSeq_no(lapSeq);
+        // Ring trailer: a member that crashed with me holds no size or widths
+        // for `ring`, and without them it can neither price these chains nor
+        // transition them onward. Once per batch, mirroring the origin UPDATE.
+        batch->setMember_count(memberCountOf(ring));
+        batch->setWidthsArraySize(rs.adjacentRings.size());
+        for (size_t j = 0; j < rs.adjacentRings.size(); ++j) {
+            MyriadGpRingTransition t;
+            t.ring = rs.adjacentRings[j].ring;
+            t.isRedundant = rs.adjacentRings[j].isRedundant;
+            batch->setWidths(j, t);
+        }
         batch->setEntriesArraySize(group.size());
         for (size_t g = 0; g < group.size(); ++g) {
             const RebasedChain& e = *group[g];
@@ -1360,6 +1387,19 @@ void MyriadGP::handleUpdateBatch(MyriadGpUpdateBatch* batch, nodeid_t sender) {
                                  << " entries=" << batch->getEntriesArraySize() << "\n";
         }
         return;
+    }
+
+    // Replay trailer, before the entries are priced.
+    if (rs2.memberCount == 0 && batch->getMember_count() > 0)
+        rs2.memberCount = batch->getMember_count();
+    if (rs2.adjacentRings.empty() && batch->getWidthsArraySize() > 0) {
+        rs2.adjacentRings.reserve(batch->getWidthsArraySize());
+        for (size_t i = 0; i < batch->getWidthsArraySize(); ++i) {
+            auto& w = batch->getWidths(i);
+            rs2.adjacentRings.push_back({ w.ring, w.isRedundant });
+        }
+        MLOG_N_DEBUG(sender) << "adopted replay trailer for ring='" << R2
+                             << "' size=" << rs2.memberCount << "\n";
     }
 
     // Process each entry (its transitions become new held batches into my other

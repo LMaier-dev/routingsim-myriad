@@ -222,6 +222,10 @@ bool MyriadGpRib::chainDegraded(const std::vector<uint32_t>& chain) const {
     return false;
 }
 
+void MyriadGpRib::clearDegrade(uint32_t ring) {
+    if (degrades.erase(ring)) reselectAll();
+}
+
 void MyriadGpRib::clearDegradeIfRecovered(uint32_t ring) {
     auto it = degrades.find(ring);
     if (it != degrades.end() && it->second.first < rings[ring].curSeq) {

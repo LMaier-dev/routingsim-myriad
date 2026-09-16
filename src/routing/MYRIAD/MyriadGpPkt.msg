@@ -147,6 +147,10 @@ class MyriadGpUpdateEntry {
 packet MyriadGpUpdateBatch extends MyriadGpHeader {
     type = MYRIADGP_UPDATE_BATCH;
     MyriadGpUpdateEntry entries[];
+    // Ring trailer, carried by REPLAY batches only (replayInto) and once for
+    // the whole batch: Same pair as the origin-UPDATE trailer; 0/empty on an ordinary batch.
+    uint32_t member_count;
+    MyriadGpRingTransition widths[];
 }
 
 // Direct-neighbor flood, not tied to the ring machinery, so no current_ring.
