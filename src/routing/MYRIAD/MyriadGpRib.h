@@ -153,7 +153,7 @@ namespace routingsim {
             // Record cand as its front ring's best recent chain. Never forwards.
             bool updateSoleFront(RibRing& rs, const RibEntry& cand);  // true if the slot changed
             // Winner across both frames (+ soleFront if that winner is degraded), cached into rs.preferred:
-            // not-degraded → spof → cost → fresh(seq==curSeq) → chain IDs.
+            // not-degraded → spof → cost → chain IDs.
             void selectPreferred(RibRing& rs);
             void reselectAll();
             // A chain is degraded iff any ring on it has an active degrade.

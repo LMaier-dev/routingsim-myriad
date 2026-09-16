@@ -238,6 +238,7 @@ namespace routingsim {
             // RingMembership::holdTimer.
             std::map<std::pair<uint32_t, nodeid_t>, std::vector<PendingTransition>> pendingTransitions[2];
             double spofHoldMultiplier = 2.0;  // 1 = both buckets flush together (off)
+            bool holdCostScaled = true;       // false = flat holdInterval, no ring-cost term
             // Batch-size scalars for finish(); mean = entries / batchesCreated.
             unsigned long batchEntriesTotal = 0;
             unsigned long batchMaxEntries = 0;

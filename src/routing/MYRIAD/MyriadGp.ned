@@ -47,6 +47,11 @@ simple myriadgp extends routingsim.foundation.Protocol
         // propagating a full wave. 1 = off.
         double spofHoldMultiplier = default(5.0);
 
+        // Hold window grows with the target ring's cost (+ size^ringCostExponent
+        // ms), so a wave crossing a big ring waits as long as that ring is
+        // expensive. false = flat holdInterval for every ring.
+        bool holdCostScaled = default(true);
+
         // On a broken ring, flood a DEGRADE so every node demotes chains that
         // transit it below any non-degraded alternative until it recovers. Off =
         // rely on refresh/purge alone (broken paths linger until reconvergence).

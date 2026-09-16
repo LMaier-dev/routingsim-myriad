@@ -169,15 +169,14 @@ bool MyriadGpRib::ringAlreadyHas(uint32_t origin, uint32_t frontRing,
                                  const RibEntry& cand) const {
     auto ri = rings.find(origin);
     if (ri == rings.end()) return false;
-    // reuse sole front guard (property best current SN generation for the target ring so far) 
-    // to suppress a candidate that would teach nothing new.
+    // The front-ring slot holds the best chain that ring recently carried, so a
+    // candidate it beats would teach the ring nothing new.
     auto si = ri->second.soleFront.find(frontRing);
     if (si == ri->second.soleFront.end()) return false;   // ring never quoted it
     const RibEntry& have = si->second;
-    // TEST (2026-09-15): seq check disabled to compare against the last generation too.
-    // Original: a newer generation must go through: the old quote may be about to
-    // expire, and seq is what drives make-before-break.
-    // if (cand.seq_no > have.seq_no) return false;
+    // No generation check: the slot keeps the best of the last two generations
+    // (updateSoleFront), and an entry two generations old is replaced by anything,
+    // so a suppression that a broken path made wrong costs at most one refresh cycle.
     // A degraded chain is what the fallback needs an alternative to: never suppress against it.
     if (chainDegraded(have.chain)) return false;
     // Suppress only what the ring would reject outright. ECMP is admitted.

@@ -108,6 +108,11 @@ def main():
                                  "fraction), boxplotted over --repeat RNG seeds; "
                                  "no RIB snapshots, so no reconvergence output")
 
+    import eval_optimizations
+    op = sub.add_parser("optimizations")
+    eval_optimizations.add_opt_args(op)
+    add_repeat_args(op)
+
     sc = sub.add_parser("scaling")
     sc.add_argument("--quick", action="store_true")
     sc.add_argument("--only", choices=["square", "topos"])
@@ -138,15 +143,19 @@ def main():
 
     # Post mode re-parses on-disk results and --list-configs only prints names;
     # neither simulates, so the oracle gate (which does) would be pure waste.
-    nosim = args.cmd == "dynamics" and (getattr(args, "post", False)
-                                        or getattr(args, "list_configs", False))
-    if args.cmd != "scaling" and not nosim:
+    nosim = (args.cmd == "dynamics" and (getattr(args, "post", False)
+                                         or getattr(args, "list_configs", False))
+             or (args.cmd == "optimizations" and getattr(args, "dry_run", False)))
+    # scaling and optimizations sweep whole topology families and carry no --topo
+    # for the gate to run on; run_evals.sh stamps the gate once before fanning out.
+    if args.cmd not in ("scaling", "optimizations") and not nosim:
         _oracle_gate(args)
 
     dispatch = {
         "convergence": "eval_convergence",
         "costdrift":   "eval_costdrift",
         "dynamics":    "eval_dynamics",
+        "optimizations": "eval_optimizations",
         "scaling":     "eval_scaling",
     }
     mod = __import__(dispatch[args.cmd])

@@ -132,6 +132,7 @@ void MyriadGP::onInitialize() {
     maxBatchBytes = par("maxBatchBytes");
     holdInterval = par("holdInterval");
     spofHoldMultiplier = par("spofHoldMultiplier");
+    holdCostScaled = par("holdCostScaled");
     ringCostExponent = par("ringCostExponent");
     snapshotInterval = par("snapshotInterval");
     snapshotStats = par("snapshotFormat").stdstringValue() == "stats";
@@ -158,8 +159,9 @@ void MyriadGP::onTwoWayReached(GpNeighbor& nbr) {
     nbr.state = NSTATE_FULL;
 
     // For each ring we share with this neighbor: originate a collect iff this
-    // TWOWAY brings the count of TWOWAY-or-better ring-neighbors on R to
-    // exactly 2.
+    // TWOWAY pushes the count of TWOWAY-or-better ring-neighbors on R past
+    // every count seen before. One such neighbor is enough (a 2-node ring never
+    // gets a second); above two the labelling is a misconfig.
     for (uint32_t R : nbr.sharedRings) {
         size_t count = 0;
         for (auto& [nid, n] : neighbors) {
@@ -1056,8 +1058,8 @@ void MyriadGP::forwardChainInterRing(uint32_t curRing, uint32_t seq, uint32_t sp
         }
 
         // A degraded ring's laps don't close, so this would only burn the
-        // retransmit budget. The degrade clears on the first lap that closes,
-        // and the king's refresh re-announces then.
+        // retransmit budget. The degrade clears once an UPDATE of a newer
+        // generation arrives from that ring (clearDegradeIfRecovered).
         if (skipDegradedTransitions && rib.isDegraded(R2)) {
             MLOG_DEBUG() << "transition into ring='" << R2
                          << "' skipped: degraded\n";
@@ -1152,7 +1154,7 @@ simtime_t MyriadGP::holdDelay(uint32_t ring, int bucket) const {
     uint32_t sz = memberCountOf(ring);
     double ms = 1.0;
     for (long k = 0; k < ringCostExponent && sz; ++k) ms *= sz;
-    simtime_t d = holdInterval + SimTime(sz ? ms : 0, SIMTIME_MS);
+    simtime_t d = holdInterval + SimTime(holdCostScaled && sz ? ms : 0, SIMTIME_MS);
     return bucket ? d * spofHoldMultiplier : d;
 }
 

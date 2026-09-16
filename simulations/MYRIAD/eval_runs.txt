@@ -76,6 +76,17 @@ python3 ~/routingsim/simulations/MYRIAD/eval_scaling.py --dir ~/routingsim/simul
 
 
 # ---------------------------------------------------------------------------
+# What each PV propagation optimization is worth, on ONE fan level of the sweep
+# above (every seed of it averaged). Each optimization runs alone against an
+# all-off baseline, then all together; ecmpCostMargin is 50% throughout.
+#
+# The horizon is warmup + 2 refresh cycles with refreshFloodsUpdate=true, so the
+# totals include what a refresh re-floods, not just the formation burst. 45 sims
+# at n=1000: keep --jobs low, two of these already need ~9GB.
+python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py optimizations --jobs 2
+
+
+# ---------------------------------------------------------------------------
 # Per-router RIB state vs NODE COUNT (generate_topos.sh grow; ringgrow
 # --sweep-n, A=300 tr=750 fixed), alongside volume with and without RR.
 # --no-link-panel: per-link load is a function of FAN, and the ring graph is
