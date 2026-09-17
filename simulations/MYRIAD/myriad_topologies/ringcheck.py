@@ -62,6 +62,22 @@ def check(topo_path, ini_path):
     return offenders(*load(topo_path, ini_path))
 
 
+def check_echo_ids(topo_path, ini_path):
+    """ring -> member count for every ring breaking the echo-id convention.
+
+    A two-node (echo) ring must be numbered inside the reserved block and
+    nothing else may be, because a router reads echo-ness off the id alone (see
+    topo2rings.ECHO_ID_BASE and MyriadGp.ned echoRingIdMax). It cannot infer it:
+    after a reboot a ring-neighbour that stayed down looks exactly like a ring
+    that only ever had two members. A plan breaking this mis-simulates silently,
+    so callers should treat a non-empty result as fatal.
+    """
+    from topo2rings import ECHO_ID_BASE   # lazy: keeps this script dependency-free
+    rings, _ = load(topo_path, ini_path)
+    return {r: len(m) for r, m in rings.items()
+            if (len(m) == 2) != (r <= ECHO_ID_BASE)}
+
+
 def _selfcheck():
     plain = {0: {1, 3}, 1: {0, 2}, 2: {1, 3}, 3: {0, 2}}      # a square
     square = {1: {0, 1, 2, 3}}

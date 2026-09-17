@@ -1025,7 +1025,8 @@ def main(args=None):
                        help="settle time between node waves, i.e. seconds from "
                             "one failure fraction to the next; also the refresh "
                             "interval of the node scenario "
-                            "(default 2*(down-min+down-jitter))")
+                            "(default: eval_common waveSpacing, else "
+                            "2*(down-min+down-jitter))")
         p.add_argument("--extra-warmup", type=float, default=0.0, metavar="S",
                        help="give the network S more seconds to converge before "
                             "the first failure (adds to --failure-start, and the "
@@ -1170,7 +1171,8 @@ def main(args=None):
     reconv = {name: {} for name in CONFIGS}
     # Waves must be spaced so that a failed node's downtime AND its refill both
     # finish before the next wave.
-    spacing = args.wave_spacing or round(2 * (DOWN_MIN + DOWN_JITTER))
+    spacing = (args.wave_spacing or _sec(common("waveSpacing", 0))
+               or round(2 * (DOWN_MIN + DOWN_JITTER)))
     waves = []
 
     if getattr(args, "overview", False):

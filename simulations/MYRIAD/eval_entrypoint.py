@@ -66,7 +66,8 @@ def main():
             sp.add_argument("--wave-spacing", type=float, default=None,
                             help="settle time between node waves (one failure "
                                  "fraction to the next); also the refresh "
-                                 "interval of the node scenario")
+                                 "interval of the node scenario "
+                                 "(default: eval_common waveSpacing)")
             sp.add_argument("--failure-start", type=float, default=None,
                             help="warmup seconds before failures begin (churn "
                                  "start and first node wave) and the cut every "

@@ -539,14 +539,14 @@ def write_out(g, plan, rpos, stem, sub, prov):
 
     member, n_echo = rings_to_membership(g, plan)
     n_rings = len(plan) + n_echo
-    ring_of = {v: [t2r.RING_ID_BASE - i for i in sorted(member[v])] for v in g.nodes()}
-    ring_ids = [t2r.RING_ID_BASE - i for i in range(n_rings)]
+    ring_of = {v: [t2r.ring_id(i, len(plan)) for i in sorted(member[v])] for v in g.nodes()}
+    ring_ids = [t2r.ring_id(i, len(plan)) for i in range(n_rings)]
     stats = t2r.topology_stats(g, ring_of, n_rings, n_echo, 0, f"{stem}  {prov}")
     os.makedirs(os.path.join(GALLERY, sub), exist_ok=True)
     png = os.path.join(GALLERY, sub, f"{stem}.png")
     # Echo rings have no site, so they get no fixed position -- draw() falls
     # back to a spring layout for the whole panel if any ring is missing one.
-    ring_pos = {t2r.RING_ID_BASE - i: p for i, p in enumerate(rpos)}
+    ring_pos = {t2r.ring_id(i, len(plan)): p for i, p in enumerate(rpos)}
     t2r.draw(g, ring_of, ring_ids, png, stats, ring_pos)
     return s, topo, ini, png
 

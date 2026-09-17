@@ -14,8 +14,8 @@ namespace {
 using namespace msgsize;
 
 int64_t gpCollectBytes(const MyriadGpCollect* p) {
-    return MYRIADGP_HDR + RSIZE + RSIZE + SPOF + COST + NODEID + 3 * BOOL
-                                                           // member_count + lap max quad + crashed + claimed + kind
+    return MYRIADGP_HDR + RSIZE + RSIZE + RSIZE + SPOF + COST + NODEID + 3 * BOOL
+                     // member_count + lap max quad + lap_min_routes + crashed + claimed + kind
          + (int64_t) p->getRrArraySize() * RR
          + (int64_t) p->getTransitionsArraySize() * TRANSITION;
 }
@@ -115,6 +115,7 @@ void MyriadGP::onInitialize() {
     refreshInterval = par("refreshInterval");
     refreshJitter = par("refreshJitter");
     watchdogMargin = par("watchdogMargin");
+    echoRingIdMax = par("echoRingIdMax");
     updateJitter = par("updateJitter");
     rib.configure(par("ringCostExponent"), par("echoRingSize"),
                   par("rankUseSpof"), par("maxEcmpPaths"),
@@ -124,6 +125,7 @@ void MyriadGP::onInitialize() {
     skipDegradedTransitions = par("skipDegradedTransitions");
     suppressRedundantTransitions = par("suppressRedundantTransitions");
     recoveryReplayEnabled = par("recoveryReplayEnabled");
+    replayShortfallRatio = par("replayShortfallRatio");
     refreshFloodsUpdate = par("refreshFloodsUpdate");
     carryRr = par("carryRr");
     if (carryRr) txBytesNoRrVec = new cOutVector("txBytesNoRr");
@@ -177,19 +179,19 @@ void MyriadGP::onTwoWayReached(GpNeighbor& nbr) {
         // ring is KNOWN degraded and now looks whole again. A survivor on a
         // healthy ring still stays silent — the king's refresh re-announces it.
         bool fresh  = m.memberCount == 0;
-        bool repair = rib.isDegraded(R) && count == ringDegree(R);
+        bool repair = rib.isDegraded(R) && count == expectedRingNeighbors(R);
         if (count > 2) {
             MLOG_N_WARN(nbr.id) << "ring '" << R
                 << "' has >2 ring-neighbors (misconfig); ignoring\n";
         } else if (m.collectInflight.tx != nullptr) {
-            // A lap is already walking. It may be doomed, but its budget expiry
-            // retries (onCollectBudgetExpired) rather than stacking laps here.
+            // A lap is already walking.
+            m.probeTriggerMissed = true;
         } else if (repair && !fresh) {
             // Staggered recovery means several members may probe before one
             // lap closes; a PROBE neither crowns a king nor re-announces.
             MLOG_N_INFO(nbr.id) << "repair probe ring='" << R
                                 << "' (degraded, now " << count << "/"
-                                << ringDegree(R) << " up)\n";
+                                << expectedRingNeighbors(R) << " up)\n";
             originateCollect(R, nbr.id, COLLECT_PROBE);
         } else if (fresh) {
             // reset() wipes memberships, so a rebooted node is always "fresh".
@@ -235,6 +237,7 @@ void MyriadGP::originateCollect(uint32_t ring, nodeid_t to, MyriadGpCollectKind 
     pkt->setLap_max_spof(q.spofTotal);
     pkt->setLap_max_cost(q.costTotal);
     pkt->setLap_max_owner(replayer == undefined_node ? myId : replayer);
+    pkt->setLap_min_routes(q.origins);   // forwarders lower it; see replayIfBest
     pkt->setKind(kind);
 
     // Insert my (subnet, myId) pairs.
@@ -434,6 +437,11 @@ void MyriadGP::replayIfBest(MyriadGpCollect* lap, uint32_t ring) {
             lap->setLap_max_cost(q.costTotal);
             lap->setLap_max_owner(myId);
         }
+        // Report the ring's neediest member too, so the originator learns that
+        // SOMEONE here lost its state — a survivor repairing the ring is never
+        // short itself and would otherwise close its lap without a replay.
+        if (q.origins < lap->getLap_min_routes())
+            lap->setLap_min_routes(q.origins);
         return;
     }
     // Addressed by id, so my RIB changing since I was picked doesn't matter.
@@ -455,8 +463,20 @@ void MyriadGP::onCollectBudgetExpired(uint32_t ring) {
     MLOG_WARN() << "ring send budget expired ring='" << ring
                 << "' seq=" << m.collectInflight.seq_no << " — ring broken\n";
     // Degrade only on actual degradation
-    if (degradeEnabled && ringNeighbors(ring).size() < ringDegree(ring))
+    auto nbrs = ringNeighbors(ring);
+    if (degradeEnabled && nbrs.size() < expectedRingNeighbors(ring))
         originateDegrade(ring);
+
+    // A neighbor came back while this lap was walking.
+    bool missed = m.probeTriggerMissed;
+    m.probeTriggerMissed = false;
+    if (missed && nbrs.size() == expectedRingNeighbors(ring)
+        && (rib.isDegraded(ring) || m.memberCount == 0)) {
+        MLOG_INFO() << "re-probe ring='" << ring
+                    << "' (neighbor returned mid-lap)\n";
+        originateCollect(ring, nbrs.front(), COLLECT_PROBE);
+        return;
+    }
 
     if (!m.isKing && !m.watchdogTimer) startWatchdog(ring);
 }
@@ -562,6 +582,7 @@ void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t sender) {
             // Lap closed: member_count now equals the ring's router count.
             m.memberCount = collect->getMember_count();
             rib.clearDegrade(R); // the lap closed, so this ring is whole again
+            m.probeTriggerMissed = false; // this lap answered it
 
             // Snapshot the collected data onto ring state.
             std::vector<MyriadGpRr> collected;
@@ -589,12 +610,23 @@ void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t sender) {
 
             // Lap closed, so the ring is whole and a replay reaches every
             // member. Seeded with the max this lap saw, so exactly the member
-            // holding it replays.
+            // holding it replays. The test looks at the NEEDIEST member, not at
+            // my own count.
             if (recoveryReplayEnabled && simTime() >= collectWarmupDuration
                 && collect->getKind() != COLLECT_REPLAY
-                && collect->getLap_max_routes() > rib.knownOrigins())
-                originateCollect(R, sender, COLLECT_REPLAY,
-                                 collect->getLap_max_owner());
+                && collect->getLap_min_routes()
+                       < replayShortfallRatio * collect->getLap_max_routes()) {
+                if (collect->getLap_max_owner() == myId) {
+                    if (memberCountOf(R) != 0) {
+                        MLOG_INFO() << "replaying into ring='" << R
+                                    << "' (own lap elected me)\n";
+                        replayInto(R);
+                    }
+                } else {
+                    originateCollect(R, sender, COLLECT_REPLAY,
+                                     collect->getLap_max_owner());
+                }
+            }
 
             // Only an electing lap crowns a king; of those only REFRESH announces.
             if (!electingKind(collect->getKind())) {
@@ -707,17 +739,6 @@ nodeid_t MyriadGP::otherRingNeighbor(uint32_t ring, nodeid_t sender) {
         for (uint32_t r : n.sharedRings) if (r == ring) return nid;
     }
     return undefined_node;
-}
-
-size_t MyriadGP::ringDegree(uint32_t ring) {
-    size_t claimants = 0;
-    for (auto& [nid, n] : neighbors)
-        for (uint32_t r : n.sharedRings) if (r == ring) { ++claimants; break; }
-    return claimants;
-}
-
-bool MyriadGP::isTwoNodeRing(uint32_t ring) {
-    return ringDegree(ring) <= 1;   // echo path: the ring is just the two of us
 }
 
 std::vector<nodeid_t> MyriadGP::ringNeighbors(uint32_t ring) {
@@ -838,7 +859,7 @@ void MyriadGP::insertAndForwardCollect(MyriadGpCollect* pkt, uint32_t R, nodeid_
     nodeid_t to = otherRingNeighbor(R, sender);
     if (to == undefined_node) {
         // A degraded larger ring (had >1 neighbor) instead drops expiring the budget
-        if (isTwoNodeRing(R)) {
+        if (isEchoRing(R)) {
             to = sender;
             MLOG_N_DEBUG(sender) << "echo COLLECT ring='" << R << "' (2-node ring)\n";
         } else {
@@ -1006,7 +1027,7 @@ void MyriadGP::forwardUpdateInRing(MyriadGpUpdate* pkt, uint32_t ring, nodeid_t 
     if (to == undefined_node) {
         // Genuine 2-node ring: echo to the sender to close the lap. A degraded
         // larger ring drops, letting the budget expire → DEGRADE.
-        if (!isTwoNodeRing(ring)) return;
+        if (!isEchoRing(ring)) return;
         to = sender;
     }
     auto np = std::make_unique<NodePkt>("Myriad_GP_Update_Pkt");
@@ -1354,7 +1375,7 @@ void MyriadGP::forwardBatchInRing(MyriadGpUpdateBatch* pkt, uint32_t ring, nodei
     if (to == undefined_node) {
         // Genuine 2-node ring: echo to the sender to close the batch lap (see
         // forwardUpdateInRing). A degraded larger ring drops → budget expiry.
-        if (!isTwoNodeRing(ring)) return;
+        if (!isEchoRing(ring)) return;
         to = sender;
     }
     auto np = std::make_unique<NodePkt>("Myriad_GP_Update_Batch_Pkt");

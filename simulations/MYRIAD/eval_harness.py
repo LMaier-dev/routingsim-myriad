@@ -266,6 +266,16 @@ def check_ring_plan(topo_path, labels_path):
             print(f"      … and {len(bad) - len(worst)} more; list them with "
                   f"myriad_topologies/ringcheck.py {topo_path} {labels_path}",
                   flush=True)
+    # Fatal, unlike the walkability warning: the protocol reads echo-ness off
+    # the ring id, so a plan outside the convention mis-handles those rings
+    # without any visible symptom in the results.
+    off = ringcheck.check_echo_ids(topo_path, labels_path)
+    if off:
+        sample = ", ".join(f"ring {r} has {c} members" for r, c in
+                           sorted(off.items())[:3])
+        sys.exit(f"{Path(labels_path).name}: {len(off)} ring(s) break the echo-id "
+                 f"convention ({sample}). Fix the plan with\n"
+                 f"    myriad_topologies/relabel_echo_rings.py {labels_path} --apply")
     return bad
 
 

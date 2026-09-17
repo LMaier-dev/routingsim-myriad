@@ -65,6 +65,8 @@ namespace routingsim {
         TimerMsg* holdTimer[2] = {nullptr, nullptr};
         // Distinguishes "routine, nothing new" refresh from warmup
         bool routineRefreshPending = false;
+        // A ring-neighbor reached TWOWAY while a lap was already walking.
+        bool probeTriggerMissed = false;
     };
 
     // An inter-ring transition held for batching (see holdInterval); origin is
@@ -142,10 +144,15 @@ namespace routingsim {
             nodeid_t otherRingNeighbor(uint32_t ring, nodeid_t sender);
             // Both TWOWAY+ ring-neighbors for R (0, 1, or 2).
             std::vector<nodeid_t> ringNeighbors(uint32_t ring);
-            // Neighbors that claim `ring` at all.
-            size_t ringDegree(uint32_t ring);
-            // True iff R is a genuine 2-node ring, from ring-ids neighbors advertise in hello
-            bool isTwoNodeRing(uint32_t ring);
+            // A two-node echo ring, straight from the id (MyriadGp.ned).
+            bool isEchoRing(uint32_t ring) const {
+                return ring <= (uint32_t) echoRingIdMax;
+            }
+            // Ring-neighbors a member of `ring` must have when the ring is
+            // whole: one on an echo ring, two on any other.
+            size_t expectedRingNeighbors(uint32_t ring) const {
+                return isEchoRing(ring) ? 1 : 2;
+            }
             void originateUpdate(uint32_t ring);
             void forwardUpdateInRing(MyriadGpUpdate* pkt, uint32_t ring, nodeid_t sender);
             // Forward a whole batch intra-ring; it never unpacks, lapping as one
@@ -211,6 +218,9 @@ namespace routingsim {
             bool carryRr = true;
             long maxCollectHops = 128;  // lap kill-switch; see MyriadGp.ned
             bool recoveryReplayEnabled = true;
+            // See MyriadGp.ned: how far below the best-informed member on a lap
+            // the neediest one must fall before the lap orders a replay.
+            double replayShortfallRatio = 0.5;
             // Only re-verifies ring state and resets members' watchdogs; it does
             // NOT re-flood an UPDATE. Meant to pair with recoveryReplayEnabled
             bool refreshFloodsUpdate = true;
@@ -223,6 +233,7 @@ namespace routingsim {
             simtime_t collectWarmupDuration; // delay UPDATE origination until COLLECTs settle
             simtime_t collectWarmupInterval; // how often to re-run COLLECTs during warmup
             bool rebooted = false;
+            long echoRingIdMax = 900000;   // see MyriadGp.ned
             std::unordered_map<uint32_t /*ring*/, uint32_t> lastOriginSeq;
             // Held transitions bucketed by (target ring, next-hop primary). Two
             // buckets: [0] spof-free transitions, [1] spof-incurring ones.

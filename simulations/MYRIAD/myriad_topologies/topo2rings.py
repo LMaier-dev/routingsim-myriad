@@ -15,6 +15,21 @@ from metrics import score
 
 # Ring ids = RING_ID_BASE - ring_index (distinguishability)
 RING_ID_BASE = 1_000_000
+# Echo (two-node) rings are numbered from their own block instead, so a router
+# reads echo-ness off the id and never has to infer it from its neighbour table
+# — which it cannot do after a reboot, when a ring-neighbour that stayed down is
+# indistinguishable from a ring that only ever had two members. Keep in step
+# with MyriadGp.ned echoRingIdMax. Echo rings exist for evaluation topologies
+# only; a deployment ring plan has none.
+ECHO_ID_BASE = 900_000
+
+
+def ring_id(idx, n_planned):
+    """Ring index -> id. Planned rings descend from RING_ID_BASE, echo rings
+    (every index from n_planned on, which is how the membership builders order
+    them) descend from ECHO_ID_BASE, so `id <= ECHO_ID_BASE` means echo ring."""
+    return (RING_ID_BASE - idx if idx < n_planned
+            else ECHO_ID_BASE - (idx - n_planned))
 # Above this the pie-per-node drawing is unreadable and spring_layout is slow.
 NODE_PNG_CAP = 250
 # One shared gallery, so a sweep's pictures land together instead of scattered
@@ -214,10 +229,10 @@ def main():
     rings_idx, n_echo, n_dropped = get_ring_per_node(
         g, args.basis, max_ring_size=args.max_ring_size, echo=not args.no_echo)
     n_rings = max((max(v) + 1 for v in rings_idx.values() if v), default=0)
-    def ring_id(idx):
-        return RING_ID_BASE - idx
-    ring_of = {n: [ring_id(i) for i in rings_idx[n]] for n in g.nodes()}
-    ring_ids = [ring_id(i) for i in range(n_rings)]
+    # get_ring_per_node numbers the cycle rings first and appends the echo ones.
+    n_planned = n_rings - n_echo
+    ring_of = {n: [ring_id(i, n_planned) for i in rings_idx[n]] for n in g.nodes()}
+    ring_ids = [ring_id(i, n_planned) for i in range(n_rings)]
 
     nodes = sorted(g.nodes())
     if args.out:

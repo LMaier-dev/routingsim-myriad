@@ -30,7 +30,7 @@ sys.path.insert(0, MYRIAD)
 from metrics import score, cover_rings, rings_to_membership
 from topo_lib import FAMILIES
 
-RING_ID_BASE = 1_000_000          # ring ids count DOWN from here, as topo2rings does
+from topo2rings import RING_ID_BASE, ring_id   # one allocator, one convention
 
 
 def write_topology(g, path, provenance):
@@ -56,7 +56,9 @@ def write_ringlabels(g, rings, path, header):
         for line in header:
             f.write(f"# {line}\n")
         for v in sorted(g.nodes()):
-            labels = ",".join(str(RING_ID_BASE - i) for i in sorted(member[v]))
+            # rings_to_membership numbers the planned rings first and appends the
+            # echo rings, so len(rings) is where the reserved block starts.
+            labels = ",".join(str(ring_id(i, len(rings))) for i in sorted(member[v]))
             f.write(f'**.Node{v}.*.ringLabel = "{labels}"\n')
 
 

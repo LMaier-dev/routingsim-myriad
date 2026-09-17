@@ -103,6 +103,8 @@ packet MyriadGpCollect extends MyriadGpNLRI {
     uint64_t lap_max_cost;   // SUM over a replay source's origins: stays 64-bit
     // Who holds the figures above.
     nodeid_t lap_max_owner;
+    // The FEWEST destination rings any member on this lap holds.
+    uint32_t lap_min_routes;
     // Set by the one member that replayed on this REPLAY lap; makes the rest
     // defer, and tells the originator on return that a replay was sent.
     bool replay_claimed;

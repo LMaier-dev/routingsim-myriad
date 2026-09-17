@@ -23,6 +23,12 @@ simple myriadgp extends routingsim.foundation.Protocol
         double refreshJitter @unit(s) = default(refreshInterval * 0.1);
         double watchdogMargin @unit(s) = default(2s);
 
+        // Ring ids at or below this belong to two-node ECHO rings; everything
+        // above is a real ring, whose every member has exactly two
+        // ring-neighbors (myriad_topologies/ringcheck.py enforces both halves).
+        // Echo rings are an evaluation construct; a deployed ring plan has none.
+        int echoRingIdMax = default(900000);
+
         // Spread the first propagating UPDATE. Inter-ring forwarding is gated
         // until collectWarmupDuration.
         double updateJitter @unit(s) = default(10s);
@@ -76,6 +82,11 @@ simple myriadgp extends routingsim.foundation.Protocol
         // ring, the king replays its current front-of-ring chains as seq=0
         // UPDATEs so the recovered node repopulates without waiting for refresh.
         bool recoveryReplayEnabled = default(true);
+
+        // A closing COLLECT lap reports the fewest chains any member on it
+        // holds. Ordering a replay is worth a lap only if that member is
+        // MATERIALLY short of the best-informed one. 0 = replay disabled
+        double replayShortfallRatio = default(0.5);
 
         // false = the king's routine refresh (already king, nothing new) only
         // re-verifies ring state and resets watchdogs, without re-flooding an
