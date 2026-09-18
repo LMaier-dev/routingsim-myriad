@@ -39,7 +39,7 @@ import eval_harness as harness
 from eval_harness import (BIN, SIM_ROOT, SRC, REPO, MYRIAD_DIR, add_repeat_args,
                           announce, apply_repeat_args, byte_unit, common,
                           ensure_ring_labels, fmt_bytes,
-                          NED_MODULE, PROTO_COLOR, overrides, pm,
+                          NED_MODULE, PROTO_COLOR, overrides, pm, pyplot,
                           rep_path, repeat_mean, repeats_note, run_sim, simtime,
                           warmup_s)
 
@@ -507,9 +507,7 @@ def plot(res, title, xlabel, outfile, nobatch=False, batch_panel=True,
     per-point tick labels would be dozens of overlapping strings. The axis then
     keeps its own evenly spaced numeric ticks from 0, with `rings` (the ring
     count of each measurement) read off the same positions on a top axis."""
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
+    plt = pyplot()
     labels = res["labels"]
     if xs is None:
         xs = list(range(len(labels)))
@@ -553,7 +551,7 @@ def plot(res, title, xlabel, outfile, nobatch=False, batch_panel=True,
         ax.set_xticks(xs)
         # Proportional spacing can put two points close together; small type is
         # what keeps their two-line ticks from overlapping.
-        ax.set_xticklabels(labels, rotation=45, ha="right", fontsize=8)
+        ax.set_xticklabels(labels, rotation=45, ha="right", fontsize=10)
         if invert:
             ax.invert_xaxis()
 
@@ -571,8 +569,8 @@ def plot(res, title, xlabel, outfile, nobatch=False, batch_panel=True,
         top.set_xticks(locs)
         top.set_xticklabels([f"{np.interp(t, kx, ky):.0f}"
                              if kx[0] <= t <= kx[-1] else "" for t in locs],
-                            fontsize=8)
-        top.set_xlabel("#rings", fontsize=9)
+                            fontsize=10)
+        top.set_xlabel("#rings")
 
     # Read the label off the data too: --set holdInterval=0s turns batching off
     # without setting --nobatch, and the figure said "batched" over a run with
@@ -621,7 +619,7 @@ def plot(res, title, xlabel, outfile, nobatch=False, batch_panel=True,
     axB.set_ylabel(f"routing bytes sent ({bname}, dashed)")
     h1, l1 = axL.get_legend_handles_labels()
     h2, l2 = axB.get_legend_handles_labels()
-    axL.legend(h1 + h2, l1 + l2, fontsize=8)
+    axL.legend(h1 + h2, l1 + l2)
 
     if axR is not None:
         axR.errorbar(xs, res["avg_sz"], yerr=_sd(res["avg_sz"]), fmt=fmt("s"),
@@ -672,7 +670,7 @@ def plot(res, title, xlabel, outfile, nobatch=False, batch_panel=True,
         axS.set_xlabel(xlabel)
         axS.set_ylabel(f"routing state per router ({sname})")
         axS.set_title("Per-router control-plane state")
-        axS.legend(fontsize=8); axS.grid(True, alpha=0.3)
+        axS.legend(); axS.grid(True, alpha=0.3)
 
     # Hotspotting. Bytes are per LINK: a node on many rings relays between
     # k(k-1) ring pairs, which is exactly the per-node term in `fan`, so PV's
@@ -702,7 +700,7 @@ def plot(res, title, xlabel, outfile, nobatch=False, batch_panel=True,
         ticks(axH)
         axH.set_xlabel(xlabel); axH.set_ylabel(f"bytes on one link ({lname})")
         axH.set_title("Link load: busiest vs median")
-        axH.legend(fontsize=8); axH.grid(True, alpha=0.3)
+        axH.legend(); axH.grid(True, alpha=0.3)
 
     fig.tight_layout()
     fig.savefig(outfile, dpi=200)
@@ -726,9 +724,7 @@ def draw_topologies(outfile):
     on their integer lattice; the flower on a central circle with each petal laid
     out as a closed regular polygon bulging outward. Each node is a PIE of the
     colours of every ring it belongs to (multi-colour = bridge node on 2 rings)."""
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
+    plt = pyplot()
     from matplotlib.patches import Wedge, Circle
     import math
 
@@ -823,10 +819,10 @@ def draw_topologies(outfile):
         pad = 2.2 * r                                     # margin so nodes aren't clipped
         ax.set_xlim(min(xs) - pad, max(xs) + pad)
         ax.set_ylim(min(ys) - pad, max(ys) + pad)
-        ax.set_title(f"{label}\n{n} nodes, {len(rings)} rings", fontsize=10)
+        ax.set_title(f"{label}\n{n} nodes, {len(rings)} rings")
         ax.set_aspect("equal"); ax.axis("off")
     fig.suptitle("Representative topology per sweep type "
-                 "(each node a pie of its ring memberships)", fontsize=13)
+                 "(each node a pie of its ring memberships)")
     fig.tight_layout()
     fig.savefig(outfile, dpi=200)
     print(f"  wrote {outfile}")
@@ -995,7 +991,10 @@ def main(args=None):
              batch_panel=False,
              state_panel=not getattr(args, "no_state_panel", False),
              link_panel=not getattr(args, "no_link_panel", False),
-             xs=xs, invert=args.x_key in ("rl", "len"), regress=True, rings=rings)
+             xs=xs, invert=args.x_key in ("rl", "len"), regress=True,
+             # ringgrow pins the ring count (A300/A1200), so the top axis would
+             # read "300 300 300 ..." across the whole sweep.
+             rings=rings if len(set(rings)) > 1 else None)
         return
 
     if args.single:

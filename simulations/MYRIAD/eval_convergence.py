@@ -27,7 +27,8 @@ import sys
 from eval_harness import (BIN, SIM_ROOT, MYRIAD_DIR, announce, apply_repeat_args,
                           common, ensure_ring_labels, overrides, pm, rep_path,
                           repeat_mean, repeats_note, run_sim, simtime, title, warmup_s,
-                          write_proto_ini, add_topo_args, PROTO_COLOR)
+                          write_proto_ini, add_topo_args, PROTO_COLOR,
+                          pyplot)
 
 HERE = str(MYRIAD_DIR)
 OUT = os.path.join(HERE, "eval", "convergence")
@@ -184,9 +185,7 @@ def main(args=None):
     row("LS", ls)
 
     try:
-        import matplotlib
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
+        plt = pyplot()
     except ImportError:
         print("\n(matplotlib not available — skipping plots)")
         return
@@ -216,8 +215,14 @@ def main(args=None):
                              label=f"LS messages ({ls_msgs:.0f})"))
     axL.set(xlabel="holdInterval (s, log scale)", ylabel="convergence time (s)")
     axR.set_ylabel("total sent messages")
+    # Both from 0: autoscaled, the left axis started at 11s and turned a 1s
+    # spread into the whole panel height.
+    axL.set_ylim(bottom=0)
+    axR.set_ylim(bottom=0)
     axL.set_title(title("Convergence time and message count vs hold interval"))
-    axL.legend(handles=lines, fontsize=7, loc="center left")
+    # Upper left: from 0 the PV convergence curve sits low and flat, and only a
+    # constant reference line runs along the top.
+    axL.legend(handles=lines, loc="upper left", framealpha=0.9)
     fig.tight_layout()
     fig.savefig(os.path.join(OUT, "tradeoff.png"), dpi=200)
 

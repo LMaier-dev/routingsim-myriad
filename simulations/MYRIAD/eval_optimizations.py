@@ -7,7 +7,9 @@ Every run covers the warmup plus two refresh cycles with refreshFloodsUpdate=tru
 so the totals include what the refreshes re-flood, not only the formation burst.
 ecmpCostMargin is 50% in every PV config. maxEcmpPaths counts total paths; the
 baseline's 1 is the "0 slots" case (0 behaves like 1: the first chain is always
-admitted). spofHoldMultiplier=1 is the NED's "off" for the spof bucket.
+admitted). spofHoldMultiplier=1 is the NED's "off" for the spof bucket. ECMP
+slots are filled by cost alone here: eval_common pins ecmpDiverseEviction off,
+and no config turns it on.
 
     python3 simulations/MYRIAD/eval_entrypoint.py optimizations --jobs 2   # as eval_runs.txt runs it
     python3 simulations/MYRIAD/eval_optimizations.py --dry-run
@@ -26,8 +28,8 @@ from concurrent.futures import ThreadPoolExecutor
 import eval_harness as harness
 import eval_scaling as S
 from eval_harness import (BIN, SRC, MYRIAD_DIR, PROTO_COLOR, add_repeat_args, announce,
-                          apply_repeat_args, fmt_bytes, overrides, repeat_mean,
-                          rep_path, simtime)
+                          apply_repeat_args, byte_unit, fmt_bytes, overrides, repeat_mean,
+                          pyplot, rep_path, simtime)
 
 FAN_DIR = os.path.join(str(MYRIAD_DIR), "myriad_topologies", "csv",
                        "delaunay_shr1000_rl16_spof0.5")
@@ -47,20 +49,21 @@ def add_opt_args(ap):
 
 COMMON = {"ecmpCostMargin": 0.50, "refreshFloodsUpdate": "true"}
 # Every optimization off; each config below switches on exactly what its name says.
-BASE = {"maxEcmpPaths": 1, "ecmpDiverseEviction": "false",
-        "suppressRedundantTransitions": "false",
+BASE = {"maxEcmpPaths": 1, "suppressRedundantTransitions": "false",
         "spofHoldMultiplier": 1, "holdCostScaled": "false"}
 HOLD_POLICY = {"spofHoldMultiplier": 4, "holdCostScaled": "true"}   # in-network policy
 CONFIGS = [
     ("baseline", {}),
     ("ecmp 2", {"maxEcmpPaths": 2}),
-    ("ecmp 4", {"maxEcmpPaths": 4}),
     ("ecmp 8", {"maxEcmpPaths": 8}),
-    ("ecmp 2 diverse", {"maxEcmpPaths": 2, "ecmpDiverseEviction": "true"}),
-    ("suppress", {"suppressRedundantTransitions": "true"}),
+    # On ecmp 2, not the baseline's 1: suppression removes chains, so at one
+    # path it undercut "all" and read as cheaper than every optimization
+    # together. It is what "all" adds on top of ecmp 2 that this bar shows.
+    ("suppress (ecmp 2)", {"maxEcmpPaths": 2,
+                           "suppressRedundantTransitions": "true"}),
     ("hold policy", HOLD_POLICY),
-    ("all", {"maxEcmpPaths": 2, "ecmpDiverseEviction": "true",
-             "suppressRedundantTransitions": "true", **HOLD_POLICY}),
+    ("all", {"maxEcmpPaths": 2, "suppressRedundantTransitions": "true",
+             **HOLD_POLICY}),
 ]
 
 
@@ -98,41 +101,50 @@ def pct(v, ref):
 
 
 def report(results, ls, outfile):
+    """outfile is a PREFIX: one <prefix>_<metric>.png per metric."""
     base = results["baseline"]
-    print(f"\n{'config':<16}{'messages':>12}{'Δ':>6}{'bytes':>11}{'Δ':>6}"
+    print(f"\n{'config':<18}{'messages':>12}{'Δ':>6}{'bytes':>11}{'Δ':>6}"
           f"{'link max':>11}{'Δ':>6}{'state/rtr':>11}{'Δ':>6}{'calc ops':>11}{'Δ':>6}")
     rows = list(results.items()) + [("LS (ref)", ls)]
+    # One unit per column, or "7.84 GB" and "533 MB" sit under each other.
+    mb = byte_unit([])
     for name, r in rows:
-        print(f"{name:<16}{r['msgs']:>12.0f}{pct(r['msgs'], base['msgs']):>6}"
-              f"{fmt_bytes(r['bytes']):>11}{pct(r['bytes'], base['bytes']):>6}"
-              f"{fmt_bytes(r['lmax']):>11}{pct(r['lmax'], base['lmax']):>6}"
-              f"{fmt_bytes(r['state']):>11}{pct(r['state'], base['state']):>6}"
+        print(f"{name:<18}{r['msgs']:>12.0f}{pct(r['msgs'], base['msgs']):>6}"
+              f"{fmt_bytes(r['bytes'], mb):>11}{pct(r['bytes'], base['bytes']):>6}"
+              f"{fmt_bytes(r['lmax'], mb):>11}{pct(r['lmax'], base['lmax']):>6}"
+              f"{fmt_bytes(r['state'], mb):>11}{pct(r['state'], base['state']):>6}"
               f"{r['calc']:>11.3g}{pct(r['calc'], base['calc']):>6}")
     print("Δ = vs. baseline (all optimizations off); mean over seeds.")
 
     try:
-        import matplotlib
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
+        plt = pyplot()
     except ImportError:
         print("(matplotlib not available — skipping plot)")
         return
     names = list(results)
+    # One file each: the four metrics are cited in different places and a
+    # 4-panel strip left every bar chart a sliver wide.
     panels = [("msgs", "messages"), ("bytes", "bytes"),
-              ("lmax", "busiest link (bytes)"), ("state", "state per router (bytes)")]
-    fig, axes = plt.subplots(1, len(panels), figsize=(4.2 * len(panels), 4.2))
-    for ax, (key, label) in zip(axes, panels):
-        vals = [float(results[n][key]) for n in names]
-        sds = [getattr(results[n][key], "sd", 0.0) or 0.0 for n in names]
+              ("lmax", "busiest link"), ("state", "state per router")]
+    for key, label in panels:
+        div, uname = (byte_unit([float(ls[key])]
+                                + [float(results[n][key]) for n in names])
+                      if key != "msgs" else (1.0, ""))
+        vals = [float(results[n][key]) / div for n in names]
+        sds = [(getattr(results[n][key], "sd", 0.0) or 0.0) / div for n in names]
+        fig, ax = plt.subplots(figsize=(7.0, 4.8))
         ax.bar(range(len(names)), vals, yerr=sds if any(sds) else None,
                color=PROTO_COLOR["pv"], capsize=3, label="Path-Vector (PV)")
-        ax.axhline(float(ls[key]), color=PROTO_COLOR["ls"], ls="--", label="Link-State (LS)")
+        ax.axhline(float(ls[key]) / div, color=PROTO_COLOR["ls"], ls="--",
+                   label="Link-State (LS)")
         ax.set_xticks(range(len(names)), names, rotation=45, ha="right")
-        ax.set_title(label)
-    axes[0].legend()
-    fig.tight_layout()
-    fig.savefig(outfile, dpi=200)
-    print(f"plot -> {outfile}")
+        ax.set_title(label + (f" ({uname})" if uname else ""))
+        ax.legend()
+        fig.tight_layout()
+        out = f"{outfile}_{key}.png"
+        fig.savefig(out, dpi=200)
+        plt.close(fig)
+        print(f"plot -> {out}")
 
 
 def main(args=None):
@@ -200,7 +212,7 @@ def main(args=None):
         by.setdefault(None if cfg is None else cfg[0], []).append(r)
     ls = S._mean_over_seeds(by.pop(None))
     results = {name: S._mean_over_seeds(by[name]) for name, _ in CONFIGS}
-    report(results, ls, os.path.join(plot_dir, f"optimizations_{match}.png"))
+    report(results, ls, os.path.join(plot_dir, f"optimizations_{match}"))
 
 
 if __name__ == "__main__":

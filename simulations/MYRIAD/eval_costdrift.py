@@ -16,7 +16,7 @@ import sys
 from eval_harness import (BIN, SIM_ROOT, MYRIAD_DIR, announce, apply_repeat_args,
                           ensure_ring_labels, overrides, pm, rep_path, repeat_mean,
                           repeats_note, run_sim, simtime, title, write_proto_ini,
-                          PROTO_COLOR,
+                          PROTO_COLOR, pyplot,
                           add_topo_args)
 
 HERE = str(MYRIAD_DIR)
@@ -180,9 +180,7 @@ def main(args=None):
           f"max spof/chain {r['spof_max']:.0f})")
 
     try:
-        import matplotlib
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
+        plt = pyplot()
     except ImportError:
         print("\n(matplotlib not available — skipping the plot)")
         return
@@ -204,7 +202,7 @@ def main(args=None):
     ax.set(xlabel="Link-State (LS), cost (Dijkstra)",
            ylabel="Path-Vector (PV) cost",
            title=title("Path-Vector vs Link-State path cost"))
-    ax.legend(fontsize=8)
+    ax.legend()
     fig.tight_layout()
     fig.savefig(os.path.join(OUT, "scatter.png"), dpi=200)
 

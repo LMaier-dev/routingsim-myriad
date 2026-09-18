@@ -48,7 +48,7 @@ import eval_harness as H   # REPEATS/JOBS/PROGRESS are bound at parse time
 from eval_harness import (BIN, MYRIAD_DIR, _sec, add_topo_args, announce,
                           apply_repeat_args, byte_unit, common, dynamics_args,
                           ensure_ring_labels, fmt_bytes, fmt_si, overrides, pm,
-                          refresh_s, rep_path,
+                          pyplot, refresh_s, rep_path,
                           repeat_mean, repeats_note, run_sim, simtime, title, warmup_s,
                           write_proto_ini, PROTO_COLOR, PROTO_LABEL)
 
@@ -698,9 +698,7 @@ def _win_title(lab, t0, t1):
 
 def overview_plots(plan, res):
     try:
-        import matplotlib
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
+        plt = pyplot()
     except ImportError:
         print("\n(matplotlib not available — skipping plots)")
         return
@@ -735,13 +733,13 @@ def overview_plots(plan, res):
             ax.plot([], [], color=COLORS[name], label=DISPLAY.get(name, name))
         ax.set_xticks(range(len(labels)))
         ax.set_xticklabels([_win_title(l, t0, t1) for _, l, t0, t1 in labels],
-                           fontsize=8)
+                           fontsize=10)
         ax.set_yscale("log")
         # No topology/seed count in the title: it goes in the caption, where
         # there is room to say what the spread actually spans.
         ax.set(ylabel=ylabel, xlabel="failure window",
                title=title("Control-plane volume per failure window"))
-        ax.legend(fontsize=8); ax.grid(axis="y", alpha=0.3); fig.tight_layout()
+        ax.legend(); ax.grid(axis="y", alpha=0.3); fig.tight_layout()
         fig.savefig(os.path.join(OUT, fname), dpi=200)
         print(f"  wrote {fname}")
 
@@ -776,9 +774,7 @@ def overview_security_plot(plan, res, cfg="pv"):
     Percentages are formed per run and then averaged, so the error bar is the
     spread across seeds and topologies rather than a ratio of two medians."""
     try:
-        import matplotlib
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
+        plt = pyplot()
     except ImportError:
         print("\n(matplotlib not available — skipping security plot)")
         return
@@ -847,15 +843,15 @@ def overview_security_plot(plan, res, cfg="pv"):
                edgecolor="black", linewidth=0.4)
         for p, s in zip(pos, stats):
             ax.annotate(f"{s[0]:.0f}%", (p, s[0] + s[1]), textcoords="offset points",
-                        xytext=(0, 3), ha="center", fontsize=8)
+                        xytext=(0, 3), ha="center", fontsize=10)
         # An idle window carries no ring signature, so the extension collapses
         # onto the solid bar and the two labels would print on top of each other.
         for p, s, g in zip(pos, stats, ghost):
             if g[0] - s[0] > 1.0:
                 ax.annotate(f"{g[0]:.0f}%", (p, g[0]), textcoords="offset points",
-                            xytext=(0, 3), ha="center", fontsize=7, alpha=0.7)
+                            xytext=(0, 3), ha="center", fontsize=10, alpha=0.7)
     ax.set_xticks(list(xs))
-    ax.set_xticklabels([_win_title(c[0], c[1], c[2]) for c in cols], fontsize=8)
+    ax.set_xticklabels([_win_title(c[0], c[1], c[2]) for c in cols], fontsize=10)
     ax.set(ylabel="added control-plane bytes (% of what was sent)",
            xlabel="situation",
            title=title(f"Cost of securing {DISPLAY.get(cfg, cfg)}, by situation"))
@@ -870,7 +866,7 @@ def overview_security_plot(plan, res, cfg="pv"):
     handles.append(Patch(facecolor="0.45", alpha=0.25, edgecolor="black",
                          linewidth=0.4, linestyle=":",
                          label="extension: per-hop signatures (no BLS aggregation)"))
-    ax.legend(handles=handles, fontsize=8, loc="upper right", framealpha=0.95)
+    ax.legend(handles=handles, loc="upper right", framealpha=0.95)
     ax.grid(axis="y", alpha=0.3)
     fig.tight_layout()
     name = "overview_security.png" if cfg == "pv" else f"overview_security_{cfg}.png"
@@ -1435,9 +1431,7 @@ def report(traffic, reconv, fractions, scenarios, spacing, churn_bytes=None,
 def plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0=None,
           churn_bytes=None, churn_series=None, churn_calc=None):
     try:
-        import matplotlib
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
+        plt = pyplot()
         from matplotlib.patches import Patch
     except ImportError:
         print("\n(matplotlib not available — skipping plots)")
@@ -1478,10 +1472,10 @@ def plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0=None,
                 # the RAW value at its own scale instead.
                 ax.bar_label(bars, labels=[fmt_bytes(v) if scale != 1
                                            else f"{v:,.0f}" for v in raw],
-                             fontsize=8)
+                             fontsize=10)
             ax.set_xticks(list(x))
             ax.set_xticklabels([DISPLAY.get(p, p.upper()) for p in protos],
-                               fontsize=8)
+                               fontsize=10)
             ax.set(ylabel=ylabel,
                    title=title(f"Control plane ({traffic_simtime()}, {note})"))
             # One scenario = one hatch = nothing to key, and the x labels already
@@ -1489,26 +1483,28 @@ def plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0=None,
             if len(avail) > 1:
                 ax.legend(handles=[Patch(facecolor="0.85", edgecolor="white",
                                          hatch=hatches[i % len(hatches)], label=sc)
-                                   for i, sc in enumerate(avail)], fontsize=8)
+                                   for i, sc in enumerate(avail)], fontsize=10)
             fig.tight_layout()
             fig.savefig(os.path.join(OUT, fname), dpi=200)
             made.append(fname)
 
-    # Steady churn in one figure: what a protocol costs to HOLD the topology
-    # converged, as bandwidth (left) and route computation (right).
+    # What a protocol costs to HOLD the topology converged under steady churn,
+    # as bandwidth and as route computation.
     has_b = bool(churn_bytes) and any(churn_bytes.get(n, ([], []))[0] for n in COLORS)
     has_c = bool(churn_calc) and any(churn_calc.get(n) for n in ("ls", "pv"))
-    if has_b or has_c:
-        ncol = int(has_b) + int(has_c)
-        fig, axs = plt.subplots(1, ncol, figsize=(6.0 * ncol, 4.8), squeeze=False)
-        free = list(axs[0])
-        ax = free.pop(0) if has_b else None
-        ax2 = free.pop(0) if has_c else None
+    # One figure each: the bandwidth panel is the one that gets cited, and
+    # pairing it with the compute panel halved its width in the thesis.
+    def churn_marker(a):
+        a.axvline(churn_start(), color="gray", lw=0.8)
+        a.text(churn_start(), a.get_ylim()[1], " churn starts", fontsize=10,
+               color="gray", va="top")
 
-        if ax is not None:
+    if has_b or has_c:
+        if has_b:
+            fig, ax = plt.subplots(figsize=(9.6, 5.4))
             cseries = [(n, COLORS[n], "-") for n in COLORS if n != "pv_nospof"]
             if churn_bytes.get(NORR, ([], []))[0]:
-                cseries.append((NORR, COLORS["pv"], ":"))
+                cseries.append((NORR, PROTO_COLOR["pv_norr"], ":"))
             rdiv, rname = byte_unit([b for n, _, _ in cseries
                                      for b in churn_bytes.get(n, ([], []))[1]])
             for name, color, style in cseries:
@@ -1519,11 +1515,17 @@ def plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0=None,
                         ls=style, label=DISPLAY.get(name, name))
             ax.set_yscale("log")
             ax.set(xlabel="time (s)", ylabel=f"control-plane {rname}/s (log)")
-            ax.set_title("bandwidth", fontsize=9)
-            ax.legend(fontsize=8)
+            ax.set_title(title(f"Control-plane cost under steady churn "
+                               f"({CHURN_NODES} node(s) every {CHURN_PERIOD:g}s)"))
+            ax.legend()
+            churn_marker(ax)
+            fig.tight_layout()
+            fig.savefig(os.path.join(OUT, "churn_cost.png"), dpi=200)
+            made.append("churn_cost.png")
 
         totals = {}
-        if ax2 is not None:
+        if has_c:
+            fig, ax2 = plt.subplots(figsize=(9.6, 5.4))
             styles = {0.2: ":", 1.0: "--", 5.0: "-."}
             for name in ("ls", "pv"):
                 models = churn_calc.get(name) or {}
@@ -1547,28 +1549,21 @@ def plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0=None,
             ax2.set_yscale("log")
             ax2.set(xlabel="time (s)",
                     ylabel="cumulative route-computation ops (log)")
-            ax2.set_title("route computation", fontsize=9)
-            ax2.legend(fontsize=7)
-
-        for a in (ax, ax2):   # after set_yscale, or the marker lands off-axis
-            if a is None:
-                continue
-            a.axvline(churn_start(), color="gray", lw=0.8)
-            a.text(churn_start(), a.get_ylim()[1], " churn starts", fontsize=8,
-                   color="gray", va="top")
-
-        pvt = totals.get(("pv", None))
-        lst = [v for (n, _w), v in totals.items() if n == "ls"]
-        band = (f"  —  LS/PV compute = {min(lst)/pvt:.0f}–{max(lst)/pvt:.0f}x "
-                f"depending on SPF coalescing" if pvt and lst else "")
-        sub = ("\nPV re-ranks one ring per update and never coalesces; "
-               "only LS has an SPF hold to vary" if has_c else "")
-        fig.suptitle(title(f"Cost of holding the topology converged under churn "
-                           f"({CHURN_NODES} node(s) every {CHURN_PERIOD:g}s)"
-                           f"{band}") + sub, fontsize=10)
-        fig.tight_layout()
-        fig.savefig(os.path.join(OUT, "churn_cost.png"), dpi=200)
-        made.append("churn_cost.png")
+            pvt = totals.get(("pv", None))
+            lst = [v for (n, _w), v in totals.items() if n == "ls"]
+            band = (f"\nLS/PV compute = {min(lst)/pvt:.0f}–{max(lst)/pvt:.0f}x "
+                    f"depending on SPF coalescing" if pvt and lst else "")
+            ax2.set_title(title(f"Route computation under steady churn "
+                                f"({CHURN_NODES} node(s) every "
+                                f"{CHURN_PERIOD:g}s)")
+                          + band
+                          + "\nPV re-ranks one ring per update and never "
+                            "coalesces; only LS has an SPF hold to vary")
+            ax2.legend()
+            churn_marker(ax2)   # after set_yscale, or the marker lands off-axis
+            fig.tight_layout()
+            fig.savefig(os.path.join(OUT, "churn_calc.png"), dpi=200)
+            made.append("churn_calc.png")
 
 
     if "node" in scenarios and any(reconv[n] for n in reconv):
@@ -1589,7 +1584,7 @@ def plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0=None,
             ax.axhline(1.0, ls=":", color="gray", label="LS optimum")
             ax.set(xlabel="nodes failed (%)", ylabel="mean path cost / LS optimum",
                    title=title("Path-cost stretch after recovery"))
-            ax.legend(fontsize=8); fig.tight_layout()
+            ax.legend(); fig.tight_layout()
             fig.savefig(os.path.join(OUT, "stretch_vs_fraction.png"), dpi=200)
             made.append("stretch_vs_fraction.png")
 
@@ -1620,7 +1615,7 @@ def plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0=None,
                 ax.axvspan(wt, wt + DOWN_MIN, color="gray", alpha=0.18, lw=0)
                 ax.axvspan(wt + DOWN_MIN, wt + DOWN_MIN + DOWN_JITTER,
                            color="gray", alpha=0.09, lw=0)
-                ax.text(wt, 101, f" {frac:.0%}", fontsize=9, color="gray")
+                ax.text(wt, 101, f" {frac:.0%}", fontsize=11, color="gray")
             ax.set(xlim=(0, max(ts)),
                    xlabel="time (s) — solid: wave fails, dark: all down, "
                           "light: reboot window",
@@ -1638,9 +1633,7 @@ def plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0=None,
                                            for b in bytes0.get(n, ([], []))[1]])
                 bseries = [(n, c, ":") for n, c in pcolors.items()]
                 if bytes0.get(NORR, ([], []))[0]:
-                    # Same PV sends minus RR; dashed so it separates from PV's
-                    # own dotted trace in the same colour.
-                    bseries.append((NORR, COLORS["pv"], (0, (1, 3))))
+                    bseries.append((NORR, PROTO_COLOR["pv_norr"], ":"))
                 for name, color, style in bseries:
                     bts, bps = bytes0.get(name, ([], []))
                     if not bts:
@@ -1653,7 +1646,7 @@ def plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0=None,
                 h2, l2 = ax2.get_legend_handles_labels()
                 handles, labels = handles + h2, labels + l2
 
-            ax.legend(handles, labels, fontsize=7, loc="lower left")
+            ax.legend(handles, labels, loc="lower left")
             fig.tight_layout()
             fig.savefig(os.path.join(OUT, "recovery_node.png"), dpi=200)
             made.append("recovery_node.png")
@@ -1694,7 +1687,7 @@ def plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0=None,
                         ax.plot(hi, [lim] * len(hi), marker="^", ls="",
                                 color=scolors[name], ms=5, clip_on=False)
             ax.axvline(churn_start(), color="gray", lw=0.8)
-            ax.text(churn_start(), ax.get_ylim()[1], " churn starts", fontsize=8,
+            ax.text(churn_start(), ax.get_ylim()[1], " churn starts", fontsize=10,
                     color="gray", va="top")
             xmax = max(t for ts, _ in curves.values() for t in ts)
             ax.set(xlim=(0, xmax),
@@ -1702,7 +1695,7 @@ def plots(traffic, reconv, fractions, scenarios, series0, waves, bytes0=None,
                    ylabel="mean path cost / LS optimum",
                    title=title(f"Path-cost stretch under steady churn "
                                f"({CHURN_NODES} node(s) every {CHURN_PERIOD:g}s)"))
-            ax.legend(fontsize=7, loc="upper left")
+            ax.legend(loc="upper left")
             fig.tight_layout()
             fig.savefig(os.path.join(OUT, "stretch_churn.png"), dpi=200)
             made.append("stretch_churn.png")
