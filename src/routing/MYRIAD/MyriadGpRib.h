@@ -109,6 +109,10 @@ namespace routingsim {
             // MyriadPduSize.h so it is commensurable with MyriadLS::lsdbBytes().
             uint64_t stateBytes() const;
 
+            // How many of the maxEcmpPaths slots actually carry a route:.
+            struct EcmpFill { uint64_t chains = 0; uint64_t frames = 0; };
+            EcmpFill ecmpFill() const;
+
             // How good my RIB is as a replay source: breadth plus the totals
             // over the per-origin preferred chains, so a lap can rank members
             // that know equally much by how well they know it.

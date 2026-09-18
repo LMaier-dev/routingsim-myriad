@@ -1,19 +1,25 @@
 #!/usr/bin/env python3
-"""Impact of the PV propagation optimizations, each switched on alone against an
-all-off baseline, then all together. One fan level of the ringpipe fan sweep,
-averaged over every seed of that level; LS runs once per seed as the reference.
+"""Impact of the PV propagation optimizations, each switched on alone against the
+baseline bar, then all together. One topology (--topo) or one sweep level of a
+ringgrow set averaged over its seeds, which is where the error bars come from;
+LS runs once per seed as the reference.
 
 Every run covers the warmup plus two refresh cycles with refreshFloodsUpdate=true,
 so the totals include what the refreshes re-flood, not only the formation burst.
-ecmpCostMargin is 50% in every PV config. maxEcmpPaths counts total paths; the
-baseline's 1 is the "0 slots" case (0 behaves like 1: the first chain is always
-admitted). spofHoldMultiplier=1 is the NED's "off" for the spof bucket. ECMP
-slots are filled by cost alone here: eval_common pins ecmpDiverseEviction off,
-and no config turns it on.
+maxEcmpPaths is fixed at ECMP for every config except the bar named for it, so a
+Δ is the optimization and not a path count; ecmpCostMargin is 50% throughout, and
+spofHoldMultiplier=1 is the NED's "off" for the spof bucket. ECMP slots are
+filled by cost alone: eval_common pins ecmpDiverseEviction off and no config
+turns it on.
+
+The byte panels split each bar: solid is the run with the reachability-record
+fields subtracted, the faded extension above it is what RR cost. Both come out
+of the SAME simulation (MyriadGP tallies its own RR bytes per link).
 
     python3 simulations/MYRIAD/eval_entrypoint.py optimizations --jobs 2   # as eval_runs.txt runs it
     python3 simulations/MYRIAD/eval_optimizations.py --dry-run
-    python3 simulations/MYRIAD/eval_optimizations.py --match share0.84 --jobs 2
+    python3 simulations/MYRIAD/eval_optimizations.py --topo "myriad_topologies/csv/grid_10,10.txt"
+    python3 simulations/MYRIAD/eval_optimizations.py --match tr300 --jobs 2
 
 Reuses eval_scaling's ini writer and .sca readers; results nest under
 eval/optimizations[_<tag>]/.
@@ -29,17 +35,24 @@ import eval_harness as harness
 import eval_scaling as S
 from eval_harness import (BIN, SRC, MYRIAD_DIR, PROTO_COLOR, add_repeat_args, announce,
                           apply_repeat_args, byte_unit, fmt_bytes, overrides, repeat_mean,
-                          pyplot, rep_path, simtime)
+                          pyplot, rep_path, simtime, title)
 
-FAN_DIR = os.path.join(str(MYRIAD_DIR), "myriad_topologies", "csv",
-                       "delaunay_shr1000_rl16_spof0.5")
-DEFAULT_MATCH = "share0.74"
+CORPUS_DIR = os.path.join(str(MYRIAD_DIR), "myriad_topologies", "csv",
+                          "delaunay_grow2500_A300_spof0.5")
+DEFAULT_MATCH = "tr500"
 
 
 def add_opt_args(ap):
     """The run's own flags, shared with eval_entrypoint's subparser."""
+    ap.add_argument("--topo", default=None,
+                    help="one topology file instead of a folder sweep "
+                         "(e.g. myriad_topologies/csv/grid_10,10.txt)")
+    ap.add_argument("--basis", choices=["min", "tree", "all", "native"], default="min",
+                    help="ring basis for --topo (default: min; a shipped "
+                         ".native.ring.ini always wins)")
     ap.add_argument("--dir", default=None,
-                    help=f"topology folder (default: the fan sweep {os.path.basename(FAN_DIR)})")
+                    help=f"topology folder; its --match level is averaged over seeds "
+                         f"(default {os.path.basename(CORPUS_DIR)})")
     ap.add_argument("--match", default=None,
                     help=f"substring selecting one sweep level; its seeds are "
                          f"averaged (default {DEFAULT_MATCH})")
@@ -47,24 +60,26 @@ def add_opt_args(ap):
     ap.add_argument("--dry-run", action="store_true",
                     help="print configs, topologies and run horizon, simulate nothing")
 
-COMMON = {"ecmpCostMargin": 0.50, "refreshFloodsUpdate": "true"}
+ECMP = 2   # every config, so a bar's Δ is the optimization and not a path count
+COMMON = {"ecmpCostMargin": 0.50, "refreshFloodsUpdate": "true",
+          "maxEcmpPaths": ECMP}
 # Every optimization off; each config below switches on exactly what its name says.
-BASE = {"maxEcmpPaths": 1, "suppressRedundantTransitions": "false",
+BASE = {"suppressRedundantTransitions": "false",
         "spofHoldMultiplier": 1, "holdCostScaled": "false"}
 HOLD_POLICY = {"spofHoldMultiplier": 4, "holdCostScaled": "true"}   # in-network policy
+# The first entry is the reference every Δ is taken against.
 CONFIGS = [
     ("baseline", {}),
-    ("ecmp 2", {"maxEcmpPaths": 2}),
-    ("ecmp 8", {"maxEcmpPaths": 8}),
-    # On ecmp 2, not the baseline's 1: suppression removes chains, so at one
-    # path it undercut "all" and read as cheaper than every optimization
-    # together. It is what "all" adds on top of ecmp 2 that this bar shows.
-    ("suppress (ecmp 2)", {"maxEcmpPaths": 2,
-                           "suppressRedundantTransitions": "true"}),
+    ("ecmp 8", {"maxEcmpPaths": 8}),          # the one config off the fixed ECMP
+    ("suppress", {"suppressRedundantTransitions": "true"}),
     ("hold policy", HOLD_POLICY),
-    ("all", {"maxEcmpPaths": 2, "suppressRedundantTransitions": "true",
-             **HOLD_POLICY}),
+    ("all", {"suppressRedundantTransitions": "true", **HOLD_POLICY}),
 ]
+
+
+def ecmp_cap(cfg):
+    """maxEcmpPaths this config runs at — the ceiling the fill panel draws."""
+    return cfg.get("maxEcmpPaths", ECMP)
 
 
 def pv_params(cfg):
@@ -86,14 +101,27 @@ def tag_of(name):
 
 
 def run_one(proto, ini, name, opts, rep):
-    """One sim -> its scalar readouts (eval_scaling's readers, same result dirs)."""
+    """One sim -> its scalar readouts (eval_scaling's readers, same result dirs).
+
+    The RR-excluded figures come out of the SAME run: MyriadGP tallies the RR
+    bytes it put on each link and finish() writes the subtracted totals, so no
+    second simulation is needed (see eval_scaling.norr_stats)."""
     tag = tag_of(name)
     msgs = S.message_count(proto, ini, tag=tag, extra_args=opts, rep=rep)
     state, lmax, _ = S.state_stats(proto, ini, tag=tag, rep=rep)
     res = rep_path(os.path.join(S.INI_DIR, f"res_{proto}{tag}_{os.path.basename(ini)}"), rep)
+    scas = glob.glob(os.path.join(res, "*.sca"))
+    nr_bytes, nr_lmax, _ = S.norr_stats(ini, tag=tag, rep=rep) if proto == "pv" \
+        else (None, None, None)
+    # Pooled over all routers, not a mean of per-router means: routers know
+    # different numbers of rings and the question is about slots, not routers.
+    chains = S._sum_scalar(scas, "ecmp_chains_total")
+    frames = S._sum_scalar(scas, "ecmp_frames_total")
     return {"msgs": msgs, "bytes": S.byte_count(proto, ini, tag=tag, rep=rep),
             "state": state, "lmax": lmax,
-            "calc": S._sum_scalar(glob.glob(os.path.join(res, "*.sca")), "calc_ops")}
+            "bytes_norr": nr_bytes, "lmax_norr": nr_lmax,
+            "ecmp_fill": (chains / frames) if frames else None,
+            "calc": S._sum_scalar(scas, "calc_ops")}
 
 
 def pct(v, ref):
@@ -102,19 +130,27 @@ def pct(v, ref):
 
 def report(results, ls, outfile):
     """outfile is a PREFIX: one <prefix>_<metric>.png per metric."""
-    base = results["baseline"]
-    print(f"\n{'config':<18}{'messages':>12}{'Δ':>6}{'bytes':>11}{'Δ':>6}"
-          f"{'link max':>11}{'Δ':>6}{'state/rtr':>11}{'Δ':>6}{'calc ops':>11}{'Δ':>6}")
+    ref = CONFIGS[0][0]
+    base = results[ref]
+    print(f"\n{'config':<14}{'messages':>12}{'Δ':>6}{'bytes':>11}{'Δ':>6}"
+          f"{'no RR':>11}{'link max':>11}{'Δ':>6}{'state/rtr':>11}{'Δ':>6}"
+          f"{'calc ops':>11}{'Δ':>6}{'ecmp':>7}")
     rows = list(results.items()) + [("LS (ref)", ls)]
     # One unit per column, or "7.84 GB" and "533 MB" sit under each other.
     mb = byte_unit([])
     for name, r in rows:
-        print(f"{name:<18}{r['msgs']:>12.0f}{pct(r['msgs'], base['msgs']):>6}"
+        fill = r.get("ecmp_fill")
+        cap = ecmp_cap(dict(CONFIGS).get(name, {})) if name in dict(CONFIGS) else None
+        print(f"{name:<14}{r['msgs']:>12.0f}{pct(r['msgs'], base['msgs']):>6}"
               f"{fmt_bytes(r['bytes'], mb):>11}{pct(r['bytes'], base['bytes']):>6}"
+              f"{fmt_bytes(r['bytes_norr'], mb) if r.get('bytes_norr') else '-':>11}"
               f"{fmt_bytes(r['lmax'], mb):>11}{pct(r['lmax'], base['lmax']):>6}"
               f"{fmt_bytes(r['state'], mb):>11}{pct(r['state'], base['state']):>6}"
-              f"{r['calc']:>11.3g}{pct(r['calc'], base['calc']):>6}")
-    print("Δ = vs. baseline (all optimizations off); mean over seeds.")
+              f"{r['calc']:>11.3g}{pct(r['calc'], base['calc']):>6}"
+              f"{(f'{float(fill):.2f}/{cap}' if fill else '-'):>7}")
+    print(f"Δ = vs. {ref}; mean over seeds. maxEcmpPaths={ECMP} except where named.")
+    print("no RR = same packets with the reachability-record fields subtracted; "
+          "ecmp = chains held per origin ring / the cap.")
 
     try:
         plt = pyplot()
@@ -122,26 +158,73 @@ def report(results, ls, outfile):
         print("(matplotlib not available — skipping plot)")
         return
     names = list(results)
-    # One file each: the four metrics are cited in different places and a
-    # 4-panel strip left every bar chart a sliver wide.
-    panels = [("msgs", "messages"), ("bytes", "bytes"),
-              ("lmax", "busiest link"), ("state", "state per router")]
-    for key, label in panels:
+    x = range(len(names))
+    # One file each: the metrics are cited in different places and a 4-panel
+    # strip left every bar chart a sliver wide.
+    # norr: the RR-excluded figure of the same metric, drawn as the solid part
+    # of the bar with the RR fields as a faded extension above it.
+    panels = [("msgs", "messages", None), ("bytes", "bytes", "bytes_norr"),
+              ("lmax", "busiest link", "lmax_norr"),
+              ("state", "state per router", None)]
+    for key, label, nrkey in panels:
         div, uname = (byte_unit([float(ls[key])]
                                 + [float(results[n][key]) for n in names])
                       if key != "msgs" else (1.0, ""))
-        vals = [float(results[n][key]) / div for n in names]
-        sds = [(getattr(results[n][key], "sd", 0.0) or 0.0) / div for n in names]
+        val = lambda n, k: float(results[n][k]) / div
+        sd = lambda n, k: (getattr(results[n][k], "sd", 0.0) or 0.0) / div
+        has_nr = nrkey and all(results[n].get(nrkey) is not None for n in names)
         fig, ax = plt.subplots(figsize=(7.0, 4.8))
-        ax.bar(range(len(names)), vals, yerr=sds if any(sds) else None,
-               color=PROTO_COLOR["pv"], capsize=3, label="Path-Vector (PV)")
+        if has_nr:
+            # Faded full bar first, solid RR-excluded one over it: what stays
+            # visible on top is what the reachability records cost.
+            ax.bar(x, [val(n, key) for n in names], color=PROTO_COLOR["pv"],
+                   alpha=0.3, edgecolor="black", linewidth=0.4, linestyle=":",
+                   label="Path-Vector (PV)")
+            ax.bar(x, [val(n, nrkey) for n in names],
+                   yerr=[sd(n, nrkey) for n in names], capsize=3,
+                   color=PROTO_COLOR["pv_norr"], edgecolor="black", linewidth=0.4,
+                   label="PV, RR fields excluded")
+        else:
+            ax.bar(x, [val(n, key) for n in names],
+                   yerr=[sd(n, key) for n in names], capsize=3,
+                   color=PROTO_COLOR["pv"], label="Path-Vector (PV)")
         ax.axhline(float(ls[key]) / div, color=PROTO_COLOR["ls"], ls="--",
                    label="Link-State (LS)")
-        ax.set_xticks(range(len(names)), names, rotation=45, ha="right")
-        ax.set_title(label + (f" ({uname})" if uname else ""))
+        ax.set_xticks(x, names, rotation=45, ha="right")
+        ax.set_title(title(label + (f" ({uname})" if uname else "")))
         ax.legend()
         fig.tight_layout()
         out = f"{outfile}_{key}.png"
+        fig.savefig(out, dpi=200)
+        plt.close(fig)
+        print(f"plot -> {out}")
+
+    # How many of the ECMP slots a config actually fills. LS has no counterpart,
+    # so no reference line; the ceiling is maxEcmpPaths, which differs per config.
+    if all(results[n].get("ecmp_fill") is not None for n in names):
+        caps = [ecmp_cap(dict(CONFIGS)[n]) for n in names]
+        fig, ax = plt.subplots(figsize=(7.0, 4.8))
+        # A rule per bar, not a bar behind it: the frame can exceed the cap (the
+        # new-best branch of MyriadGpRib::store admits without checking it), and
+        # a bar behind would be hidden exactly where that happens.
+        ax.hlines(caps, [i - 0.4 for i in x], [i + 0.4 for i in x],
+                  color="black", ls="--", lw=1.2, label="maxEcmpPaths (the cap)")
+        ax.bar(x, [float(results[n]["ecmp_fill"]) for n in names],
+               yerr=[getattr(results[n]["ecmp_fill"], "sd", 0.0) or 0.0
+                     for n in names], capsize=3,
+               color=PROTO_COLOR["pv"], edgecolor="black", linewidth=0.4,
+               label="chains actually held")
+        for i, n in enumerate(names):
+            ax.annotate(f"{float(results[n]['ecmp_fill']):.2f}",
+                        (i, float(results[n]["ecmp_fill"])),
+                        textcoords="offset points", xytext=(0, 3), ha="center",
+                        fontsize=10)
+        ax.set_xticks(x, names, rotation=45, ha="right")
+        ax.set_ylabel("chains per origin ring")
+        ax.set_title(title("ECMP slots filled"))
+        ax.legend()
+        fig.tight_layout()
+        out = f"{outfile}_ecmpfill.png"
         fig.savefig(out, dpi=200)
         plt.close(fig)
         print(f"plot -> {out}")
@@ -157,12 +240,25 @@ def main(args=None):
     check_params()
 
     # eval_entrypoint passes its own namespace, where the defaults are None.
-    topo_dir = getattr(args, "dir", None) or FAN_DIR
-    match = getattr(args, "match", None) or DEFAULT_MATCH
-    topos = sorted(p for p in glob.glob(os.path.join(os.path.abspath(topo_dir), "*.txt"))
-                   if match in os.path.basename(p))
-    if not topos:
-        sys.exit(f"no .txt in {topo_dir} matching '{match}'")
+    # TOPO_LABEL is what title() puts on the figures' second line, the way every
+    # other eval names its topology.
+    one = getattr(args, "topo", None)
+    if one:
+        if not os.path.exists(one):
+            one = os.path.join(str(MYRIAD_DIR), "myriad_topologies", "csv", one)
+        if not os.path.exists(one):
+            sys.exit(f"--topo {args.topo}: no such topology file")
+        S.BASIS = getattr(args, "basis", None) or "min"
+        topos, match = [os.path.abspath(one)], os.path.splitext(os.path.basename(one))[0]
+        harness.TOPO_LABEL = harness.topo_label(one)
+    else:
+        topo_dir = getattr(args, "dir", None) or CORPUS_DIR
+        match = getattr(args, "match", None) or DEFAULT_MATCH
+        topos = sorted(p for p in glob.glob(os.path.join(os.path.abspath(topo_dir), "*.txt"))
+                       if match in os.path.basename(p))
+        if not topos:
+            sys.exit(f"no .txt in {topo_dir} matching '{match}'")
+        harness.TOPO_LABEL = f"{os.path.basename(os.path.normpath(topo_dir))} {match}".upper()
     simt = simtime(cycles=2)
     out = os.path.join(S.EVAL_DIR, "optimizations" + (f"_{args.tag}" if args.tag else ""))
     S.INI_DIR = os.path.join(out, "ini")

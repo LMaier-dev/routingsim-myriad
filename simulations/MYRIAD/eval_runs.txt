@@ -76,14 +76,15 @@ python3 ~/routingsim/simulations/MYRIAD/eval_scaling.py --dir ~/routingsim/simul
 
 
 # ---------------------------------------------------------------------------
-# What each PV propagation optimization is worth, on ONE fan level of the sweep
-# above (every seed of it averaged). Each optimization runs alone against an
-# all-off baseline, then all together; ecmpCostMargin is 50% throughout.
-#
-# The horizon is warmup + 2 refresh cycles with refreshFloodsUpdate=true, so the
-# totals include what a refresh re-floods, not just the formation burst. 45 sims
-# at n=1000: keep --jobs low, two of these already need ~9GB.
-python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py optimizations --jobs 2
+# What each PV propagation optimization is worth, on ONE tr level of the n=2500
+# ringgrow corpus above (every seed of it averaged, which is where the error bars
+# come from). Each optimization runs alone against a baseline with the others
+# off, then all together. maxEcmpPaths is 2 everywhere except the bar named for
+# it, so a Δ is the optimization and not a path count; ecmpCostMargin is 50%
+# throughout. The byte bars split into an RR-excluded solid part and a faded RR
+# extension, both from the same run, and a fifth figure reports how many ECMP
+# slots each config actually fills.
+python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py optimizations --jobs 6
 
 
 # ---------------------------------------------------------------------------

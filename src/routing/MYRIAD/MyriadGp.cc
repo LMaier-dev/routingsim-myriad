@@ -1546,6 +1546,9 @@ void MyriadGP::finish() {
     recordScalar("batch_max_entries", batchMaxEntries);
     recordScalar("batches_created", batchesCreated);
     recordScalar("state_bytes", (double) rib.stateBytes());
+    auto ecmp = rib.ecmpFill();
+    recordScalar("ecmp_chains_total", (double) ecmp.chains);
+    recordScalar("ecmp_frames_total", (double) ecmp.frames);
 
     recordSecScalars();
 

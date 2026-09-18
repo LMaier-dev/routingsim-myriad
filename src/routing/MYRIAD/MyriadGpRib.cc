@@ -95,21 +95,29 @@ bool MyriadGpRib::admitToFrame(RibRing& rs, const RibEntry& cand) {
     auto& cf = rs.frames[rs.cur];
 
     // Index, not pointer: erase/push_back below invalidate references into cf.
-    size_t bestIdx = SIZE_MAX;
-    for (size_t i = 0; i < cf.size(); ++i)
-        if (bestIdx == SIZE_MAX || betterExact(cf[i], cf[bestIdx])) bestIdx = i;
+    auto bestOf = [&] {
+        size_t b = SIZE_MAX;
+        for (size_t i = 0; i < cf.size(); ++i)
+            if (b == SIZE_MAX || betterExact(cf[i], cf[b])) b = i;
+        return b;
+    };
+    size_t bestIdx = bestOf();
     if (bestIdx == SIZE_MAX) { cf.push_back(cand); return true; }
 
     if (strictlyBetter(cand, cf[bestIdx])) {    // new best: drop everything worse
+        // "Worse" by the same relation that made cand the best.
         // The self chain [origin] survives: it is this node's own membership, not
         // a learned route, and re-learning the ring via a neighbour costs a hop.
         cf.erase(std::remove_if(cf.begin(), cf.end(),
             [&](const RibEntry& e) {
-                return e.chain.size() > 1 && cand.chain_cost < e.chain_cost; }), cf.end());
-        cf.push_back(cand);
-        return true;
+                return e.chain.size() > 1 && strictlyBetter(cand, e); }), cf.end());
+        bestIdx = bestOf();
+        if (bestIdx == SIZE_MAX) { cf.push_back(cand); return true; }
     }
-    if (!coBest(cand, cf[bestIdx])) return false;   // out of margin, inferior
+    else if (!coBest(cand, cf[bestIdx])) return false;   // out of margin, inferior
+
+    // Room or not, for a new best and a co-best arrival alike: append, else
+    // replace the worst.
     if ((long)cf.size() < maxEcmpPaths) { cf.push_back(cand); return true; }
 
     // Full frame: pick the eviction target over (frame \ best) ∪ {cand}.
@@ -348,6 +356,20 @@ uint64_t MyriadGpRib::stateBytes() const {
     // the chains; counted for completeness rather than because it moves the number.
     b += degrades.size() * (msgsize::RING + 2 * msgsize::SEQ);
     return b;
+}
+
+MyriadGpRib::EcmpFill MyriadGpRib::ecmpFill() const {
+    // Learned chains only. The self chain ([origin], this node's own ring
+    // membership) is exempt from the cap in store(), so counting it would report
+    // a slot the ECMP logic never filled.
+    EcmpFill f;
+    for (const auto& [origin, r] : rings) {
+        uint64_t n = 0;
+        for (const auto& e : r.frames[r.cur])
+            if (e.chain.size() > 1) ++n;
+        if (n) { f.chains += n; ++f.frames; }
+    }
+    return f;
 }
 
 MyriadGpRib::ReplayQuality MyriadGpRib::replayQuality() const {
