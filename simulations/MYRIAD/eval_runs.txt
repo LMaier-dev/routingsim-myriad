@@ -46,7 +46,7 @@ SPLIT python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --topo
 # overview: bytes and messages per phase (conv, churn, each wave fraction),
 # boxplotted over the tr extremes x --repeat failure schedules. No snapshots.
 # Every config runs in this one process, so no --post is needed.
-python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --overview --dir ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow2500_A300_spof0.5 --tr-extremes --basis native --repeat 4 --jobs 32 --no-refresh-flood --wave-spacing 50 --extra-warmup 50
+python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --overview --dir ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow2500_A300_spof0.5 --tr-extremes --basis native --repeat 4 --jobs 24 --no-refresh-flood --wave-spacing 50 --extra-warmup 50
 
 
 # ---------------------------------------------------------------------------
@@ -81,7 +81,7 @@ python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --overview -
 # panel: per-router RIB is a function of NODE COUNT, which this sweep pins at
 # 1000. --norr makes the RR-excluded series a real carryRr=false run rather than
 # a subtraction, which n=1000 can afford.
-python3 ~/routingsim/simulations/MYRIAD/eval_scaling.py --dir ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_shr1000_rl16_spof0.5 --x-key fan --jobs 6 --no-state-panel --norr
+python3 ~/routingsim/simulations/MYRIAD/eval_scaling.py --dir ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_shr1000_rl16_spof0.5 --x-key fan --jobs 3 --no-state-panel --norr
 
 
 # ---------------------------------------------------------------------------
@@ -102,7 +102,7 @@ python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py optimizations --jobs 
 # --no-link-panel: per-link load is a function of FAN, and the ring graph is
 # pinned here. No --norr: n runs to 8000, so the RR-excluded series comes from
 # the free in-run subtraction instead of a third simulation per point.
-python3 ~/routingsim/simulations/MYRIAD/eval_scaling.py --dir ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_nsweep_A300_tr750_spof0.5 --x-key n --jobs 10 --no-link-panel
+python3 ~/routingsim/simulations/MYRIAD/eval_scaling.py --dir ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_nsweep_A300_tr750_spof0.5 --x-key n --jobs 24 --no-link-panel
 
 # All three panels on the ringgrow corpus the dynamics runs use: state, volume
 # and link load, each with and without RR. tr is the swept knob, so fan moves
