@@ -415,6 +415,11 @@ def sweep(items, nobatch=False, conv=False, norr=False):
     run_one = lambda j: measure(j[1], nobatch, conv, norr)
     if (harness.JOBS or 1) > 1 and len(jobs) > 1:
         harness.PROGRESS = False    # N concurrent sims would fight over the \r line
+        # Longest job first: a sweep is in ascending x, so dispatching in that
+        # order starts the slowest topologies last and leaves the pool idling on
+        # one n=8000 run at the end. Points reverse, seeds keep their order, and
+        # ex.map returns in submission order, so per_point below is unaffected.
+        jobs = [(i, t) for i in reversed(range(len(items))) for t in items[i][1]]
         with ThreadPoolExecutor(max_workers=harness.JOBS) as ex:
             done = list(ex.map(run_one, jobs))
     else:

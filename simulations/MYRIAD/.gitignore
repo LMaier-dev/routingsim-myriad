@@ -1,6 +1,6 @@
 *.png
 *.ring.ini
 eval
-eval_before*
+eval_tb23*
 
 *.native.ring.txt

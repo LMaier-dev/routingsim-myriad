@@ -7,7 +7,7 @@ LS runs once per seed as the reference.
 Every run covers the warmup plus two refresh cycles with refreshFloodsUpdate=true,
 so the totals include what the refreshes re-flood, not only the formation burst.
 maxEcmpPaths is fixed at ECMP for every config except the bar named for it, so a
-Δ is the optimization and not a path count; ecmpCostMargin is 50% throughout, and
+Δ is the optimization and not a path count; ecmpCostMargin is 10% throughout, and
 spofHoldMultiplier=1 is the NED's "off" for the spof bucket. ECMP slots are
 filled by cost alone: eval_common pins ecmpDiverseEviction off and no config
 turns it on.
@@ -60,26 +60,22 @@ def add_opt_args(ap):
     ap.add_argument("--dry-run", action="store_true",
                     help="print configs, topologies and run horizon, simulate nothing")
 
-ECMP = 2   # every config, so a bar's Δ is the optimization and not a path count
-COMMON = {"ecmpCostMargin": 0.50, "refreshFloodsUpdate": "true",
+ECMP = 3   # every config, so a bar's Δ is the optimization and not a path count
+COMMON = {"refreshFloodsUpdate": "true",
           "maxEcmpPaths": ECMP}
 # Every optimization off; each config below switches on exactly what its name says.
 BASE = {"suppressRedundantTransitions": "false",
         "spofHoldMultiplier": 1, "holdCostScaled": "false"}
-HOLD_POLICY = {"spofHoldMultiplier": 4, "holdCostScaled": "true"}   # in-network policy
+HOLD_POLICY = {"spofHoldMultiplier": 3, "holdCostScaled": "true"}   # in-network policy
 # The first entry is the reference every Δ is taken against.
 CONFIGS = [
-    ("baseline", {}),
-    ("ecmp 8", {"maxEcmpPaths": 8}),          # the one config off the fixed ECMP
-    ("suppress", {"suppressRedundantTransitions": "true"}),
-    ("hold policy", HOLD_POLICY),
-    ("all", {"suppressRedundantTransitions": "true", **HOLD_POLICY}),
+    ("ecmp 8/0.5", {"maxEcmpPaths": 8, "ecmpCostMargin": 0.5}),          # the one config off the fixed ECMP
+    ("base 3/0.25", {"ecmpCostMargin": 0.25}),
+    ("hold policy", {**HOLD_POLICY, "ecmpCostMargin": 0.25}),
+    ("suppress", {"suppressRedundantTransitions": "true", "ecmpCostMargin": 0.25}),
+    ("both 3/0.25", {"suppressRedundantTransitions": "true", **HOLD_POLICY, "ecmpCostMargin": 0.25}),
+    ("both 8/0.5", {"suppressRedundantTransitions": "true", **HOLD_POLICY, "maxEcmpPaths": 8, "ecmpCostMargin": 0.5}),          # the one config off the fixed ECMP
 ]
-
-
-def ecmp_cap(cfg):
-    """maxEcmpPaths this config runs at — the ceiling the fill panel draws."""
-    return cfg.get("maxEcmpPaths", ECMP)
 
 
 def pv_params(cfg):
@@ -100,6 +96,20 @@ def tag_of(name):
     return "_" + re.sub(r"\W+", "_", name)
 
 
+FILL_RE = re.compile(r"^scalar\s+(\S+)\s+ecmp_(chains|frames)_total\s+([0-9.]+)", re.M)
+
+
+def router_fills(scas):
+    """Chains held per origin ring, per ROUTER. _sum_scalar pools the two totals
+    over the whole network, which gives the mean but no spread; the min and max
+    need them paired by module."""
+    per = {}
+    for sca in scas:
+        for m in FILL_RE.finditer(open(sca).read()):
+            per.setdefault(m.group(1), {})[m.group(2)] = float(m.group(3))
+    return sorted(v["chains"] / v["frames"] for v in per.values() if v.get("frames"))
+
+
 def run_one(proto, ini, name, opts, rep):
     """One sim -> its scalar readouts (eval_scaling's readers, same result dirs).
 
@@ -117,10 +127,13 @@ def run_one(proto, ini, name, opts, rep):
     # different numbers of rings and the question is about slots, not routers.
     chains = S._sum_scalar(scas, "ecmp_chains_total")
     frames = S._sum_scalar(scas, "ecmp_frames_total")
+    fills = router_fills(scas)
     return {"msgs": msgs, "bytes": S.byte_count(proto, ini, tag=tag, rep=rep),
             "state": state, "lmax": lmax,
             "bytes_norr": nr_bytes, "lmax_norr": nr_lmax,
             "ecmp_fill": (chains / frames) if frames else None,
+            "ecmp_fill_min": fills[0] if fills else None,
+            "ecmp_fill_max": fills[-1] if fills else None,
             "calc": S._sum_scalar(scas, "calc_ops")}
 
 
@@ -134,23 +147,25 @@ def report(results, ls, outfile):
     base = results[ref]
     print(f"\n{'config':<14}{'messages':>12}{'Δ':>6}{'bytes':>11}{'Δ':>6}"
           f"{'no RR':>11}{'link max':>11}{'Δ':>6}{'state/rtr':>11}{'Δ':>6}"
-          f"{'calc ops':>11}{'Δ':>6}{'ecmp':>7}")
+          f"{'calc ops':>11}{'Δ':>6}{'ecmp min/mean/max':>19}")
     rows = list(results.items()) + [("LS (ref)", ls)]
     # One unit per column, or "7.84 GB" and "533 MB" sit under each other.
     mb = byte_unit([])
     for name, r in rows:
         fill = r.get("ecmp_fill")
-        cap = ecmp_cap(dict(CONFIGS).get(name, {})) if name in dict(CONFIGS) else None
+        span = (f"{float(r['ecmp_fill_min']):.2f}/{float(fill):.2f}/"
+                f"{float(r['ecmp_fill_max']):.2f}") if fill else "-"
         print(f"{name:<14}{r['msgs']:>12.0f}{pct(r['msgs'], base['msgs']):>6}"
               f"{fmt_bytes(r['bytes'], mb):>11}{pct(r['bytes'], base['bytes']):>6}"
               f"{fmt_bytes(r['bytes_norr'], mb) if r.get('bytes_norr') else '-':>11}"
               f"{fmt_bytes(r['lmax'], mb):>11}{pct(r['lmax'], base['lmax']):>6}"
               f"{fmt_bytes(r['state'], mb):>11}{pct(r['state'], base['state']):>6}"
               f"{r['calc']:>11.3g}{pct(r['calc'], base['calc']):>6}"
-              f"{(f'{float(fill):.2f}/{cap}' if fill else '-'):>7}")
+              f"{span:>19}")
     print(f"Δ = vs. {ref}; mean over seeds. maxEcmpPaths={ECMP} except where named.")
     print("no RR = same packets with the reachability-record fields subtracted; "
-          "ecmp = chains held per origin ring / the cap.")
+          "ecmp = chains held per origin ring, over the thinnest / all / the "
+          "richest router.")
 
     try:
         plt = pyplot()
@@ -200,28 +215,25 @@ def report(results, ls, outfile):
         print(f"plot -> {out}")
 
     # How many of the ECMP slots a config actually fills. LS has no counterpart,
-    # so no reference line; the ceiling is maxEcmpPaths, which differs per config.
+    # so no reference line. The whiskers are the thinnest and the richest ROUTER,
+    # not the seed spread: the question is whether some routers sit empty while
+    # the mean looks healthy, which a standard deviation over seeds cannot show.
     if all(results[n].get("ecmp_fill") is not None for n in names):
-        caps = [ecmp_cap(dict(CONFIGS)[n]) for n in names]
         fig, ax = plt.subplots(figsize=(7.0, 4.8))
-        # A rule per bar, not a bar behind it: the frame can exceed the cap (the
-        # new-best branch of MyriadGpRib::store admits without checking it), and
-        # a bar behind would be hidden exactly where that happens.
-        ax.hlines(caps, [i - 0.4 for i in x], [i + 0.4 for i in x],
-                  color="black", ls="--", lw=1.2, label="maxEcmpPaths (the cap)")
-        ax.bar(x, [float(results[n]["ecmp_fill"]) for n in names],
-               yerr=[getattr(results[n]["ecmp_fill"], "sd", 0.0) or 0.0
-                     for n in names], capsize=3,
+        mean = [float(results[n]["ecmp_fill"]) for n in names]
+        lo = [m - float(results[n]["ecmp_fill_min"]) for m, n in zip(mean, names)]
+        hi = [float(results[n]["ecmp_fill_max"]) - m for m, n in zip(mean, names)]
+        ax.bar(x, mean, yerr=[lo, hi], capsize=3,
                color=PROTO_COLOR["pv"], edgecolor="black", linewidth=0.4,
-               label="chains actually held")
-        for i, n in enumerate(names):
-            ax.annotate(f"{float(results[n]['ecmp_fill']):.2f}",
-                        (i, float(results[n]["ecmp_fill"])),
-                        textcoords="offset points", xytext=(0, 3), ha="center",
-                        fontsize=10)
+               label="chains held (mean, whiskers = thinnest/richest router)")
+        for i, (m, h) in enumerate(zip(mean, hi)):
+            ax.annotate(f"{m:.2f}", (i, m + h), textcoords="offset points",
+                        xytext=(0, 3), ha="center", fontsize=10)
         ax.set_xticks(x, names, rotation=45, ha="right")
         ax.set_ylabel("chains per origin ring")
         ax.set_title(title("ECMP slots filled"))
+        # Headroom for the labels and the legend, which sits over the tallest bar.
+        ax.set_ylim(top=max(m + h for m, h in zip(mean, hi)) * 1.25)
         ax.legend()
         fig.tight_layout()
         out = f"{outfile}_ecmpfill.png"
