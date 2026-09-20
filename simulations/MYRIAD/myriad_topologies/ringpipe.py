@@ -17,9 +17,9 @@ every ring in that interface:
                +------------------------------+
 
 Interfaces are edge-disjoint CLIQUES of sites, so any two rings meet exactly
-once. That is not cosmetic: MyriadGP infers ring adjacency from shared
+once. That is not cosmetic: MyriadPV infers ring adjacency from shared
 ringLabels, so if P and Q met in two separate places, the edge bounding one
-place would join two P-members that are not adjacent in P -- a CHORD, and GP's
+place would join two P-members that are not adjacent in P -- a CHORD, and PV's
 lap forks onto a sub-cycle that never closes (see ringcheck.py). Chord-freedom
 here is by construction, not by repair.
 
@@ -30,7 +30,7 @@ fan-out   sum over nodes of k(k-1), k = rings the node is in. An interface of m
           (quadratic), --width-max raises w (linear).
 n         node count. Held exactly by padding rings with FILLER -- nodes in one
           ring only, which carry no ring pairs and so cost no fan-out.
-length    median ring length -- MyriadGP's lap length, so it drives message
+length    median ring length -- MyriadPV's lap length, so it drives message
           counts directly.
 
 These three are tied by an identity, and only TWO can be pinned at once:
@@ -509,10 +509,10 @@ def build(family="gabriel", rings=100, seed=0, ring_size=8,
 
 def write_out(g, plan, rpos, stem, sub, prov):
     """Write one built topology's three files: the graph (csv/), the ring labels
-    MyriadGP reads (ringlabels/) and a picture (gallery/). Shared with
+    MyriadPV reads (ringlabels/) and a picture (gallery/). Shared with
     ringgrow.py, which builds its plans differently but ships the same triple."""
     s = score(g, plan)          # raises if any ring isn't hop-walkable
-    # Walkable is not enough: GP also needs every member to have exactly TWO
+    # Walkable is not enough: PV also needs every member to have exactly TWO
     # ring-neighbours, or its lap has a fork it cannot resolve. The planner
     # cannot break that, but the post-passes reshape the graph afterwards, so it
     # is checked on the way out -- shipping a chorded plan would silently ruin

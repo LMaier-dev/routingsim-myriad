@@ -1,4 +1,4 @@
-#include "routing/MYRIAD/MyriadGpRib.h"
+#include "routing/MYRIAD/MyriadPvRib.h"
 #include "routing/MYRIAD/MyriadHelper.h"
 #include "routing/MYRIAD/MyriadPduSize.h"
 #include <algorithm>
@@ -8,8 +8,8 @@
 
 namespace routingsim {
 
-uint32_t MyriadGpRib::sizeToCost(uint32_t s) const {
-    if (s == 2) s = (uint32_t) echoRingSize;   // see MyriadGp.ned
+uint32_t MyriadPvRib::sizeToCost(uint32_t s) const {
+    if (s == 2) s = (uint32_t) echoRingSize;   // see MyriadPv.ned
     // s^ringCostExponent with u32 saturation: a high exponent on a big ring still
     // overflows, and saturating keeps it costly rather than wrapping to 0.
     uint32_t term = 1;
@@ -21,18 +21,18 @@ uint32_t MyriadGpRib::sizeToCost(uint32_t s) const {
     return term;
 }
 
-uint32_t MyriadGpRib::curSeq(uint32_t ring) const {
+uint32_t MyriadPvRib::curSeq(uint32_t ring) const {
     auto it = rings.find(ring);
     return it == rings.end() ? 0 : it->second.curSeq;
 }
 
-const std::vector<MyriadGpRr>& MyriadGpRib::rr(uint32_t ring) const {
-    static const std::vector<MyriadGpRr> none;
+const std::vector<MyriadPvRr>& MyriadPvRib::rr(uint32_t ring) const {
+    static const std::vector<MyriadPvRr> none;
     auto it = rings.find(ring);
     return it == rings.end() ? none : it->second.rr;
 }
 
-void MyriadGpRib::invalidate(uint32_t ring) {
+void MyriadPvRib::invalidate(uint32_t ring) {
     RibRing& rs = rings[ring];
     rs.frames[0].clear();
     rs.frames[1].clear();
@@ -40,7 +40,7 @@ void MyriadGpRib::invalidate(uint32_t ring) {
     rs.hasPreferred = false;
 }
 
-void MyriadGpRib::installSelfChain(uint32_t ring, uint32_t originSeq, uint32_t cost) {
+void MyriadPvRib::installSelfChain(uint32_t ring, uint32_t originSeq, uint32_t cost) {
     RibRing& rs = rings[ring];
     if (originSeq > rs.curSeq) {            // flip: fresh generation of my own ring
         rs.curSeq = originSeq;
@@ -55,7 +55,7 @@ void MyriadGpRib::installSelfChain(uint32_t ring, uint32_t originSeq, uint32_t c
     selectPreferred(rs);
 }
 
-bool MyriadGpRib::withinMargin(uint32_t a, uint32_t b) const {
+bool MyriadPvRib::withinMargin(uint32_t a, uint32_t b) const {
     if (ecmpCostMargin <= 0) return a <= b;
     // double, since b may be sizeToCost's uint64 saturation where b*(1+m) wraps.
     double lim = (double)b * (1.0 + ecmpCostMargin);
@@ -63,7 +63,7 @@ bool MyriadGpRib::withinMargin(uint32_t a, uint32_t b) const {
     return (double)a <= (lim > cap ? cap : lim);
 }
 
-bool MyriadGpRib::strictlyBetter(const RibEntry& a, const RibEntry& b) const {
+bool MyriadPvRib::strictlyBetter(const RibEntry& a, const RibEntry& b) const {
     if (rankUseSpof && a.spof_count != b.spof_count) return a.spof_count < b.spof_count;
     if (!withinMargin(a.chain_cost, b.chain_cost)) return false;
     if (!withinMargin(b.chain_cost, a.chain_cost)) return a.chain_cost < b.chain_cost;
@@ -72,14 +72,14 @@ bool MyriadGpRib::strictlyBetter(const RibEntry& a, const RibEntry& b) const {
     return ecmpCostMargin > 0 ? false : a.chain.size() < b.chain.size();
 }
 
-bool MyriadGpRib::betterExact(const RibEntry& a, const RibEntry& b) const {
+bool MyriadPvRib::betterExact(const RibEntry& a, const RibEntry& b) const {
     if (rankUseSpof && a.spof_count != b.spof_count) return a.spof_count < b.spof_count;
     if (a.chain_cost != b.chain_cost) return a.chain_cost < b.chain_cost;
     if (a.chain.size() != b.chain.size()) return a.chain.size() < b.chain.size();
     return a.chain < b.chain;   // total order, so preference is deterministic
 }
 
-bool MyriadGpRib::coBest(const RibEntry& a, const RibEntry& b) const {
+bool MyriadPvRib::coBest(const RibEntry& a, const RibEntry& b) const {
     return (!rankUseSpof || a.spof_count == b.spof_count)
         // With a margin, length is already strictlyBetter's tiebreak.
         && (ecmpCostMargin > 0 || a.chain.size() == b.chain.size())
@@ -91,7 +91,7 @@ bool MyriadGpRib::coBest(const RibEntry& a, const RibEntry& b) const {
 // pure acceptance: an in-band arrival widens the frame, an out-of-margin cheaper
 // one replaces everything it beats. On a fullframe the evicted entry is the least  
 // ring-diverse vs the best chain (ecmpDiverseEviction) OR the costliest.
-bool MyriadGpRib::admitToFrame(RibRing& rs, const RibEntry& cand) {
+bool MyriadPvRib::admitToFrame(RibRing& rs, const RibEntry& cand) {
     auto& cf = rs.frames[rs.cur];
 
     // Index, not pointer: erase/push_back below invalidate references into cf.
@@ -160,7 +160,7 @@ bool MyriadGpRib::admitToFrame(RibRing& rs, const RibEntry& cand) {
 // Record cand as its front ring's best recent chain (replay coverage, degrade fallback
 // and suppression, never forwarded). A better chain always wins; a worse one only
 // replaces a slot two generations old, so a path that broke drops out within one cycle.
-bool MyriadGpRib::updateSoleFront(RibRing& rs, const RibEntry& cand) {
+bool MyriadPvRib::updateSoleFront(RibRing& rs, const RibEntry& cand) {
     if (cand.chain.empty()) return false;
     auto it = rs.soleFront.find(cand.chain.front());
     if (it == rs.soleFront.end()
@@ -173,7 +173,7 @@ bool MyriadGpRib::updateSoleFront(RibRing& rs, const RibEntry& cand) {
     return false;
 }
 
-bool MyriadGpRib::ringAlreadyHas(uint32_t origin, uint32_t frontRing,
+bool MyriadPvRib::ringAlreadyHas(uint32_t origin, uint32_t frontRing,
                                  const RibEntry& cand) const {
     auto ri = rings.find(origin);
     if (ri == rings.end()) return false;
@@ -191,7 +191,7 @@ bool MyriadGpRib::ringAlreadyHas(uint32_t origin, uint32_t frontRing,
     return !strictlyBetter(cand, have) && !coBest(cand, have);
 }
 
-void MyriadGpRib::selectPreferred(RibRing& rs) {
+void MyriadPvRib::selectPreferred(RibRing& rs) {
     // Rank BOTH frames together by cost (make-before-break): while the current
     // generation is still converging, last generation's completed chains are
     // valid and may be cheaper, so they must stay eligible until the new gen
@@ -221,20 +221,20 @@ void MyriadGpRib::selectPreferred(RibRing& rs) {
     if (onCalc) onCalc(ranked);
 }
 
-void MyriadGpRib::reselectAll() {
+void MyriadPvRib::reselectAll() {
     for (auto& [ring, rs] : rings) selectPreferred(rs);
 }
 
-bool MyriadGpRib::chainDegraded(const std::vector<uint32_t>& chain) const {
+bool MyriadPvRib::chainDegraded(const std::vector<uint32_t>& chain) const {
     for (uint32_t r : chain) if (degrades.count(r)) return true;
     return false;
 }
 
-void MyriadGpRib::clearDegrade(uint32_t ring) {
+void MyriadPvRib::clearDegrade(uint32_t ring) {
     if (degrades.erase(ring)) reselectAll();
 }
 
-void MyriadGpRib::clearDegradeIfRecovered(uint32_t ring) {
+void MyriadPvRib::clearDegradeIfRecovered(uint32_t ring) {
     auto it = degrades.find(ring);
     if (it != degrades.end() && it->second.first < rings[ring].curSeq) {
         degrades.erase(it);
@@ -242,7 +242,7 @@ void MyriadGpRib::clearDegradeIfRecovered(uint32_t ring) {
     }
 }
 
-std::pair<uint32_t, uint32_t> MyriadGpRib::markDegraded(uint32_t ring) {
+std::pair<uint32_t, uint32_t> MyriadPvRib::markDegraded(uint32_t ring) {
     uint32_t seq = rings[ring].curSeq;
     bool isNew = !degrades.count(ring);
     auto& d = degrades[ring];               // culprit ring -> (seq, beacon)
@@ -252,7 +252,7 @@ std::pair<uint32_t, uint32_t> MyriadGpRib::markDegraded(uint32_t ring) {
     return d;
 }
 
-bool MyriadGpRib::applyDegrade(uint32_t ring, uint32_t seq, uint32_t beacon) {
+bool MyriadPvRib::applyDegrade(uint32_t ring, uint32_t seq, uint32_t beacon) {
     // Stale: the ring has already re-originated past this generation (recovered).
     auto rit = rings.find(ring);
     if (rit != rings.end() && seq < rit->second.curSeq) return false;
@@ -269,9 +269,9 @@ bool MyriadGpRib::applyDegrade(uint32_t ring, uint32_t seq, uint32_t beacon) {
 }
 
 // originRrTrailer is the rr to adopt on a seq-advance (the packet's own rr).
-StoreResult MyriadGpRib::store(uint32_t origin, const std::vector<uint32_t>& fullChain,
+StoreResult MyriadPvRib::store(uint32_t origin, const std::vector<uint32_t>& fullChain,
                                uint32_t fullCost, uint32_t seq, uint32_t spof,
-                               const std::vector<MyriadGpRr>* originRrTrailer) {
+                               const std::vector<MyriadPvRr>* originRrTrailer) {
     StoreResult res;
     RibRing& originRs = rings[origin];
 
@@ -330,13 +330,13 @@ StoreResult MyriadGpRib::store(uint32_t origin, const std::vector<uint32_t>& ful
     return res;
 }
 
-size_t MyriadGpRib::knownOrigins() const {
+size_t MyriadPvRib::knownOrigins() const {
     size_t n = 0;
     for (auto& [origin, rs] : rings) if (rs.hasPreferred) ++n;
     return n;
 }
 
-uint64_t MyriadGpRib::stateBytes() const {
+uint64_t MyriadPvRib::stateBytes() const {
     // A chain is the path vector itself; the rest of RibEntry is its scalars.
     auto entry = [](const RibEntry& e) {
         return e.chain.size() * msgsize::RING    // chain
@@ -358,7 +358,7 @@ uint64_t MyriadGpRib::stateBytes() const {
     return b;
 }
 
-MyriadGpRib::EcmpFill MyriadGpRib::ecmpFill() const {
+MyriadPvRib::EcmpFill MyriadPvRib::ecmpFill() const {
     // Learned chains only. The self chain ([origin], this node's own ring
     // membership) is exempt from the cap in store(), so counting it would report
     // a slot the ECMP logic never filled.
@@ -372,7 +372,7 @@ MyriadGpRib::EcmpFill MyriadGpRib::ecmpFill() const {
     return f;
 }
 
-MyriadGpRib::ReplayQuality MyriadGpRib::replayQuality() const {
+MyriadPvRib::ReplayQuality MyriadPvRib::replayQuality() const {
     ReplayQuality q;
     for (auto& [origin, rs] : rings) {
         if (!rs.hasPreferred) continue;
@@ -386,7 +386,7 @@ MyriadGpRib::ReplayQuality MyriadGpRib::replayQuality() const {
     return q;
 }
 
-std::vector<MyriadGpRib::ReplayChain> MyriadGpRib::preferredChains() const {
+std::vector<MyriadPvRib::ReplayChain> MyriadPvRib::preferredChains() const {
     std::vector<ReplayChain> out;
     // The per-origin preferred plus every soleFront slot: replay must reach every
     // (origin, front ring), and front coverage lives in soleFront.
@@ -403,7 +403,7 @@ std::vector<MyriadGpRib::ReplayChain> MyriadGpRib::preferredChains() const {
     return out;
 }
 
-void MyriadGpRib::dumpTo(std::ostream& f, const std::string& tprefix, bool stats, int nodeId) const {
+void MyriadPvRib::dumpTo(std::ostream& f, const std::string& tprefix, bool stats, int nodeId) const {
     std::vector<uint32_t> originIds;
     for (auto& [rid, rs] : rings)
         if (rs.hasPreferred) originIds.push_back(rid);

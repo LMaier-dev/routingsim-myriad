@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Path cost-drift: MyriadGP (production, rankUseSpof=true) vs oracle (LS/Dijkstra).
+"""Path cost-drift: MyriadPV (production, rankUseSpof=true) vs oracle (LS/Dijkstra).
 
 PV's spof-first ranking deliberately picks costlier but more-redundant paths.
 This measures by how much — the "redundancy premium" per (node, origin) route.
@@ -110,8 +110,8 @@ def main(args=None):
             print(f"  ✓ LS done ({len(oracle)} entries)")
             print("  → PV production (rankUseSpof=true) …", flush=True)
         pv = _run(pv_ini, "ribDumpFile",
-                  os.path.join(OUT, "drift_gp.txt"),
-                  os.path.join(OUT, "res_gp"), rep)
+                  os.path.join(OUT, "drift_pv.txt"),
+                  os.path.join(OUT, "res_pv"), rep)
         if rep == 0:
             print(f"  ✓ PV done ({len(pv)} entries)")
             if want_nospof:
@@ -121,8 +121,8 @@ def main(args=None):
         # its scatter cloud sits on y=x and isolates the spof premium from any real
         # PV suboptimality.
         nospof = _run(pv_ini, "ribDumpFile",
-                      os.path.join(OUT, "drift_gp_nospof.txt"),
-                      os.path.join(OUT, "res_gp_nospof"), rep,
+                      os.path.join(OUT, "drift_pv_nospof.txt"),
+                      os.path.join(OUT, "res_pv_nospof"), rep,
                       extra=["--**.rankUseSpof=false",
                              "--**.ecmpCostMargin=0.2"]) if want_nospof else {}
         if rep == 0 and want_nospof:

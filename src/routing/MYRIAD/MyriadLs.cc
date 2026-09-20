@@ -155,6 +155,9 @@ void MyriadLS::onMessage(NodePkt_p pkt) {
 
 }
 
+// A router crash: NetworkManager calls this when the node fails. The LSDB is
+// lost, so the returning router re-originates its own LSAs and refills the rest
+// from the database exchange its neighbors start once hellos reach TWOWAY again.
 void MyriadLS::reset() {
     Enter_Method_Silent();   // invoked cross-module from NetworkManager; we reschedule below
     for (auto& [nid, nbr] : neighbors) {
@@ -728,7 +731,7 @@ void MyriadLS::finish() {
 }
 
 // Protocol state THIS router holds, at the wire field widths of MyriadPduSize.h
-// so it is commensurable with bytes_total and with GP's state_bytes.
+// so it is commensurable with bytes_total and with PV's state_bytes.
 uint64_t MyriadLS::lsdbBytes() const {
     uint64_t b = 0;
     for (const auto& [key, lsa] : lsdb) {

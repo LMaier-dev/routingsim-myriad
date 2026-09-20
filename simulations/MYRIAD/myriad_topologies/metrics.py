@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Score a topology + ring assignment on the quantities MyriadGP's control plane
+"""Score a topology + ring assignment on the quantities MyriadPV's control plane
 actually turns on. Import `score`; run this file for the family sweep.
 
     python3 metrics.py --sizes 100 250 500 --families ringmesh gabriel rgg
@@ -38,7 +38,7 @@ def rings_to_membership(g, rings, echo=True):
 def validate_rings(g, rings):
     """Reasons `rings` is not a usable ring set, or [] if it is.
 
-    A GP ring is walked hop by hop, so consecutive members must be ADJACENT and
+    A PV ring is walked hop by hop, so consecutive members must be ADJACENT and
     a ring must be a SIMPLE cycle. Fan-out/spof are computed from membership
     sets, which stay happily finite for a bogus ring -- a spof-merging post-pass
     scored a 20% fan-out win here purely by splicing rings into walks that no

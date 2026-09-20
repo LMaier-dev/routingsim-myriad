@@ -4,7 +4,7 @@
 #include <cstdint>
 
 // Modelled on-wire field widths (bytes) for MYRIAD control PDUs, shared by the
-// path-vector (MyriadGp) and link-state (MyriadLs) protocols and the common
+// path-vector (MyriadPv) and link-state (MyriadLs) protocols and the common
 // Hello.
 
 namespace routingsim {
@@ -36,7 +36,7 @@ constexpr int64_t IPV4_HDR = 20;
 constexpr int64_t FRAME    = ETH_HDR + ETH_FCS + IPV4_HDR;   // 38
 
 constexpr int64_t MYRIADLS_HDR = TYPE_TAG + NODEID;             // 3:  type + router_id_src
-constexpr int64_t MYRIADGP_HDR = TYPE_TAG + NODEID + SEQ + RING + U8; // 8: + seq_no + current_ring + hops
+constexpr int64_t MYRIADPV_HDR = TYPE_TAG + NODEID + SEQ + RING + U8; // 8: + seq_no + current_ring + hops
 constexpr int64_t LSA_HDR      = TYPE_TAG + SEQ + NODEID;       // 5:  type + seq + origin
 constexpr int64_t RR           = U32 + NODEID;                  // 6:  subnet + owner
 constexpr int64_t TRANSITION   = RING + BOOL;                   // 3:  ring + isRedundant

@@ -1,9 +1,9 @@
-#ifndef __ROUTINGSIM_MYRIADGP_H_
-#define __ROUTINGSIM_MYRIADGP_H_
+#ifndef __ROUTINGSIM_MYRIADPV_H_
+#define __ROUTINGSIM_MYRIADPV_H_
 
 #include "routing/MYRIAD/MyriadHello.h"
-#include "routing/MYRIAD/MyriadGpPkt_m.h"
-#include "routing/MYRIAD/MyriadGpRib.h"
+#include "routing/MYRIAD/MyriadPvPkt_m.h"
+#include "routing/MYRIAD/MyriadPvRib.h"
 #include <boost/container/flat_map.hpp>
 #include <unordered_map>
 #include <map>
@@ -15,7 +15,7 @@
 
 namespace routingsim {
 
-    struct GpNeighbor : HelloNeighbor {
+    struct PvNeighbor : HelloNeighbor {
     };
 
     // Reliable ring send. Retransmits alternate primary/fallback so one
@@ -45,7 +45,7 @@ namespace routingsim {
     };
 
     // State a router keeps ONLY for rings it is itself a member of: king/collect
-    // bookkeeping and the in-flight ring laps. Route state lives in MyriadGpRib.
+    // bookkeeping and the in-flight ring laps. Route state lives in MyriadPvRib.
     struct RingMembership {
         uint32_t originSeq = 1;     // routing generation; advances only on a won ELECTION
         uint32_t collectSeq = 1;    // per-lap counter, matches a COLLECT to its own return
@@ -79,13 +79,13 @@ namespace routingsim {
         uint32_t spof = 0;
         std::vector<uint32_t> fwdChain;
         uint32_t fwdCost = 0;
-        std::vector<MyriadGpRr> rr;
+        std::vector<MyriadPvRr> rr;
     };
 
-    class MyriadGP : public MyriadHelloProto<GpNeighbor>
+    class MyriadPV : public MyriadHelloProto<PvNeighbor>
     {
         // Distinct from MYRIADLS_PACKET_TYPE so both protocols can coexist.
-        static constexpr int MYRIADGP_PACKET_TYPE = 56;
+        static constexpr int MYRIADPV_PACKET_TYPE = 56;
 
         protected:
             void onInitialize() override;
@@ -93,16 +93,16 @@ namespace routingsim {
             void reset() override;
             void finish() override;
 
-            void onTwoWayReached(GpNeighbor& nbr) override;
-            void onNeighborDead(GpNeighbor& nbr, bool wasFull) override;
+            void onTwoWayReached(PvNeighbor& nbr) override;
+            void onNeighborDead(PvNeighbor& nbr, bool wasFull) override;
 
-            void handleCollect(MyriadGpCollect* collect, nodeid_t from);
-            // In-ring lap kill-switch; see MyriadGp.ned maxCollectHops.
-            bool lapExpired(MyriadGpHeader* pkt, uint32_t ring, nodeid_t sender,
+            void handleCollect(MyriadPvCollect* collect, nodeid_t from);
+            // In-ring lap kill-switch; see MyriadPv.ned maxCollectHops.
+            bool lapExpired(MyriadPvHeader* pkt, uint32_t ring, nodeid_t sender,
                             const char* what);
-            void handleUpdate(MyriadGpUpdate* update, nodeid_t from);
-            void handleUpdateBatch(MyriadGpUpdateBatch* batch, nodeid_t from);
-            void handleDegrade(MyriadGpDegrade* degrade, nodeid_t from);
+            void handleUpdate(MyriadPvUpdate* update, nodeid_t from);
+            void handleUpdateBatch(MyriadPvUpdateBatch* batch, nodeid_t from);
+            void handleDegrade(MyriadPvDegrade* degrade, nodeid_t from);
             // Push my whole RIB into `ring` as seq==0 UPDATEs, each chain rebased
             // onto it, so a recovered member there gets its routes back.
             void replayInto(uint32_t ring);
@@ -110,7 +110,7 @@ namespace routingsim {
             // member; the REPLAY lap is seeded with that figure, so only that
             // one member replays and the rest defer. Kingship plays no part: a
             // king crowned mid-recovery can be missing entries itself.
-            void replayIfBest(MyriadGpCollect* lap, uint32_t ring);
+            void replayIfBest(MyriadPvCollect* lap, uint32_t ring);
             // COLLECT election key: live (memberCount>0) beats crashed, ties by id.
             // Deliberately NOT ranked by RIB richness: counts move during
             // convergence, so there is no fixed point and kingship churns.
@@ -125,11 +125,11 @@ namespace routingsim {
             // `replayer` addresses a REPLAY lap at the member a prior lap
             // elected; default addresses it at me.
             void originateCollect(uint32_t ring, nodeid_t to,
-                                  MyriadGpCollectKind kind = COLLECT_ELECTION,
+                                  MyriadPvCollectKind kind = COLLECT_ELECTION,
                                   nodeid_t replayer = undefined_node);
             // Fresh COLLECT for a ring I own (picks a ring-neighbor).
             void reoriginateCollect(uint32_t ring, bool routine = false,
-                                    MyriadGpCollectKind kind = COLLECT_ELECTION);
+                                    MyriadPvCollectKind kind = COLLECT_ELECTION);
             void startRefresh(uint32_t ring);   // king: periodic re-collect
             void startWatchdog(uint32_t ring);  // member: coup if the king goes silent
             // Observational periodic RIB snapshot (snapshotInterval)
@@ -139,12 +139,12 @@ namespace routingsim {
             void cancelKingship(uint32_t ring);
             // Insert my pairs + transitions, forward to the other ring-neighbor.
             // `sender` is the hop we received from, used to pick the other one.
-            void insertAndForwardCollect(MyriadGpCollect* pkt, uint32_t ring, nodeid_t sender);
+            void insertAndForwardCollect(MyriadPvCollect* pkt, uint32_t ring, nodeid_t sender);
             // The ring-neighbor we did NOT receive from; undefined_node if none.
             nodeid_t otherRingNeighbor(uint32_t ring, nodeid_t sender);
             // Both TWOWAY+ ring-neighbors for R (0, 1, or 2).
             std::vector<nodeid_t> ringNeighbors(uint32_t ring);
-            // A two-node echo ring, straight from the id (MyriadGp.ned).
+            // A two-node echo ring, straight from the id (MyriadPv.ned).
             bool isEchoRing(uint32_t ring) const {
                 return ring <= (uint32_t) echoRingIdMax;
             }
@@ -154,10 +154,10 @@ namespace routingsim {
                 return isEchoRing(ring) ? 1 : 2;
             }
             void originateUpdate(uint32_t ring);
-            void forwardUpdateInRing(MyriadGpUpdate* pkt, uint32_t ring, nodeid_t sender);
+            void forwardUpdateInRing(MyriadPvUpdate* pkt, uint32_t ring, nodeid_t sender);
             // Forward a whole batch intra-ring; it never unpacks, lapping as one
             // packet to close a single ACK.
-            void forwardBatchInRing(MyriadGpUpdateBatch* pkt, uint32_t ring, nodeid_t sender);
+            void forwardBatchInRing(MyriadPvUpdateBatch* pkt, uint32_t ring, nodeid_t sender);
             // RIB insert/select for one learned chain, then transition it
             // inter-ring if it wins and is loop-free. Shared by handleUpdate and
             // handleUpdateBatch (per entry). `handled` accrues the rings this
@@ -165,21 +165,21 @@ namespace routingsim {
             void processChain(uint32_t curRing, uint32_t seq, uint32_t spof,
                               const std::vector<uint32_t>& chain,
                               uint32_t chainCost,
-                              const std::vector<MyriadGpRr>& rr,
-                              const std::vector<MyriadGpRr>* originRrTrailer,
+                              const std::vector<MyriadPvRr>& rr,
+                              const std::vector<MyriadPvRr>* originRrTrailer,
                               std::vector<uint32_t>& handled);
             // Transition one chain into each of my other rings not in `chain` or
             // `handled`. hold=0 sends now; hold>0 queues for the next flush.
             void forwardChainInterRing(uint32_t curRing, uint32_t seq, uint32_t spof,
                               const std::vector<uint32_t>& chain,
                               uint32_t chainCost,
-                              const std::vector<MyriadGpRr>& rr,
+                              const std::vector<MyriadPvRr>& rr,
                               std::vector<uint32_t>& handled);
             // Build a single-chain transition UPDATE (the hold=0 immediate path).
-            MyriadGpUpdate* buildTransitionUpdate(uint32_t R2, nodeid_t src, uint32_t seq,
+            MyriadPvUpdate* buildTransitionUpdate(uint32_t R2, nodeid_t src, uint32_t seq,
                                   uint32_t spof, const std::vector<uint32_t>& fwdChain,
                                   uint32_t fwdCost,
-                                  const std::vector<MyriadGpRr>& rr);
+                                  const std::vector<MyriadPvRr>& rr);
             // Emit the held transitions as one batch per (R2, primary) bucket,
             // each lapping R2 under a single circular-ACK.
             // Batch window for transitions into `ring`: holdInterval plus the
@@ -210,15 +210,15 @@ namespace routingsim {
             simtime_t watchdogMargin; // coup this long after a refresh could last arrive
             simtime_t updateJitter;   // spread the initial per-ring UPDATE storm
             bool degradeEnabled = true;
-            // Skip inter-ring transitions into a degraded ring; see MyriadGp.ned
+            // Skip inter-ring transitions into a degraded ring; see MyriadPv.ned
             bool skipDegradedTransitions = true;
-            // Skip inter-ring transitions a ring would reject; see MyriadGp.ned
+            // Skip inter-ring transitions a ring would reject; see MyriadPv.ned
             bool suppressRedundantTransitions = true;
             // RibEntry never carries rr. (For eval)
             bool carryRr = true;
-            long maxCollectHops = 128;  // lap kill-switch; see MyriadGp.ned
+            long maxCollectHops = 128;  // lap kill-switch; see MyriadPv.ned
             bool recoveryReplayEnabled = true;
-            // See MyriadGp.ned: how far below the best-informed member on a lap
+            // See MyriadPv.ned: how far below the best-informed member on a lap
             // the neediest one must fall before the lap orders a replay.
             double replayShortfallRatio = 0.5;
             // Only re-verifies ring state and resets members' watchdogs; it does
@@ -232,8 +232,10 @@ namespace routingsim {
             bool snapshotStats = false; // periodic snapshot as aggregate stats, not full RIB
             simtime_t collectWarmupDuration; // delay UPDATE origination until COLLECTs settle
             simtime_t collectWarmupInterval; // how often to re-run COLLECTs during warmup
+            // Set by reset(), never cleared: this router has been up before, so
+            // holding no ring state means recovery rather than formation.
             bool rebooted = false;
-            long echoRingIdMax = 900000;   // see MyriadGp.ned
+            long echoRingIdMax = 900000;   // see MyriadPv.ned
             std::unordered_map<uint32_t /*ring*/, uint32_t> lastOriginSeq;
             // Held transitions bucketed by (target ring, next-hop primary). Two
             // buckets: [0] spof-free transitions, [1] spof-incurring ones.
@@ -249,12 +251,12 @@ namespace routingsim {
             // bytes_norr_* scalars.
             std::unordered_map<nodeid_t, unsigned long long> rrBytesPerLink;
             unsigned long long rrBytesTotal = 0;
-            void countGpSend(const std::string& type, unsigned long long bytes,
+            void countPvSend(const std::string& type, unsigned long long bytes,
                              nodeid_t to, const cPacket* inner);
 
         private:
-            MyriadGpRib rib;
-            // Present iff I am a member of the ring; see RibRing in MyriadGpRib.h
+            MyriadPvRib rib;
+            // Present iff I am a member of the ring; see RibRing in MyriadPvRib.h
             // for the route state kept per origin ring.
             std::unordered_map<uint32_t /*ring*/, RingMembership> memberships;
     };

@@ -1,7 +1,7 @@
-#ifndef __ROUTINGSIM_MYRIADGPRIB_H_
-#define __ROUTINGSIM_MYRIADGPRIB_H_
+#ifndef __ROUTINGSIM_MYRIADPVRIB_H_
+#define __ROUTINGSIM_MYRIADPVRIB_H_
 
-#include "routing/MYRIAD/MyriadGpPkt_m.h"
+#include "routing/MYRIAD/MyriadPvPkt_m.h"
 #include <array>
 #include <cstdint>
 #include <functional>
@@ -28,7 +28,7 @@ namespace routingsim {
     // soleFront holds the freshest chain per front ring — replay coverage and the
     // degrade fallback, never forwarded, not counted against a frame's maxEcmpPaths.
     struct RibRing {
-        std::vector<MyriadGpRr> rr; // (subnet, owner) pairs; refreshed on a flip
+        std::vector<MyriadPvRr> rr; // (subnet, owner) pairs; refreshed on a flip
         uint32_t curSeq = 0;
         std::array<std::vector<RibEntry>, 2> frames;
         uint8_t cur = 0;
@@ -47,8 +47,8 @@ namespace routingsim {
     };
 
     // Origin-scoped route state and the whole rank/store/select cascade. No
-    // protocol, timer or packet state — MyriadGP owns those.
-    class MyriadGpRib {
+    // protocol, timer or packet state — MyriadPV owns those.
+    class MyriadPvRib {
         public:
             void configure(long costExponent, long echoSize, bool useSpof, long maxEcmp,
                            double ecmpMargin = 0.0, bool diverseEvict = true) {
@@ -63,8 +63,8 @@ namespace routingsim {
 
             uint32_t sizeToCost(uint32_t s) const;
             uint32_t curSeq(uint32_t ring) const;
-            const std::vector<MyriadGpRr>& rr(uint32_t ring) const;
-            void setRr(uint32_t ring, std::vector<MyriadGpRr> v) { rings[ring].rr = std::move(v); }
+            const std::vector<MyriadPvRr>& rr(uint32_t ring) const;
+            void setRr(uint32_t ring, std::vector<MyriadPvRr> v) { rings[ring].rr = std::move(v); }
             // Ring size changed under us: everything learned about it is suspect.
             void invalidate(uint32_t ring);
             // Adopt generation `originSeq` for a ring I originate on and install
@@ -74,7 +74,7 @@ namespace routingsim {
 
             StoreResult store(uint32_t origin, const std::vector<uint32_t>& fullChain,
                               uint32_t fullCost, uint32_t seq, uint32_t spof,
-                              const std::vector<MyriadGpRr>* originRrTrailer);
+                              const std::vector<MyriadPvRr>* originRrTrailer);
 
             // Cancel if injecting `cand` into `frontRing` would teach it nothing
             bool ringAlreadyHas(uint32_t origin, uint32_t frontRing,
@@ -95,9 +95,9 @@ namespace routingsim {
                 const std::vector<uint32_t>* chain;
                 uint32_t cost;
                 uint32_t spof;
-                const std::vector<MyriadGpRr>* rr;   // the origin ring's rr
+                const std::vector<MyriadPvRr>* rr;   // the origin ring's rr
             };
-            // My best route to every origin I know; see MyriadGP::replayInto
+            // My best route to every origin I know; see MyriadPV::replayInto
             // for how each chain is rebased onto the ring it is replayed into.
             std::vector<ReplayChain> preferredChains() const;
             // Origins I currently hold a route to. Used as a RIB-richness test:
@@ -137,12 +137,12 @@ namespace routingsim {
                                std::pair<uint32_t /*seq_no*/, uint32_t /*beacon_no*/>> degrades;
             // Path cost = sum of member_count^ringCostExponent over the chain.
             long ringCostExponent = 1;
-            // Substituted for a member_count of 2; see MyriadGp.ned.
+            // Substituted for a member_count of 2; see MyriadPv.ned.
             long echoRingSize = 2;
-            // false = rank purely by cost (oracle mode); see MyriadGp.ned.
+            // false = rank purely by cost (oracle mode); see MyriadPv.ned.
             bool rankUseSpof = true;
             long maxEcmpPaths = 1;
-            // See MyriadGp.ned. 0 = exact-equality co-best.
+            // See MyriadPv.ned. 0 = exact-equality co-best.
             double ecmpCostMargin = 0.0;
             bool ecmpDiverseEviction = true;
             bool withinMargin(uint32_t a, uint32_t b) const;

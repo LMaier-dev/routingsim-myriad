@@ -5,7 +5,7 @@ A router cannot tell a genuine two-node (echo) ring from a ring-neighbour that
 stayed down while it was rebooting: both look like "one neighbour claims this
 ring". Guessing wrong closes a lap that never walked the ring, which invents a
 member_count of 2 and mis-prices every chain across that ring. Encoding the
-answer in the id removes the guess — see MyriadGp.ned echoRingIdMax.
+answer in the id removes the guess — see MyriadPv.ned echoRingIdMax.
 
 Echo rings are identifiable from the labels alone (exactly two members), so this
 renumbers them without touching the topology graphs: the .txt files stay

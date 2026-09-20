@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Validate a ring plan against the topology it labels.
 
-MYRIAD GP reconstructs a ring by asking "which of my neighbours carry this ring's
-label" (MyriadGp.cc otherRingNeighbor), so the plan is only walkable if every
+MYRIAD PV reconstructs a ring by asking "which of my neighbours carry this ring's
+label" (MyriadPv.cc otherRingNeighbor), so the plan is only walkable if every
 member of ring R has EXACTLY TWO neighbours carrying R. A third one -- a chord,
 i.e. two members of R joined by an edge that belongs to some other ring -- makes
 "forward to the other one" ambiguous: the lap can fork onto a sub-cycle that
@@ -45,7 +45,7 @@ def load(topo_path, ini_path):
 
 def offenders(rings, adj):
     """ring -> [(node, ring-neighbour count)] for members that don't have exactly
-    two. 2-member rings are exempt: GP echoes those back to the sender."""
+    two. 2-member rings are exempt: PV echoes those back to the sender."""
     bad = {}
     for r, mem in rings.items():
         if len(mem) <= 2:
@@ -67,7 +67,7 @@ def check_echo_ids(topo_path, ini_path):
 
     A two-node (echo) ring must be numbered inside the reserved block and
     nothing else may be, because a router reads echo-ness off the id alone (see
-    topo2rings.ECHO_ID_BASE and MyriadGp.ned echoRingIdMax). It cannot infer it:
+    topo2rings.ECHO_ID_BASE and MyriadPv.ned echoRingIdMax). It cannot infer it:
     after a reboot a ring-neighbour that stayed down looks exactly like a ring
     that only ever had two members. A plan breaking this mis-simulates silently,
     so callers should treat a non-empty result as fatal.

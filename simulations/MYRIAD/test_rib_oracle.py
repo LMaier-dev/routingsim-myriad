@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Optimality gate for MyriadGP, checked against an independent Dijkstra oracle.
+"""Optimality gate for MyriadPV, checked against an independent Dijkstra oracle.
 
 test_rib_batching.py proves batching preserves REACHABILITY. It cannot tell an
 optimal RIB from a merely-connected one. This does: MyriadLS floods a full
 link-state DB and (via RingSpfOracle) runs Dijkstra on the ring graph to compute
-the OPTIMAL least-cost path from every node to every origin ring. MyriadGP,
+the OPTIMAL least-cost path from every node to every origin ring. MyriadPV,
 running the same topology with rankUseSpof=false (pure cost ranking), must agree
 on every (node, origin) cost. Two independently-converged protocols + two
 different algorithms (path-vector vs. shortest-path) matching = both reached the
@@ -12,10 +12,10 @@ same optimum.
 
     python3 simulations/MYRIAD/test_rib_oracle.py
 
-Exit 0 = GP is cost-optimal on every fixture.
+Exit 0 = PV is cost-optimal on every fixture.
 
 Note: both fixtures here happen to be spof=0 everywhere (every ring transition is
-double-bridged), so rankUseSpof=false is a no-op on them — GP is already
+double-bridged), so rankUseSpof=false is a no-op on them — PV is already
 cost-ranked. The knob's discriminating power (declining a costlier redundant path
 in favour of the least-cost one) only shows on a topology with a single-bridge
 alternative, which we don't yet have a fixture for.
@@ -38,7 +38,7 @@ _PAPER_LABELS = [f"**.Node{n}.*.ringLabel = \"{r}\"" for n, r in enumerate(
 
 # Pinned regression fixtures: name -> (topology, ring labels). A label list is
 # used as-is; None means generate the min-basis labels from the topology.
-# Built into their own inis rather than run out of myriad{gp,ls}.ini -c NAME:
+# Built into their own inis rather than run out of myriad{pv,ls}.ini -c NAME:
 # OMNeT++ resolves every `include` in the file, including ones under configs you
 # did not select, so an unrelated section's missing ring .ini aborts the run.
 CONFIGS = {
@@ -59,7 +59,7 @@ CONV = overrides(sim_time_limit=f"{warmup_s() + _REFRESH + 20:g}s",
                  refreshJitter="0s")
 
 
-def _parse_gp(dump):
+def _parse_pv(dump):
     out = {}
     with open(dump) as f:
         for l in f:
@@ -83,24 +83,24 @@ def _parse_oracle(dump):
     return out
 
 
-def _compare(gp, oracle, fatal=True):
+def _compare(pv, oracle, fatal=True):
     """Print comparison results; return True if all checks pass.
 
     fatal=False downgrades the wording to WARN: used for the caller's own
     topology, where a suboptimal chain is a finding to report, not a reason to
     withhold the eval. The pinned fixtures stay fatal — they are the regression."""
     tag = "FAIL" if fatal else "WARN"
-    print(f"  {len(gp)} GP entries vs {len(oracle)} oracle entries")
-    missing = [k for k in oracle if k not in gp]
+    print(f"  {len(pv)} PV entries vs {len(oracle)} oracle entries")
+    missing = [k for k in oracle if k not in pv]
     SENTINEL = 10 ** 12
-    unconverged = [k for k in oracle if k in gp and gp[k][0] > SENTINEL]
-    mismatch = [(k, gp[k][0], oracle[k]) for k in oracle
-                if k in gp and gp[k][0] <= SENTINEL and gp[k][0] != oracle[k]]
-    max_spof = max((s for _, s in gp.values()), default=0)
+    unconverged = [k for k in oracle if k in pv and pv[k][0] > SENTINEL]
+    mismatch = [(k, pv[k][0], oracle[k]) for k in oracle
+                if k in pv and pv[k][0] <= SENTINEL and pv[k][0] != oracle[k]]
+    max_spof = max((s for _, s in pv.values()), default=0)
     ok = True
     if missing:
         ok = False
-        print(f"  {tag}: {len(missing)} (node,origin) reachable in oracle but MISSING in GP")
+        print(f"  {tag}: {len(missing)} (node,origin) reachable in oracle but MISSING in PV")
         for k in sorted(missing)[:8]:
             print(f"        node={k[0]} {k[1]}")
     if unconverged:
@@ -110,27 +110,27 @@ def _compare(gp, oracle, fatal=True):
             print(f"        node={k[0]} {k[1]}")
     if mismatch:
         ok = False
-        print(f"  {tag}: {len(mismatch)} cost MISMATCHES (GP converged but not least-cost)")
+        print(f"  {tag}: {len(mismatch)} cost MISMATCHES (PV converged but not least-cost)")
         for k, gc, oc in sorted(mismatch)[:8]:
-            print(f"        node={k[0]} {k[1]} gp_cost={gc} optimal={oc} (+{gc - oc})")
+            print(f"        node={k[0]} {k[1]} pv_cost={gc} optimal={oc} (+{gc - oc})")
     if ok:
-        print(f"  OK: every oracle (node,origin) cost matched by GP "
+        print(f"  OK: every oracle (node,origin) cost matched by PV "
               f"(max spof on chosen paths = {max_spof})")
     return ok
 
 
-def _run_gp_ini(ini, dump, label):
+def _run_pv_ini(ini, dump, label):
     if os.path.exists(dump):
         os.remove(dump)
-    print(f"  -> GP {label} …", flush=True)
+    print(f"  -> PV {label} …", flush=True)
     run_sim([BIN, "-u", "Cmdenv", ini, *CONV,
              "--**.rankUseSpof=false",
              "--**.ecmpCostMargin=0",   # oracle is exact least-cost
              f'--**.ribDumpFile="{dump}"',
-             "--result-dir", os.path.join(OUT, f"gp_{label}")])
+             "--result-dir", os.path.join(OUT, f"pv_{label}")])
     if not os.path.exists(dump):
-        sys.exit(f"FAIL: GP {label} produced no RIB dump")
-    return _parse_gp(dump)
+        sys.exit(f"FAIL: PV {label} produced no RIB dump")
+    return _parse_pv(dump)
 
 
 def _run_oracle_ini(ini, dump, label):
@@ -173,14 +173,14 @@ def main(args=None):
     for config, (topo, labels) in CONFIGS.items():
         print(f"\n=== {config} ===")
         lbl = _labels_for(config, topo, labels)
-        gp_ini = write_proto_ini(os.path.join(OUT, f"pv_{config}.ini"), "pv",
+        pv_ini = write_proto_ini(os.path.join(OUT, f"pv_{config}.ini"), "pv",
                                  topo, lbl, extra_lines=_REFRESH_LINES)
         ls_ini = write_proto_ini(os.path.join(OUT, f"ls_{config}.ini"), "ls",
                                  topo, lbl, extra_lines=_REFRESH_LINES)
-        gp = _run_gp_ini(gp_ini, os.path.join(OUT, f"gp_{config}.txt"), config)
+        pv = _run_pv_ini(pv_ini, os.path.join(OUT, f"pv_{config}.txt"), config)
         oracle = _run_oracle_ini(ls_ini, os.path.join(OUT, f"oracle_{config}.txt"),
                                  config)
-        if not _compare(gp, oracle):
+        if not _compare(pv, oracle):
             all_ok = False
 
     # Also test the caller's topology on the SAME basis the eval will use, so the
@@ -190,20 +190,20 @@ def main(args=None):
     label = topo.stem
     print(f"\n=== {label} (custom, basis={args.basis}) ===")
     labels = ensure_ring_labels(topo, args.basis)
-    gp_ini = write_proto_ini(os.path.join(OUT, f"pv_{label}.ini"), "pv",
+    pv_ini = write_proto_ini(os.path.join(OUT, f"pv_{label}.ini"), "pv",
                              topo, labels, extra_lines=_REFRESH_LINES,
                              update_jitter=args.update_jitter, warmup=args.warmup)
     ls_ini = write_proto_ini(os.path.join(OUT, f"ls_{label}.ini"), "ls",
                              topo, labels, extra_lines=_REFRESH_LINES)
-    gp = _run_gp_ini(gp_ini, os.path.join(OUT, f"gp_{label}.txt"), label)
+    pv = _run_pv_ini(pv_ini, os.path.join(OUT, f"pv_{label}.txt"), label)
     oracle = _run_oracle_ini(ls_ini, os.path.join(OUT, f"oracle_{label}.txt"), label)
-    if not _compare(gp, oracle, fatal=False):
+    if not _compare(pv, oracle, fatal=False):
         print(f"  (warning only: {label} is the eval's own topology, not a pinned "
               "regression fixture — continuing)")
 
     if not all_ok:
         sys.exit("\nOPTIMALITY CHECK FAILED.")
-    print("\nPASS: MyriadGP matches the independent Dijkstra optimum on all fixtures.")
+    print("\nPASS: MyriadPV matches the independent Dijkstra optimum on all fixtures.")
 
 
 if __name__ == "__main__":

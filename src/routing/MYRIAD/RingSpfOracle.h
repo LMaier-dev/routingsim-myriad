@@ -1,17 +1,17 @@
 #ifndef __ROUTINGSIM_RINGSPFORACLE_H_
 #define __ROUTINGSIM_RINGSPFORACLE_H_
 
-// Independent optimality oracle for MyriadGP: pure STL + Boost, no protocol deps.
+// Independent optimality oracle for MyriadPV: pure STL + Boost, no protocol deps.
 // Given every node's ring membership (a converged MyriadLS reads it from its LSDB
 // RingsLsa), builds the ring graph and runs node-weighted Dijkstra for the optimal
-// cost from each node to every origin ring. GP's converged cost must match.
+// cost from each node to every origin ring. PV's converged cost must match.
 //
 // Ring graph: rings adjacent iff they share a node; ring weight = member_count^exp
-// (a count of 2 priced as echoSize, matching MyriadGpRib::sizeToCost);
-// path cost sums every ring on it, both endpoints — same as MyriadGP::pathCost.
+// (a count of 2 priced as echoSize, matching MyriadPvRib::sizeToCost);
+// path cost sums every ring on it, both endpoints — same as MyriadPV::pathCost.
 //
 // Member counts come from `weightRings` (persistent membership), NOT from the
-// live routing view: GP prices a chain by the ring sizes it learned and does not
+// live routing view: PV prices a chain by the ring sizes it learned and does not
 // reprice when a member dies, so an oracle that shrank its weights on every
 // failure would compare two different cost functions. Under churn that read as
 // stretch swinging above and below 1 with no route having changed.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare MyriadLS (link-state) vs MyriadGP (path-vector) message counts as
+"""Compare MyriadLS (link-state) vs MyriadPV (path-vector) message counts as
 grid topologies scale:
 
   square : 2x2, 3x3, ... 10x10   (both dimensions grow -> dense 2D ring-mesh)
@@ -9,7 +9,7 @@ For each topology it generates ring labels, writes a self-contained .ini per
 (for sweeps) plots LS vs PV.
 
 Everything generated lands in eval/<basis>_cycles/ (git-ignored). Nothing touches
-the tracked myriad{gp,ls}.ini. Run from anywhere:
+the tracked myriad{pv,ls}.ini. Run from anywhere:
 
     # full grid sweeps + plots (minimum_cycle_basis rings)
     python3 simulations/MYRIAD/eval_scaling.py
@@ -276,7 +276,7 @@ def norr_stats(ini_path, tag="", rep=0):
     """(total bytes, max link bytes, median link bytes) with PV's reachability
     records subtracted out, from the PV run's own .sca — no second simulation.
 
-    MyriadGp tallies the RR bytes it puts on each link (gpRrBytes) and finish()
+    MyriadPv tallies the RR bytes it puts on each link (pvRrBytes) and finish()
     writes the subtracted figures, so this is the same run's packets minus the RR
     fields -- the cost of RR AS A FIELD, which is what the series claims and all
     it claims. It is an upper bound on removing RR altogether, and a loose one:

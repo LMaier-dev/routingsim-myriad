@@ -26,9 +26,9 @@ simple myriadls extends routingsim.foundation.Protocol
         string ringLabel = default("");
 
         // Optimality-oracle hook (see RingSpfOracle): non-empty oracleDumpFile makes
-        // finish() append this node's Dijkstra least-cost-per-origin. Exponent must match GP's.
+        // finish() append this node's Dijkstra least-cost-per-origin. Exponent must match PV's.
         int ringCostExponent = default(2);
-        // Must match GP's; see MyriadGp.ned.
+        // Must match PV's; see MyriadPv.ned.
         int echoRingSize = default(64);
         string oracleDumpFile = default("");
 
@@ -37,7 +37,7 @@ simple myriadls extends routingsim.foundation.Protocol
         // t=<simTime> prefix; 0s = off
         double snapshotInterval @unit(s) = default(0s);
 
-        // See MyriadGp.ned.
+        // See MyriadPv.ned.
         string snapshotFormat = default("full");
 
         // logging: DEBUG | INFO | WARN | ERROR

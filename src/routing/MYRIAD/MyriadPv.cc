@@ -1,4 +1,4 @@
-#include "routing/MYRIAD/MyriadGp.h"
+#include "routing/MYRIAD/MyriadPv.h"
 #include "routing/MYRIAD/MyriadPduSize.h"
 #include <algorithm>
 #include <cmath>
@@ -8,28 +8,28 @@
 
 namespace routingsim {
 
-Define_Module(MyriadGP);
+Define_Module(MyriadPV);
 
 namespace {
 using namespace msgsize;
 
-int64_t gpCollectBytes(const MyriadGpCollect* p) {
-    return MYRIADGP_HDR + RSIZE + RSIZE + RSIZE + SPOF + COST + NODEID + 3 * BOOL
+int64_t pvCollectBytes(const MyriadPvCollect* p) {
+    return MYRIADPV_HDR + RSIZE + RSIZE + RSIZE + SPOF + COST + NODEID + 3 * BOOL
                      // member_count + lap max quad + lap_min_routes + crashed + claimed + kind
          + (int64_t) p->getRrArraySize() * RR
          + (int64_t) p->getTransitionsArraySize() * TRANSITION;
 }
-int64_t gpUpdateBytes(const MyriadGpUpdate* p) {
-    return MYRIADGP_HDR + RSIZE + SPOF + COST              // member_count + spof_count + chain_cost
+int64_t pvUpdateBytes(const MyriadPvUpdate* p) {
+    return MYRIADPV_HDR + RSIZE + SPOF + COST              // member_count + spof_count + chain_cost
          + (int64_t) p->getRrArraySize() * RR
          + (int64_t) p->getRing_chainArraySize() * RING
          + (int64_t) p->getHandled_ringsArraySize() * RING
          + (int64_t) p->getWidthsArraySize() * TRANSITION;
 }
-int64_t gpBatchBytes(const MyriadGpUpdateBatch* p) {
-    int64_t b = MYRIADGP_HDR;
+int64_t pvBatchBytes(const MyriadPvUpdateBatch* p) {
+    int64_t b = MYRIADPV_HDR;
     for (size_t i = 0; i < p->getEntriesArraySize(); ++i) {
-        const MyriadGpUpdateEntry& e = p->getEntries(i);
+        const MyriadPvUpdateEntry& e = p->getEntries(i);
         b += SEQ + SPOF + COST                             // seq_no + spof_count + chain_cost
            + (int64_t) e.getRing_chainArraySize() * RING
            + (int64_t) e.getHandled_ringsArraySize() * RING
@@ -46,7 +46,7 @@ constexpr int64_t SEC_HOP   = RSIZE + BOOL;  // chain unfolding: ring size + red
 
 // Security overhead one PDU would carry, split so each part can be rescaled
 // independently in post-processing.
-void gpSecBytes(const cPacket* p, int64_t& sig, int64_t& strct, int64_t& sigLin) {
+void pvSecBytes(const cPacket* p, int64_t& sig, int64_t& strct, int64_t& sigLin) {
     sig = 0;
     strct = 0;
     sigLin = 0;
@@ -58,33 +58,33 @@ void gpSecBytes(const cPacket* p, int64_t& sig, int64_t& strct, int64_t& sigLin)
     auto chainSigLin = [](size_t hops) {
         return SEC_SIG_PERHOP * (int64_t) (hops + 1);
     };
-    if (auto* b = dynamic_cast<const MyriadGpUpdateBatch*>(p)) {
+    if (auto* b = dynamic_cast<const MyriadPvUpdateBatch*>(p)) {
         for (size_t i = 0; i < b->getEntriesArraySize(); ++i) {
-            const MyriadGpUpdateEntry& e = b->getEntries(i);
+            const MyriadPvUpdateEntry& e = b->getEntries(i);
             size_t hops = e.getRing_chainArraySize();
             sig += 2 * SEC_SIG;
             sigLin += SEC_SIG_PERHOP + chainSigLin(hops);
             strct += chainTerm(hops);
         }
-    } else if (auto* u = dynamic_cast<const MyriadGpUpdate*>(p)) {
+    } else if (auto* u = dynamic_cast<const MyriadPvUpdate*>(p)) {
         size_t hops = u->getRing_chainArraySize();
         sig = 2 * SEC_SIG;
         sigLin = SEC_SIG_PERHOP + chainSigLin(hops);
         strct = chainTerm(hops) - RSIZE;   // member_count moves into the entries
-    } else if (dynamic_cast<const MyriadGpDegrade*>(p)) {
+    } else if (dynamic_cast<const MyriadPvDegrade*>(p)) {
         sig = SEC_SIG;                     // stamped with the culprit ring's key
         sigLin = SEC_SIG_PERHOP;           // single signature; nothing to aggregate
     }
     // COLLECT: link MAC only; the receiver id is bound inside the MAC, not carried.
 }
 
-// RR bytes inside a GP PDU, tallied per link alongside countSend so the eval can
+// RR bytes inside a PV PDU, tallied per link alongside countSend so the eval can
 // report PV's volume with reachability records subtracted out (bytes_norr_*)
-int64_t gpRrBytes(const cPacket* p) {
-    // Collect and Update both derive from MyriadGpNLRI, which owns the rr array.
-    if (auto* n = dynamic_cast<const MyriadGpNLRI*>(p))
+int64_t pvRrBytes(const cPacket* p) {
+    // Collect and Update both derive from MyriadPvNLRI, which owns the rr array.
+    if (auto* n = dynamic_cast<const MyriadPvNLRI*>(p))
         return (int64_t) n->getRrArraySize() * RR;
-    if (auto* b = dynamic_cast<const MyriadGpUpdateBatch*>(p)) {
+    if (auto* b = dynamic_cast<const MyriadPvUpdateBatch*>(p)) {
         int64_t entries = 0;
         for (size_t i = 0; i < b->getEntriesArraySize(); ++i)
             entries += (int64_t) b->getEntries(i).getRrArraySize();
@@ -98,16 +98,16 @@ static uint32_t satAdd(uint32_t a, uint32_t b) {
 }
 } // namespace
 
-uint32_t MyriadGP::memberCountOf(uint32_t ring) const {
+uint32_t MyriadPV::memberCountOf(uint32_t ring) const {
     auto it = memberships.find(ring);
     return it == memberships.end() ? 0 : it->second.memberCount;
 }
 
-void MyriadGP::onInitialize() {
+void MyriadPV::onInitialize() {
     MyriadHelloProto::onInitialize();
-    packetType = MYRIADGP_PACKET_TYPE;
+    packetType = MYRIADPV_PACKET_TYPE;
 
-    node().bind(MYRIADGP_PACKET_TYPE, this);
+    node().bind(MYRIADPV_PACKET_TYPE, this);
 
     mySubnets = { (static_cast<uint32_t>(myId) << 8) | 0x01,
                   (static_cast<uint32_t>(myId) << 8) | 0x02 };
@@ -146,7 +146,7 @@ void MyriadGP::onInitialize() {
     if (collectWarmupInterval <= SIMTIME_ZERO)
         collectWarmupInterval = 0.3 * collectWarmupDuration;
 
-    MLOG_INFO() << "MyriadGP up\n";
+    MLOG_INFO() << "MyriadPV up\n";
 
     // Periodically send hellos to all neighbors. Cold start staggers the first
     // hello over joinJitter so formation isn't a synchronized herd.
@@ -160,7 +160,7 @@ void MyriadGP::onInitialize() {
     }
 }
 
-void MyriadGP::onTwoWayReached(GpNeighbor& nbr) {
+void MyriadPV::onTwoWayReached(PvNeighbor& nbr) {
     nbr.state = NSTATE_FULL;
 
     // For each ring we share with this neighbor: originate a collect iff this
@@ -213,7 +213,7 @@ void MyriadGP::onTwoWayReached(GpNeighbor& nbr) {
     }
 }
 
-void MyriadGP::originateCollect(uint32_t ring, nodeid_t to, MyriadGpCollectKind kind,
+void MyriadPV::originateCollect(uint32_t ring, nodeid_t to, MyriadPvCollectKind kind,
                                 nodeid_t replayer) {
     RingMembership& m = memberships[ring];
     // Lap counter only — the routing generation opens in originateUpdate, so a
@@ -221,8 +221,8 @@ void MyriadGP::originateCollect(uint32_t ring, nodeid_t to, MyriadGpCollectKind 
     m.collectSeq += 1;
     m.collectInflight.seq_no = m.collectSeq;
 
-    auto* pkt = new MyriadGpCollect("Myriad_GP_Collect");
-    pkt->setType(MYRIADGP_COLLECT);
+    auto* pkt = new MyriadPvCollect("Myriad_PV_Collect");
+    pkt->setType(MYRIADPV_COLLECT);
     pkt->setRouter_id_src(myId);     // king_id
     pkt->setSeq_no(m.collectSeq);    // lap identity, matched on own return
     pkt->setCurrent_ring(ring);
@@ -232,7 +232,7 @@ void MyriadGP::originateCollect(uint32_t ring, nodeid_t to, MyriadGpCollectKind 
     pkt->setOriginator_crashed(m.memberCount == 0);
     // A REPLAY lap only carries the addressee; the figures are the election's
     // business and start from mine on every other kind.
-    MyriadGpRib::ReplayQuality q = rib.replayQuality();
+    MyriadPvRib::ReplayQuality q = rib.replayQuality();
     pkt->setLap_max_routes(q.origins);
     pkt->setLap_max_spof(q.spofTotal);
     pkt->setLap_max_cost(q.costTotal);
@@ -244,7 +244,7 @@ void MyriadGP::originateCollect(uint32_t ring, nodeid_t to, MyriadGpCollectKind 
     if (carryRr) {
         pkt->setRrArraySize(mySubnets.size());
         for (size_t i = 0; i < mySubnets.size(); ++i) {
-            MyriadGpRr rr_entry; rr_entry.subnet = mySubnets[i];
+            MyriadPvRr rr_entry; rr_entry.subnet = mySubnets[i];
             rr_entry.owner = myId;
             pkt->setRr(i, rr_entry);
         }
@@ -256,13 +256,13 @@ void MyriadGP::originateCollect(uint32_t ring, nodeid_t to, MyriadGpCollectKind 
     for (uint32_t r : selfRings) if (r != ring) transitions.push_back(r);
     pkt->setTransitionsArraySize(transitions.size());
     for (size_t i = 0; i < transitions.size(); ++i) {
-        MyriadGpRingTransition t; t.ring = transitions[i]; t.isRedundant = false;
+        MyriadPvRingTransition t; t.ring = transitions[i]; t.isRedundant = false;
         pkt->setTransitions(i, t);
     }
 
     // Retransmits stay on `to`: a lap crosses every ring link in either direction,
     // and a PROBE must keep retrying the dead neighbor as its grace period.
-    pkt->setByteLength(gpCollectBytes(pkt));
+    pkt->setByteLength(pvCollectBytes(pkt));
     sendRingReliable(m.collectInflight, to, to, pkt, rxmtInterval,
                      COLLECT_RETRY_LIMIT, [this, ring]() { onCollectBudgetExpired(ring); });
 
@@ -270,7 +270,7 @@ void MyriadGP::originateCollect(uint32_t ring, nodeid_t to, MyriadGpCollectKind 
         << "' seq=" << m.originSeq << "\n";
 }
 
-void MyriadGP::reoriginateCollect(uint32_t ring, bool routine, MyriadGpCollectKind kind) {
+void MyriadPV::reoriginateCollect(uint32_t ring, bool routine, MyriadPvCollectKind kind) {
     // Either ring-neighbor works as the target, a lap covers the ring in both
     // directions; skip if the ring isn't fully seen.
     std::vector<nodeid_t> nbrs = ringNeighbors(ring);
@@ -284,7 +284,7 @@ void MyriadGP::reoriginateCollect(uint32_t ring, bool routine, MyriadGpCollectKi
     originateCollect(ring, nbrs[0], kind);
 }
 
-void MyriadGP::startRefresh(uint32_t ring) {
+void MyriadPV::startRefresh(uint32_t ring) {
     RingMembership& rs = memberships[ring];
     if (rs.watchdogTimer) { cancelAndDelete(rs.watchdogTimer); rs.watchdogTimer = nullptr; }
     if (rs.refreshTimer)  { cancelAndDelete(rs.refreshTimer);  rs.refreshTimer = nullptr; }
@@ -296,7 +296,7 @@ void MyriadGP::startRefresh(uint32_t ring) {
     });
 }
 
-void MyriadGP::startSnapshot() {
+void MyriadPV::startSnapshot() {
     // Re-arms itself like startRefresh; purely observational (see header).
     snapshotTimer = addOneShotTimer(snapshotInterval, [this](short) {
         snapshotTimer = nullptr;
@@ -307,7 +307,7 @@ void MyriadGP::startSnapshot() {
     });
 }
 
-void MyriadGP::startWarmupCollects() {
+void MyriadPV::startWarmupCollects() {
     addOneShotTimer(collectWarmupInterval, [this](short) -> bool {
         // Spread each king's re-COLLECT uniformly across the interval instead of
         // firing them all at once: a synchronized herd every tick is itself a
@@ -327,7 +327,7 @@ void MyriadGP::startWarmupCollects() {
     });
 }
 
-void MyriadGP::startWatchdog(uint32_t ring) {
+void MyriadPV::startWatchdog(uint32_t ring) {
     RingMembership& rs = memberships[ring];
     if (rs.watchdogTimer) { cancelAndDelete(rs.watchdogTimer); rs.watchdogTimer = nullptr; }
     // Fire just after a healthy king's refresh SHOULD have re-armed us.
@@ -341,14 +341,14 @@ void MyriadGP::startWatchdog(uint32_t ring) {
     });
 }
 
-void MyriadGP::cancelKingship(uint32_t ring) {
+void MyriadPV::cancelKingship(uint32_t ring) {
     RingMembership& rs = memberships[ring];
     rs.isKing = false;
     if (rs.refreshTimer) { cancelAndDelete(rs.refreshTimer); rs.refreshTimer = nullptr; }
     startWatchdog(ring);
 }
 
-void MyriadGP::sendRingReliable(RingInflight& fl, nodeid_t primary, nodeid_t fallback,
+void MyriadPV::sendRingReliable(RingInflight& fl, nodeid_t primary, nodeid_t fallback,
                                 cPacket* pkt, simtime_t interval, int retryLimit,
                                 std::function<void()> onBudgetExpired) {
     auto* h = new RingTx{pkt, primary, fallback, interval, nullptr, false};
@@ -358,7 +358,7 @@ void MyriadGP::sendRingReliable(RingInflight& fl, nodeid_t primary, nodeid_t fal
     np->setType(packetType);
     np->setAttributes(np->getAttributes() | NODEPKT_ATTR_CONTROL_PLANE_PROCESSING_DELAY);
     np->encapsulate(pkt->dup());
-    countGpSend(sendTypeLabel(pkt->getName()), np->getByteLength(), primary, pkt);
+    countPvSend(sendTypeLabel(pkt->getName()), np->getByteLength(), primary, pkt);
     sendToNode(primary, std::move(np));
 
     h->timer = addOneShotTimer(interval, [this, h](short) {
@@ -377,7 +377,7 @@ void MyriadGP::sendRingReliable(RingInflight& fl, nodeid_t primary, nodeid_t fal
         });
 }
 
-void MyriadGP::ringRetxFire(RingTx* h) {
+void MyriadPV::ringRetxFire(RingTx* h) {
     h->onFallback = !h->onFallback;
     nodeid_t to = h->onFallback ? h->fallback : h->primary;
 
@@ -385,7 +385,7 @@ void MyriadGP::ringRetxFire(RingTx* h) {
     np->setType(packetType);
     np->setAttributes(np->getAttributes() | NODEPKT_ATTR_CONTROL_PLANE_PROCESSING_DELAY);
     np->encapsulate(h->pkt->dup());
-    countGpSend(sendTypeLabel(h->pkt->getName()), np->getByteLength(), to, h->pkt);
+    countPvSend(sendTypeLabel(h->pkt->getName()), np->getByteLength(), to, h->pkt);
     sendToNode(to, std::move(np));
 
     h->timer = addOneShotTimer(h->interval, [this, h](short) {
@@ -394,7 +394,7 @@ void MyriadGP::ringRetxFire(RingTx* h) {
     });
 }
 
-void MyriadGP::cancelRingReliable(RingInflight& fl) {
+void MyriadPV::cancelRingReliable(RingInflight& fl) {
     if (fl.tx) {
         if (fl.tx->timer) cancelAndDelete(fl.tx->timer);
         delete fl.tx->pkt;
@@ -407,7 +407,7 @@ void MyriadGP::cancelRingReliable(RingInflight& fl) {
     }
 }
 
-void MyriadGP::cancelCollect(uint32_t ring) {
+void MyriadPV::cancelCollect(uint32_t ring) {
     auto it = memberships.find(ring);
     if (it == memberships.end()) return;
     cancelRingReliable(it->second.collectInflight);
@@ -417,8 +417,8 @@ void MyriadGP::cancelCollect(uint32_t ring) {
 // first holder. Compared per-origin, not on the totals: both totals grow with
 // the origin count, so a totals-AND would let the broadest RIB — the one worth
 // replaying — lose to any narrower one.
-static bool betterReplaySource(const MyriadGpRib::ReplayQuality& q,
-                               const MyriadGpCollect* lap) {
+static bool betterReplaySource(const MyriadPvRib::ReplayQuality& q,
+                               const MyriadPvCollect* lap) {
     uint32_t n = lap->getLap_max_routes();
     if (q.origins <= n) return false;
     if (n == 0) return true;
@@ -426,8 +426,8 @@ static bool betterReplaySource(const MyriadGpRib::ReplayQuality& q,
         && q.costTotal / q.origins <= lap->getLap_max_cost() / n;
 }
 
-void MyriadGP::replayIfBest(MyriadGpCollect* lap, uint32_t ring) {
-    MyriadGpRib::ReplayQuality q = rib.replayQuality();
+void MyriadPV::replayIfBest(MyriadPvCollect* lap, uint32_t ring) {
+    MyriadPvRib::ReplayQuality q = rib.replayQuality();
     if (lap->getKind() != COLLECT_REPLAY) {
         // Report the ring's best replay source; the REPLAY lap is seeded with
         // the result, so this is what elects the replayer.
@@ -455,7 +455,7 @@ void MyriadGP::replayIfBest(MyriadGpCollect* lap, uint32_t ring) {
     lap->setReplay_claimed(true);
 }
 
-void MyriadGP::onCollectBudgetExpired(uint32_t ring) {
+void MyriadPV::onCollectBudgetExpired(uint32_t ring) {
     RingMembership& m = memberships[ring];
     m.collectInflight.budgetTimer = nullptr;
     if (m.collectInflight.tx == nullptr) return; // already resolved
@@ -481,7 +481,7 @@ void MyriadGP::onCollectBudgetExpired(uint32_t ring) {
     if (!m.isKing && !m.watchdogTimer) startWatchdog(ring);
 }
 
-void MyriadGP::onUpdateBudgetExpired(uint32_t ring, std::vector<uint32_t> chain) {
+void MyriadPV::onUpdateBudgetExpired(uint32_t ring, std::vector<uint32_t> chain) {
     auto rit = memberships.find(ring);
     if (rit == memberships.end()) return;
     auto& infl = rit->second.updateInflights;
@@ -495,7 +495,7 @@ void MyriadGP::onUpdateBudgetExpired(uint32_t ring, std::vector<uint32_t> chain)
                 << "' chain-len=" << chain.size() << " — ring broken\n";
 }
 
-void MyriadGP::onBatchBudgetExpired(uint32_t ring, uint32_t batchLapSeq) {
+void MyriadPV::onBatchBudgetExpired(uint32_t ring, uint32_t batchLapSeq) {
     auto rit = memberships.find(ring);
     if (rit == memberships.end()) return;
     auto& infl = rit->second.batchInflights;
@@ -508,7 +508,7 @@ void MyriadGP::onBatchBudgetExpired(uint32_t ring, uint32_t batchLapSeq) {
                 << "' seq=" << batchLapSeq << " — ring broken\n";
 }
 
-void MyriadGP::onNeighborDead(GpNeighbor& nbr, bool /*wasFull*/) {
+void MyriadPV::onNeighborDead(PvNeighbor& nbr, bool /*wasFull*/) {
     // For each ring shared with the dead neighbor: if no inflight for that
     // ring, probe the dead neighbor. Its retransmits act as the liveness grace
     // period — the probe closing means the ring is whole, the budget expiring
@@ -522,33 +522,33 @@ void MyriadGP::onNeighborDead(GpNeighbor& nbr, bool /*wasFull*/) {
     }
 }
 
-void MyriadGP::onMessage(NodePkt_p pkt) {
+void MyriadPV::onMessage(NodePkt_p pkt) {
     myId = node().getNodeId();
     nodeid_t sender = pkt->getHop().from;  // immediate hop, not the king
     auto inner = std::unique_ptr<cPacket>(pkt->decapsulate());
 
-    // Hello packets come from MyriadHello so dont go through gpheader path
+    // Hello packets come from MyriadHello so dont go through pvheader path
     if (auto* hello = dynamic_cast<MyriadHello*>(inner.get())) {
         handleHello(hello, hello->getRouter_id_src());
         return;
     }
 
-    // DEGRADE is a standalone class (does not extend MyriadGpHeader).
-    if (auto* degrade = dynamic_cast<MyriadGpDegrade*>(inner.get())) {
+    // DEGRADE is a standalone class (does not extend MyriadPvHeader).
+    if (auto* degrade = dynamic_cast<MyriadPvDegrade*>(inner.get())) {
         handleDegrade(degrade, sender);
         return;
     }
 
-    auto* header = check_and_cast<MyriadGpHeader*>(inner.get());
+    auto* header = check_and_cast<MyriadPvHeader*>(inner.get());
     switch (header->getType()) {
-        case MYRIADGP_COLLECT:
-            handleCollect(check_and_cast<MyriadGpCollect*>(header), sender);
+        case MYRIADPV_COLLECT:
+            handleCollect(check_and_cast<MyriadPvCollect*>(header), sender);
             break;
-        case MYRIADGP_UPDATE:
-            handleUpdate(check_and_cast<MyriadGpUpdate*>(header), sender);
+        case MYRIADPV_UPDATE:
+            handleUpdate(check_and_cast<MyriadPvUpdate*>(header), sender);
             break;
-        case MYRIADGP_UPDATE_BATCH:
-            handleUpdateBatch(check_and_cast<MyriadGpUpdateBatch*>(header), sender);
+        case MYRIADPV_UPDATE_BATCH:
+            handleUpdateBatch(check_and_cast<MyriadPvUpdateBatch*>(header), sender);
             break;
         default:
             MLOG_WARN() << "received unknown packet type: " << header->getType() << "\n";
@@ -562,13 +562,13 @@ static bool electingKind(uint8_t k) {
     return k == COLLECT_ELECTION || k == COLLECT_REFRESH;
 }
 
-bool MyriadGP::collectWins(bool incomingCrashed, nodeid_t incomingId, uint32_t ring) const {
+bool MyriadPV::collectWins(bool incomingCrashed, nodeid_t incomingId, uint32_t ring) const {
     bool myCrashed = memberCountOf(ring) == 0;
     if (incomingCrashed != myCrashed) return myCrashed;   // live beats crashed
     return incomingId > myId;
 }
 
-void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t sender) {
+void MyriadPV::handleCollect(MyriadPvCollect* collect, nodeid_t sender) {
     uint32_t R = collect->getCurrent_ring();
     nodeid_t king = collect->getRouter_id_src();
     uint32_t seq = collect->getSeq_no();
@@ -585,7 +585,7 @@ void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t sender) {
             m.probeTriggerMissed = false; // this lap answered it
 
             // Snapshot the collected data onto ring state.
-            std::vector<MyriadGpRr> collected;
+            std::vector<MyriadPvRr> collected;
             collected.reserve(collect->getRrArraySize());
             for (size_t i = 0; i < collect->getRrArraySize(); ++i)
                 collected.push_back(collect->getRr(i));
@@ -717,7 +717,7 @@ void MyriadGP::handleCollect(MyriadGpCollect* collect, nodeid_t sender) {
     insertAndForwardCollect(collect, R, sender);
 }
 
-bool MyriadGP::lapExpired(MyriadGpHeader* pkt, uint32_t ring, nodeid_t sender,
+bool MyriadPV::lapExpired(MyriadPvHeader* pkt, uint32_t ring, nodeid_t sender,
                           const char* what) {
     // Every in-ring forward passes here. A lap longer than the ring is no longer
     // walking the cycle
@@ -732,7 +732,7 @@ bool MyriadGP::lapExpired(MyriadGpHeader* pkt, uint32_t ring, nodeid_t sender,
     return false;
 }
 
-nodeid_t MyriadGP::otherRingNeighbor(uint32_t ring, nodeid_t sender) {
+nodeid_t MyriadPV::otherRingNeighbor(uint32_t ring, nodeid_t sender) {
     for (auto& [nid, n] : neighbors) {
         if (nid == sender) continue;
         if (n.state < NSTATE_TWOWAY) continue;
@@ -741,7 +741,7 @@ nodeid_t MyriadGP::otherRingNeighbor(uint32_t ring, nodeid_t sender) {
     return undefined_node;
 }
 
-std::vector<nodeid_t> MyriadGP::ringNeighbors(uint32_t ring) {
+std::vector<nodeid_t> MyriadPV::ringNeighbors(uint32_t ring) {
     std::vector<nodeid_t> out;
     for (auto& [nid, n] : neighbors) {
         if (n.state < NSTATE_TWOWAY) continue;
@@ -750,13 +750,13 @@ std::vector<nodeid_t> MyriadGP::ringNeighbors(uint32_t ring) {
     return out;
 }
 
-void MyriadGP::originateUpdate(uint32_t ring) {
+void MyriadPV::originateUpdate(uint32_t ring) {
     RingMembership& m = memberships[ring];
     m.originSeq = std::max({m.originSeq, lastOriginSeq[ring], rib.curSeq(ring)}) + 1;
     lastOriginSeq[ring] = m.originSeq;
     rib.installSelfChain(ring, m.originSeq,
         rib.sizeToCost(m.memberCount ? m.memberCount : UNKNOWN_RING_SIZE));
-    const std::vector<MyriadGpRr>& rr = rib.rr(ring);
+    const std::vector<MyriadPvRr>& rr = rib.rr(ring);
 
     std::vector<nodeid_t> nbrs = ringNeighbors(ring);
     if (nbrs.empty()) {
@@ -768,8 +768,8 @@ void MyriadGP::originateUpdate(uint32_t ring) {
     nodeid_t primary = nbrs[0];
     nodeid_t fallback = nbrs.size() > 1 ? nbrs[1] : nbrs[0];
 
-    auto* pkt = new MyriadGpUpdate("Myriad_GP_Update");
-    pkt->setType(MYRIADGP_UPDATE);
+    auto* pkt = new MyriadPvUpdate("Myriad_PV_Update");
+    pkt->setType(MYRIADPV_UPDATE);
     pkt->setRouter_id_src(myId);          // ringking for this ring traversal
     pkt->setSeq_no(m.originSeq);          // same seq as the collect round
     pkt->setCurrent_ring(ring);
@@ -785,7 +785,7 @@ void MyriadGP::originateUpdate(uint32_t ring) {
     // set spof_count correctly when they transition this update onward.
     pkt->setWidthsArraySize(m.adjacentRings.size());
     for (size_t i = 0; i < m.adjacentRings.size(); ++i) {
-        MyriadGpRingTransition t;
+        MyriadPvRingTransition t;
         t.ring = m.adjacentRings[i].ring;
         t.isRedundant = m.adjacentRings[i].isRedundant;
         pkt->setWidths(i, t);
@@ -800,7 +800,7 @@ void MyriadGP::originateUpdate(uint32_t ring) {
     for (size_t i = 0; i < handled.size(); ++i) pkt->setHandled_rings(i, handled[i]);
 
     // Origin-UPDATE lives in the empty-chain inflight slot.
-    pkt->setByteLength(gpUpdateBytes(pkt));
+    pkt->setByteLength(pvUpdateBytes(pkt));
     RingInflight& fl = m.updateInflights[emptyChain];
     // A previous origin lap may still be retransmitting under a now-stale seq;
     // sendRingReliable would overwrite the handle and orphan its timer.
@@ -813,7 +813,7 @@ void MyriadGP::originateUpdate(uint32_t ring) {
         << "' seq=" << m.originSeq << " rr=" << rr.size() << "\n";
 }
 
-void MyriadGP::insertAndForwardCollect(MyriadGpCollect* pkt, uint32_t R, nodeid_t sender) {
+void MyriadPV::insertAndForwardCollect(MyriadPvCollect* pkt, uint32_t R, nodeid_t sender) {
     RingMembership& m = memberships[R];
     if (lapExpired(pkt, R, sender, "COLLECT")) return;
     replayIfBest(pkt, R);
@@ -825,7 +825,7 @@ void MyriadGP::insertAndForwardCollect(MyriadGpCollect* pkt, uint32_t R, nodeid_
         size_t n = pkt->getRrArraySize();
         pkt->setRrArraySize(n + mySubnets.size());
         for (size_t i = 0; i < mySubnets.size(); ++i) {
-            MyriadGpRr rr_entry;
+            MyriadPvRr rr_entry;
             rr_entry.subnet = mySubnets[i];
             rr_entry.owner = myId;
             pkt->setRr(n + i, rr_entry);
@@ -846,7 +846,7 @@ void MyriadGP::insertAndForwardCollect(MyriadGpCollect* pkt, uint32_t R, nodeid_
         if (!found) {
             size_t k = pkt->getTransitionsArraySize();
             pkt->setTransitionsArraySize(k + 1);
-            MyriadGpRingTransition t;
+            MyriadPvRingTransition t;
             t.ring = otherRing;
             t.isRedundant = false;
             pkt->setTransitions(k, t);
@@ -868,26 +868,26 @@ void MyriadGP::insertAndForwardCollect(MyriadGpCollect* pkt, uint32_t R, nodeid_
             return;
         }
     }
-    auto np = std::make_unique<NodePkt>("Myriad_GP_Collect_Pkt");
-    np->setType(MYRIADGP_PACKET_TYPE);
+    auto np = std::make_unique<NodePkt>("Myriad_PV_Collect_Pkt");
+    np->setType(MYRIADPV_PACKET_TYPE);
     np->setAttributes(np->getAttributes() | NODEPKT_ATTR_CONTROL_PLANE_PROCESSING_DELAY);
-    pkt->setByteLength(gpCollectBytes(pkt));
+    pkt->setByteLength(pvCollectBytes(pkt));
     np->encapsulate(pkt->dup());
-    countGpSend("collect", np->getByteLength(), to, pkt);
+    countPvSend("collect", np->getByteLength(), to, pkt);
     sendToNode(to, std::move(np));
     MLOG_N_DEBUG(to) << "forward COLLECT ring='" << R
                      << "' seq=" << pkt->getSeq_no()
                      << " king=" << (int)pkt->getRouter_id_src() << "\n";
 }
 
-void MyriadGP::originateDegrade(uint32_t ring) {
+void MyriadPV::originateDegrade(uint32_t ring) {
     auto [seq, beacon] = rib.markDegraded(ring);
     floodDegrade(ring, seq, beacon, undefined_node);
 }
 
-void MyriadGP::floodDegrade(uint32_t ring, uint32_t seq, uint32_t beacon, nodeid_t skip) {
-    auto tmpl = std::make_unique<MyriadGpDegrade>("Myriad_GP_Degrade");
-    tmpl->setType(MYRIADGP_DEGRADE);
+void MyriadPV::floodDegrade(uint32_t ring, uint32_t seq, uint32_t beacon, nodeid_t skip) {
+    auto tmpl = std::make_unique<MyriadPvDegrade>("Myriad_PV_Degrade");
+    tmpl->setType(MYRIADPV_DEGRADE);
     tmpl->setRouter_id_src(myId);
     tmpl->setRing_id(ring);
     tmpl->setSeq_no(seq);
@@ -896,16 +896,16 @@ void MyriadGP::floodDegrade(uint32_t ring, uint32_t seq, uint32_t beacon, nodeid
                         + msgsize::SEQ + msgsize::RING + msgsize::U8);
     for (auto& [nid, nbr] : neighbors) {
         if (nid == skip) continue;
-        auto np = std::make_unique<NodePkt>("Myriad_GP_Degrade_Pkt");
-        np->setType(MYRIADGP_PACKET_TYPE);
+        auto np = std::make_unique<NodePkt>("Myriad_PV_Degrade_Pkt");
+        np->setType(MYRIADPV_PACKET_TYPE);
         np->setAttributes(np->getAttributes() | NODEPKT_ATTR_CONTROL_PLANE_PROCESSING_DELAY);
         np->encapsulate(tmpl->dup());
-        countGpSend("degrade", np->getByteLength(), nid, tmpl.get());
+        countPvSend("degrade", np->getByteLength(), nid, tmpl.get());
         sendToNode(nid, std::move(np));
     }
 }
 
-void MyriadGP::handleUpdate(MyriadGpUpdate* update, nodeid_t sender) {
+void MyriadPV::handleUpdate(MyriadPvUpdate* update, nodeid_t sender) {
     uint32_t curRing = update->getCurrent_ring();
     nodeid_t king = update->getRouter_id_src();
     uint32_t seq = update->getSeq_no();
@@ -953,7 +953,7 @@ void MyriadGP::handleUpdate(MyriadGpUpdate* update, nodeid_t sender) {
         m.memberCount = update->getMember_count();
     }
 
-    std::vector<MyriadGpRr> rr;
+    std::vector<MyriadPvRr> rr;
     rr.reserve(update->getRrArraySize());
     for (size_t i = 0; i < update->getRrArraySize(); ++i) rr.push_back(update->getRr(i));
 
@@ -971,12 +971,12 @@ void MyriadGP::handleUpdate(MyriadGpUpdate* update, nodeid_t sender) {
 }
 
 // originRrTrailer is the rr to adopt on a seq-advance (the packet's own rr).
-// See the declaration in MyriadGp.h for the rest.
-void MyriadGP::processChain(uint32_t curRing, uint32_t seq, uint32_t spof,
+// See the declaration in MyriadPv.h for the rest.
+void MyriadPV::processChain(uint32_t curRing, uint32_t seq, uint32_t spof,
                             const std::vector<uint32_t>& chain,
                             uint32_t chainCost,
-                            const std::vector<MyriadGpRr>& rr,
-                            const std::vector<MyriadGpRr>* originRrTrailer,
+                            const std::vector<MyriadPvRr>& rr,
+                            const std::vector<MyriadPvRr>* originRrTrailer,
                             std::vector<uint32_t>& handled) {
     uint32_t origin = chain.empty() ? curRing : chain.back();
     
@@ -1021,7 +1021,7 @@ void MyriadGP::processChain(uint32_t curRing, uint32_t seq, uint32_t spof,
         forwardChainInterRing(curRing, seq, spof, chain, chainCost, rr, handled);
 }
 
-void MyriadGP::forwardUpdateInRing(MyriadGpUpdate* pkt, uint32_t ring, nodeid_t sender) {
+void MyriadPV::forwardUpdateInRing(MyriadPvUpdate* pkt, uint32_t ring, nodeid_t sender) {
     if (lapExpired(pkt, ring, sender, "UPDATE")) return;
     nodeid_t to = otherRingNeighbor(ring, sender);
     if (to == undefined_node) {
@@ -1030,23 +1030,23 @@ void MyriadGP::forwardUpdateInRing(MyriadGpUpdate* pkt, uint32_t ring, nodeid_t 
         if (!isEchoRing(ring)) return;
         to = sender;
     }
-    auto np = std::make_unique<NodePkt>("Myriad_GP_Update_Pkt");
-    np->setType(MYRIADGP_PACKET_TYPE);
+    auto np = std::make_unique<NodePkt>("Myriad_PV_Update_Pkt");
+    np->setType(MYRIADPV_PACKET_TYPE);
     np->setAttributes(np->getAttributes() | NODEPKT_ATTR_CONTROL_PLANE_PROCESSING_DELAY);
-    pkt->setByteLength(gpUpdateBytes(pkt));
+    pkt->setByteLength(pvUpdateBytes(pkt));
     np->encapsulate(pkt->dup());
-    countGpSend("update", np->getByteLength(), to, pkt);
+    countPvSend("update", np->getByteLength(), to, pkt);
     sendToNode(to, std::move(np));
     MLOG_N_DEBUG(to) << "forward UPDATE in-ring='" << ring
                      << "' seq=" << pkt->getSeq_no() << "\n";
 }
 
-MyriadGpUpdate* MyriadGP::buildTransitionUpdate(uint32_t R2, nodeid_t src, uint32_t seq,
+MyriadPvUpdate* MyriadPV::buildTransitionUpdate(uint32_t R2, nodeid_t src, uint32_t seq,
                               uint32_t spof, const std::vector<uint32_t>& fwdChain,
                               uint32_t fwdCost,
-                              const std::vector<MyriadGpRr>& rr) {
-    auto* fwd = new MyriadGpUpdate("Myriad_GP_Update");
-    fwd->setType(MYRIADGP_UPDATE);
+                              const std::vector<MyriadPvRr>& rr) {
+    auto* fwd = new MyriadPvUpdate("Myriad_PV_Update");
+    fwd->setType(MYRIADPV_UPDATE);
     fwd->setRouter_id_src(src);            // owner of this new ring traversal
     fwd->setSeq_no(seq);
     fwd->setCurrent_ring(R2);
@@ -1056,14 +1056,14 @@ MyriadGpUpdate* MyriadGP::buildTransitionUpdate(uint32_t R2, nodeid_t src, uint3
     fwd->setChain_cost(fwdCost);
     fwd->setRrArraySize(rr.size());
     for (size_t i = 0; i < rr.size(); ++i) fwd->setRr(i, rr[i]);
-    fwd->setByteLength(gpUpdateBytes(fwd));
+    fwd->setByteLength(pvUpdateBytes(fwd));
     return fwd;
 }
 
-void MyriadGP::forwardChainInterRing(uint32_t curRing, uint32_t seq, uint32_t spof,
+void MyriadPV::forwardChainInterRing(uint32_t curRing, uint32_t seq, uint32_t spof,
                           const std::vector<uint32_t>& chain,
                           uint32_t chainCost,
-                          const std::vector<MyriadGpRr>& rr,
+                          const std::vector<MyriadPvRr>& rr,
                           std::vector<uint32_t>& handled) {
     // During COLLECT warmup suppress inter-ring forwarding; memberCounts are
     // still being established
@@ -1185,7 +1185,7 @@ void MyriadGP::forwardChainInterRing(uint32_t curRing, uint32_t seq, uint32_t sp
     }
 }
 
-simtime_t MyriadGP::holdDelay(uint32_t ring, int bucket) const {
+simtime_t MyriadPV::holdDelay(uint32_t ring, int bucket) const {
     // holdInterval + size^ringCostExponent ms, so a wave crossing a big ring is
     // held as long as that ring is expensive.
     uint32_t sz = memberCountOf(ring);
@@ -1195,7 +1195,7 @@ simtime_t MyriadGP::holdDelay(uint32_t ring, int bucket) const {
     return bucket ? d * spofHoldMultiplier : d;
 }
 
-void MyriadGP::flushPendingTransitions(uint32_t ring, int bucket) {
+void MyriadPV::flushPendingTransitions(uint32_t ring, int bucket) {
     // Only this ring's keys; the map is keyed (ring, primary), so extract the
     // [ring, ring+1) span and leave every other ring's window running.
     auto& all = pendingTransitions[bucket];
@@ -1237,15 +1237,15 @@ void MyriadGP::flushPendingTransitions(uint32_t ring, int bucket) {
                 ++i;
             }
             uint32_t lapSeq = ++rs2.batchLapSeq;
-            auto* batch = new MyriadGpUpdateBatch("Myriad_GP_Update_Batch");
-            batch->setType(MYRIADGP_UPDATE_BATCH);
+            auto* batch = new MyriadPvUpdateBatch("Myriad_PV_Update_Batch");
+            batch->setType(MYRIADPV_UPDATE_BATCH);
             batch->setRouter_id_src(myId);        // owner: recognised on own-return
             batch->setCurrent_ring(R2);
             batch->setSeq_no(lapSeq);             // per-ring batch-lap counter
             batch->setEntriesArraySize(group.size());
             for (size_t g = 0; g < group.size(); ++g) {
                 PendingTransition* pt = group[g];
-                MyriadGpUpdateEntry e;
+                MyriadPvUpdateEntry e;
                 e.setSeq_no(pt->seq);
                 e.setSpof_count(pt->spof);
                 e.setRing_chainArraySize(pt->fwdChain.size());
@@ -1261,7 +1261,7 @@ void MyriadGP::flushPendingTransitions(uint32_t ring, int bucket) {
 
             RingInflight& fl = rs2.batchInflights[lapSeq];
             fl.seq_no = lapSeq;
-            batch->setByteLength(gpBatchBytes(batch));
+            batch->setByteLength(pvBatchBytes(batch));
             sendRingReliable(fl, primary, fallback, batch, rxmtInterval, COLLECT_RETRY_LIMIT,
                              [this, R2, lapSeq]() { onBatchBudgetExpired(R2, lapSeq); });
             MLOG_N_INFO(primary) << "flush UPDATE batch into ring='" << R2
@@ -1271,7 +1271,7 @@ void MyriadGP::flushPendingTransitions(uint32_t ring, int bucket) {
     }
 }
 
-void MyriadGP::replayInto(uint32_t ring) {
+void MyriadPV::replayInto(uint32_t ring) {
     std::vector<nodeid_t> nbrs = ringNeighbors(ring);
     if (nbrs.empty()) return;
     nodeid_t primary = nbrs[0];
@@ -1284,7 +1284,7 @@ void MyriadGP::replayInto(uint32_t ring) {
     // rebasing my whole RIB onto it hands the recovered node a route to every
     // origin I know, whichever of my rings I actually reach it through.
     struct RebasedChain { std::vector<uint32_t> chain; uint64_t cost; uint32_t spof;
-                          const std::vector<MyriadGpRr>* rr; };
+                          const std::vector<MyriadPvRr>* rr; };
     std::vector<RebasedChain> replay;
     uint64_t ringCost = rib.sizeToCost(memberCountOf(ring));
 
@@ -1328,8 +1328,8 @@ void MyriadGP::replayInto(uint32_t ring) {
             ++i;
         }
         uint32_t lapSeq = ++rs.batchLapSeq;
-        auto* batch = new MyriadGpUpdateBatch("Myriad_GP_Update_Batch");
-        batch->setType(MYRIADGP_UPDATE_BATCH);
+        auto* batch = new MyriadPvUpdateBatch("Myriad_PV_Update_Batch");
+        batch->setType(MYRIADPV_UPDATE_BATCH);
         batch->setRouter_id_src(myId);
         batch->setCurrent_ring(ring);
         batch->setSeq_no(lapSeq);
@@ -1339,7 +1339,7 @@ void MyriadGP::replayInto(uint32_t ring) {
         batch->setMember_count(memberCountOf(ring));
         batch->setWidthsArraySize(rs.adjacentRings.size());
         for (size_t j = 0; j < rs.adjacentRings.size(); ++j) {
-            MyriadGpRingTransition t;
+            MyriadPvRingTransition t;
             t.ring = rs.adjacentRings[j].ring;
             t.isRedundant = rs.adjacentRings[j].isRedundant;
             batch->setWidths(j, t);
@@ -1347,8 +1347,8 @@ void MyriadGP::replayInto(uint32_t ring) {
         batch->setEntriesArraySize(group.size());
         for (size_t g = 0; g < group.size(); ++g) {
             const RebasedChain& e = *group[g];
-            const std::vector<MyriadGpRr>& rr = *e.rr;
-            MyriadGpUpdateEntry en;
+            const std::vector<MyriadPvRr>& rr = *e.rr;
+            MyriadPvUpdateEntry en;
             en.setSeq_no(0);                      // sentinel: replay, adopt-if-empty
             en.setSpof_count(e.spof);
             en.setRing_chainArraySize(e.chain.size());
@@ -1361,7 +1361,7 @@ void MyriadGP::replayInto(uint32_t ring) {
 
         RingInflight& fl = rs.batchInflights[lapSeq];
         fl.seq_no = lapSeq;
-        batch->setByteLength(gpBatchBytes(batch));
+        batch->setByteLength(pvBatchBytes(batch));
         sendRingReliable(fl, primary, fallback, batch, rxmtInterval, COLLECT_RETRY_LIMIT,
                          [this, ring, lapSeq]() { onBatchBudgetExpired(ring, lapSeq); });
         MLOG_N_INFO(primary) << "replay batch into ring='" << ring
@@ -1369,7 +1369,7 @@ void MyriadGP::replayInto(uint32_t ring) {
     }
 }
 
-void MyriadGP::forwardBatchInRing(MyriadGpUpdateBatch* pkt, uint32_t ring, nodeid_t sender) {
+void MyriadPV::forwardBatchInRing(MyriadPvUpdateBatch* pkt, uint32_t ring, nodeid_t sender) {
     if (lapExpired(pkt, ring, sender, "batch")) return;
     nodeid_t to = otherRingNeighbor(ring, sender);
     if (to == undefined_node) {
@@ -1378,18 +1378,18 @@ void MyriadGP::forwardBatchInRing(MyriadGpUpdateBatch* pkt, uint32_t ring, nodei
         if (!isEchoRing(ring)) return;
         to = sender;
     }
-    auto np = std::make_unique<NodePkt>("Myriad_GP_Update_Batch_Pkt");
-    np->setType(MYRIADGP_PACKET_TYPE);
+    auto np = std::make_unique<NodePkt>("Myriad_PV_Update_Batch_Pkt");
+    np->setType(MYRIADPV_PACKET_TYPE);
     np->setAttributes(np->getAttributes() | NODEPKT_ATTR_CONTROL_PLANE_PROCESSING_DELAY);
-    pkt->setByteLength(gpBatchBytes(pkt));
+    pkt->setByteLength(pvBatchBytes(pkt));
     np->encapsulate(pkt->dup());
-    countGpSend("update_batch", np->getByteLength(), to, pkt);
+    countPvSend("update_batch", np->getByteLength(), to, pkt);
     sendToNode(to, std::move(np));
     MLOG_N_DEBUG(to) << "forward batch in-ring='" << ring
                      << "' seq=" << pkt->getSeq_no() << "\n";
 }
 
-void MyriadGP::handleUpdateBatch(MyriadGpUpdateBatch* batch, nodeid_t sender) {
+void MyriadPV::handleUpdateBatch(MyriadPvUpdateBatch* batch, nodeid_t sender) {
     uint32_t R2 = batch->getCurrent_ring();
     nodeid_t owner = batch->getRouter_id_src();
     uint32_t lapSeq = batch->getSeq_no();
@@ -1427,10 +1427,10 @@ void MyriadGP::handleUpdateBatch(MyriadGpUpdateBatch* batch, nodeid_t sender) {
     // rings), updating its handled_rings in place so sibling bridges downstream
     // see what I flooded. The batch itself stays WHOLE for the lap.
     for (size_t i = 0; i < batch->getEntriesArraySize(); ++i) {
-        MyriadGpUpdateEntry& e = batch->getEntriesForUpdate(i);
+        MyriadPvUpdateEntry& e = batch->getEntriesForUpdate(i);
         std::vector<uint32_t> chain;
         for (size_t j = 0; j < e.getRing_chainArraySize(); ++j) chain.push_back(e.getRing_chain(j));
-        std::vector<MyriadGpRr> rr;
+        std::vector<MyriadPvRr> rr;
         for (size_t j = 0; j < e.getRrArraySize(); ++j) rr.push_back(e.getRr(j));
         std::vector<uint32_t> handled;
         for (size_t j = 0; j < e.getHandled_ringsArraySize(); ++j)
@@ -1446,7 +1446,7 @@ void MyriadGP::handleUpdateBatch(MyriadGpUpdateBatch* batch, nodeid_t sender) {
     forwardBatchInRing(batch, R2, sender);
 }
 
-void MyriadGP::handleDegrade(MyriadGpDegrade* degrade, nodeid_t from) {
+void MyriadPV::handleDegrade(MyriadPvDegrade* degrade, nodeid_t from) {
     if (!degradeEnabled) return;
     uint32_t R = degrade->getRing_id();
     uint32_t seq = degrade->getSeq_no(), beacon = degrade->getBeacon_no();
@@ -1455,7 +1455,11 @@ void MyriadGP::handleDegrade(MyriadGpDegrade* degrade, nodeid_t from) {
     MLOG_N_DEBUG(from) << "degrade ring='" << R << "' seq=" << seq << "\n";
 }
 
-void MyriadGP::reset() {
+// A router crash: NetworkManager calls this when the node fails, and the node
+// comes back holding nothing but its configured ring labels. Every route, ring
+// membership, kingship and in-flight lap is gone, so the returning router has to
+// be let back into its rings by the recovery path rather than forming them.
+void MyriadPV::reset() {
     Enter_Method_Silent();   // invoked cross-module from NetworkManager; we reschedule below
     for (auto& [nid, nbr] : neighbors) {
         if (nbr.deadTimer) {
@@ -1489,27 +1493,27 @@ void MyriadGP::reset() {
     if (snapshotTimer) { cancelAndDelete(snapshotTimer); snapshotTimer = nullptr; }
     cancelHelloTimer();
 
-    rebooted = true;   // stateless from here on means recovery, not formation
-    
+    rebooted = true;
+
     scheduleHello(helloInterval);
     if (snapshotInterval > 0 && !par("ribDumpFile").stdstringValue().empty())
         startSnapshot();
 }
 
-void MyriadGP::dumpRibTo(std::ostream& f, const std::string& tprefix, bool stats) {
+void MyriadPV::dumpRibTo(std::ostream& f, const std::string& tprefix, bool stats) {
     rib.dumpTo(f, tprefix, stats, (int)myId);
 }
 
-void MyriadGP::countGpSend(const std::string& type, unsigned long long bytes,
+void MyriadPV::countPvSend(const std::string& type, unsigned long long bytes,
                            nodeid_t to, const cPacket* inner) {
     int64_t sig = 0, strct = 0, sigLin = 0;
-    gpSecBytes(inner, sig, strct, sigLin);
+    pvSecBytes(inner, sig, strct, sigLin);
     secSigBytes += sig;
     secStructBytes += strct;
     secSigPerHopBytes += sigLin;
     secPduExtra = sig + strct;
     secPduExtraPerHop = sigLin + strct;
-    unsigned long long rr = (unsigned long long) std::max<int64_t>(0, gpRrBytes(inner));
+    unsigned long long rr = (unsigned long long) std::max<int64_t>(0, pvRrBytes(inner));
     countSend(type, bytes, rr);      // also feeds the RR-excluded txBytes vector
     if (rr) {
         rrBytesPerLink[to] += rr;
@@ -1517,11 +1521,11 @@ void MyriadGP::countGpSend(const std::string& type, unsigned long long bytes,
     }
 }
 
-void MyriadGP::finish() {
+void MyriadPV::finish() {
     recordSendScalars();
     recordCalcScalars();
     // Same volume figures recordSendScalars writes, minus the RR bytes on each
-    // link (see gpRrBytes).
+    // link (see pvRrBytes).
     if (carryRr) {
         recordScalar("bytes_rr_total", (double) rrBytesTotal);
         unsigned long long norrTotal = 0;

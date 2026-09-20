@@ -11,24 +11,29 @@
 namespace routingsim {
 
     // Common neighbor state every hello-driven protocol needs. Subclasses
-    // extend this with their own per-neighbor bookkeeping and pass the 
+    // extend this with their own per-neighbor bookkeeping and pass the
     // derived type to MyriadHelloProto<N>.
     struct HelloNeighbor {
         nodeid_t id;
         NeighborState state = NSTATE_DOWN;
         TimerMsg* deadTimer = nullptr;
         std::vector<uint32_t> rings;
-        // Intersection of `rings` and the local node's selfRings
+        // Rings this router shares with the neighbor. On a shared ring the
+        // neighbor is one of the (at most two) ring-neighbors a lap forwards to.
         std::vector<uint32_t> sharedRings;
     };
 
+    // The hello FSM both protocols run: DOWN -> INIT -> TWOWAY, dropping back on
+    // a dead interval or a hello that stops listing us. Hellos carry the sender's
+    // ring memberships, so neighbor discovery alone tells a router which rings it
+    // shares with whom, which is all the underlay needs to forward a lap.
+    // Subclasses hook the transitions via onTwoWayReached / onNeighborDead.
     template <class N>
     class MyriadHelloProto : public MyriadHelper {
         protected:
             std::unordered_map<nodeid_t, N> neighbors;
 
             // Rings this node belongs to (integer ring ids).
-            // Populated by initSelfRings()
             std::vector<uint32_t> selfRings;
             std::string selfRingsLabel;
 
@@ -36,7 +41,7 @@ namespace routingsim {
             simtime_t deadInterval;
             simtime_t rxmtInterval;
             simtime_t helloJitter;
-            simtime_t joinJitter;   // one-time cold-start hello stagger, see subclass onInitialize
+            simtime_t joinJitter;
 
             void onInitialize() override {
                 MyriadHelper::onInitialize();
@@ -68,8 +73,6 @@ namespace routingsim {
             virtual void onNeighborDead(N& /*nbr*/, bool /*wasFull*/) {}
 
             void initSelfRings() {
-                // Ring membership from the ringLabel param, e.g. "1000000,999999".
-                // Set per node via **.NodeN.*.ringLabel
                 selfRingsLabel = hasPar("ringLabel") ? par("ringLabel").stdstringValue() : "";
                 selfRings.clear();
                 std::stringstream ss(selfRingsLabel);
@@ -83,7 +86,6 @@ namespace routingsim {
             }
 
             void scheduleHello(simtime_t delay) {
-                // Add jitter so nodes don't all hello on the same tick
                 helloTimer = addOneShotTimer(delay + uniform(0, helloJitter), [this](short) {
                     helloTimer = nullptr;
                     sendHello();

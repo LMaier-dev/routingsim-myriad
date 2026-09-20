@@ -1,12 +1,12 @@
 package routingsim.routing.MYRIAD;
 
-simple myriadgp extends routingsim.foundation.Protocol
+simple myriadpv extends routingsim.foundation.Protocol
 {
     parameters:
-        @class(MyriadGP);
+        @class(MyriadPV);
 
         // Shared with MyriadLS via MyriadHelloProto. Keep helloInterval +
-        // helloJitter < deadInterval. GP configs raise helloJitter to break up
+        // helloJitter < deadInterval. PV configs raise helloJitter to break up
         // the synchronized-origination wave.
         double helloInterval @unit(s) = default(10s);
         double deadInterval @unit(s) = default(40s);
@@ -33,7 +33,7 @@ simple myriadgp extends routingsim.foundation.Protocol
         // until collectWarmupDuration.
         double updateJitter @unit(s) = default(10s);
 
-        // Path-cost exponent for summing up member_count^a; see MyriadGp.h.
+        // Path-cost exponent for summing up member_count^a; see MyriadPv.h.
         // a>1 is convex (penalises one huge ring over several small ones), a=1
         // is a plain member sum.
         int ringCostExponent = default(2);

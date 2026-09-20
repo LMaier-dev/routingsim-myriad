@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Derive MyriadGP ring memberships from an EXISTING routingsim topology .txt
+# Derive MyriadPV ring memberships from an EXISTING routingsim topology .txt
 #   python3 topo2rings.py ../topologies/grid_10,10.txt
 
 import argparse
@@ -19,7 +19,7 @@ RING_ID_BASE = 1_000_000
 # reads echo-ness off the id and never has to infer it from its neighbour table
 # — which it cannot do after a reboot, when a ring-neighbour that stayed down is
 # indistinguishable from a ring that only ever had two members. Keep in step
-# with MyriadGp.ned echoRingIdMax. Echo rings exist for evaluation topologies
+# with MyriadPv.ned echoRingIdMax. Echo rings exist for evaluation topologies
 # only; a deployment ring plan has none.
 ECHO_ID_BASE = 900_000
 
@@ -56,7 +56,7 @@ def read_topology(path):
 
 def topology_stats(g, ring_of, n_rings, n_echo, n_dropped, label):
     """Ring-decomposition stats for the .ini header and the PNG caption (so the
-    two never disagree). The quantities MyriadGP's cost turns on -- fan-out,
+    two never disagree). The quantities MyriadPV's cost turns on -- fan-out,
     spof transitions, ring-graph components -- are computed by metrics.score;
     see it for what each means. ring_of already carries the echo rings, so score
     must not add its own; echo rings are 2-node and unordered here, so the
@@ -97,7 +97,7 @@ def draw(g, ring_of, ring_ids, path, stats=(), ring_pos=None):
     color = {rid: cmap(i / max(1, n_rings)) for i, rid in enumerate(ring_ids)}
 
     # Two panels: the ring graph on the left (rings as nodes, shared members as
-    # edges -- this is the graph MyriadGP's inter-ring propagation actually runs
+    # edges -- this is the graph MyriadPV's inter-ring propagation actually runs
     # on) and the node graph on the right.
     fig, (axr, ax) = plt.subplots(1, 2, figsize=(26, 14),
                                   gridspec_kw={"width_ratios": [1, 1.3]})

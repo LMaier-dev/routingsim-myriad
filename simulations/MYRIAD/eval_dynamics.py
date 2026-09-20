@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Control-plane cost and failure response of MyriadGP vs MyriadLS.
+"""Control-plane cost and failure response of MyriadPV vs MyriadLS.
 
 Three scenarios, one run each per protocol, every run scored on BOTH families:
 traffic (messages/bytes per PDU type) and, where nodes fail, reconvergence time.
@@ -61,23 +61,23 @@ CHURN_NODES, CHURN_PERIOD = 1, 1.0  # churn scenario: nodes down per period, sec
 FAILURE_START = 100.0              # churn / first node wave, and the measurement cut
 QUIET_LEN = 25.0                   # idle-baseline window, ending at FAILURE_START
 DOWN_MIN, DOWN_JITTER = 2.0, 8.0   # per-node downtime: DOWN_MIN + U(0, JITTER)
-COLLECT_RETRY_LIMIT = 3            # mirrors MyriadGp.h
+COLLECT_RETRY_LIMIT = 3            # mirrors MyriadPv.h
 
 SENT_RE = re.compile(r"^scalar\s+\S+\s+sent_(\S+)\s+([0-9.]+)", re.M)
 BYTES_RE = re.compile(r"^scalar\s+\S+\s+bytes_(\S+)\s+([0-9.]+)", re.M)
 STATS_RE = re.compile(r"^t=([0-9.]+)s?\s+(\d+)\s+n=(\d+)\s+cost_sum=(\d+)"
                       r"\s+cost_max=(\d+)(?:\s+present=(\d+))?", re.M)
 def _unknown_ring_size():
-    """UNKNOWN_RING_SIZE read out of MyriadGp.h, not mirrored here.
+    """UNKNOWN_RING_SIZE read out of MyriadPv.h, not mirrored here.
 
     It was mirrored, and it drifted: the C++ went 1<<20 -> 1<<12 and this copy
     did not, so stretch_at's filter kept every router holding an unknown-priced
     chain (~1.7e7) instead of dropping it, and mean stretch read in the thousands
     instead of ~1. Parsing the header cannot drift."""
-    src = (H.SRC / "routing" / "MYRIAD" / "MyriadGp.h").read_text()
+    src = (H.SRC / "routing" / "MYRIAD" / "MyriadPv.h").read_text()
     m = re.search(r"UNKNOWN_RING_SIZE\s*=\s*1u?\s*<<\s*(\d+)", src)
     if not m:
-        sys.exit("could not read UNKNOWN_RING_SIZE from MyriadGp.h — "
+        sys.exit("could not read UNKNOWN_RING_SIZE from MyriadPv.h — "
                  "the constant moved or changed form; fix _unknown_ring_size()")
     return 1 << int(m.group(1))
 
@@ -90,7 +90,7 @@ DOWN_RE = re.compile(r"^scalar\s+\S+\s+down_(\d+)_(\d+)\s+([0-9.]+)", re.M)
 # Last two: None = don't override (NED default, true). pv_noreplay is the
 # refresh-bound baseline; opt in with --noreplay. It NEEDS refreshFloodsUpdate's
 # default (true) — periodic reflood is its only propagation path without replay
-# — so --no-refresh-flood (below) only touches the "gp" entry, never this one.
+# — so --no-refresh-flood (below) only touches the "pv" entry, never this one.
 # A blanket --set refreshFloodsUpdate=... would hit both and cripple pv_noreplay.
 CONFIGS = {"pv": ("pv", "ribDumpFile", "true", None),
            "pv_noreplay": ("pv", "ribDumpFile", "false", None),
@@ -345,7 +345,7 @@ def bytes_over_time(resdir, bin_s=1.0, vec="txBytes"):
     traffic spike is then visible directly.
 
     vec="txBytesNoRr" gives PV's same send events with the reachability-record
-    bytes taken out (MyriadGP::countGpSend); LS never writes that vector."""
+    bytes taken out (MyriadPV::countPvSend); LS never writes that vector."""
     bins = defaultdict(float)
     for t, v in _tx_samples(resdir, vec):
         bins[int(t // bin_s)] += v
@@ -939,7 +939,7 @@ def reconverge_latencies(series, wave_t, reboots, end_t=float("inf")):
 
 
 def sizeToCost(size):
-    """Ring size -> cost, mirroring MyriadGpRib::sizeToCost."""
+    """Ring size -> cost, mirroring MyriadPvRib::sizeToCost."""
     return size ** int(common("ringCostExponent", "2"))
 
 

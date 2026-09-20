@@ -16,18 +16,18 @@ namespace routingsim {
 // the following will be defined in namespace routingsim
 namespace routingsim;
 
-enum MyriadGpPDUType {
-    MYRIADGP_HELLO = 0;
-    MYRIADGP_COLLECT = 1;
-    MYRIADGP_UPDATE = 2;
-    MYRIADGP_DEGRADE = 3;
-    MYRIADGP_UPDATE_BATCH = 4;
+enum MyriadPvPDUType {
+    MYRIADPV_HELLO = 0;
+    MYRIADPV_COLLECT = 1;
+    MYRIADPV_UPDATE = 2;
+    MYRIADPV_DEGRADE = 3;
+    MYRIADPV_UPDATE_BATCH = 4;
 }
 
 // What a COLLECT lap is for. REFRESH and ELECTION both crown a king and run the
 // contention rules; only REFRESH re-announces the ring. The rest exist so churn
 // never originates an UPDATE.
-enum MyriadGpCollectKind {
+enum MyriadPvCollectKind {
     // A dead king's seat being taken: watchdog coup, or a lap that closed
     // finding no king. Elects, but does NOT announce — the new king's own
     // refresh does that, which is what keeps origination refresh-paced.
@@ -58,8 +58,8 @@ class nodeid_t {
       @fromValue(omnetpp::checked_int_cast<unsigned short>($.intValue()));
 }
 
-packet MyriadGpHeader {
-    MyriadGpPDUType type;
+packet MyriadPvHeader {
+    MyriadPvPDUType type;
     // A packet lapping back to its router_id_src on current_ring is the ACK.
     nodeid_t router_id_src;
     uint32_t seq_no;
@@ -68,26 +68,26 @@ packet MyriadGpHeader {
 }
 
 // isRedundant: false = a single-router (SPOF) transition to `ring`, true = two+.
-struct MyriadGpRingTransition {
+struct MyriadPvRingTransition {
     uint32_t ring;
     bool isRedundant;
 }
 
 // (subnet, owner) pair, owner being the router that inserted the subnet during
 // collect. Enables segment-routing lookup: subnet -> owner -> chain.
-struct MyriadGpRr {
+struct MyriadPvRr {
     uint32_t subnet;
     nodeid_t owner;
 }
 
-packet MyriadGpNLRI extends MyriadGpHeader {
-    type = MYRIADGP_COLLECT;
-    MyriadGpRr rr[]; // each node inserts its own (subnet, myId) pairs
+packet MyriadPvNLRI extends MyriadPvHeader {
+    type = MYRIADPV_COLLECT;
+    MyriadPvRr rr[]; // each node inserts its own (subnet, myId) pairs
 }
 
-packet MyriadGpCollect extends MyriadGpNLRI {
-    type = MYRIADGP_COLLECT;
-    MyriadGpRingTransition transitions[];
+packet MyriadPvCollect extends MyriadPvNLRI {
+    type = MYRIADPV_COLLECT;
+    MyriadPvRingTransition transitions[];
     // King seeds 1, each forwarder increments; on own-return it equals the
     // ring's size.
     uint32_t member_count;
@@ -108,18 +108,18 @@ packet MyriadGpCollect extends MyriadGpNLRI {
     // Set by the one member that replayed on this REPLAY lap; makes the rest
     // defer, and tells the originator on return that a replay was sent.
     bool replay_claimed;
-    // See MyriadGpCollectKind.
+    // See MyriadPvCollectKind.
     uint8_t kind = COLLECT_ELECTION;
 }
 
-packet MyriadGpUpdate extends MyriadGpNLRI {
-    type = MYRIADGP_UPDATE;
-    // Prepend-order ring ids (see RibEntry in MyriadGp.h); empty at origination.
+packet MyriadPvUpdate extends MyriadPvNLRI {
+    type = MYRIADPV_UPDATE;
+    // Prepend-order ring ids (see RibEntry in MyriadPv.h); empty at origination.
     uint32_t ring_chain[];
     uint32_t spof_count;
     // Origin king's adjacentRings for current_ring; set only on the origin
     // UPDATE, members store it and strip it on inter-ring forward.
-    MyriadGpRingTransition widths[];
+    MyriadPvRingTransition widths[];
     // Rings already flooded into on this lap, so the second bridge of a double
     // transition doesn't duplicate; reset empty on inter-ring transition.
     uint32_t handled_rings[];
@@ -133,31 +133,31 @@ packet MyriadGpUpdate extends MyriadGpNLRI {
 // each entry carries the per-chain fields plus its OWN handled_rings, since
 // entries fan into different rings as the batch laps. (A class not a struct:
 // OMNeT++ structs can't hold dynamic arrays.)
-class MyriadGpUpdateEntry {
+class MyriadPvUpdateEntry {
     uint32_t seq_no;
     uint32_t ring_chain[];
     uint32_t spof_count;
-    MyriadGpRr rr[];
+    MyriadPvRr rr[];
     uint32_t chain_cost;
     uint32_t handled_rings[];
 }
 
 // Batch of inter-ring transitions sharing one owner and target ring, coalesced
-// within a holdInterval window (see MyriadGp.ned). Laps current_ring WHOLE and
+// within a holdInterval window (see MyriadPv.ned). Laps current_ring WHOLE and
 // closes a single ACK for all entries; seq_no is the owner's per-ring batch-lap
-// counter (batchLapSeq in MyriadGp.h), distinct from the per-entry seq_no.
-packet MyriadGpUpdateBatch extends MyriadGpHeader {
-    type = MYRIADGP_UPDATE_BATCH;
-    MyriadGpUpdateEntry entries[];
+// counter (batchLapSeq in MyriadPv.h), distinct from the per-entry seq_no.
+packet MyriadPvUpdateBatch extends MyriadPvHeader {
+    type = MYRIADPV_UPDATE_BATCH;
+    MyriadPvUpdateEntry entries[];
     // Ring trailer, carried by REPLAY batches only (replayInto) and once for
     // the whole batch: Same pair as the origin-UPDATE trailer; 0/empty on an ordinary batch.
     uint32_t member_count;
-    MyriadGpRingTransition widths[];
+    MyriadPvRingTransition widths[];
 }
 
 // Direct-neighbor flood, not tied to the ring machinery, so no current_ring.
-packet MyriadGpDegrade {
-    MyriadGpPDUType type = MYRIADGP_DEGRADE;
+packet MyriadPvDegrade {
+    MyriadPvPDUType type = MYRIADPV_DEGRADE;
     nodeid_t router_id_src;   // last forwarder (for skip-sender flood)
     uint32_t ring_id;         // culprit (broken) ring
     uint32_t seq_no;          // culprit ring's seq at time of failure

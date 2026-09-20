@@ -14,7 +14,7 @@ turns it on.
 
 The byte panels split each bar: solid is the run with the reachability-record
 fields subtracted, the faded extension above it is what RR cost. Both come out
-of the SAME simulation (MyriadGP tallies its own RR bytes per link).
+of the SAME simulation (MyriadPV tallies its own RR bytes per link).
 
     python3 simulations/MYRIAD/eval_entrypoint.py optimizations --jobs 2   # as eval_runs.txt runs it
     python3 simulations/MYRIAD/eval_optimizations.py --dry-run
@@ -85,11 +85,11 @@ def pv_params(cfg):
 def check_params():
     """An override naming no parameter is silently ignored by OMNeT++, which would
     turn a typo into a config identical to the baseline. Fail before simulating."""
-    ned = open(os.path.join(SRC, "routing", "MYRIAD", "MyriadGp.ned")).read()
+    ned = open(os.path.join(SRC, "routing", "MYRIAD", "MyriadPv.ned")).read()
     missing = sorted({k for _, cfg in CONFIGS for k in pv_params(cfg)
                       if not re.search(rf"\b{re.escape(k)}\s*(@unit\([^)]*\)\s*)?=", ned)})
     if missing:
-        sys.exit(f"not MyriadGP NED parameters: {', '.join(missing)}")
+        sys.exit(f"not MyriadPV NED parameters: {', '.join(missing)}")
 
 
 def tag_of(name):
@@ -113,7 +113,7 @@ def router_fills(scas):
 def run_one(proto, ini, name, opts, rep):
     """One sim -> its scalar readouts (eval_scaling's readers, same result dirs).
 
-    The RR-excluded figures come out of the SAME run: MyriadGP tallies the RR
+    The RR-excluded figures come out of the SAME run: MyriadPV tallies the RR
     bytes it put on each link and finish() writes the subtracted totals, so no
     second simulation is needed (see eval_scaling.norr_stats)."""
     tag = tag_of(name)

@@ -17,7 +17,7 @@ namespace {
 constexpr uint64_t INF = std::numeric_limits<uint64_t>::max();
 
 // member_count^exp, saturating on overflow. Byte-for-byte the per-ring term of
-// MyriadGP::pathCost, so ties/costs compare exactly against GP's uint64 cost.
+// MyriadPV::pathCost, so ties/costs compare exactly against PV's uint64 cost.
 uint64_t ringWeight(uint32_t members, long exp, long echoSize) {
     if (members == 2) members = (uint32_t) echoSize;
     uint64_t term = 1;
@@ -163,7 +163,7 @@ shortestRingCostsFor(const std::map<NodeId, std::vector<RingId>>& perNodeRings, 
 
     const int R = (int) rg.ringList.size();
     // Best over self's member rings; ties broken by fewer hops, matching
-    // MyriadGP's cost-then-length rank.
+    // MyriadPV's cost-then-length rank.
     std::vector<RingRoute> best(R, RingRoute{INF, 0});
     for (RingId mr : sit->second) {
         auto iit = rg.idx.find(mr);

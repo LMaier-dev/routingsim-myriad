@@ -241,7 +241,7 @@ _RING_CHECKED = set()
 
 
 def check_ring_plan(topo_path, labels_path):
-    """Warn if the plan isn't walkable by GP; see myriad_topologies/ringcheck.py.
+    """Warn if the plan isn't walkable by PV; see myriad_topologies/ringcheck.py.
 
     Every eval routes through ensure_ring_labels, so checking here covers native
     and generated plans alike. A warning, not an exit: an unwalkable ring makes
@@ -258,7 +258,7 @@ def check_ring_plan(topo_path, labels_path):
         worst = sorted(bad.items())[:3]
         print(f"  ! {Path(topo_path).name}: {len(bad)} of "
               f"{len(ringcheck.load(topo_path, labels_path)[0])} rings are not "
-              f"walkable (a member has !=2 ring-neighbours, so GP's lap can fork "
+              f"walkable (a member has !=2 ring-neighbours, so PV's lap can fork "
               f"off the cycle):", flush=True)
         for r, off in worst:
             print(f"      ring {r}: {off}", flush=True)
@@ -383,7 +383,7 @@ def run_sim(cmd, cwd=None, allow_budget_expired=False, rep=0):
 # Everything an eval names -- config keys, result dirs, CSV values, plot text --
 # calls the path-vector protocol `pv`. The NED module keeps its original name, so
 # this map is the one place the two vocabularies meet.
-NED_MODULE = {"pv": "gp", "ls": "ls"}
+NED_MODULE = {"pv": "pv", "ls": "ls"}
 
 # One colour per protocol variant, everywhere. A reader who learns "red is
 # path-vector" on one figure must not have to relearn it on the next, so this is
@@ -416,7 +416,7 @@ def write_proto_ini(out_path, proto, topo_path, ring_labels_path,
                     extra_lines=None, update_jitter=None, warmup=None,
                     network="routingsim.simulations.DefaultNetwork"):
     """Self-contained ini for one protocol+topology: eval_common plus the per-run
-    bits. myriad{gp,ls}.ini is deliberately not loaded — its [Config] sections
+    bits. myriad{pv,ls}.ini is deliberately not loaded — its [Config] sections
     would override eval_common."""
     lines = [
         f"include {COMMON_INI}",
@@ -658,14 +658,14 @@ def add_topo_args(parser):
     parser.add_argument(
         "--max-ring-size", dest="max_ring_size", type=int, default=0,
         help="drop rings larger than this; members fall back to echo rings "
-             "(0 = keep all). Long rings dominate GP's fan-out and lap latency")
+             "(0 = keep all). Long rings dominate PV's fan-out and lap latency")
     parser.add_argument(
         "--no-echo-rings", dest="no_echo_rings", action="store_true",
         help="omit 2-node echo rings; combined with --max-ring-size this can "
              "leave nodes in no ring at all, which the label step reports")
     parser.add_argument(
         "--update-jitter", dest="update_jitter", default=None,
-        help="GP initial-UPDATE jitter; raise on large topologies, e.g. 15s")
+        help="PV initial-UPDATE jitter; raise on large topologies, e.g. 15s")
     parser.add_argument(
         "--warmup", dest="warmup", default=None,
         help=f"collectWarmupDuration (eval_common: {common('collectWarmupDuration')})")

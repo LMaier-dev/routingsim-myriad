@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Emit any candidate topology as a routingsim .txt PLUS its .ring.ini, so
-it can be run under MyriadGP exactly like the existing topologies.
+it can be run under MyriadPV exactly like the existing topologies.
 
 The topo_lib families here have no native ring plan, so rings are mined with
 the stock cover_rings (cycle_basis), isolating the topology rather than the

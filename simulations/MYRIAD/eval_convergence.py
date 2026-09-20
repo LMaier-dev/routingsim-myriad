@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Convergence comparison: MyriadGP (batching sweep) vs MyriadLS (reference).
+"""Convergence comparison: MyriadPV (batching sweep) vs MyriadLS (reference).
 
 The oracle test proves both protocols reach the same optimum. This measures how
 fast and how cheaply each gets there. PV is swept over the batching holdInterval
@@ -155,17 +155,17 @@ def main(args=None):
     # PV's converged RIB targets the same optimum LS computes (see the oracle test)
     # — required for the %-optimal numbers to be meaningful (else spof-first ranking
     # picks costlier redundant paths and never matches the pure-cost truth).
-    gp = {}  # hold -> {"ct", "msgs", "fo"}
+    pv = {}  # hold -> {"ct", "msgs", "fo"}
     for h in HOLDS:
         print(f"  → PV hold={h} …", flush=True)
         dump = os.path.join(OUT, f"pv_{h}.txt")
-        gp[h] = repeat_mean(lambda rep, h=h, dump=dump: derive(
+        pv[h] = repeat_mean(lambda rep, h=h, dump=dump: derive(
             *run_proto(pv_ini, "ribDumpFile", dump,
-                       os.path.join(OUT, f"res_gp_{h}"),
+                       os.path.join(OUT, f"res_pv_{h}"),
                        overrides(holdInterval=h, rankUseSpof="false"), rep),
             truth, warmup_s()))
-        print(f"  ✓ hold={h}: conv={gp[h]['ct']}s, msgs={gp[h]['msgs']:.0f}, "
-              f"{gp[h]['fo']:.1f}% optimal")
+        print(f"  ✓ hold={h}: conv={pv[h]['ct']}s, msgs={pv[h]['msgs']:.0f}, "
+              f"{pv[h]['fo']:.1f}% optimal")
 
     # Summary table.
     print(f"\n=== convergence vs holdInterval "
@@ -181,7 +181,7 @@ def main(args=None):
               f"{r['fo']:>11.1f}%")
 
     for h in HOLDS:
-        row(h, gp[h])
+        row(h, pv[h])
     row("LS", ls)
 
     try:
@@ -201,13 +201,13 @@ def main(args=None):
     # references blue, and the two metrics are told apart by marker and alpha.
     pv, ls_c = PROTO_COLOR["pv"], PROTO_COLOR["ls"]
     lines = [
-        axL.plot(gx, [gp[h]["ct"] for h in geo], "o-", color=pv,
+        axL.plot(gx, [pv[h]["ct"] for h in geo], "o-", color=pv,
                  label="Path-Vector (PV) convergence time")[0],
-        axR.plot(gx, [gp[h]["msgs"] for h in geo], "s--", color=pv, alpha=.55,
+        axR.plot(gx, [pv[h]["msgs"] for h in geo], "s--", color=pv, alpha=.55,
                  label="PV sent messages")[0],
     ]
     if has_off:
-        lines.append(axR.axhline(gp["0s"]["msgs"], ls=":", color=pv, alpha=.6,
+        lines.append(axR.axhline(pv["0s"]["msgs"], ls=":", color=pv, alpha=.6,
                                  label="PV messages, no batching (0s)"))
     lines.append(axL.axhline(ls_ct, ls="-", color=ls_c, alpha=.6,
                              label=f"LS convergence ({ls_ct:.1f}s)"))
