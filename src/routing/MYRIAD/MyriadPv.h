@@ -69,8 +69,7 @@ namespace routingsim {
         bool probeTriggerMissed = false;
     };
 
-    // An inter-ring transition held for batching (see holdInterval); origin is
-    // fwdChain.back().
+    // An inter-ring transition held for batching. Its origin is fwdChain.back().
     struct PendingTransition {
         uint32_t R2 = 0;
         nodeid_t primary = 0;
@@ -112,8 +111,7 @@ namespace routingsim {
             // king crowned mid-recovery can be missing entries itself.
             void replayIfBest(MyriadPvCollect* lap, uint32_t ring);
             // COLLECT election key: live (memberCount>0) beats crashed, ties by id.
-            // Deliberately NOT ranked by RIB richness: counts move during
-            // convergence, so there is no fixed point and kingship churns.
+            // Not RIB richness, which moves during convergence and churns kingship.
             bool collectWins(bool incomingCrashed, nodeid_t incomingId, uint32_t ring) const;
             // Null-safe member count: 0 if I hold no membership for `ring`
             uint32_t memberCountOf(uint32_t ring) const;
@@ -166,6 +164,7 @@ namespace routingsim {
                               const std::vector<uint32_t>& chain,
                               uint32_t chainCost,
                               const std::vector<MyriadPvRr>& rr,
+                              // Adopted as the origin ring's rr when the seq advances.
                               const std::vector<MyriadPvRr>* originRrTrailer,
                               std::vector<uint32_t>& handled);
             // Transition one chain into each of my other rings not in `chain` or
@@ -180,12 +179,12 @@ namespace routingsim {
                                   uint32_t spof, const std::vector<uint32_t>& fwdChain,
                                   uint32_t fwdCost,
                                   const std::vector<MyriadPvRr>& rr);
-            // Emit the held transitions as one batch per (R2, primary) bucket,
-            // each lapping R2 under a single circular-ACK.
             // Batch window for transitions into `ring`: holdInterval plus the
             // ring's own size^ringCostExponent in ms, times spofHoldMultiplier
             // for the spof bucket.
             simtime_t holdDelay(uint32_t ring, int bucket) const;
+            // Emit the held transitions as one batch per (R2, primary) bucket,
+            // each lapping R2 under a single circular-ACK.
             void flushPendingTransitions(uint32_t ring, int bucket);
             void cancelCollect(uint32_t ring);
             void onCollectBudgetExpired(uint32_t ring);

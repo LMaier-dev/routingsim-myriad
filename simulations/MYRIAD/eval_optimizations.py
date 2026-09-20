@@ -9,8 +9,7 @@ so the totals include what the refreshes re-flood, not only the formation burst.
 maxEcmpPaths is fixed at ECMP for every config except the bar named for it, so a
 Δ is the optimization and not a path count; ecmpCostMargin is 10% throughout, and
 spofHoldMultiplier=1 is the NED's "off" for the spof bucket. ECMP slots are
-filled by cost alone: eval_common pins ecmpDiverseEviction off and no config
-turns it on.
+filled by cost alone.
 
 The byte panels split each bar: solid is the run with the reachability-record
 fields subtracted, the faded extension above it is what RR cost. Both come out

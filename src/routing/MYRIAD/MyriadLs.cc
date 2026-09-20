@@ -364,7 +364,6 @@ void MyriadLS::logLsdb() {
 }
 
 void MyriadLS::processDBD(MyriadDBD* dbd, NeighborEntry& nbr) {
-    // iterate over dbds compare to lsdb with the key and add newer seq no to the lsr_pending
     for (size_t i = 0; i < dbd->getLs_dbdsArraySize(); ++i) {
         const LsaHeader& h = dbd->getLs_dbds(i);
         if (h.getLsa_origin() == myId) continue;
@@ -384,8 +383,7 @@ void MyriadLS::processDBD(MyriadDBD* dbd, NeighborEntry& nbr) {
 
 void MyriadLS::sendNextLsr(NeighborEntry& nbr) {
     if (nbr.lsrQueue.empty()) {
-        // satisfied the last outstanding requests.
-        // But go full only if no DBDs exchange finished
+        // Nothing left to request, which is one of the conditions for FULL.
         tryGoFull(nbr);
         return;
     }
@@ -504,7 +502,6 @@ void MyriadLS::handleLSU(MyriadLSU* lsu, nodeid_t from) {
         }
     }
 
-    // pass pointer to packtet for slice reply
     if (!toAck.empty()) sendAck(from, toAck);
 
     if (drainedAny) {
@@ -799,20 +796,17 @@ void MyriadLS::handleDBD(MyriadDBD* dbd, nodeid_t from) {
         if (dbd->getInit()) { // Phase 1 master negotioation
             nbr.amMaster = false;
             nbr.ddSeq = dbd->getSeq_no() + 1;
-            // Keep our own init retransmitting (do NOT cancel it here). The master
-            // starts the exchange only from its getInit handler, so it must receive
-            // our init AFTER it reaches TWO-WAY — otherwise a staggered join, where
-            // the master ignored our earlier inits, deadlocks in ExStart. The init
-            // is cancelled once the master's phase-2 arrives (the else branch below).
+            // Our own init keeps retransmitting until the master's phase-2 arrives
+            // and the else branch below cancels it. The master starts the exchange
+            // only from an init it receives after reaching TWO-WAY.
         } else {
             // slaves never retransmit (cancel just in case, but it should be null)
             cancelReliable(nbr.inflightDbd);
             // Phase 2 response by slave
             if (dbd->getMaster() && (dbd->getSeq_no() == nbr.ddSeq || !nbr.dbdStarted)
                     && nbr.state < NSTATE_FULL) {
-                // The master owns the sequence: adopt it on the exchange's first
-                // DBD instead of insisting on the value our own init negotiated,
-                // which is stale whenever the master ExStarted before we did.
+                // The master owns the sequence, so adopt it on the exchange's
+                // first DBD rather than the value our own init negotiated.
                 nbr.amMaster = false;
                 nbr.ddSeq = dbd->getSeq_no();
                 nbr.dbdStarted = true;

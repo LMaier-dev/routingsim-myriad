@@ -28,19 +28,15 @@ enum MyriadPvPDUType {
 // contention rules; only REFRESH re-announces the ring. The rest exist so churn
 // never originates an UPDATE.
 enum MyriadPvCollectKind {
-    // A dead king's seat being taken: watchdog coup, or a lap that closed
-    // finding no king. Elects, but does NOT announce — the new king's own
-    // refresh does that, which is what keeps origination refresh-paced.
+    // Takes a vacant king's seat. Elects but does not announce: the new king's
+    // own refresh does that, keeping origination refresh-paced.
     COLLECT_ELECTION = 0;
-    // Liveness check after a ring-neighbor died, and the lap a rebooted node
-    // sends to rejoin: forwarded unconditionally, carries no routing entries.
-    // Its budget expiry is what fires DEGRADE.
+    // Liveness check, and the lap a router with no ring state sends to join.
+    // Forwarded unconditionally; its budget expiry fires DEGRADE.
     COLLECT_PROBE = 1;
-    // Sent once a probe closed and reported a better-informed member: the only
-    // kind that makes a member replay its RIB into the ring.
+    // The only kind that makes a member replay its RIB into the ring.
     COLLECT_REPLAY = 2;
-    // Formation and the king's periodic refresh: elects like ELECTION and is
-    // the only kind that re-announces the ring.
+    // The king's periodic refresh, and the only kind that announces the ring.
     COLLECT_REFRESH = 3;
 }
 

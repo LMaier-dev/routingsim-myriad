@@ -23,16 +23,9 @@ namespace routingsim {
         }
     };
 
-    // An LSA's content is fixed by (origin, type, seq) -- an origin only changes
-    // what it says by bumping the seq -- so every router's copy of the same row
-    // is byte-identical. Storing one object and sharing it turns the LSDB from
-    // O(nodes * origins) allocations into O(origins): at n=10000 that was 3e8
-    // cObjects (44GB) for 3e4 distinct LSAs. The database each router sees is
-    // unchanged; only the simulator stops duplicating it.
-    //
-    // Const because sharing makes an installed LSA everyone's. Nothing mutates
-    // one today (setters run only in buildSelf*Lsa, on a fresh object), and the
-    // send paths dup() out of the LSDB before an LSU adopts the pointer.
+    // An LSA's content is fixed by (origin, type, seq), since an origin only
+    // changes what it says by bumping the seq, so every router's copy of a row is
+    // byte-identical and one shared object serves them all.
     using LsaPtr = std::shared_ptr<const LsaHeader>;
     using Lsdb = std::unordered_map<LsaKey, LsaPtr, LsaKeyHash>;
 
@@ -59,7 +52,7 @@ namespace routingsim {
         bool amMaster = true;
         uint16_t ddSeq = 0;
         PendingTx* inflightDbd = nullptr;
-        // At most one outstanding LSR per neighbors
+        // At most one outstanding LSR per neighbor
         PendingTx* inflightLsr = nullptr;
 
         // DBD send queue: LsaKeys we still owe this neighbor as DBD summaries.
@@ -77,8 +70,8 @@ namespace routingsim {
         // Per-neighbor flooding queue
         std::deque<LsaKey> floodQueue;
         PendingTx* inflightFloodLsu = nullptr;
-        // The seq tag in inflightFloodKeys lets us ignore stale LSAcks
-        // The ones we aleady updated
+        // Keys of the batch in flight, each tagged with the seq that was sent, so
+        // an LSAck for a row already superseded here does not clear the batch.
         std::unordered_map<LsaKey, uint16_t, LsaKeyHash> inflightFloodKeys;
     };
 

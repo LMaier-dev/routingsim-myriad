@@ -4,12 +4,11 @@
 #include <algorithm>
 #include <limits>
 #include <ostream>
-#include <set>
 
 namespace routingsim {
 
 uint32_t MyriadPvRib::sizeToCost(uint32_t s) const {
-    if (s == 2) s = (uint32_t) echoRingSize;   // see MyriadPv.ned
+    if (s == 2) s = (uint32_t) echoRingSize;
     // s^ringCostExponent with u32 saturation: a high exponent on a big ring still
     // overflows, and saturating keeps it costly rather than wrapping to 0.
     uint32_t term = 1;
@@ -57,7 +56,7 @@ void MyriadPvRib::installSelfChain(uint32_t ring, uint32_t originSeq, uint32_t c
 
 bool MyriadPvRib::withinMargin(uint32_t a, uint32_t b) const {
     if (ecmpCostMargin <= 0) return a <= b;
-    // double, since b may be sizeToCost's uint64 saturation where b*(1+m) wraps.
+    // double, since b may be sizeToCost's saturation value, where b*(1+m) wraps.
     double lim = (double)b * (1.0 + ecmpCostMargin);
     double cap = (double)std::numeric_limits<uint32_t>::max();
     return (double)a <= (lim > cap ? cap : lim);
@@ -67,8 +66,8 @@ bool MyriadPvRib::strictlyBetter(const RibEntry& a, const RibEntry& b) const {
     if (rankUseSpof && a.spof_count != b.spof_count) return a.spof_count < b.spof_count;
     if (!withinMargin(a.chain_cost, b.chain_cost)) return false;
     if (!withinMargin(b.chain_cost, a.chain_cost)) return a.chain_cost < b.chain_cost;
-    // Mutually in-margin: siblings, so neither wins — else store()'s new-best
-    // branch erases them. At margin 0 in-margin means equal cost; length breaks it.
+    // Mutually in-margin chains are siblings, so neither wins: a winner would make
+    // admitToFrame erase the others. At margin 0 costs are equal and length decides.
     return ecmpCostMargin > 0 ? false : a.chain.size() < b.chain.size();
 }
 
@@ -87,10 +86,6 @@ bool MyriadPvRib::coBest(const RibEntry& a, const RibEntry& b) const {
         && withinMargin(b.chain_cost, a.chain_cost);
 }
 
-// Admit cand to frames[cur]; returns whether to propagate. The margin is
-// pure acceptance: an in-band arrival widens the frame, an out-of-margin cheaper
-// one replaces everything it beats. On a fullframe the evicted entry is the least  
-// ring-diverse vs the best chain (ecmpDiverseEviction) OR the costliest.
 bool MyriadPvRib::admitToFrame(RibRing& rs, const RibEntry& cand) {
     auto& cf = rs.frames[rs.cur];
 
@@ -105,9 +100,8 @@ bool MyriadPvRib::admitToFrame(RibRing& rs, const RibEntry& cand) {
     if (bestIdx == SIZE_MAX) { cf.push_back(cand); return true; }
 
     if (strictlyBetter(cand, cf[bestIdx])) {    // new best: drop everything worse
-        // "Worse" by the same relation that made cand the best.
-        // The self chain [origin] survives: it is this node's own membership, not
-        // a learned route, and re-learning the ring via a neighbour costs a hop.
+        // The self chain [origin] survives: it is this router's own membership, so
+        // re-learning the ring through a neighbour would cost a hop.
         cf.erase(std::remove_if(cf.begin(), cf.end(),
             [&](const RibEntry& e) {
                 return e.chain.size() > 1 && strictlyBetter(cand, e); }), cf.end());
@@ -116,28 +110,15 @@ bool MyriadPvRib::admitToFrame(RibRing& rs, const RibEntry& cand) {
     }
     else if (!coBest(cand, cf[bestIdx])) return false;   // out of margin, inferior
 
-    // Room or not, for a new best and a co-best arrival alike: append, else
-    // replace the worst.
     if ((long)cf.size() < maxEcmpPaths) { cf.push_back(cand); return true; }
 
-    // Full frame: pick the eviction target over (frame \ best) ∪ {cand}.
-    const std::vector<uint32_t> bc = cf[bestIdx].chain;
-    auto intersect = [&](const std::vector<uint32_t>& c) {
-        std::set<uint32_t> s(bc.begin(), bc.end());
-        size_t n = 0; for (uint32_t r : c) n += s.count(r); return n;
-    };
-    // A cand cheaper than best is always admitted, so exempt it from being the
-    // target; else it competes on the eviction key.
+    // Full frame: the target is the costliest of (frame \ best). A cand cheaper
+    // than best is always admitted, so it never competes to be the target.
     bool candSafe = betterExact(cand, cf[bestIdx]);
-    size_t worst = SIZE_MAX, worstKey = 0; uint64_t worstCost = 0;
+    size_t worst = SIZE_MAX;
     for (size_t i = 0; i < cf.size(); ++i) {
         if (i == bestIdx) continue;
-        size_t key = ecmpDiverseEviction ? intersect(cf[i].chain) : 0;
-        bool wins = worst == SIZE_MAX;
-        if (!wins && ecmpDiverseEviction) wins = key > worstKey
-            || (key == worstKey && cf[i].chain_cost > worstCost);
-        else if (!wins) wins = betterExact(cf[worst], cf[i]);   // costlier => target
-        if (wins) { worst = i; worstKey = key; worstCost = cf[i].chain_cost; }
+        if (worst == SIZE_MAX || betterExact(cf[worst], cf[i])) worst = i;
     }
     if (worst == SIZE_MAX) {        // frame is just {best}: nothing to evict but it
         // A strictly cheaper chain must still take the slot.
@@ -145,21 +126,12 @@ bool MyriadPvRib::admitToFrame(RibRing& rs, const RibEntry& cand) {
         cf[bestIdx] = cand;
         return true;
     }
-    if (!candSafe) {                             // cand only enters if it beats the worst
-        bool candWorse = ecmpDiverseEviction
-            ? (intersect(cand.chain) > worstKey
-               || (intersect(cand.chain) == worstKey && cand.chain_cost >= cf[worst].chain_cost))
-            : betterExact(cf[worst], cand);
-        if (candWorse) return false;
-    }
+    if (!candSafe && betterExact(cf[worst], cand)) return false;
     cf.erase(cf.begin() + worst);
     cf.push_back(cand);
     return true;
 }
 
-// Record cand as its front ring's best recent chain (replay coverage, degrade fallback
-// and suppression, never forwarded). A better chain always wins; a worse one only
-// replaces a slot two generations old, so a path that broke drops out within one cycle.
 bool MyriadPvRib::updateSoleFront(RibRing& rs, const RibEntry& cand) {
     if (cand.chain.empty()) return false;
     auto it = rs.soleFront.find(cand.chain.front());
@@ -177,26 +149,17 @@ bool MyriadPvRib::ringAlreadyHas(uint32_t origin, uint32_t frontRing,
                                  const RibEntry& cand) const {
     auto ri = rings.find(origin);
     if (ri == rings.end()) return false;
-    // The front-ring slot holds the best chain that ring recently carried, so a
-    // candidate it beats would teach the ring nothing new.
     auto si = ri->second.soleFront.find(frontRing);
     if (si == ri->second.soleFront.end()) return false;   // ring never quoted it
     const RibEntry& have = si->second;
-    // No generation check: the slot keeps the best of the last two generations
-    // (updateSoleFront), and an entry two generations old is replaced by anything,
-    // so a suppression that a broken path made wrong costs at most one refresh cycle.
-    // A degraded chain is what the fallback needs an alternative to: never suppress against it.
+    // A degraded chain is what the fallback needs an alternative to, so never
+    // suppress against it.
     if (chainDegraded(have.chain)) return false;
     // Suppress only what the ring would reject outright. ECMP is admitted.
     return !strictlyBetter(cand, have) && !coBest(cand, have);
 }
 
 void MyriadPvRib::selectPreferred(RibRing& rs) {
-    // Rank BOTH frames together by cost (make-before-break): while the current
-    // generation is still converging, last generation's completed chains are
-    // valid and may be cheaper, so they must stay eligible until the new gen
-    // produces something as good. Non-degraded beats degraded first; then spof,
-    // cost, chain IDs.
     const RibEntry* best = nullptr;
     auto consider = [&](const RibEntry& e) {
         if (!best) { best = &e; return; }
@@ -217,7 +180,6 @@ void MyriadPvRib::selectPreferred(RibRing& rs) {
     }
     rs.hasPreferred = best != nullptr;
     if (best) rs.preferred = *best;
-    // One op per candidate ranked.
     if (onCalc) onCalc(ranked);
 }
 
@@ -245,7 +207,7 @@ void MyriadPvRib::clearDegradeIfRecovered(uint32_t ring) {
 std::pair<uint32_t, uint32_t> MyriadPvRib::markDegraded(uint32_t ring) {
     uint32_t seq = rings[ring].curSeq;
     bool isNew = !degrades.count(ring);
-    auto& d = degrades[ring];               // culprit ring -> (seq, beacon)
+    auto& d = degrades[ring];
     if (d.first < seq) d = {seq, 0};        // new generation
     else d.second += 1;                     // re-beacon the current one
     if (isNew) reselectAll();
@@ -268,7 +230,6 @@ bool MyriadPvRib::applyDegrade(uint32_t ring, uint32_t seq, uint32_t beacon) {
     return true;
 }
 
-// originRrTrailer is the rr to adopt on a seq-advance (the packet's own rr).
 StoreResult MyriadPvRib::store(uint32_t origin, const std::vector<uint32_t>& fullChain,
                                uint32_t fullCost, uint32_t seq, uint32_t spof,
                                const std::vector<MyriadPvRr>* originRrTrailer) {
@@ -337,7 +298,6 @@ size_t MyriadPvRib::knownOrigins() const {
 }
 
 uint64_t MyriadPvRib::stateBytes() const {
-    // A chain is the path vector itself; the rest of RibEntry is its scalars.
     auto entry = [](const RibEntry& e) {
         return e.chain.size() * msgsize::RING    // chain
              + msgsize::COST                     // chain_cost
@@ -352,16 +312,13 @@ uint64_t MyriadPvRib::stateBytes() const {
         for (const auto& [front, e] : r.soleFront) b += msgsize::RING + entry(e);
         if (r.hasPreferred) b += entry(r.preferred);
     }
-    // degrades is per culprit ring, bounded by the ring count and tiny next to
-    // the chains; counted for completeness rather than because it moves the number.
     b += degrades.size() * (msgsize::RING + 2 * msgsize::SEQ);
     return b;
 }
 
 MyriadPvRib::EcmpFill MyriadPvRib::ecmpFill() const {
-    // Learned chains only. The self chain ([origin], this node's own ring
-    // membership) is exempt from the cap in store(), so counting it would report
-    // a slot the ECMP logic never filled.
+    // Learned chains only: the self chain is exempt from the cap, so counting it
+    // would report a slot the ECMP logic never filled.
     EcmpFill f;
     for (const auto& [origin, r] : rings) {
         uint64_t n = 0;
@@ -388,8 +345,6 @@ MyriadPvRib::ReplayQuality MyriadPvRib::replayQuality() const {
 
 std::vector<MyriadPvRib::ReplayChain> MyriadPvRib::preferredChains() const {
     std::vector<ReplayChain> out;
-    // The per-origin preferred plus every soleFront slot: replay must reach every
-    // (origin, front ring), and front coverage lives in soleFront.
     for (auto& [origin, ors] : rings) {
         if (!ors.hasPreferred) continue;
         auto emit = [&](const RibEntry& e) {
@@ -420,7 +375,6 @@ void MyriadPvRib::dumpTo(std::ostream& f, const std::string& tprefix, bool stats
         return;
     }
 
-    // One line per origin with the primary chain.
     for (uint32_t rid : originIds) {
         const RibRing& rs = rings.at(rid);
         const RibEntry& e = rs.preferred;

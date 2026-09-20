@@ -119,7 +119,7 @@ void MyriadPV::onInitialize() {
     updateJitter = par("updateJitter");
     rib.configure(par("ringCostExponent"), par("echoRingSize"),
                   par("rankUseSpof"), par("maxEcmpPaths"),
-                  par("ecmpCostMargin"), par("ecmpDiverseEviction"));
+                  par("ecmpCostMargin"));
     rib.onCalc = [this](unsigned long long ops) { countCalc(ops); };
     degradeEnabled = par("degradeEnabled");
     skipDegradedTransitions = par("skipDegradedTransitions");
@@ -241,8 +241,8 @@ void MyriadPV::originateCollect(uint32_t ring, nodeid_t to, MyriadPvCollectKind 
         }
     }
 
-    // Seed transitions with my OTHER rings, all isRedundant=false; the ring
-    // fills them in as members insert their own memberships.
+    // Seed with my other rings; members flip a transition to redundant when a
+    // second of them claims it.
     std::vector<uint32_t> transitions;
     for (uint32_t r : selfRings) if (r != ring) transitions.push_back(r);
     pkt->setTransitionsArraySize(transitions.size());
@@ -262,8 +262,7 @@ void MyriadPV::originateCollect(uint32_t ring, nodeid_t to, MyriadPvCollectKind 
 }
 
 void MyriadPV::reoriginateCollect(uint32_t ring, bool routine, MyriadPvCollectKind kind) {
-    // Either ring-neighbor works as the target, a lap covers the ring in both
-    // directions; skip if the ring isn't fully seen.
+    // Either ring-neighbor works: a lap covers the ring whichever way it goes.
     std::vector<nodeid_t> nbrs = ringNeighbors(ring);
     if (nbrs.empty()) {
         MLOG_DEBUG() << "re-collect ring='" << ring
@@ -710,8 +709,6 @@ void MyriadPV::handleCollect(MyriadPvCollect* collect, nodeid_t sender) {
 
 bool MyriadPV::lapExpired(MyriadPvHeader* pkt, uint32_t ring, nodeid_t sender,
                           const char* what) {
-    // Every in-ring forward passes here. A lap longer than the ring is no longer
-    // walking the cycle
     uint32_t cap = (uint32_t) maxCollectHops;
     uint32_t hops = pkt->getHops() + 1u;
     if (hops > cap) {
@@ -782,8 +779,7 @@ void MyriadPV::originateUpdate(uint32_t ring) {
         pkt->setWidths(i, t);
     }
 
-    // handled accrues the rings I fan into so sibling bridges on the origin 
-    // lap don't duplicate.
+    // Accrues the rings I fan into, so later bridges on this lap skip them.
     std::vector<uint32_t> handled;
     std::vector<uint32_t> emptyChain;
     forwardChainInterRing(ring, m.originSeq, 0, emptyChain, 0, rr, handled);
@@ -793,8 +789,7 @@ void MyriadPV::originateUpdate(uint32_t ring) {
     // Origin-UPDATE lives in the empty-chain inflight slot.
     pkt->setByteLength(pvUpdateBytes(pkt));
     RingInflight& fl = m.updateInflights[emptyChain];
-    // A previous origin lap may still be retransmitting under a now-stale seq;
-    // sendRingReliable would overwrite the handle and orphan its timer.
+    // An earlier origin lap may still be retransmitting under a stale seq.
     cancelRingReliable(fl);
     fl.seq_no = m.originSeq;
     sendRingReliable(fl, primary, fallback, pkt, rxmtInterval, COLLECT_RETRY_LIMIT,
@@ -808,7 +803,6 @@ void MyriadPV::insertAndForwardCollect(MyriadPvCollect* pkt, uint32_t R, nodeid_
     RingMembership& m = memberships[R];
     if (lapExpired(pkt, R, sender, "COLLECT")) return;
     replayIfBest(pkt, R);
-    // Count myself as a ring member
     pkt->setMember_count(pkt->getMember_count() + 1);
 
     // 1. Append my (subnet, myId) pairs.
@@ -844,12 +838,12 @@ void MyriadPV::insertAndForwardCollect(MyriadPvCollect* pkt, uint32_t R, nodeid_
         }
     }
 
-    // 3. Forward to the OTHER ring-neighbor for R. A genuine 2-node ring has
-    // no other neighbor: echo back to the sender so the king still gets its
-    // circular ACK (with 2 spofs).
+    // 3. Forward to the other ring-neighbor. An echo ring has none, so the lap
+    // turns around at its single member.
     nodeid_t to = otherRingNeighbor(R, sender);
     if (to == undefined_node) {
-        // A degraded larger ring (had >1 neighbor) instead drops expiring the budget
+        // On any other ring the neighbor is missing because the ring is broken,
+        // so dropping the lap lets the budget expire into a DEGRADE.
         if (isEchoRing(R)) {
             to = sender;
             MLOG_N_DEBUG(sender) << "echo COLLECT ring='" << R << "' (2-node ring)\n";
@@ -961,8 +955,6 @@ void MyriadPV::handleUpdate(MyriadPvUpdate* update, nodeid_t sender) {
     forwardUpdateInRing(update, curRing, sender);
 }
 
-// originRrTrailer is the rr to adopt on a seq-advance (the packet's own rr).
-// See the declaration in MyriadPv.h for the rest.
 void MyriadPV::processChain(uint32_t curRing, uint32_t seq, uint32_t spof,
                             const std::vector<uint32_t>& chain,
                             uint32_t chainCost,
@@ -971,17 +963,15 @@ void MyriadPV::processChain(uint32_t curRing, uint32_t seq, uint32_t spof,
                             std::vector<uint32_t>& handled) {
     uint32_t origin = chain.empty() ? curRing : chain.back();
     
-    // Don't store or bridge an inter-ring update arriving on a ring whose COLLECT
-    // hasn't landed here yet (the dup guard blocks re-forwarding). Excludes seq==0
-    // replay: it's adopted into the RIB and never re-forwarded, so the dup-guard
-    // rationale doesn't apply
+    // Without this ring's size a chain through it cannot be priced, so defer
+    // until our own COLLECT lands. Replays are exempt: they never re-forward.
     if (!chain.empty() && seq != 0 && memberCountOf(curRing) == 0) {
         MLOG_DEBUG() << "inter-ring UPDATE on ring='" << curRing
                      << "' deferred: own COLLECT not yet complete\n";
         return;
     }
 
-    // Full path identity = current_ring :: packet chain, with sizes parallel.
+    // The chain as seen from here: my ring prepended to the carried one.
     std::vector<uint32_t> fullChain;
     fullChain.reserve(chain.size() + 1);
     fullChain.push_back(curRing);
@@ -1016,8 +1006,6 @@ void MyriadPV::forwardUpdateInRing(MyriadPvUpdate* pkt, uint32_t ring, nodeid_t 
     if (lapExpired(pkt, ring, sender, "UPDATE")) return;
     nodeid_t to = otherRingNeighbor(ring, sender);
     if (to == undefined_node) {
-        // Genuine 2-node ring: echo to the sender to close the lap. A degraded
-        // larger ring drops, letting the budget expire → DEGRADE.
         if (!isEchoRing(ring)) return;
         to = sender;
     }
@@ -1056,11 +1044,11 @@ void MyriadPV::forwardChainInterRing(uint32_t curRing, uint32_t seq, uint32_t sp
                           uint32_t chainCost,
                           const std::vector<MyriadPvRr>& rr,
                           std::vector<uint32_t>& handled) {
-    // During COLLECT warmup suppress inter-ring forwarding; memberCounts are
-    // still being established
+    // Nothing can be priced while the warmup is still settling member counts.
     if (collectWarmupDuration > 0 && simTime() < collectWarmupDuration)
         return;
-    // curRing prices the hop this bridge adds. Unknown, it would go out at UNKNOWN_RING_SIZE
+    // curRing prices the hop this bridge adds, so without its size the chain
+    // would leave here quoted at UNKNOWN_RING_SIZE.
     if (memberCountOf(curRing) == 0) {
         MLOG_DEBUG() << "transition out of ring='" << curRing
                      << "' skipped: own COLLECT not yet complete\n";
@@ -1077,17 +1065,16 @@ void MyriadPV::forwardChainInterRing(uint32_t curRing, uint32_t seq, uint32_t sp
         for (uint32_t h : handled) if (h == R2) { already = true; break; }
         if (already) continue;
 
-        // R2's COLLECT hasn't landed here yet: its members can't bridge out of it
-        // (same gate in processChain) target ring has to prove redundancy first.
+        // Without R2's size its members could not price what they bridge onward,
+        // and its transition widths are not known either.
         if (memberCountOf(R2) == 0) {
             MLOG_DEBUG() << "transition into ring='" << R2
                          << "' skipped: its COLLECT not yet complete\n";
             continue;
         }
 
-        // A degraded ring's laps don't close, so this would only burn the
-        // retransmit budget. The degrade clears once an UPDATE of a newer
-        // generation arrives from that ring (clearDegradeIfRecovered).
+        // A degraded ring's laps do not close, so a transition into it would only
+        // burn the retransmit budget.
         if (skipDegradedTransitions && rib.isDegraded(R2)) {
             MLOG_DEBUG() << "transition into ring='" << R2
                          << "' skipped: degraded\n";
@@ -1137,10 +1124,8 @@ void MyriadPV::forwardChainInterRing(uint32_t curRing, uint32_t seq, uint32_t sp
         }
 
         if (holdInterval > SIMTIME_ZERO) {
-            // Queue for the next flush; RIB dedup + handled marks prevent double-queue.
-            // Bucket 1 (this hop adds a spof) waits longer, so the spof-free wave
-            // settles the RIB first and this one dies on arrival. See the header.
-            // The window is per TARGET ring, armed by that ring's first chain.
+            // The spof bucket waits longer, so the spof-free wave settles the RIB
+            // first and these chains lose on arrival instead of being forwarded.
             int bucket = doubleTransition ? 0 : 1;
             pendingTransitions[bucket][{R2, primary}].push_back(
                 PendingTransition{R2, primary, fallback, seq, fwdSpof, fwdChain, fwdCost, rr});
@@ -1177,8 +1162,6 @@ void MyriadPV::forwardChainInterRing(uint32_t curRing, uint32_t seq, uint32_t sp
 }
 
 simtime_t MyriadPV::holdDelay(uint32_t ring, int bucket) const {
-    // holdInterval + size^ringCostExponent ms, so a wave crossing a big ring is
-    // held as long as that ring is expensive.
     uint32_t sz = memberCountOf(ring);
     double ms = 1.0;
     for (long k = 0; k < ringCostExponent && sz; ++k) ms *= sz;
@@ -1201,9 +1184,8 @@ void MyriadPV::flushPendingTransitions(uint32_t ring, int bucket) {
         nodeid_t primary = key.second;
         RingMembership& rs2 = memberships[R2];
 
-        // Send ALL queued, no re-validation: a chain that was winner-on-arrival
-        // already propagated downstream, and via loop prevention may be the only
-        // path to some nodes. Re-dropping non-final winners here loses those routes.
+        // No re-validation: a chain that won on arrival has already propagated
+        // downstream, and dropping it here would strand whatever it reached.
         std::vector<PendingTransition*> live;
         live.reserve(chains.size());
         for (auto& pt : chains) live.push_back(&pt);
@@ -1211,9 +1193,8 @@ void MyriadPV::flushPendingTransitions(uint32_t ring, int bucket) {
 
         nodeid_t fallback = live.front()->fallback;
 
-        // Pack into batches up to maxBatchBytes; overflow spills into more that
-        // lap R2 independently. A lone over-cap entry still ships (can't split a
-        // chain). Modelled per-entry size: chain*8 + rr*6 + 16, ~16B header.
+        // Overflow spills into further batches that lap R2 independently. An
+        // entry over the cap on its own still ships, since a chain cannot split.
         auto entryBytes = [](const PendingTransition* pt) {
             return (long)(pt->fwdChain.size() * 8 + pt->rr.size() * 6 + 16);
         };
@@ -1306,8 +1287,7 @@ void MyriadPV::replayInto(uint32_t ring) {
         return (long)(e.chain.size() * 8 + e.rr->size() * 6 + 16);
     };
 
-    // Pack into batches up to maxBatchBytes (see flushPendingTransitions); each
-    // laps `ring` under its own circular-ACK.
+    // Packed like a flush, each batch lapping `ring` under its own circular-ACK.
     size_t i = 0;
     while (i < replay.size()) {
         std::vector<const RebasedChain*> group;
@@ -1414,9 +1394,8 @@ void MyriadPV::handleUpdateBatch(MyriadPvUpdateBatch* batch, nodeid_t sender) {
                              << "' size=" << rs2.memberCount << "\n";
     }
 
-    // Process each entry (its transitions become new held batches into my other
-    // rings), updating its handled_rings in place so sibling bridges downstream
-    // see what I flooded. The batch itself stays WHOLE for the lap.
+    // Each entry's handled_rings is updated in place, so bridges further along
+    // the lap see what this one already fanned out.
     for (size_t i = 0; i < batch->getEntriesArraySize(); ++i) {
         MyriadPvUpdateEntry& e = batch->getEntriesForUpdate(i);
         std::vector<uint32_t> chain;
@@ -1433,7 +1412,6 @@ void MyriadPV::handleUpdateBatch(MyriadPvUpdateBatch* batch, nodeid_t sender) {
         for (size_t j = 0; j < handled.size(); ++j) e.setHandled_rings(j, handled[j]);
     }
 
-    // Forward the WHOLE batch within R2 so the owner's lap closes.
     forwardBatchInRing(batch, R2, sender);
 }
 
