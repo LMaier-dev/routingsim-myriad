@@ -8,10 +8,10 @@ simple myriadpv extends routingsim.foundation.Protocol
         // Shared with MyriadLS via MyriadHelloProto. Keep helloInterval +
         // helloJitter < deadInterval. PV configs raise helloJitter to break up
         // the synchronized-origination wave.
-        double helloInterval @unit(s) = default(10s);
-        double deadInterval @unit(s) = default(40s);
-        double rxmtInterval @unit(s) = default(5s);
-        double helloJitter @unit(s) = default(0s);
+        double helloInterval @unit(s) = default(4s);
+        double deadInterval @unit(s) = default(9s);
+        double rxmtInterval @unit(s) = default(2s);
+        double helloJitter @unit(s) = default(2s);
         // One-time stagger of the first hello at cold start (uniform(0, joinJitter)),
         // so ring formation isn't a synchronized herd. Reboots are already spread
         // by the failure scenario, so this applies to initial startup only.
@@ -19,7 +19,7 @@ simple myriadpv extends routingsim.foundation.Protocol
 
         // King re-originates a COLLECT every refreshInterval; a member watchdogs
         // at refreshInterval + refreshJitter + watchdogMargin
-        double refreshInterval @unit(s) = default(30s);
+        double refreshInterval @unit(s) = default(120s);
         double refreshJitter @unit(s) = default(refreshInterval * 0.1);
         double watchdogMargin @unit(s) = default(2s);
 
@@ -41,7 +41,7 @@ simple myriadpv extends routingsim.foundation.Protocol
         // Size a 2-member ring is priced at instead of its real one. Such a ring
         // is a single link carrying both of its spofs, so it is a last resort
         // however cheap its size looks; 2 disables the penalty.
-        int echoRingSize = default(16);
+        int echoRingSize = default(20);
 
         // Rank on SPOF count first (default) or skip it and rank purely by cost.
         // false makes the RIB least-cost, matching the Dijkstra algo
@@ -51,7 +51,7 @@ simple myriadpv extends routingsim.foundation.Protocol
         // spof-free wave settles the RIB first and the spof-incurring one — which
         // rankUseSpof would outrank anyway — dies on arrival instead of
         // propagating a full wave. 1 = off.
-        double spofHoldMultiplier = default(5.0);
+        double spofHoldMultiplier = default(3.0);
 
         // Hold window grows with the target ring's cost (+ size^ringCostExponent
         // ms), so a wave crossing a big ring waits as long as that ring is
@@ -69,7 +69,7 @@ simple myriadpv extends routingsim.foundation.Protocol
 
         // Don't transition a chain into a ring that already quoted an equal-or-
         // better route to that origin.
-        bool suppressRedundantTransitions = default(false);
+        bool suppressRedundantTransitions = default(true);
 
         // Eval only: Disable RR
         bool carryRr = default(true);
@@ -102,16 +102,16 @@ simple myriadpv extends routingsim.foundation.Protocol
         // Relative cost band counting two chains as co-best (0.2 = 20%). 0 =
         // exact equality, which on an irregular topology almost never holds,
         // leaving maxEcmpPaths inert. Must stay 0 for the Dijkstra oracle gate.
-        double ecmpCostMargin = default(0.2);
+        double ecmpCostMargin = default(0.25);
 
         // Max serialized bytes of one inter-ring UPDATE batch; the flush splits
         // the held set across frame-sized batches (real path-vector protocols
-        // cap PDU size too). 1400 ≈ one Ethernet payload.
-        int maxBatchBytes = default(1400);
+        // cap PDU size too).
+        int maxBatchBytes = default(4096);
 
         // Inter-ring UPDATE batching window (see flushPendingTransitions); only
         // inter-ring transitions are held, never intra-ring laps. 0s = off.
-        double holdInterval @unit(s) = default(200ms);
+        double holdInterval @unit(s) = default(50ms);
 
         // Test hook (see finish / test_rib_batching.py): if non-empty, each node
         // appends its converged preferred routes here.
@@ -120,7 +120,7 @@ simple myriadpv extends routingsim.foundation.Protocol
         // Observational RIB snapshot period (see startSnapshot). >0 appends the
         // preferred RIB to ribDumpFile every interval with a t=<simTime> prefix;
         // 0s = off (finish() dump only). Read-only, does not perturb the protocol.
-        double snapshotInterval @unit(s) = default(0s);
+        double snapshotInterval @unit(s) = default(1000ms);
 
         // Periodic snapshot format: "full" (one line per route, needed for
         // cost-drift) or "stats" (one aggregate line per node: route count, cost
@@ -133,7 +133,7 @@ simple myriadpv extends routingsim.foundation.Protocol
         // has set memberCount. Convergence measurements subtract this offset.
         // On by default: without it, round-1 UPDATEs carry unsettled counts and
         // corrections diffuse only ~1 ring-hop per refresh cycle. 0s = off.
-        double collectWarmupDuration @unit(s) = default(10s);
+        double collectWarmupDuration @unit(s) = default(30s);
 
         // Interval at which COLLECTs are re-triggered during warmup. 0s (the
         // default) derives it as 0.3 * collectWarmupDuration, i.e. ~3 COLLECTs
@@ -147,7 +147,7 @@ simple myriadpv extends routingsim.foundation.Protocol
         // per-id table. Set via **.NodeN.*.ringLabel or a node property.
         string ringLabel = default("");
 
-        string logLevel = default("DEBUG");  // DEBUG | INFO | WARN | ERROR
+        string logLevel = default("warn");  // DEBUG | INFO | WARN | ERROR
         // ANSI-color the log prefix by level (Cmdenv terminal only).
         bool colorLog = default(false);
 }
