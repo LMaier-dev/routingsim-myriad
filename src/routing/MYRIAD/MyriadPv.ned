@@ -79,8 +79,9 @@ simple myriadpv extends routingsim.foundation.Protocol
         int maxCollectHops = default(128);
 
         // On COLLECT own-return, if a recovered (stateless) member is on the
-        // ring, the king replays its current front-of-ring chains as seq=0
-        // UPDATEs so the recovered node repopulates without waiting for refresh.
+        // ring, its best-informed member replays that member's current chains as
+        // seq=0 UPDATEs, so the recovered node refills without waiting for a
+        // refresh.
         bool recoveryReplayEnabled = default(true);
 
         // A closing COLLECT lap reports the fewest chains any member on it

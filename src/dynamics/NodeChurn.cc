@@ -13,9 +13,9 @@ simtime_t NodeChurn::scheduleDynamics() {
 	size_t maxDegree = par("maxDegree");
 	if (maxDegree == 0) maxDegree = std::numeric_limits<int>::max();
 
-	// Same split as EscalatingFailure: eligibility is live (an already-down node
-	// can't fail again) but the degree filter reads the structural topology, so a
-	// healthy node isn't excluded just because a neighbour happens to be down.
+	// Eligibility is live, since an already-down node cannot fail again, but the
+	// degree filter reads the structural topology, so a healthy node is not
+	// excluded because a neighbour happens to be down.
 	std::vector<nodeid_t> activeIds;
 	getTopology().getNodeIDs(activeIds);
 	std::vector<nodeid_t> candidates;

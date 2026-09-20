@@ -42,7 +42,9 @@ constexpr int64_t RR           = U32 + NODEID;                  // 6:  subnet + 
 constexpr int64_t TRANSITION   = RING + BOOL;                   // 3:  ring + isRedundant
 constexpr int64_t LSREQ        = NODEID + TYPE_TAG;             // 3:  origin + type
 
-// Security overhead model. Shared by both protocols: the link tier is the common Hello handshake.
+// Security overhead model, shared by both protocols: the link tier is the common
+// Hello handshake. These widths are only added to PDU sizes so the byte counts
+// include authentication. Nothing is signed, aggregated or verified.
 constexpr int64_t SEC_SIG        = 48;  // one BLS signature (compressed G1)
 constexpr int64_t SEC_SIG_PERHOP = 64;  // alternative: pairing-free (Schnorr/ECDSA),
                                         // cannot aggregate across distinct keys

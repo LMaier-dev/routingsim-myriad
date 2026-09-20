@@ -90,9 +90,8 @@ packet MyriadPvCollect extends MyriadPvNLRI {
     // Originator lacked state (memberCount==0): loses the king election to any
     // live member (formation tie-break by id).
     bool originator_crashed;
-    // Best replay source seen on this lap: origin count first, then fewer total
-    // spofs, then lower total cost over the preferred chains. A forwarder must
-    // beat all three to take the slot, so it never trades breadth for quality.
+    // Best replay source seen on this lap: more origins always takes the slot,
+    // and the mean spof and cost only separate sources holding the same number.
     // Not part of the election.
     uint32_t lap_max_routes;
     uint32_t lap_max_spof;

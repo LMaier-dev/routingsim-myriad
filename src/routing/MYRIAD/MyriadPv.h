@@ -106,18 +106,19 @@ namespace routingsim {
             // onto it, so a recovered member there gets its routes back.
             void replayInto(uint32_t ring);
             // Non-REPLAY laps raise lap_max_routes to the ring's best-informed
-            // member; the REPLAY lap is seeded with that figure, so only that
-            // one member replays and the rest defer. Kingship plays no part: a
-            // king crowned mid-recovery can be missing entries itself.
+            // member, and the REPLAY lap carries that figure so only that member
+            // replays. Not the king, which may be crowned while still empty.
             void replayIfBest(MyriadPvCollect* lap, uint32_t ring);
             // COLLECT election key: live (memberCount>0) beats crashed, ties by id.
             // Not RIB richness, which moves during convergence and churns kingship.
             bool collectWins(bool incomingCrashed, nodeid_t incomingId, uint32_t ring) const;
             // Null-safe member count: 0 if I hold no membership for `ring`
             uint32_t memberCountOf(uint32_t ring) const;
-            // A broken ring's collect lap expired: record + flood a DEGRADE for it
-            // (re-beaconed on each retry). floodDegrade skips the hop we got it from.
+            // A broken ring's collect lap expired: record and flood a DEGRADE for
+            // it, re-beaconed on each retry.
             void originateDegrade(uint32_t ring);
+            // `skip` is the hop the DEGRADE arrived on, or undefined_node when
+            // originating.
             void floodDegrade(uint32_t ring, uint32_t seq, uint32_t beacon, nodeid_t skip);
 
             // `replayer` addresses a REPLAY lap at the member a prior lap
@@ -201,6 +202,8 @@ namespace routingsim {
             void sendRingReliable(RingInflight& fl, nodeid_t primary, nodeid_t fallback,
                                   cPacket* pkt, simtime_t interval, int retryLimit,
                                   std::function<void()> onBudgetExpired);
+            // Frees the retransmit handle and the budget timer, so a budget-timer
+            // callback must null budgetTimer first: its own timer is the one firing.
             void cancelRingReliable(RingInflight& fl);
             void ringRetxFire(RingTx* h);
             std::vector<uint32_t> mySubnets;    // (subnet, myId) pairs, set at init
@@ -209,9 +212,9 @@ namespace routingsim {
             simtime_t watchdogMargin; // coup this long after a refresh could last arrive
             simtime_t updateJitter;   // spread the initial per-ring UPDATE storm
             bool degradeEnabled = true;
-            // Skip inter-ring transitions into a degraded ring; see MyriadPv.ned
+            // Skip inter-ring transitions into a degraded ring.
             bool skipDegradedTransitions = true;
-            // Skip inter-ring transitions a ring would reject; see MyriadPv.ned
+            // Skip inter-ring transitions a ring would reject.
             bool suppressRedundantTransitions = true;
             // RibEntry never carries rr. (For eval)
             bool carryRr = true;

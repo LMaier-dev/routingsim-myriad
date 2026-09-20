@@ -41,7 +41,7 @@ int64_t pvBatchBytes(const MyriadPvUpdateBatch* p) {
     return b;
 }
 
-// Signature and link widths are shared with MyriadLs (see MyriadPduSize.h).
+// Signature and link widths are shared with MyriadLs.
 constexpr int64_t SEC_HOP   = RSIZE + BOOL;  // chain unfolding: ring size + redundancy bit
 
 // Security overhead one PDU would carry, split so each part can be rescaled
@@ -410,8 +410,10 @@ void MyriadPV::cancelCollect(uint32_t ring) {
 static bool betterReplaySource(const MyriadPvRib::ReplayQuality& q,
                                const MyriadPvCollect* lap) {
     uint32_t n = lap->getLap_max_routes();
-    if (q.origins <= n) return false;
-    if (n == 0) return true;
+    // Breadth first: a wider RIB always takes the slot.
+    if (q.origins != n) return q.origins > n;
+    if (n == 0) return false;
+    // Equal breadth: prefer the lower mean spof and cost per origin.
     return (uint64_t) q.spofTotal * n <= (uint64_t) lap->getLap_max_spof() * q.origins
         && q.costTotal / q.origins <= lap->getLap_max_cost() / n;
 }
@@ -452,12 +454,12 @@ void MyriadPV::onCollectBudgetExpired(uint32_t ring) {
     cancelRingReliable(m.collectInflight);
     MLOG_WARN() << "ring send budget expired ring='" << ring
                 << "' seq=" << m.collectInflight.seq_no << " — ring broken\n";
-    // Degrade only on actual degradation
+    // A budget expiring with every ring-neighbor up is loss, not degradation,
+    // so the routers beside a break are the ones that originate.
     auto nbrs = ringNeighbors(ring);
     if (degradeEnabled && nbrs.size() < expectedRingNeighbors(ring))
         originateDegrade(ring);
 
-    // A neighbor came back while this lap was walking.
     bool missed = m.probeTriggerMissed;
     m.probeTriggerMissed = false;
     if (missed && nbrs.size() == expectedRingNeighbors(ring)
@@ -477,7 +479,6 @@ void MyriadPV::onUpdateBudgetExpired(uint32_t ring, std::vector<uint32_t> chain)
     auto& infl = rit->second.updateInflights;
     auto it = infl.find(chain);
     if (it == infl.end()) return;
-    // Drop the budget-timer handle first (see onCollectBudgetExpired).
     it->second.budgetTimer = nullptr;
     cancelRingReliable(it->second);
     infl.erase(it);
@@ -491,7 +492,7 @@ void MyriadPV::onBatchBudgetExpired(uint32_t ring, uint32_t batchLapSeq) {
     auto& infl = rit->second.batchInflights;
     auto it = infl.find(batchLapSeq);
     if (it == infl.end()) return;
-    it->second.budgetTimer = nullptr;   // see onCollectBudgetExpired
+    it->second.budgetTimer = nullptr;
     cancelRingReliable(it->second);
     infl.erase(it);
     MLOG_WARN() << "batch-lap budget expired ring='" << ring
@@ -598,10 +599,9 @@ void MyriadPV::handleCollect(MyriadPvCollect* collect, nodeid_t sender) {
             }
             EV << "]\n";
 
-            // Lap closed, so the ring is whole and a replay reaches every
-            // member. Seeded with the max this lap saw, so exactly the member
-            // holding it replays. The test looks at the NEEDIEST member, not at
-            // my own count.
+            // The lap closed, so the ring is whole and a replay reaches every
+            // member. The shortfall test compares the NEEDIEST member against the
+            // best-informed one, not against my own count.
             if (recoveryReplayEnabled && simTime() >= collectWarmupDuration
                 && collect->getKind() != COLLECT_REPLAY
                 && collect->getLap_min_routes()
@@ -1250,11 +1250,8 @@ void MyriadPV::replayInto(uint32_t ring) {
     nodeid_t fallback = nbrs.size() > 1 ? nbrs[1] : nbrs[0];
     RingMembership& rs = memberships[ring];
 
-    // A replay is a plain seq==0 UPDATE, so the receiver prepends `ring` and adds
-    // its cost like any inter-ring transition (see processChain). We therefore
-    // send what lies BEYOND `ring`: as king I am a converged member of it, so
-    // rebasing my whole RIB onto it hands the recovered node a route to every
-    // origin I know, whichever of my rings I actually reach it through.
+    // The receiver prepends `ring` and prices it like any inter-ring transition,
+    // so what goes on the wire is the part of each chain BEYOND `ring`.
     struct RebasedChain { std::vector<uint32_t> chain; uint64_t cost; uint32_t spof;
                           const std::vector<MyriadPvRr>* rr; };
     std::vector<RebasedChain> replay;

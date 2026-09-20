@@ -111,9 +111,8 @@ namespace routingsim {
             struct EcmpFill { uint64_t chains = 0; uint64_t frames = 0; };
             EcmpFill ecmpFill() const;
 
-            // How good my RIB is as a replay source: breadth plus the totals
-            // over the per-origin preferred chains, so a lap can rank members
-            // that know equally much by how well they know it.
+            // How good my RIB is as a replay source: the breadth, plus the
+            // totals a lap divides by it to compare quality per origin.
             struct ReplayQuality {
                 uint32_t origins = 0;
                 uint32_t spofTotal = 0;

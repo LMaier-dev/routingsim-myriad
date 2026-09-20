@@ -13,8 +13,7 @@
 // Member counts come from `weightRings` (persistent membership), NOT from the
 // live routing view: PV prices a chain by the ring sizes it learned and does not
 // reprice when a member dies, so an oracle that shrank its weights on every
-// failure would compare two different cost functions. Under churn that read as
-// stretch swinging above and below 1 with no route having changed.
+// failure would compare two different cost functions.
 
 #include <cstdint>
 #include <map>
