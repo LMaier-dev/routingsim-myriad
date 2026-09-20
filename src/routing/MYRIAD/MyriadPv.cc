@@ -194,21 +194,12 @@ void MyriadPV::onTwoWayReached(PvNeighbor& nbr) {
                                 << expectedRingNeighbors(R) << " up)\n";
             originateCollect(R, nbr.id, COLLECT_PROBE);
         } else if (fresh) {
-            // reset() wipes memberships, so a rebooted node is always "fresh".
-            // It probes; only a closed lap is worth a replay (handleCollect).
-            if (rebooted) {
-                originateCollect(R, nbr.id, COLLECT_PROBE);  // reboot: immediate, recovery latency matters
-            } else if (collectWarmupInterval > 0) {
-                // Spread the first election over uniform(0, collectWarmupInterval)
-                uint32_t r = R;
-                addOneShotTimer(uniform(0, collectWarmupInterval),
-                                [this, r](short) {
-                                    reoriginateCollect(r, false, COLLECT_REFRESH);
-                                    return false;
-                                });
-            } else {
-                originateCollect(R, nbr.id, COLLECT_REFRESH);
-            }
+            // Holding no state means either the ring is forming or I lost mine,
+            // and nothing local tells the two apart, so both probe. A PROBE laps
+            // unconditionally, so it closes and can order a replay. Meeting no
+            // king on the way leaves originator_crashed set, and the closing lap
+            // turns that into the coup that crowns the first king.
+            originateCollect(R, nbr.id, COLLECT_PROBE);
         }
     }
 }
@@ -638,7 +629,7 @@ void MyriadPV::handleCollect(MyriadPvCollect* collect, nodeid_t sender) {
                     MLOG_INFO() << "replay lap met no king on ring='" << R << "' — coup\n";
                     reoriginateCollect(R);
                 } else if (!m.isKing && !m.watchdogTimer) {
-                    startWatchdog(R);  // rebooted node returns a plain member
+                    startWatchdog(R);  // the ring has a king, so I stay a member
                 }
                 return;
             }
@@ -1492,8 +1483,6 @@ void MyriadPV::reset() {
     for (auto& pt : pendingTransitions) pt.clear();
     if (snapshotTimer) { cancelAndDelete(snapshotTimer); snapshotTimer = nullptr; }
     cancelHelloTimer();
-
-    rebooted = true;
 
     scheduleHello(helloInterval);
     if (snapshotInterval > 0 && !par("ribDumpFile").stdstringValue().empty())

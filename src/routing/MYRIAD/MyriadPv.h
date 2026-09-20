@@ -232,9 +232,6 @@ namespace routingsim {
             bool snapshotStats = false; // periodic snapshot as aggregate stats, not full RIB
             simtime_t collectWarmupDuration; // delay UPDATE origination until COLLECTs settle
             simtime_t collectWarmupInterval; // how often to re-run COLLECTs during warmup
-            // Set by reset(), never cleared: this router has been up before, so
-            // holding no ring state means recovery rather than formation.
-            bool rebooted = false;
             long echoRingIdMax = 900000;   // see MyriadPv.ned
             std::unordered_map<uint32_t /*ring*/, uint32_t> lastOriginSeq;
             // Held transitions bucketed by (target ring, next-hop primary). Two
