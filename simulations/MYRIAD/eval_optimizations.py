@@ -72,6 +72,7 @@ CONFIGS = [
     ("base 3/0.25", {"ecmpCostMargin": 0.25}),
     ("hold policy", {**HOLD_POLICY, "ecmpCostMargin": 0.25}),
     ("suppress", {"suppressRedundantTransitions": "true", "ecmpCostMargin": 0.25}),
+    ("both 1/0", {"suppressRedundantTransitions": "true", **HOLD_POLICY, "maxEcmpPaths": 1, "ecmpCostMargin": 0}),     
     ("both 3/0.25", {"suppressRedundantTransitions": "true", **HOLD_POLICY, "ecmpCostMargin": 0.25}),
     ("both 8/0.5", {"suppressRedundantTransitions": "true", **HOLD_POLICY, "maxEcmpPaths": 8, "ecmpCostMargin": 0.5}),          # the one config off the fixed ECMP
 ]
