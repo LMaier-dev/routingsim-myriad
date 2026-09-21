@@ -35,7 +35,8 @@ sys.path.insert(0, HERE)
 import ringpipe as rp
 import ringgrow as rg
 from metrics import score
-from ringpipe_explain import RING_COLORS, draw_rings, head, interfaces, plural
+from ringpipe_explain import (RING_COLORS, draw_rings, head, interfaces,
+                              plural, spof_nodes)
 
 
 def main():
@@ -75,18 +76,18 @@ def main():
     RAD = 0.12
     CURVE = f"arc3,rad={RAD}"
 
-    fig, axes = plt.subplots(2, 4, figsize=(22, 11.5))
+    fig, axes = plt.subplots(2, 4, figsize=(22, 13))
     ax = axes.ravel()
 
     # 1. sites
     nx.draw_networkx_edges(ax=ax[0], G=sg, pos=spos, edge_color="0.6")
-    nx.draw_networkx_nodes(ax=ax[0], G=sg, pos=spos, node_size=420,
+    nx.draw_networkx_nodes(ax=ax[0], G=sg, pos=spos, node_size=560,
                            node_color=[RING_COLORS[i % len(RING_COLORS)] for i in sg])
-    nx.draw_networkx_labels(ax=ax[0], G=sg, pos=spos, font_size=9, font_color="w")
+    nx.draw_networkx_labels(ax=ax[0], G=sg, pos=spos, font_size=12, font_color="w")
     head(ax[0], f"1. place {a.rings} rings",
-         "one dot per ring. The grey lines say which rings are near each other, "
-         "which is all this graph is for: it decides the ORDER pairs are joined "
-         "in, never how many.")
+         "one dot per ring, which is what a ring is in the overlay: a node. "
+         "Grey lines say which rings are near each other, and they fix only "
+         "the ORDER pairs are joined in, never how many.")
 
     # 2. the merge order. Numbered rather than grouped by tree/site/rest: the
     # numbers ARE the order, and re-deriving the groups here would duplicate
@@ -106,42 +107,39 @@ def main():
                        ha="center", va="center", fontsize=8, color="tab:blue",
                        bbox=dict(boxstyle="circle,pad=0.12", fc="white",
                                  ec="tab:blue", lw=0.8))
-    nx.draw_networkx_nodes(ax=ax[1], G=sg, pos=spos, node_size=420,
+    nx.draw_networkx_nodes(ax=ax[1], G=sg, pos=spos, node_size=560,
                            node_color=[RING_COLORS[i % len(RING_COLORS)] for i in sg])
-    nx.draw_networkx_labels(ax=ax[1], G=sg, pos=spos, font_size=9, font_color="w")
+    nx.draw_networkx_labels(ax=ax[1], G=sg, pos=spos, font_size=12, font_color="w")
     head(ax[1], f"2. choose which {a.tr} pairs meet",
-         "numbered in the order they are joined: the shortest tree first, so "
-         "every ring is reachable at the smallest count the sweep can ask for, "
-         "then the remaining near pairs, then anything left. Each pair is "
-         "joined at most once, so a pair is a transition and the count is exact.")
+         "numbered in join order: a spanning tree first, so every ring is "
+         "reachable at the smallest count, then the nearest pairs. Each pair "
+         "is joined once, so the count is exact.")
 
     # 3-6. the router graph, pass by pass
     draw_rings(ax[2], *stage["laid"], rpos,
                f"3. lay {a.rings} separate rings",
-               "no ring touches another yet. A ring gets two spare routers per "
-               "transition it will carry, plus two kept at the end so the "
-               "closing cable always joins spare to spare.\n"
-               + note(*stage["laid"]))
+               "the underlay: routers and links. No ring touches another "
+               "yet, and each holds two spare routers for every transition "
+               "it will carry.\n" + note(*stage["laid"]))
     draw_rings(ax[3], *stage["merged"], rpos,
                f"4. join the {a.tr} pairs",
-               "to join two rings, two spare routers of one are handed to the "
-               "other: now both own them, and traffic can change ring there. "
-               "That is one transition. The loops do not get longer -- the "
-               "network gets SMALLER by two routers each time.\n"
+               "two routers of one ring are handed to the other, so both "
+               "own them: they become transition routers and the pair now "
+               "has one transition. Each join costs two routers.\n"
                + note(*stage["merged"]))
     draw_rings(ax[4], *stage["narrowed"], rpos,
                "5. squeeze some meeting places to one router",
-               "give one of the two routers back, so the pair now shares just "
-               "one (red). They still meet -- lose that router and they cannot "
-               "reach each other.\n" + note(*stage["narrowed"]),
-               mark=[v for v in stage["narrowed"][0] if v not in stage["merged"][0]])
+               "one router is handed back, so the pair meets at a single "
+               "transition router (red): a single point of failure, since "
+               "losing it severs them.\n"
+               + note(*stage["narrowed"]),
+               mark=spof_nodes(stage["narrowed"][1]))
     draw_rings(ax[5], g3, plan3, rpos,
                f"6. add spare routers back to {a.target_n}",
-               "spread evenly, so the loops stay about the same length. The "
-               "network gets bigger; the number of transitions does not "
-               "change. --sweep-n is this step and nothing else: rerun it at "
-               "several --target-n and every point is the SAME ring graph at a "
-               "different size.\n" + note(g3, plan3))
+               "spread evenly, so all rings grow alike. Member counts rise, "
+               "the ring plan does not change: --sweep-n is this step "
+               "alone.\n"
+               + note(g3, plan3))
 
     # 7. the ring graph: what the plan looks like to the control plane
     ifc = interfaces(plan3)
@@ -159,17 +157,16 @@ def main():
                            connectionstyle=CURVE, arrows=True, arrowstyle="-",
                            edge_color=["tab:red" if wid[e] == 1 else "0.45"
                                        for e in rgg.edges()])
-    nx.draw_networkx_nodes(ax=ax[6], G=rgg, pos=rpos_d, node_size=420,
+    nx.draw_networkx_nodes(ax=ax[6], G=rgg, pos=rpos_d, node_size=560,
                            node_color=[RING_COLORS[k % len(RING_COLORS)] for k in rgg])
-    nx.draw_networkx_labels(ax=ax[6], G=rgg, pos=rpos_d, font_size=9, font_color="w")
-    nx.draw_networkx_edge_labels(ax=ax[6], G=rgg, pos=rpos_d, font_size=7,
+    nx.draw_networkx_labels(ax=ax[6], G=rgg, pos=rpos_d, font_size=12, font_color="w")
+    nx.draw_networkx_edge_labels(ax=ax[6], G=rgg, pos=rpos_d, font_size=11,
                                  connectionstyle=CURVE,
                                  edge_labels={e: str(w) for e, w in wid.items()})
     head(ax[6], f"7. what the routing sees: {rgg.number_of_edges()} transitions",
-         "one dot per ring, one line per pair that meets -- and this is exactly "
-         "the picture from panel 2, which is the point: the count was chosen up "
-         "front, not solved for. The number on a line is how many routers the "
-         "two rings share; red means one, so losing it cuts them apart.")
+         "the overlay: one node per ring, one link per transition, and "
+         "exactly panel 2, because the count was chosen up front and never "
+         "solved for. The label is the transition width, red means width 1.")
 
     # 8. the knobs, and the closed forms that make this generator worth having.
     # Predicted vs achieved rather than predicted alone: these identities are
@@ -182,42 +179,31 @@ def main():
               ("cables = n + tr", fin["m"], n + tr_),
               ("sum of ring lengths = n + 2*tr - spof",
                sum(len(r) for r in plan3), n + 2 * tr_ - s_)]
-    ok = "\n".join(f"  {name:<38} {got:>6}  {'ok' if got == want else f'!= {want}'}"
+    ok = "\n".join(f"  {name:<28} {got:>5}  {'ok' if got == want else f'!= {want}'}"
                    for name, got, want in checks)
     ax[7].text(0.0, 1.0,
                "the settings used here\n\n"
-               f"--rings {a.rings:<10} {a.rings} rings (panel 1)\n"
-               f"--tr {a.tr:<13} {a.tr} pairs of them meet (panel 2)\n"
-               f"--spof {a.spof:<11g} {s_} of the {tr_} squeezed to 1 router\n"
-               f"--ring-size {a.ring_size:<6} every ring at least {a.ring_size} routers long\n"
-               f"--target-n {a.target_n:<7} keep adding spare routers until "
-               f"{a.target_n}\n\n"
-               "ringgrow needs no solver: fix the ring count and the node\n"
-               "count, and everything else follows in closed form. Measured\n"
-               "against the identity, on this very plan:\n\n"
+               f"--rings {a.rings:<8} {a.rings} rings (panel 1)\n"
+               f"--tr {a.tr:<11} pairs that meet (panel 2)\n"
+               f"--spof {a.spof:<9g} {s_} of them squeezed to 1 router\n"
+               f"--ring-size {a.ring_size:<4} shortest ring allowed\n"
+               f"--target-n {a.target_n:<5} pad with spares until {a.target_n}\n\n"
+               "no solver needed: fix the ring and node count and the rest\n"
+               "follows in closed form. Checked on this plan:\n\n"
                f"{ok}\n\n"
-               "so ring length and mean degree MOVE with tr, by exactly this\n"
-               "much -- the price of the x axis, not a confound, and what\n"
-               "ringpipe's --hold-len solver was paying to avoid.\n\n"
-               "the same identities give TWO sweeps out of one generator:\n\n"
-               "  --sweep-tr  n fixed, tr swept: the ring graph IS the axis.\n"
-               "  --sweep-n   tr fixed, n swept -- panel 6 alone. fan does not\n"
-               "              contain n, so fan, transitions and the ring graph\n"
-               "              are identical at every point and only the length\n"
-               "              follows -- the axis per-router state scales on (LS\n"
-               "              keeps a row per node, path-vector keeps its rings),\n"
-               "              which no n-pinned sweep can show. Floor:\n"
-               "              n >= 2*tr + 2*A + spof.\n"
-               f"the file name keeps the result: _A{fin['rings']} _tr{tr_} "
-               f"_fan{fin['fan']} _n{n}",
-               transform=ax[7].transAxes, va="top", ha="left", fontsize=7.0,
+               "member count and overlay degree therefore MOVE with tr, by\n"
+               "exactly this much: the price of the x axis, not a confound.\n\n"
+               "  --sweep-tr  n fixed, the ring graph IS the axis\n"
+               "  --sweep-n   tr fixed, panel 6 alone: same ring graph at\n"
+               "              every point, only the member counts rise",
+               transform=ax[7].transAxes, va="top", ha="left", fontsize=11.5,
                family="monospace")
 
     fig.suptitle(f"ringgrow.py --family {a.family} --rings {a.rings} --tr {a.tr} "
                  f"--spof {a.spof:g} --ring-size {a.ring_size} "
                  f"--target-n {a.target_n} --seed {a.seed}\n"
                  f"result: {n} routers in {fin['rings']} rings, "
-                 f"{plural(tr_, 'transition')} between them", fontsize=11)
+                 f"{plural(tr_, 'transition')} between them", fontsize=15)
     fig.tight_layout(rect=(0, 0, 1, 0.94))
     os.makedirs(os.path.dirname(a.out), exist_ok=True)
     fig.savefig(a.out, dpi=200)

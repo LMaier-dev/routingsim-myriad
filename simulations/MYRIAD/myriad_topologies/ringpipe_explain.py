@@ -38,11 +38,13 @@ def plural(k, word):
 
 def head(ax, title, note=""):
     """Panel title plus its wrapped explanation, both inside the axes' width —
-    a long note as a figure-level text runs into the neighbouring panel."""
+    a long note as a figure-level text runs into the neighbouring panel. The
+    figure is printed rotated and half a page wide, so the wrap is set by what
+    stays legible at that size, not by how much fits."""
     import textwrap
-    ax.set_title(title + ("\n" + "\n".join(textwrap.fill(ln, 62)
+    ax.set_title(title + ("\n" + "\n".join(textwrap.fill(ln, 50, break_on_hyphens=False)
                                            for ln in note.split("\n")) if note else ""),
-                 fontsize=10 if not note else 9, linespacing=1.35)
+                 fontsize=15 if not note else 13, linespacing=1.3)
     ax.set_axis_off()
 
 
@@ -58,6 +60,25 @@ def interfaces(plan):
         if len(rs) > 1:
             out.setdefault(frozenset(rs), []).append(v)
     return out
+
+
+def spof_nodes(plan):
+    """The single router a narrowed pair meets at: what panel 5 marks in red and
+    what panel 7 draws as a red line. Derived from the finished plan, not by
+    diffing node ids against the previous pass -- narrowing SPLITS a shared node
+    and hands the new copy to one ring, so the id that appears is the solo half,
+    not the point of failure, and _spof_final relabels besides."""
+    memb = {}
+    for k, r in enumerate(plan):
+        for v in r:
+            memb.setdefault(v, set()).add(k)
+    shared = {}
+    for v, rs in memb.items():
+        for a in sorted(rs):
+            for b in sorted(rs):
+                if a < b:
+                    shared.setdefault((a, b), []).append(v)
+    return {vs[0] for vs in shared.values() if len(vs) == 1}
 
 
 def layout(g, plan, rpos):
@@ -123,7 +144,7 @@ def draw_rings(ax, g, plan, rpos, title, note="", mark=(), label_ifaces=False):
             ax.annotate("rings " + ",".join(str(r) for r in sorted(rs)) + "\n"
                         + plural(len(rs) * (len(rs) - 1) // 2, "transition"),
                         (x, y), textcoords="offset points", xytext=(0, 14),
-                        ha="center", fontsize=7.5, color="tab:blue")
+                        ha="center", fontsize=11, color="tab:blue")
     head(ax, title, note)
 
 
@@ -170,21 +191,20 @@ def main():
     g1, plan1 = rp._prune_solo(g0.copy(), [list(r) for r in plan0],
                                a.prune_solo, rng)
     g2, plan2 = rp._spof_final(g1.copy(), [list(r) for r in plan1], a.spof, rng)
-    narrowed = [v for v in g2 if v not in g1]     # the split halves _spof_final made
     g3, plan3 = rp._pad_uniform(g2.copy(), [list(r) for r in plan2], a.target_n, rng)
 
-    fig, axes = plt.subplots(2, 4, figsize=(22, 11.5))
+    fig, axes = plt.subplots(2, 4, figsize=(22, 13))
     ax = axes.ravel()
 
     # 1. sites
     spos = {i: tuple(pts[i]) for i in sg}
     nx.draw_networkx_edges(ax=ax[0], G=sg, pos=spos, edge_color="0.6")
-    nx.draw_networkx_nodes(ax=ax[0], G=sg, pos=spos, node_size=420,
+    nx.draw_networkx_nodes(ax=ax[0], G=sg, pos=spos, node_size=560,
                            node_color=[RING_COLORS[i % len(RING_COLORS)] for i in sg])
-    nx.draw_networkx_labels(ax=ax[0], G=sg, pos=spos, font_size=9, font_color="w")
+    nx.draw_networkx_labels(ax=ax[0], G=sg, pos=spos, font_size=12, font_color="w")
     head(ax[0], f"1. place {a.rings} rings",
-         f"one dot per ring. The grey lines say which rings are neighbours, "
-         f"so we know which ones could meet.")
+         "one dot per ring, which is what a ring is in the overlay: a node. "
+         "Grey lines mark the rings close enough to meet.")
 
     # 2. clique cover: each clique becomes one interface.
     # Drawn as a hub with a spoke to each member site, NOT as coloured site
@@ -208,40 +228,37 @@ def main():
         ax[1].annotate(f"{plural(m, 'ring')}\n"
                        f"{plural(m * (m - 1) // 2, 'transition')}", (cx, cy),
                        textcoords="offset points", xytext=(0, 13), ha="center",
-                       fontsize=8, color="tab:blue", zorder=4)
-    nx.draw_networkx_nodes(ax=ax[1], G=sg, pos=spos, node_size=420,
+                       fontsize=11, color="tab:blue", zorder=4)
+    nx.draw_networkx_nodes(ax=ax[1], G=sg, pos=spos, node_size=560,
                            node_color=[RING_COLORS[i % len(RING_COLORS)] for i in sg])
-    nx.draw_networkx_labels(ax=ax[1], G=sg, pos=spos, font_size=9, font_color="w")
+    nx.draw_networkx_labels(ax=ax[1], G=sg, pos=spos, font_size=12, font_color="w")
     head(ax[1], f"2. pick {len(cliques)} meeting places",
-         f"each black square is one place where rings meet; the dashed lines "
-         f"say which. Every PAIR of rings that meets there can hand traffic "
-         f"over: that is one transition. {max(len(c) for c in cliques)} rings "
-         f"meeting = {max(len(c) for c in cliques) * (max(len(c) for c in cliques) - 1) // 2} "
-         f"transitions. Two rings never meet twice.")
+         f"each square is one place, the dashed lines say which rings meet "
+         f"there. Every PAIR meeting is one transition, so m rings give "
+         f"m(m-1)/2 of them.")
 
     # 3-6. the router graph, pass by pass
     draw_rings(ax[2], g0, plan0, rpos,
                "3. build the rings",
-               f"every ring is a loop. A meeting place becomes "
-               f"{a.width_max} routers that all the rings there own (black); "
-               f"the rest are spare routers in one ring only (white). A cable "
-               f"used by several rings is drawn with one line per ring.\n"
+               f"the underlay: routers and links. A meeting place becomes "
+               f"{a.width_max} transition routers, owned by every ring there "
+               f"(black). The rest belong to one ring only (white).\n"
                + stats_note(g0, plan0), label_ifaces=True)
     draw_rings(ax[3], g1, plan1, rpos,
                "4. take the spare routers out",
-               "spare routers belong to one ring, so they carry no transition "
-               "— dropping them only makes the loops shorter. This is the "
-               "smallest the plan can be.\n" + stats_note(g1, plan1))
+               "a router in one ring only carries no transition, so cutting "
+               "it out just shortens that ring. The floor of this plan.\n"
+               + stats_note(g1, plan1))
     draw_rings(ax[4], g2, plan2, rpos,
                "5. squeeze some meeting places to one router",
-               "the two rings still meet, but now at a single router (red): "
-               "lose it and they cannot reach each other. Same number of "
-               "transitions, thinner.\n" + stats_note(g2, plan2), mark=narrowed)
+               "the pair still meets, but at a single transition router "
+               "(red): a single point of failure, since losing it severs "
+               "them. Same transitions, less fan-out.\n"
+               + stats_note(g2, plan2), mark=spof_nodes(plan2))
     draw_rings(ax[5], g3, plan3, rpos,
                f"6. add spare routers back to {a.target_n}",
-               "spread evenly, so the loops stay about the same length. The "
-               "network gets bigger; the number of transitions does not "
-               "change.\n" + stats_note(g3, plan3))
+               "spread evenly, so all rings grow alike. Member counts rise, "
+               "the ring plan does not change.\n" + stats_note(g3, plan3))
 
     # 7. the ring graph: what the plan looks like to the control plane
     ifc = interfaces(plan3)
@@ -258,18 +275,16 @@ def main():
     nx.draw_networkx_edges(ax=ax[6], G=rg, pos=rgpos, width=2.2,
                            edge_color=["tab:red" if wid[e] == 1 else "0.45"
                                        for e in rg.edges()])
-    nx.draw_networkx_nodes(ax=ax[6], G=rg, pos=rgpos, node_size=420,
+    nx.draw_networkx_nodes(ax=ax[6], G=rg, pos=rgpos, node_size=560,
                            node_color=[RING_COLORS[k % len(RING_COLORS)] for k in rg])
-    nx.draw_networkx_labels(ax=ax[6], G=rg, pos=rgpos, font_size=9, font_color="w")
-    nx.draw_networkx_edge_labels(ax=ax[6], G=rg, pos=rgpos, font_size=7,
+    nx.draw_networkx_labels(ax=ax[6], G=rg, pos=rgpos, font_size=12, font_color="w")
+    nx.draw_networkx_edge_labels(ax=ax[6], G=rg, pos=rgpos, font_size=11,
                                  edge_labels={e: str(w) for e, w in wid.items()})
     nred = sum(1 for e in rg.edges() if wid[e] == 1)
     head(ax[6], f"7. what the routing sees: {rg.number_of_edges()} transitions",
-         f"one dot per ring, one line per pair of rings that meet. That is all "
-         f"the routing has to keep track of: {rg.number_of_edges()} lines. "
-         f"the number on a line is how many routers the two rings share; "
-         f"red means just one, so losing it cuts them apart. A line counts "
-         f"once however many routers are behind it.")
+         f"the overlay, and all the routing keeps: one node per ring, one "
+         f"link per transition. The label is the transition width, how many "
+         f"routers the pair shares. Red means width 1.")
 
     # 8. which knob moves what
     ax[7].set_axis_off()
@@ -279,22 +294,23 @@ def main():
                "the settings used here\n\n"
                f"--rings {a.rings:<10} {a.rings} rings (panel 1)\n"
                f"--share {a.share:<10g} up to {biggest} rings may meet in one place\n"
-               f"--width-max {a.width_max:<6} a meeting place is {a.width_max} routers "
-               f"({a.width_max - 1} cable)\n"
+               f"--width-max {a.width_max:<6} transitions are {a.width_max} "
+               f"routers wide\n"
                f"--spof {a.spof:<11g} {fin['spof']} of the {fin['pairs']} transitions "
                f"squeezed to 1 router\n"
                f"--ring-size {a.ring_size:<6} every ring at least {a.ring_size} routers long\n"
                f"--target-n {a.target_n:<7} keep adding spare routers until "
                f"{a.target_n}\n\n"
                "turn one up and you get\n\n"
-               "  more rings          more transitions\n"
-               "  more sharing        more transitions\n"
-               "  wider meeting place same transitions, more fan-out\n"
-               "  more spof           same transitions, less fan-out\n"
-               "  bigger target-n     same transitions, longer loops\n\n"
+               "  more rings        more transitions\n"
+               "  more sharing      more transitions\n"
+               "  wider transition  more fan-out\n"
+               "  more spof         less fan-out\n"
+               "  bigger n          longer rings\n\n"
+               "only the first two move the transition count.\n\n"
                "the file name keeps the result:\n"
                f"  _A{fin['rings']} _tr{fin['pairs']} _fan{fin['fan']} _n{fin['n']}",
-               transform=ax[7].transAxes, va="top", ha="left", fontsize=9.5,
+               transform=ax[7].transAxes, va="top", ha="left", fontsize=13,
                family="monospace")
 
     s = score(g3, plan3, check=False)
@@ -303,7 +319,7 @@ def main():
                  f"--ring-size {a.ring_size} --target-n {a.target_n} "
                  f"--seed {a.seed}\n"
                  f"result: {s['n']} routers in {s['rings']} rings, "
-                 f"{plural(s['pairs'], 'transition')} between them", fontsize=11)
+                 f"{plural(s['pairs'], 'transition')} between them", fontsize=15)
     fig.tight_layout(rect=(0, 0, 1, 0.94))
     os.makedirs(os.path.dirname(a.out), exist_ok=True)
     fig.savefig(a.out, dpi=200)
