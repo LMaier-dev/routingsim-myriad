@@ -199,15 +199,15 @@ def main(args=None):
     axL.set_xscale("log")
     # Colour is the protocol, never the axis: both PV series are red and both LS
     # references blue, and the two metrics are told apart by marker and alpha.
-    pv, ls_c = PROTO_COLOR["pv"], PROTO_COLOR["ls"]
+    pv_c, ls_c = PROTO_COLOR["pv"], PROTO_COLOR["ls"]
     lines = [
-        axL.plot(gx, [pv[h]["ct"] for h in geo], "o-", color=pv,
+        axL.plot(gx, [pv[h]["ct"] for h in geo], "o-", color=pv_c,
                  label="Path-Vector (PV) convergence time")[0],
-        axR.plot(gx, [pv[h]["msgs"] for h in geo], "s--", color=pv, alpha=.55,
+        axR.plot(gx, [pv[h]["msgs"] for h in geo], "s--", color=pv_c, alpha=.55,
                  label="PV sent messages")[0],
     ]
     if has_off:
-        lines.append(axR.axhline(pv["0s"]["msgs"], ls=":", color=pv, alpha=.6,
+        lines.append(axR.axhline(pv["0s"]["msgs"], ls=":", color=pv_c, alpha=.6,
                                  label="PV messages, no batching (0s)"))
     lines.append(axL.axhline(ls_ct, ls="-", color=ls_c, alpha=.6,
                              label=f"LS convergence ({ls_ct:.1f}s)"))
