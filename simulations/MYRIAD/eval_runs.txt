@@ -44,9 +44,12 @@ SPLIT python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --topo
 SPLIT python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --topo ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow2500_A300_spof0.5@median --only node --basis native --no-refresh-flood --nospof --noreplay --wave-spacing 50
 
 # overview: bytes and messages per phase (conv, churn, each wave fraction),
-# boxplotted over the tr extremes x --repeat failure schedules. No snapshots.
-# Every config runs in this one process, so no --post is needed.
-python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --overview --dir ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow2500_A300_spof0.5 --tr-extremes --basis native --repeat 4 --jobs 24 --no-refresh-flood --wave-spacing 50 --extra-warmup 50
+# boxplotted over the whole transition sweep, one failure schedule per topology.
+# No snapshots. Every config runs in this one process, so no --post is needed.
+# The topology is what a box's spread is meant to be over, so the runs go to 25
+# topologies once each rather than to the two ends of the sweep four times: the
+# same box then has its middle drawn from topologies that exist.
+python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --overview --dir ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_grow2500_A300_spof0.5 --schedule-per-topo --basis native --jobs 32 --no-refresh-flood --wave-spacing 50 --extra-warmup 50
 
 
 # ---------------------------------------------------------------------------
@@ -71,6 +74,9 @@ SPLIT python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --topo
 # Totals per window on the real topology: bytes AND messages for convergence,
 # idle and churn, all off the same simulations.
 python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py dynamics --overview --topo ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/German_HV_net_n2312.min.ring.txt --only churn --basis native --repeat 4 --jobs 4 --no-refresh-flood
+
+# What a refresh costs against the initial convergence, PV against itself.
+python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py refresh --topo ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/German_HV_net_core_n981.min.ring.txt --basis native --margins 0.1,0.25 --refreshes 3 --repeat 1 --jobs 1 --tag margin
 
 
 # ---------------------------------------------------------------------------
@@ -102,7 +108,8 @@ python3 ~/routingsim/simulations/MYRIAD/eval_entrypoint.py optimizations --jobs 
 # --no-link-panel: per-link load is a function of FAN, and the ring graph is
 # pinned here. No --norr: n runs to 8000, so the RR-excluded series comes from
 # the free in-run subtraction instead of a third simulation per point.
-python3 ~/routingsim/simulations/MYRIAD/eval_scaling.py --dir ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_nsweep_A300_tr750_spof0.5 --x-key n --jobs 24 --no-link-panel
+# SKIPPED for now
+# python3 ~/routingsim/simulations/MYRIAD/eval_scaling.py --dir ~/routingsim/simulations/MYRIAD/myriad_topologies/csv/delaunay_nsweep_A300_tr750_spof0.5 --x-key n --jobs 24 --no-link-panel
 
 # All three panels on the ringgrow corpus the dynamics runs use: state, volume
 # and link load, each with and without RR. tr is the swept knob, so fan moves

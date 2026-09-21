@@ -302,16 +302,17 @@ void MyriadPV::startWarmupCollects() {
         // Spread each king's re-COLLECT uniformly across the interval instead of
         // firing them all at once: a synchronized herd every tick is itself a
         // flood spike on ring-dense topologies. uniform(0, interval) = 0.3*warmup.
+        simtime_t left = collectWarmupDuration - simTime();
         for (auto& [ring, m] : memberships)
             if (m.isKing) {
                 uint32_t r = ring;
-                addOneShotTimer(uniform(0, collectWarmupInterval),
+                addOneShotTimer(uniform(0, std::min(collectWarmupInterval, left)),
                                 [this, r](short) {
                                     reoriginateCollect(r, false, COLLECT_REFRESH);
                                     return false;
                                 });
             }
-        if (simTime() < collectWarmupDuration)
+        if (simTime() + collectWarmupInterval < collectWarmupDuration)
             startWarmupCollects();
         return false;
     });
@@ -656,10 +657,13 @@ void MyriadPV::handleCollect(MyriadPvCollect* collect, nodeid_t sender) {
             // size from its own lap return, so members stay at memberCount==0
             // until an origin-UPDATE trailer reaches them.
             originateUpdate(R);
-            // Warmup laps never bridged: originate once more with counts known.
-            if (simTime() < collectWarmupDuration)
+            // Warmup laps never bridged, so the ring originates once more when
+            // the gate opens and counts are known.
+            if (simTime() < collectWarmupDuration && !m.warmupOriginateArmed) {
+                m.warmupOriginateArmed = true;
                 addOneShotTimer(collectWarmupDuration - simTime() + uniform(0, updateJitter),
                                 [this, R](short) { originateUpdate(R); return false; });
+            }
 
             startRefresh(R);
         } else {

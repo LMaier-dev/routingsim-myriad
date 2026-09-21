@@ -67,6 +67,9 @@ namespace routingsim {
         bool routineRefreshPending = false;
         // A ring-neighbor reached TWOWAY while a lap was already walking.
         bool probeTriggerMissed = false;
+        // The post-warmup origination is armed, so a later warmup lap does not
+        // arm a second one for the same ring.
+        bool warmupOriginateArmed = false;
     };
 
     // An inter-ring transition held for batching. Its origin is fwdChain.back().

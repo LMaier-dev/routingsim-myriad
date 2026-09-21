@@ -3,7 +3,7 @@
 
 Runs the oracle regression test first, then dispatches to the selected eval.
 
-    python3 eval_entrypoint.py {convergence,costdrift,dynamics} [--topo PATH] [--basis {min,tree}]
+    python3 eval_entrypoint.py {convergence,costdrift,dynamics,refresh} [--topo PATH] [--basis {min,tree}]
     python3 eval_entrypoint.py scaling [--quick] [--only ...] [--basis {min,tree}] [--single TOPO] ...
 
 Run conditions come from eval_common.ini; --refresh/--warmup/--snapshot/--set
@@ -103,6 +103,8 @@ def main():
                                  "highest-_tr topologies in it, every seed of each — "
                                  "the two ends of a transition sweep at a fraction of "
                                  "the sim cost")
+            sp.add_argument("--schedule-per-topo", action="store_true",
+                            help="with --dir: give each topology its own failure-schedule seed instead of running every topology under all --repeat seeds. The pool then spans the whole sweep at one run per topology, so the spread a box shows is across topologies rather than across schedules on a few of them")
             sp.add_argument("--overview", action="store_true",
                             help="traffic-only mode: messages and bytes per "
                                  "failure window (churn, each node-wave "
@@ -113,6 +115,11 @@ def main():
     op = sub.add_parser("optimizations")
     eval_optimizations.add_opt_args(op)
     add_repeat_args(op)
+
+    import eval_refresh
+    rf = sub.add_parser("refresh")
+    add_topo_args(rf)
+    eval_refresh.add_refresh_args(rf)
 
     sc = sub.add_parser("scaling")
     sc.add_argument("--quick", action="store_true")
@@ -146,7 +153,8 @@ def main():
     # neither simulates, so the oracle gate (which does) would be pure waste.
     nosim = (args.cmd == "dynamics" and (getattr(args, "post", False)
                                          or getattr(args, "list_configs", False))
-             or (args.cmd == "optimizations" and getattr(args, "dry_run", False)))
+             or (args.cmd in ("optimizations", "refresh")
+                 and (getattr(args, "dry_run", False) or getattr(args, "post", False))))
     # scaling and optimizations sweep whole topology families and carry no --topo
     # for the gate to run on; run_evals.sh stamps the gate once before fanning out.
     if args.cmd not in ("scaling", "optimizations") and not nosim:
@@ -157,6 +165,7 @@ def main():
         "costdrift":   "eval_costdrift",
         "dynamics":    "eval_dynamics",
         "optimizations": "eval_optimizations",
+        "refresh":     "eval_refresh",
         "scaling":     "eval_scaling",
     }
     mod = __import__(dispatch[args.cmd])

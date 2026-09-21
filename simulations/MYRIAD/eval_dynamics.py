@@ -542,7 +542,8 @@ def tx_windows(resdir, windows):
     return {k: tuple(v) for k, v in out.items()}
 
 
-def overview(inis, topos, scenarios, fractions, spacing, run_sims):
+def overview(inis, topos, scenarios, fractions, spacing, run_sims,
+             per_topo=False):
     """Message volume and bytes per failure window, over REPEATS RNG seeds and
     every topology in `topos` (--dir).
 
@@ -581,8 +582,12 @@ def overview(inis, topos, scenarios, fractions, spacing, run_sims):
     if not plan:
         sys.exit("--overview scores the churn and node scenarios; --only link "
                  "leaves it nothing to measure")
-    tasks = [(t, s, n, r) for t in topos for s in plan
-             for n in CONFIGS for r in range(H.REPEATS)]
+    # rep picks both the seed-set and the result dir, so one rep per topology
+    # IS one schedule per topology. Spending the runs on more topologies buys
+    # more spread than repeating schedules on a few of them.
+    tasks = [(t, s, n, r) for i, t in enumerate(topos) for s in plan
+             for n in CONFIGS
+             for r in ([i] if per_topo else range(H.REPEATS))]
     jobs = max(1, min(H.JOBS or os.cpu_count() or 1, len(tasks)))
     H.PROGRESS = jobs == 1   # a shared \r status line is unreadable from N runs
 
@@ -596,7 +601,8 @@ def overview(inis, topos, scenarios, fractions, spacing, run_sims):
         return tx_windows(resdir, wins)
 
     print(f"\n{len(tasks)} runs ({len(topos)} topologies × {len(plan)} scenarios "
-          f"× {len(CONFIGS)} configs × {H.REPEATS} seeds) on {jobs} job(s)"
+          f"× {len(CONFIGS)} configs × "
+          f"{'1 schedule each' if per_topo else f'{H.REPEATS} seeds'}) on {jobs} job(s)"
           + ("" if run_sims else " — post mode, re-parsing on disk"))
     # (scenario, label, config) -> [(bytes, msgs, topology, seed)], one entry per
     # run: topology and seed are both spread the boxplot draws, kept apart only
@@ -613,17 +619,18 @@ def overview(inis, topos, scenarios, fractions, spacing, run_sims):
     if not any(res.values()):
         sys.exit("FAIL: no txBytes vectors parsed — opp_scavetool missing, or "
                  "no runs on disk for --post")
-    overview_report(plan, res)
+    overview_report(plan, res, per_topo)
     overview_plots(plan, res)
     overview_security_plot(plan, res)
     overview_security_plot(plan, res, cfg="ls")
 
 
-def overview_report(plan, res):
+def overview_report(plan, res, per_topo=False):
     """Median per window over the runs, plus the spread the boxplots draw."""
     ntopo = len({v[2] for vals in res.values() for v in vals})
     print(f"\n=== overview: control-plane volume per failure window "
-          f"({ntopo} topolog{'y' if ntopo == 1 else 'ies'} × {H.REPEATS} seed(s), "
+          f"({ntopo} topolog{'y' if ntopo == 1 else 'ies'} × "
+          f"{'1 schedule each' if per_topo else f'{H.REPEATS} seed(s)'}, "
           f"warmup excluded) ===")
     # One unit for the volume columns
     rows = []   # built first: the header can't print until the unit is known
@@ -1061,6 +1068,8 @@ def main(args=None):
                             "highest-_tr topologies in it, every seed of each — "
                             "the two ends of a transition sweep at a fraction of "
                             "the sim cost")
+        p.add_argument("--schedule-per-topo", action="store_true",
+                       help="with --dir: give each topology its own failure-schedule seed instead of running every topology under all --repeat seeds. The pool then spans the whole sweep at one run per topology, so the spread a box shows is across topologies rather than across schedules on a few of them")
         p.add_argument("--overview", action="store_true",
                        help="traffic-only mode: messages and bytes per failure "
                             "window (churn, and each node-wave fraction), "
@@ -1172,7 +1181,8 @@ def main(args=None):
     waves = []
 
     if getattr(args, "overview", False):
-        return overview(inis, topos, scenarios, fractions, spacing, run_sims)
+        return overview(inis, topos, scenarios, fractions, spacing, run_sims,
+                        getattr(args, "schedule_per_topo", False))
 
     # --- traffic scenarios ---
     for scenario in [s for s in scenarios if s != "node"]:
