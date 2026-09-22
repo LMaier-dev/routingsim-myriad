@@ -4,8 +4,10 @@ baseline bar, then all together. One topology (--topo) or one sweep level of a
 ringgrow set averaged over its seeds, which is where the error bars come from;
 LS runs once per seed as the reference.
 
-Every run covers the warmup plus two refresh cycles with refreshFloodsUpdate=true,
-so the totals include what the refreshes re-flood, not only the formation burst.
+Every run covers the warmup plus one refresh cycle with refreshFloodsUpdate=true,
+so the totals include what the refresh re-floods, not only the formation burst.
+One cycle is enough to price a refresh and keeps the LS reference affordable: with
+lsRefreshInterval set, each extra cycle is another full LSDB re-flood.
 maxEcmpPaths is fixed at ECMP for every config except the bar named for it, so a
 Δ is the optimization and not a path count; ecmpCostMargin is 10% throughout, and
 spofHoldMultiplier=1 is the NED's "off" for the spof bucket. ECMP slots are
@@ -271,13 +273,13 @@ def main(args=None):
         if not topos:
             sys.exit(f"no .txt in {topo_dir} matching '{match}'")
         harness.TOPO_LABEL = f"{os.path.basename(os.path.normpath(topo_dir))} {match}".upper()
-    simt = simtime(cycles=2)
+    simt = simtime(cycles=1)
     out = os.path.join(S.EVAL_DIR, "optimizations" + (f"_{args.tag}" if args.tag else ""))
     S.INI_DIR = os.path.join(out, "ini")
     plot_dir = os.path.join(out, "plots")
 
     print(f"== {len(topos)} topologies matching '{match}', horizon {simt} "
-          f"(warmup + 2 refresh cycles) ==")
+          f"(warmup + 1 refresh cycle) ==")
     for p in topos:
         print(f"  {os.path.basename(p)}")
     for name, cfg in CONFIGS:

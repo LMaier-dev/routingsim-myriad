@@ -27,7 +27,7 @@ import sys
 from eval_harness import (BIN, SIM_ROOT, MYRIAD_DIR, announce, apply_repeat_args,
                           common, ensure_ring_labels, overrides, pm, rep_path,
                           repeat_mean, repeats_note, run_sim, simtime, title, warmup_s,
-                          write_proto_ini, add_topo_args, PROTO_COLOR,
+                          write_proto_ini, add_topo_args, PROTO_COLOR, PROTO_LABEL,
                           pyplot)
 
 HERE = str(MYRIAD_DIR)
@@ -192,38 +192,52 @@ def main(args=None):
 
     geo = [h for h in HOLDS if _to_seconds(h) > 0]
     gx = [_to_seconds(h) for h in geo]
-    has_off = "0s" in HOLDS
 
-    fig, axL = plt.subplots()
-    axR = axL.twinx()
-    axL.set_xscale("log")
-    # Colour is the protocol, never the axis: both PV series are red and both LS
-    # references blue, and the two metrics are told apart by marker and alpha.
+    # One panel per metric rather than a second y-axis: seconds and message
+    # counts share no scale, and twinning them forces one range to be read
+    # against the other's gridlines.
+    fig, (axT, axB) = plt.subplots(2, 1, sharex=True, figsize=(7, 6.5),
+                                   layout="constrained")
+    axT.set_xscale("log")
+    # Colour is the protocol, never the metric: the panel says which metric.
     pv_c, ls_c = PROTO_COLOR["pv"], PROTO_COLOR["ls"]
-    lines = [
-        axL.plot(gx, [pv[h]["ct"] for h in geo], "o-", color=pv_c,
-                 label="Path-Vector (PV) convergence time")[0],
-        axR.plot(gx, [pv[h]["msgs"] for h in geo], "s--", color=pv_c, alpha=.55,
-                 label="PV sent messages")[0],
-    ]
-    if has_off:
-        lines.append(axR.axhline(pv["0s"]["msgs"], ls=":", color=pv_c, alpha=.6,
-                                 label="PV messages, no batching (0s)"))
-    lines.append(axL.axhline(ls_ct, ls="-", color=ls_c, alpha=.6,
-                             label=f"LS convergence ({ls_ct:.1f}s)"))
-    lines.append(axR.axhline(ls_msgs, ls="--", color=ls_c, alpha=.45,
-                             label=f"LS messages ({ls_msgs:.0f})"))
-    axL.set(xlabel="holdInterval (s, log scale)", ylabel="convergence time (s)")
-    axR.set_ylabel("total sent messages")
-    # Both from 0: autoscaled, the left axis started at 11s and turned a 1s
-    # spread into the whole panel height.
-    axL.set_ylim(bottom=0)
-    axR.set_ylim(bottom=0)
-    axL.set_title(title("Convergence time and message count vs hold interval"))
-    # Upper left: from 0 the PV convergence curve sits low and flat, and only a
-    # constant reference line runs along the top.
-    axL.legend(handles=lines, loc="upper left", framealpha=0.9)
-    fig.tight_layout()
+    pv_line = axT.plot(gx, [pv[h]["ct"] for h in geo], "o-", color=pv_c,
+                       label=PROTO_LABEL["pv"])[0]
+    ls_line = axT.axhline(ls_ct, ls="--", color=ls_c, label=PROTO_LABEL["ls"])
+    axB.plot(gx, [pv[h]["msgs"] / 1e3 for h in geo], "o-", color=pv_c)
+    axB.axhline(ls_msgs / 1e3, ls="--", color=ls_c)
+
+    # The reference values belong on the lines, not in the legend, so the
+    # legend stays about identity.
+    axT.annotate(f"{ls_ct:.0f}s", xy=(gx[0], ls_ct), xytext=(0, 4),
+                 textcoords="offset points", color=ls_c, fontsize=10)
+    axB.annotate(f"{ls_msgs / 1e3:.0f}k", xy=(gx[0], ls_msgs / 1e3), xytext=(0, 4),
+                 textcoords="offset points", color=ls_c, fontsize=10)
+
+    # Where the rest of the evaluation runs, so the reader can price the choice
+    # off the two curves. Not a measured crossover: convergence is sampled at
+    # snapshotInterval, so these times are whole seconds and the point at which
+    # PV crosses LS falls between two swept holds.
+    cfg = _to_seconds(common("holdInterval", "50ms"))
+    if gx[0] <= cfg <= gx[-1]:
+        for ax in (axT, axB):
+            ax.axvline(cfg, color="0.35", lw=1, ls=":", zorder=0)
+        axT.annotate(f"configured: {cfg * 1e3:g} ms", xy=(cfg, 1),
+                     xycoords=("data", "axes fraction"),
+                     xytext=(-5, -12), textcoords="offset points",
+                     ha="right", va="top", color="0.35", fontsize=10)
+
+    axB.set_xlabel("holdInterval (s, log scale)")
+    axT.set_ylabel("convergence time (s)")
+    axB.set_ylabel("sent messages (thousands)")
+    axT.set_title(title("Convergence time and message count vs hold interval"))
+    axT.legend(handles=[pv_line, ls_line], loc="upper left", frameon=False)
+    for ax in (axT, axB):
+        ax.grid(axis="y", color="0.9", lw=0.8)
+        ax.set_axisbelow(True)
+        ax.margins(y=0.14)
+        for side in ("top", "right"):
+            ax.spines[side].set_visible(False)
     fig.savefig(os.path.join(OUT, "tradeoff.png"), dpi=200)
 
     print(f"\nplots -> {OUT}/tradeoff.png")
