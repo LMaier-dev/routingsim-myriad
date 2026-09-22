@@ -21,6 +21,11 @@ simple myriadls extends routingsim.foundation.Protocol
         // per this window; bursts (e.g. many neighbors reaching FULL at once, or
         // a high-degree node) coalesce into one re-origination at the window edge.
         double minLsInterval @unit(s) = default(1s);
+        // OSPF LSRefreshTime: re-originate this router's own LSAs on a period.
+        // 0 = never, which is what the evals that measure formation want. Set it
+        // to MyriadPV's refreshInterval to give both protocols the same number of
+        // origination waves over a run.
+        double lsRefreshInterval @unit(s) = default(0s);
 
         // Ring membership, e.g. "A,B". Set per node via **.NodeN.*.ringLabel.
         string ringLabel = default("");

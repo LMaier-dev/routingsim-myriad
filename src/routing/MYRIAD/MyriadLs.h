@@ -92,6 +92,8 @@ namespace routingsim {
             void onNeighborDead(NeighborEntry& nbr, bool wasFull) override;
 
             void installSelfLsas();
+            // Arm the next periodic re-origination. `delay` staggers the first one.
+            void scheduleLsRefresh(double delay);
             // Debounced entry point (see doOriginateSelfLsa + minLsInterval).
             void originateSelfLsa(MyriadLSAType type, uint16_t minSeq = 0);
             void doOriginateSelfLsa(MyriadLSAType type, uint16_t minSeq);
@@ -128,6 +130,8 @@ namespace routingsim {
 
             int dbExchangeBatchSize = 220;
             simtime_t minLsInterval;
+            simtime_t lsRefreshInterval;     // periodic self-LSA re-origination; 0 = off
+            TimerMsg* lsRefreshTimer = nullptr;
 
             // MinLSInterval debounce state, see doOriginateSelfLsa.
             std::unordered_map<LsaKey, simtime_t, LsaKeyHash> lastOriginated;

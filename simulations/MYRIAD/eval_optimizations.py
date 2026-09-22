@@ -303,7 +303,12 @@ def main(args=None):
         p, cfg = job
         ls_ini, pv_ini = inis[p]
         if cfg is None:
-            opts = overrides(sim_time_limit=simt)
+            # LS originates once and never re-floods, so over a window holding two
+            # PV refreshes it would answer with a third of the origination work.
+            # Give it MyriadPV's period, so the reference is a protocol comparison
+            # rather than formation measured against steady state.
+            opts = overrides(sim_time_limit=simt,
+                             lsRefreshInterval=f"{harness.refresh_s():g}s")
             return repeat_mean(lambda rep: run_one("ls", ls_ini, "ref", opts, rep))
         opts = overrides(sim_time_limit=simt, **pv_params(cfg[1]))
         return repeat_mean(lambda rep: run_one("pv", pv_ini, cfg[0], opts, rep))

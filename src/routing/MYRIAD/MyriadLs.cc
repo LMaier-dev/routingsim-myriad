@@ -84,6 +84,7 @@ void MyriadLS::onInitialize() {
     packetType = MYRIADLS_PACKET_TYPE;
     dbExchangeBatchSize = par("dbExchangeBatchSize");
     minLsInterval = par("minLsInterval");
+    lsRefreshInterval = par("lsRefreshInterval");
     snapshotInterval = par("snapshotInterval");
     snapshotStats = par("snapshotFormat").stdstringValue() == "stats";
 
@@ -95,12 +96,28 @@ void MyriadLS::onInitialize() {
     secLinkHello  = msgsize::SEC_LINK_SIG + msgsize::SEC_HELLO;
 
     installSelfLsas();
+    // Spread the first refresh over a whole period: every router originating in
+    // lockstep would measure one synchronised burst, not a steady rate. The draw
+    // is inside the guard because uniform() consumes the RNG stream even for an
+    // empty range, which would shift every later draw when refresh is off.
+    if (lsRefreshInterval > SIMTIME_ZERO)
+        scheduleLsRefresh(uniform(0, lsRefreshInterval.dbl()));
 
     // periodically send hellos to all neighbors
     scheduleHello(helloInterval + uniform(0, joinJitter));
 
     if (snapshotInterval > 0 && !par("oracleDumpFile").stdstringValue().empty())
         startSnapshot();
+}
+
+void MyriadLS::scheduleLsRefresh(double delay) {
+    if (lsRefreshInterval <= SIMTIME_ZERO) return;
+    lsRefreshTimer = addOneShotTimer(delay, [this](short) {
+        lsRefreshTimer = nullptr;
+        installSelfLsas();
+        scheduleLsRefresh(lsRefreshInterval.dbl());
+        return false;
+    });
 }
 
 void MyriadLS::onTwoWayReached(NeighborEntry& nbr) {
@@ -181,9 +198,12 @@ void MyriadLS::reset() {
     installSelfLsas();
 
     if (snapshotTimer) { cancelAndDelete(snapshotTimer); snapshotTimer = nullptr; }
+    if (lsRefreshTimer) { cancelAndDelete(lsRefreshTimer); lsRefreshTimer = nullptr; }
     cancelHelloTimer();
 
     scheduleHello(helloInterval);
+    if (lsRefreshInterval > SIMTIME_ZERO)
+        scheduleLsRefresh(uniform(0, lsRefreshInterval.dbl()));
     if (snapshotInterval > 0 && !par("oracleDumpFile").stdstringValue().empty())
         startSnapshot();
 }
