@@ -595,7 +595,9 @@ def plot(res, title, xlabel, outfile, nobatch=False, batch_panel=True,
                  label=pv_label + fit(axL, res["pv"], PROTO_COLOR["pv"]), color=PROTO_COLOR["pv"])
     ticks(axL)
     axL.set_xlabel(xlabel); axL.set_ylabel("routing messages sent")
-    axL.set_title(title); axL.grid(True, alpha=0.3)
+    # The bytes twinx defeats matplotlib's title auto-bump, so with the #rings
+    # top axis present the title has to be lifted over it by hand.
+    axL.set_title(title, pad=32 if rings else None); axL.grid(True, alpha=0.3)
     # Bytes share the panel on a twin axis: message count alone hides the fact
     # that PV's PDUs are far fatter, so the two curves can rank opposite ways.
     axB = axL.twinx()
@@ -624,7 +626,7 @@ def plot(res, title, xlabel, outfile, nobatch=False, batch_panel=True,
     axB.set_ylabel(f"routing bytes sent ({bname}, dashed)")
     h1, l1 = axL.get_legend_handles_labels()
     h2, l2 = axB.get_legend_handles_labels()
-    axL.legend(h1 + h2, l1 + l2)
+    axL.legend(h1 + h2, l1 + l2, loc="upper left")
 
     if axR is not None:
         axR.errorbar(xs, res["avg_sz"], yerr=_sd(res["avg_sz"]), fmt=fmt("s"),
